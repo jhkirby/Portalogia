@@ -1,0 +1,126 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-12 */
+
+/* ── TAB SEARCH ───────────────────────────────────────────────────────── */
+
+.tab-search__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+
+  background: var(--color-overlay-backdrop);
+}
+
+.tab-search {
+  display: flex;
+  flex-direction: column;
+  width: min(34rem, 90vw);
+  max-height: 60vh;
+  overflow: hidden;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.tab-search__input {
+  padding: var(--size-spacing-md);
+
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-panel-border);
+
+  font-size: 15px;
+  color: var(--color-address-text);
+}
+
+.tab-search__input:focus {
+  outline: none;
+}
+
+.tab-search__results {
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--size-spacing-xs);
+  list-style: none;
+}
+
+.tab-search__empty {
+  padding: var(--size-spacing-md);
+
+  font-size: var(--size-font-md);
+  color: var(--color-address-placeholder);
+}
+
+.tab-search__result {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text-active);
+
+  cursor: pointer;
+}
+
+.tab-search__result--selected {
+  background: var(--color-selection-bg);
+}
+
+.tab-search__favicon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tab-search__favicon-placeholder {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+
+  background: var(--color-chrome-border);
+  border-radius: 50%;
+}
+
+.tab-search__title {
+  overflow: hidden;
+  flex: 1;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tab-search__workspace {
+  flex-shrink: 0;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
+}
+
+.tab-search__split {
+  flex-shrink: 0;
+  padding: 2px var(--size-spacing-sm);
+
+  background: transparent;
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-sm);
+  color: var(--color-accent-text);
+
+  cursor: pointer;
+}
+
+.tab-search__split:hover {
+  background: var(--color-button-hover-bg);
+}

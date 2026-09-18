@@ -1,0 +1,51 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-12 */
+
+/* ── PAGE ACTIONS ─────────────────────────────────────────────────────── */
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.page-actions__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 var(--size-spacing-xs);
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font-size: 16px;
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.page-actions__button:hover:not(:disabled) {
+  background: var(--color-button-hover-bg);
+}
+
+.page-actions__button:disabled {
+  color: var(--color-button-disabled-text);
+  cursor: default;
+}
+
+.page-actions__button[aria-pressed='true'] {
+  background: var(--color-selection-bg);
+  color: var(--color-accent-text);
+}
+
+.page-actions__button--pdf {
+  padding: 0 var(--size-spacing-sm);
+  font-size: var(--size-font-sm);
+  font-weight: 600;
+}

@@ -1,0 +1,78 @@
+// Project: Northstar
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-09-12
+
+import { contextBridge, ipcRenderer } from 'electron';
+import { IpcChannel, type IpcResult, type NorthstarApi } from '@shared/ipc-contract';
+import type { BrowserState } from '@shared/tab-state';
+
+/**
+ * Invokes a channel and returns its `IpcResult` unchanged — the renderer
+ * decides how to react to a failure.
+ * @param channel Channel to invoke.
+ * @param payload Request payload matching that channel's schema.
+ * @returns The main process's `IpcResult`.
+ */
+function invoke<T>(channel: string, payload?: unknown): Promise<IpcResult<T>> {
+  return ipcRenderer.invoke(channel, payload) as Promise<IpcResult<T>>;
+}
+
+const api: NorthstarApi = {
+  createTab: (url) => invoke(IpcChannel.TabsCreate, { url }),
+  closeTab: (id) => invoke(IpcChannel.TabsClose, { id }),
+  activateTab: (id) => invoke(IpcChannel.TabsActivate, { id }),
+  navigate: (id, url) => invoke(IpcChannel.TabsNavigate, { id, url }),
+  goBack: (id) => invoke(IpcChannel.TabsGoBack, { id }),
+  goForward: (id) => invoke(IpcChannel.TabsGoForward, { id }),
+  reload: (id) => invoke(IpcChannel.TabsReload, { id }),
+  stop: (id) => invoke(IpcChannel.TabsStop, { id }),
+  getState: () => invoke(IpcChannel.TabsGetState),
+  onStateChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: BrowserState): void => {
+      listener(state);
+    };
+    ipcRenderer.on(IpcChannel.TabsStateChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.TabsStateChanged, handler);
+  },
+
+  exportToPdf: (id) => invoke(IpcChannel.TabsExportPdf, { id }),
+
+  createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
+  sendTerminalInput: (id, data) => ipcRenderer.send(IpcChannel.TerminalInput, { id, data }),
+  resizeTerminal: (id, cols, rows) => ipcRenderer.send(IpcChannel.TerminalResize, { id, cols, rows }),
+  onTerminalData: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { id: string; data: string }): void => {
+      listener(payload.id, payload.data);
+    };
+    ipcRenderer.on(IpcChannel.TerminalData, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.TerminalData, handler);
+  },
+
+  createWorkspace: (name) => invoke(IpcChannel.WorkspacesCreate, { name }),
+  switchWorkspace: (id) => invoke(IpcChannel.WorkspacesSwitch, { id }),
+  renameWorkspace: (id, name) => invoke(IpcChannel.WorkspacesRename, { id, name }),
+  removeWorkspace: (id) => invoke(IpcChannel.WorkspacesRemove, { id }),
+
+  addBookmark: (title, url) => invoke(IpcChannel.BookmarksAdd, { title, url }),
+  removeBookmark: (id) => invoke(IpcChannel.BookmarksRemove, { id }),
+
+  enterSplitView: (secondaryId) => invoke(IpcChannel.SplitEnter, { secondaryId }),
+  exitSplitView: () => invoke(IpcChannel.SplitExit),
+
+  setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
+
+  onOpenTabSearch: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.UiOpenTabSearch, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiOpenTabSearch, handler);
+  },
+
+  onFocusAddressBar: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
+  },
+};
+
+contextBridge.exposeInMainWorld('northstar', api satisfies NorthstarApi);

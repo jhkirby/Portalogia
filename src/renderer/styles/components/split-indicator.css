@@ -1,0 +1,68 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-12 */
+
+/* ── SPLIT INDICATOR ──────────────────────────────────────────────────── */
+
+.split-indicator {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 10rem;
+  height: 26px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-xs);
+
+  background: var(--color-selection-bg);
+  border-radius: var(--size-radius-pill);
+}
+
+.split-indicator__favicon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.split-indicator__favicon-placeholder {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+
+  background: var(--color-chrome-border);
+  border-radius: 50%;
+}
+
+.split-indicator__title {
+  overflow: hidden;
+  flex: 1;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.split-indicator__exit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 13px;
+  line-height: 1;
+  color: inherit;
+
+  cursor: pointer;
+}
+
+.split-indicator__exit:hover {
+  background: var(--color-button-hover-bg);
+}

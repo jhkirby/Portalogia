@@ -1,0 +1,43 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-16 */
+
+/* ── TERMINAL ─────────────────────────────────────────────────────────── */
+/* One tab's xterm.js instance, absolutely positioned to fill `.tab-content`
+   (see app.css) exactly like a browser tab's native `WebContentsView`
+   would. Every terminal tab's instance stays mounted here for as long as
+   its tab exists — `display: none` while inactive, rather than unmounting
+   — so switching tabs never interrupts its shell or clears its scrollback;
+   see the `Terminal` component. */
+
+.terminal {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.terminal--active {
+  display: block;
+}
+
+.terminal__surface {
+  width: 100%;
+  height: 100%;
+  /* xterm.js paints its own background from the `theme` option passed in
+     `Terminal.tsx`; this is just the instant it takes for that to happen. */
+  background: #1e1e1e;
+}
+
+.terminal__exited-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: var(--size-spacing-xs) var(--size-spacing-sm);
+
+  font-size: 12px;
+  color: #e8eaed;
+  background: rgba(0, 0, 0, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}

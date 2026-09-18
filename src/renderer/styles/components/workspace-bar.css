@@ -1,0 +1,180 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-16 */
+
+/* ── SIDEBAR ──────────────────────────────────────────────────────────── */
+/* Rail on the left edge of the window, beneath the top bar (see app.css's
+   `.app-shell`, a column of [.app, .main-row] — `.main-row` a row of
+   [.sidebar, .tab-content]) rather than spanning the full window height
+   and competing with it for the top-left corner. Its height comes from
+   `.main-row`'s default flex `align-items: stretch`, not an explicit
+   rule here, so only `width` needs setting; the actual tab content still
+   starts at that same x-offset regardless of the sidebar's own content —
+   see TabManager.computeMainBoundsForLeftInset() in the main process for
+   how a browser tab's native view is shifted right by --size-sidebar-width
+   to clear it (Terminal, `.tab-content`'s other occupant, clears it via
+   plain CSS flow instead). */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--size-sidebar-width);
+  min-height: 0;
+  padding: var(--size-spacing-sm);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+  border-right: 1px solid var(--color-chrome-border);
+
+  /* Ctrl+L (TabManager.toggleSidebar) toggles `.sidebar--hidden`, driving
+     this same slide; the main process animates the native tab content's
+     bounds over the same --size-sidebar-toggle-duration and a matching
+     ease-out-cubic curve so the two move in step. */
+  transition:
+    width var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    border-color var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.sidebar--hidden {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-color: transparent;
+}
+
+/* ── WORKSPACE LIST ───────────────────────────────────────────────────── */
+
+.workspace-bar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: var(--size-spacing-xs);
+  overflow-y: auto;
+}
+
+.workspace-bar__pill {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+  box-sizing: border-box;
+  flex-shrink: 0;
+
+  background: transparent;
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.workspace-bar__pill:hover {
+  background: var(--color-tab-hover-bg);
+}
+
+.workspace-bar__pill--active {
+  background: var(--color-tab-bg-active);
+  color: var(--color-tab-text-active);
+}
+
+.workspace-bar__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.workspace-bar__name {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.workspace-bar__name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  font: inherit;
+  color: inherit;
+}
+
+.workspace-bar__name-input:focus {
+  outline: none;
+}
+
+.workspace-bar__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 13px;
+  line-height: 1;
+  color: inherit;
+
+  cursor: pointer;
+}
+
+.workspace-bar__remove:hover {
+  background: var(--color-close-hover-bg);
+}
+
+/* ── NEW WORKSPACE ────────────────────────────────────────────────────── */
+
+.workspace-bar__new {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  margin-top: var(--size-spacing-xs);
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+  box-sizing: border-box;
+  flex-shrink: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.workspace-bar__new:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.workspace-bar__new-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  flex-shrink: 0;
+
+  font-size: 14px;
+}

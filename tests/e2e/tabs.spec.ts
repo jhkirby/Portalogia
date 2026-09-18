@@ -1,0 +1,92 @@
+// Project: Northstar
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-09-15
+
+import { test, expect } from './fixtures';
+
+test.describe('tabs', () => {
+  test('the new-tab button opens another tab and focuses the address bar', async ({ window }) => {
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await expect(tabs).toHaveCount(1);
+
+    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+
+    await expect(tabs).toHaveCount(2);
+    await expect(window.getByLabel('Search the internet...')).toBeFocused();
+  });
+
+  test('closing a tab removes it and leaves the other active', async ({ window }) => {
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await expect(tabs).toHaveCount(2);
+
+    await tabs.last().getByRole('button', { name: /Close/ }).click();
+
+    await expect(tabs).toHaveCount(1);
+  });
+
+  test('closing the only tab in a workspace replaces it with a fresh home tab', async ({ window }) => {
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await expect(tabs).toHaveCount(1);
+
+    await tabs.first().getByRole('button', { name: /Close/ }).click();
+
+    // Never zero tabs — TabManager.closeTab opens a fresh home tab instead.
+    await expect(tabs).toHaveCount(1);
+    await expect(window.getByLabel('Search the internet...')).toHaveValue('');
+  });
+
+  test('Ctrl+W closes only the tab, never the window, even with one tab left', async ({
+    electronApp,
+    window,
+  }) => {
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await expect(tabs).toHaveCount(1);
+    const pageCountBefore = electronApp.windows().length;
+
+    await window.keyboard.press('Control+w');
+
+    await expect(tabs).toHaveCount(1);
+    await expect(window.getByLabel('Search the internet...')).toHaveValue('');
+    expect(window.isClosed()).toBe(false);
+    expect(electronApp.windows()).toHaveLength(pageCountBefore);
+  });
+
+  test('Ctrl+W with focus on the sidebar (not tab content) never closes the window', async ({
+    electronApp,
+    window,
+  }) => {
+    // Regression test: focus here reaches the OS-level menu accelerator
+    // directly, unlike tab content where TabManager's `before-input-event`
+    // handler consumes the key first — that's exactly the path that used
+    // to collide with the built-in `windowMenu` role's Close item.
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await expect(tabs).toHaveCount(1);
+    const pageCountBefore = electronApp.windows().length;
+
+    await window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab').first().click();
+    await window.keyboard.press('Control+w');
+
+    await expect(tabs).toHaveCount(1);
+    expect(window.isClosed()).toBe(false);
+    expect(electronApp.windows()).toHaveLength(pageCountBefore);
+  });
+
+  test('navigating updates the tab title, the address bar, and back/forward state', async ({
+    window,
+    server,
+  }) => {
+    const addressBar = window.getByLabel('Search the internet...');
+    await addressBar.fill(server.url('/widgets'));
+    await addressBar.press('Enter');
+
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await expect(tabs.first()).toContainText('Widgets Catalog');
+    await expect(addressBar).toHaveValue(server.url('/widgets'));
+    await expect(window.getByRole('button', { name: 'Back' })).toBeEnabled();
+
+    await window.getByRole('button', { name: 'Home' }).click();
+    await expect(addressBar).toHaveValue('');
+  });
+});

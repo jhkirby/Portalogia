@@ -1,0 +1,38 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-11 */
+
+:root {
+  --size-tab-bar-height: 40px;
+  /* Must equal CHROME_HEIGHT_FOCUSED_PX in src/shared/constants.ts — Focus
+     Mode hides the tab row entirely, leaving only the toolbar. */
+  --size-toolbar-height: 44px;
+  /* Must equal CHROME_HEIGHT_PX in src/shared/constants.ts — the main
+     process uses that constant to position tab content below this much
+     chrome, so the two can't drift independently. */
+  --size-chrome-height: 84px;
+
+  --size-tab-min-width: 120px;
+  --size-tab-max-width: 220px;
+
+  /* Must equal SIDEBAR_WIDTH_PX in src/shared/constants.ts — the main
+     process shifts tab content right by this much so it never sits
+     underneath the sidebar. */
+  --size-sidebar-width: 180px;
+  /* Must equal SIDEBAR_TOGGLE_DURATION_MS in src/shared/constants.ts — the
+     main process animates tab content's bounds over exactly this long so
+     it moves in step with this transition instead of snapping ahead of
+     or behind it. */
+  --size-sidebar-toggle-duration: 220ms;
+
+  --size-radius-sm: 6px;
+  --size-radius-pill: 15px;
+
+  --size-spacing-xs: 4px;
+  --size-spacing-sm: 8px;
+  --size-spacing-md: 12px;
+
+  --size-font-sm: 12px;
+  --size-font-md: 13px;
+}

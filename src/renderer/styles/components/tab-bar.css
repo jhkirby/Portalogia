@@ -1,0 +1,153 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-11 */
+
+/* ── TAB BAR ──────────────────────────────────────────────────────────── */
+
+/* Lives inside `.tab-row` (see app.css), which supplies the shared
+   height/background/border — `.tab-bar` itself just needs to flex to fill
+   the space between the workspace pills and the search button, and scroll
+   horizontally on its own once there are more tabs than fit. */
+.tab-bar {
+  display: flex;
+  align-items: flex-end;
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--size-spacing-sm);
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.tab-bar__tab {
+  display: flex;
+  align-items: center;
+  min-width: var(--size-tab-min-width);
+  max-width: var(--size-tab-max-width);
+  height: calc(var(--size-tab-bar-height) - 6px);
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-xs);
+
+  background: var(--color-tab-bg);
+  border-radius: var(--size-radius-sm) var(--size-radius-sm) 0 0;
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+/* `:not(--active)` so the active tab keeps its own (lighter) background on
+   hover instead of the pseudo-class outranking the `--active` modifier
+   class on specificity and flattening it to the same grey as every other
+   hovered tab — which also washed out the close button's hover circle
+   against it. */
+.tab-bar__tab:hover:not(.tab-bar__tab--active) {
+  background: var(--color-tab-hover-bg);
+}
+
+.tab-bar__tab--active {
+  background: var(--color-tab-bg-active);
+  color: var(--color-tab-text-active);
+}
+
+.tab-bar__favicon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tab-bar__favicon-placeholder {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+
+  background: var(--color-chrome-border);
+  border-radius: 50%;
+}
+
+.tab-bar__terminal-icon {
+  flex-shrink: 0;
+
+  font-size: 11px;
+  font-family: Menlo, Consolas, monospace;
+  color: var(--color-accent-text);
+}
+
+.tab-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+
+  border: 2px solid var(--color-spinner-track);
+  border-top-color: var(--color-spinner-active);
+  border-radius: 50%;
+
+  animation: tab-bar-spin 0.7s linear infinite;
+}
+
+.tab-bar__title {
+  overflow: hidden;
+  flex: 1;
+
+  font-size: inherit;
+  color: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tab-bar__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 14px;
+  line-height: 1;
+  color: inherit;
+
+  cursor: pointer;
+}
+
+.tab-bar__close:hover {
+  /* Distinct from --color-tab-hover-bg: the tab underneath is already that
+     color on hover (the pointer is still over the parent tab), so reusing
+     it would leave the circle invisible against its own background. */
+  background: var(--color-close-hover-bg);
+}
+
+.tab-bar__new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 3px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 16px;
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.tab-bar__new:hover {
+  background: var(--color-button-hover-bg);
+}
+
+@keyframes tab-bar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

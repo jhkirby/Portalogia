@@ -1,0 +1,71 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-11 */
+
+/* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
+
+.address-bar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 30px;
+  padding: 0 var(--size-spacing-md);
+  gap: var(--size-spacing-sm);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-pill);
+}
+
+.address-bar:focus-within {
+  border-color: var(--color-address-border-focus);
+}
+
+.address-bar__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  flex-shrink: 0;
+
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-address-placeholder);
+}
+
+.address-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+
+  border: 2px solid var(--color-spinner-track);
+  border-top-color: var(--color-spinner-active);
+  border-radius: 50%;
+
+  animation: address-bar-spin 0.7s linear infinite;
+}
+
+.address-bar__input {
+  width: 100%;
+
+  background: transparent;
+  border: none;
+
+  font-size: var(--size-font-md);
+  color: var(--color-address-text);
+}
+
+.address-bar__input::placeholder {
+  color: var(--color-address-placeholder);
+}
+
+.address-bar__input:focus {
+  outline: none;
+}
+
+@keyframes address-bar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

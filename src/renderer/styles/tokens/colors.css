@@ -1,0 +1,66 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-11 */
+
+:root {
+  --color-chrome-bg: #f1f3f4;
+  --color-chrome-border: #d7d9db;
+
+  --color-tab-bg: transparent;
+  --color-tab-bg-active: #ffffff;
+  --color-tab-text: #444444;
+  --color-tab-text-active: #1a1a1a;
+  --color-tab-hover-bg: #e4e6e7;
+  --color-close-hover-bg: rgba(0, 0, 0, 0.18);
+
+  --color-address-bg: #ffffff;
+  --color-address-border: #d7d9db;
+  --color-address-border-focus: #8ab4f8;
+  --color-address-text: #1a1a1a;
+  --color-address-placeholder: #8a8d91;
+
+  --color-button-hover-bg: #e4e6e7;
+  --color-button-disabled-text: #b7b9bb;
+
+  --color-spinner-track: #d7d9db;
+  --color-spinner-active: #4285f4;
+
+  --color-panel-bg: #ffffff;
+  --color-panel-border: #d7d9db;
+  --color-overlay-backdrop: rgba(32, 33, 36, 0.35);
+  --color-selection-bg: #e8f0fe;
+  --color-accent-text: #1a73e8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-chrome-bg: #202124;
+    --color-chrome-border: #3c4043;
+
+    --color-tab-bg: transparent;
+    --color-tab-bg-active: #35363a;
+    --color-tab-text: #bdc1c6;
+    --color-tab-text-active: #e8eaed;
+    --color-tab-hover-bg: #3c4043;
+    --color-close-hover-bg: rgba(255, 255, 255, 0.22);
+
+    --color-address-bg: #303134;
+    --color-address-border: #5f6368;
+    --color-address-border-focus: #8ab4f8;
+    --color-address-text: #e8eaed;
+    --color-address-placeholder: #9aa0a6;
+
+    --color-button-hover-bg: #3c4043;
+    --color-button-disabled-text: #5f6368;
+
+    --color-spinner-track: #5f6368;
+    --color-spinner-active: #8ab4f8;
+
+    --color-panel-bg: #2d2e31;
+    --color-panel-border: #5f6368;
+    --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
+    --color-selection-bg: #3c4043;
+    --color-accent-text: #8ab4f8;
+  }
+}

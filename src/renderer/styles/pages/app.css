@@ -1,0 +1,109 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-11 */
+
+/* ── APP SHELL ────────────────────────────────────────────────────────── */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Column of [full-width top bar, main row]. The top bar owns the entire
+   top-left corner — the sidebar starts below it rather than competing
+   with it there — so it must come first in source order and span the
+   full width, with the main row beneath it. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Row of [sidebar, tab content] filling the rest of `.app-shell`'s height
+   below the top bar. A browser tab's actual content is a native
+   `WebContentsView` the main process positions directly over
+   `.tab-content`'s area, entirely outside this DOM — see
+   TabManager.computeMainBoundsForLeftInset(). A terminal tab is the one
+   exception, rendered right inside `.tab-content` (see `Terminal`). */
+.main-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.tab-content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* The BrowserWindow itself is much taller; everything below this is the
+     native WebContentsView the main process draws, not part of this DOM. */
+  height: var(--size-chrome-height);
+
+  background: var(--color-chrome-bg);
+}
+
+/* Focus Mode hides the tab row (and the sidebar — see `App`) entirely, so
+   the chrome only needs to reserve toolbar height — must track
+   CHROME_HEIGHT_FOCUSED_PX in src/shared/constants.ts, which the main
+   process uses to grow the page into the space this frees up. */
+.app--focus-mode {
+  height: var(--size-toolbar-height);
+}
+
+/* ── TAB ROW ──────────────────────────────────────────────────────────── */
+/* Houses the (possibly-scrolling) tab strip, sharing the row's
+   background/border/height. */
+
+.tab-row {
+  display: flex;
+  align-items: stretch;
+  height: var(--size-tab-bar-height);
+
+  background: var(--color-chrome-bg);
+  border-bottom: 1px solid var(--color-chrome-border);
+}
+
+/* ── TOOLBAR ──────────────────────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--size-toolbar-height);
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+
+  background: var(--color-chrome-bg);
+  border-bottom: 1px solid var(--color-chrome-border);
+}
+
+/* Stands in for NavControls + AddressBar while a terminal tab is active —
+   neither URL navigation nor back/forward history applies to a shell. */
+.toolbar__terminal-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  font-size: 13px;
+  font-family: Menlo, Consolas, monospace;
+  color: var(--color-tab-text);
+}

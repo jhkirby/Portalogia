@@ -1,0 +1,33 @@
+// Project: Northstar
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-09-15
+
+const PAGE_STYLE = `
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    box-sizing: border-box;
+    background: light-dark(#ffffff, #202124);
+  }
+`;
+
+/**
+ * Builds Northstar's home page / new-tab page. Served by the `northstar://home`
+ * protocol handler in `main/index.ts` — a plain server-rendered page with
+ * no script.
+ * @returns A complete HTML document.
+ */
+export function buildHomePageHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Tab</title>
+<style>${PAGE_STYLE}</style>
+</head>
+<body>
+</body>
+</html>`;
+}
