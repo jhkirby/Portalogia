@@ -25,6 +25,12 @@ export const tabIdRequestSchema = z.object({
 });
 export type TabIdRequest = z.infer<typeof tabIdRequestSchema>;
 
+export const moveTabRequestSchema = z.object({
+  id: z.string().min(1),
+  beforeId: z.string().min(1).nullable(),
+});
+export type MoveTabRequest = z.infer<typeof moveTabRequestSchema>;
+
 export const navigateRequestSchema = z.object({
   id: z.string().min(1),
   url: z.string().min(1),

@@ -17,6 +17,7 @@ const EMPTY_STATE: BrowserState = {
   splitView: null,
   focusMode: false,
   sidebarVisible: true,
+  grabbedTabId: null,
 };
 
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
@@ -86,6 +87,9 @@ export function useTabs() {
   const activateTab = useCallback((id: string) => {
     void window.northstar.activateTab(id).then(logIfFailed);
   }, []);
+  const moveTab = useCallback((id: string, beforeId: string | null) => {
+    void window.northstar.moveTab(id, beforeId).then(logIfFailed);
+  }, []);
   const navigate = useCallback((id: string, url: string) => {
     void window.northstar.navigate(id, url).then(logIfFailed);
   }, []);
@@ -153,10 +157,12 @@ export function useTabs() {
     secondaryTab,
     focusMode: state.focusMode,
     sidebarVisible: state.sidebarVisible,
+    grabbedTabId: state.grabbedTabId,
 
     createTab,
     closeTab,
     activateTab,
+    moveTab,
     navigate,
     goBack,
     goForward,

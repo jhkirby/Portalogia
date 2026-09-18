@@ -1,7 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-09-18
+
+import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
 
 interface NavControlsProps {
   /** Whether the active tab has back history. */
@@ -30,31 +32,40 @@ export function NavControls({
     <div className="nav-controls">
       <button
         type="button"
-        className="nav-controls__button"
+        className="nav-controls__button chrome-tooltip"
         onClick={onBack}
         disabled={!canGoBack}
         aria-label="Back"
+        data-tooltip={`Back (${formatAltShortcut('←')})`}
       >
         ‹
       </button>
       <button
         type="button"
-        className="nav-controls__button"
+        className="nav-controls__button chrome-tooltip"
         onClick={onForward}
         disabled={!canGoForward}
         aria-label="Forward"
+        data-tooltip={`Forward (${formatAltShortcut('→')})`}
       >
         ›
       </button>
       <button
         type="button"
-        className="nav-controls__button"
+        className="nav-controls__button chrome-tooltip"
         onClick={onReloadOrStop}
         aria-label={isLoading ? 'Stop' : 'Reload'}
+        data-tooltip={isLoading ? 'Stop' : `Reload (${formatShortcut('R')})`}
       >
         {isLoading ? '✕' : '⟳'}
       </button>
-      <button type="button" className="nav-controls__button" onClick={onHome} aria-label="Home">
+      <button
+        type="button"
+        className="nav-controls__button chrome-tooltip"
+        onClick={onHome}
+        aria-label="Home"
+        data-tooltip={`Home (${formatShortcut('H')})`}
+      >
         ⌂
       </button>
     </div>

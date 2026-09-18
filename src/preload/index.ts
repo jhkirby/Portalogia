@@ -22,6 +22,7 @@ const api: NorthstarApi = {
   createTab: (url) => invoke(IpcChannel.TabsCreate, { url }),
   closeTab: (id) => invoke(IpcChannel.TabsClose, { id }),
   activateTab: (id) => invoke(IpcChannel.TabsActivate, { id }),
+  moveTab: (id, beforeId) => invoke(IpcChannel.TabsMove, { id, beforeId }),
   navigate: (id, url) => invoke(IpcChannel.TabsNavigate, { id, url }),
   goBack: (id) => invoke(IpcChannel.TabsGoBack, { id }),
   goForward: (id) => invoke(IpcChannel.TabsGoForward, { id }),

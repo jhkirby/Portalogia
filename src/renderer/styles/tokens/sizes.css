@@ -13,7 +13,6 @@
      chrome, so the two can't drift independently. */
   --size-chrome-height: 84px;
 
-  --size-tab-min-width: 120px;
   --size-tab-max-width: 220px;
 
   /* Must equal SIDEBAR_WIDTH_PX in src/shared/constants.ts — the main

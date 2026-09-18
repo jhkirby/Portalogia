@@ -63,13 +63,12 @@ export function buildMenu(
           click: () => getTabManager()?.createWorkspace(),
         },
         {
-          // Deliberately overrides the OS/Chromium "Select All" convention
-          // at the user's explicit request — see the Edit menu below, which
-          // omits the `selectAll` role entirely so Ctrl+A is free for this.
-          // That trade-off means Select All has no keyboard shortcut left
-          // anywhere in the app, chrome and page content alike.
+          // Same action as the visible entry above, under a second
+          // accelerator — hidden so the menu doesn't show two entries for
+          // one action; the accelerator still registers regardless of
+          // visibility.
           label: 'New Workspace',
-          accelerator: 'CmdOrCtrl+A',
+          accelerator: 'CmdOrCtrl+Q',
           visible: false,
           click: () => getTabManager()?.createWorkspace(),
         },
@@ -84,21 +83,26 @@ export function buildMenu(
           },
         },
         {
-          label: 'Close Workspace',
+          label: 'Close All Tabs',
           accelerator: 'CmdOrCtrl+Shift+W',
-          click: () => {
-            const manager = getTabManager();
-            if (manager) {
-              manager.removeWorkspace(manager.getState().activeWorkspaceId);
-            }
-          },
+          click: () => getTabManager()?.closeAllTabs(),
         },
         {
           // Deliberately a harder-to-hit combo than Close Tab, so
-          // reaching for the wrong "close" shortcut doesn't quit the app.
-          label: 'Close Window',
+          // reaching for the wrong "close" shortcut doesn't quit the app —
+          // `removeWorkspace` itself refuses to act on the last remaining
+          // workspace, so this can never close the window either.
+          label: 'Close Workspace',
           accelerator: 'CmdOrCtrl+Alt+W',
-          click: () => getTabManager()?.closeWindow(),
+          click: () => {
+            const tabManager = getTabManager();
+            tabManager?.removeWorkspace(tabManager.getState().activeWorkspaceId);
+          },
+        },
+        {
+          label: 'Close All Workspaces',
+          accelerator: 'CmdOrCtrl+Shift+Alt+W',
+          click: () => getTabManager()?.closeAllWorkspaces(),
         },
         { type: 'separator' },
         {
@@ -120,15 +124,16 @@ export function buildMenu(
             }
           },
         },
-        { type: 'separator' },
-        { role: 'quit' },
+        // Deliberately no Quit item, and no `role: 'quit'` anywhere in this
+        // menu — that role carries an automatic default accelerator
+        // (CmdOrCtrl+Q) even when none is set explicitly, which collided
+        // with "New Workspace" above once that moved onto Ctrl+Q. Quitting
+        // is disabled outright (see MainWindow.ts's 'close' handler), so an
+        // item that could never do anything would just be dead UI.
       ],
     },
     {
       label: 'Edit',
-      // Built manually rather than `role: 'editMenu'` specifically to
-      // drop `selectAll` — that role always claims Ctrl+A, and the New
-      // Workspace binding above needs it free.
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
@@ -137,6 +142,7 @@ export function buildMenu(
         { role: 'copy' },
         { role: 'paste' },
         { role: 'delete' },
+        { role: 'selectAll' },
       ],
     },
     {

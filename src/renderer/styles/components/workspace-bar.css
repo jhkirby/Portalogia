@@ -141,6 +141,20 @@
   background: var(--color-close-hover-bg);
 }
 
+/* Unlike the toolbar's tooltips (see tooltip.css), this one can't just grow
+   past its container: the active tab's native `WebContentsView` is layered
+   directly to the right of the sidebar (see TabManager's bounds math), and
+   would silently paint over any tooltip pixel that strayed past the
+   sidebar's own edge — clipping wouldn't even be the failure mode, it'd
+   just render behind that view. Anchoring right and capping the width
+   keeps the whole tooltip inside `--size-sidebar-width`, wrapping instead
+   of overflowing if the text is too long for one line at that width. */
+.workspace-bar__remove::after {
+  right: 0;
+  max-width: 150px;
+  white-space: normal;
+}
+
 /* ── NEW WORKSPACE ────────────────────────────────────────────────────── */
 
 .workspace-bar__new {
@@ -167,6 +181,15 @@
 
 .workspace-bar__new:hover {
   background: var(--color-button-hover-bg);
+}
+
+/* Same reasoning as `.workspace-bar__remove::after` above — kept inside
+   `--size-sidebar-width` so the active tab's native view can't paint over
+   it. Anchored left since this button spans the sidebar's full width. */
+.workspace-bar__new::after {
+  left: 0;
+  max-width: 150px;
+  white-space: normal;
 }
 
 .workspace-bar__new-icon {

@@ -7,8 +7,10 @@
 
 /* Lives inside `.tab-row` (see app.css), which supplies the shared
    height/background/border — `.tab-bar` itself just needs to flex to fill
-   the space between the workspace pills and the search button, and scroll
-   horizontally on its own once there are more tabs than fit. */
+   the space between the workspace pills and the search button. Tabs have
+   no min-width floor (see `.tab-bar__tab`): with `flex-basis: 0` they
+   always shrink evenly to whatever width divides the row exactly, so this
+   never needs to scroll no matter how many tabs are open. */
 .tab-bar {
   display: flex;
   align-items: flex-end;
@@ -16,13 +18,21 @@
   min-width: 0;
   padding: 0 var(--size-spacing-sm);
   gap: 2px;
-  overflow-x: auto;
 }
 
+/* Deliberately no `overflow: hidden` here (only `.tab-bar__title` clips
+   its own text) — the close button's tooltip (see below) is a descendant
+   of this element, and an `overflow: hidden` ancestor clips positioned
+   descendants too, tooltip included, no matter how they're positioned. In
+   the extreme case of a tab shrunk well past its favicon+close's combined
+   width, those can spill slightly into a neighboring tab instead of being
+   clipped — accepted for the tradeoff of the tooltip actually being
+   visible. */
 .tab-bar__tab {
   display: flex;
   align-items: center;
-  min-width: var(--size-tab-min-width);
+  flex: 1 1 0;
+  min-width: 0;
   max-width: var(--size-tab-max-width);
   height: calc(var(--size-tab-bar-height) - 6px);
   padding: 0 var(--size-spacing-sm);
@@ -49,6 +59,26 @@
 .tab-bar__tab--active {
   background: var(--color-tab-bg-active);
   color: var(--color-tab-text-active);
+}
+
+/* The tab currently being grabbed. No drag-image snapshot follows the
+   cursor (see TabBar.tsx's `TRANSPARENT_DRAG_IMAGE`), so this in-place
+   highlight is the only feedback that it's being dragged — placed after
+   `--active` so it wins over that background too. */
+.tab-bar__tab--dragging {
+  background: var(--color-tab-dragging-bg);
+}
+
+/* Drop-position indicator: a thin line on whichever edge the dragged tab
+   would land against, driven by which half of the hovered tab the cursor
+   is over (see TabBar.tsx's `handleDragOver`). `box-shadow` rather than
+   `border` so it doesn't nudge the tab's own layout width. */
+.tab-bar__tab--drop-before {
+  box-shadow: inset 2px 0 0 0 var(--color-accent-text);
+}
+
+.tab-bar__tab--drop-after {
+  box-shadow: inset -2px 0 0 0 var(--color-accent-text);
 }
 
 .tab-bar__favicon {
@@ -123,6 +153,33 @@
   background: var(--color-close-hover-bg);
 }
 
+/* This row is the very top of the chrome, so — unlike the toolbar buttons'
+   tooltips — there's no room above it to open upward; it opens down into
+   the toolbar instead, which is still our own chrome DOM, not the tab
+   content's native view. Horizontally, a tab can land anywhere from the
+   window's left edge to its right, so this defaults to centered and only
+   the first/last tab (the two that can actually reach a window edge)
+   override it to anchor away from that edge instead. */
+.tab-bar__close::after {
+  top: 100%;
+  bottom: auto;
+  left: 50%;
+  margin-top: 6px;
+  margin-bottom: 0;
+  transform: translateX(-50%);
+}
+
+.tab-bar__tab:first-of-type .tab-bar__close::after {
+  left: 0;
+  transform: none;
+}
+
+.tab-bar__tab:last-of-type .tab-bar__close::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 .tab-bar__new {
   display: flex;
   align-items: center;
@@ -144,6 +201,19 @@
 
 .tab-bar__new:hover {
   background: var(--color-button-hover-bg);
+}
+
+/* Opens downward for the same reason as `.tab-bar__close` above. This
+   button doesn't shrink with the tabs (see `.tab-bar`), so once there are
+   enough tabs to fill the row it sits right at the row's right edge —
+   anchored right and growing leftward keeps it inside the window there,
+   same as `.page-actions__button`'s tooltips. */
+.tab-bar__new::after {
+  top: 100%;
+  bottom: auto;
+  right: 0;
+  margin-top: 6px;
+  margin-bottom: 0;
 }
 
 @keyframes tab-bar-spin {

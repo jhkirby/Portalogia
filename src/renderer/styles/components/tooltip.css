@@ -1,0 +1,48 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-18 */
+
+/* ── TOOLTIP ──────────────────────────────────────────────────────────── */
+
+/* Shared by every toolbar icon button (`.nav-controls__button`,
+   `.page-actions__button`) that wants a hover tooltip: a self-drawn one
+   rather than the native `title` attribute, since Electron's OS-level
+   tooltip is unreliable over this custom chrome (delayed, easy to miss,
+   and suppressed entirely on a `:disabled` button, whereas `:hover` itself
+   still fires regardless of disabled state). Opens *upward*, since this
+   toolbar is the bottom edge of the chrome and just past it is the active
+   tab's native `WebContentsView` — a separate surface the main process
+   layers on top of this whole page, which would silently paint over (and
+   hide) a tooltip that instead opened downward.
+   Each consumer still owns its own horizontal anchor (`left: 0` to grow
+   rightward, `right: 0` to grow leftward) — whichever keeps it inside the
+   window depends on which edge of the toolbar that button sits near. */
+.chrome-tooltip {
+  position: relative;
+}
+
+.chrome-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  z-index: 10;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+
+  background: var(--color-tooltip-bg);
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-sm);
+  font-weight: 400;
+  color: var(--color-tooltip-text);
+  white-space: nowrap;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease 400ms;
+}
+
+.chrome-tooltip:hover::after {
+  opacity: 1;
+}

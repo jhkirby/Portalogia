@@ -5,6 +5,7 @@
 
 import { useState, type KeyboardEvent } from 'react';
 import type { WorkspaceState } from '@shared/tab-state';
+import { formatShortcut } from '../../lib/shortcuts';
 
 interface WorkspaceBarProps {
   readonly workspaces: readonly WorkspaceState[];
@@ -93,12 +94,13 @@ export function WorkspaceBar({
               {workspaces.length > 1 && !isEditing && (
                 <button
                   type="button"
-                  className="workspace-bar__remove"
+                  className="workspace-bar__remove chrome-tooltip"
                   aria-label={`Remove ${workspace.name} workspace`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onRemove(workspace.id);
                   }}
+                  data-tooltip={isActive ? `Close workspace (${formatShortcut('Alt+W')})` : 'Close workspace'}
                 >
                   ×
                 </button>
@@ -107,7 +109,13 @@ export function WorkspaceBar({
           );
         })}
       </div>
-      <button type="button" className="workspace-bar__new" aria-label="New workspace" onClick={onCreate}>
+      <button
+        type="button"
+        className="workspace-bar__new chrome-tooltip"
+        aria-label="New workspace"
+        onClick={onCreate}
+        data-tooltip={`New workspace (${formatShortcut('Shift+N')})`}
+      >
         <span className="workspace-bar__new-icon" aria-hidden="true">
           +
         </span>

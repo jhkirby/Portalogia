@@ -30,6 +30,17 @@
   cursor: pointer;
 }
 
+/* This whole group sits at the toolbar's right edge — see tooltip.css for
+   the shared `.chrome-tooltip` look this button also carries — close
+   enough to the window's own right edge that a wide, centered tooltip
+   (e.g. "Search tabs (Ctrl+K)") can overflow past it. Anchoring to the
+   button's own right edge and growing leftward instead keeps every
+   tooltip here inside the window no matter how close its button is to
+   that edge. */
+.page-actions__button::after {
+  right: 0;
+}
+
 .page-actions__button:hover:not(:disabled) {
   background: var(--color-button-hover-bg);
 }

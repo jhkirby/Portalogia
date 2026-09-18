@@ -48,6 +48,23 @@ interface ClosedTab {
 const CLOSED_TAB_HISTORY_LIMIT = 20;
 
 /**
+ * How long to wait for another Space auto-repeat before treating it as
+ * released — see `armSpaceHoldTimeout`. Comfortably longer than even a
+ * slow OS key-repeat interval, so it never fires while Space is still
+ * actually held.
+ */
+const SPACE_HOLD_GRACE_MS = 600;
+
+/**
+ * Absolute ceiling on a single keyboard-grab, regardless of any repeat or
+ * key-up signal — a last-resort net under `armSpaceHoldTimeout` and the
+ * Control-release path, in case both somehow miss (e.g. focus lost to
+ * something that swallows input entirely). No legitimate reorder needs
+ * anywhere near this long.
+ */
+const GRAB_MAX_DURATION_MS = 15_000;
+
+/**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
  * groups tabs into workspaces, and positions the on-screen view(s) beneath
  * the chrome (one full-width view normally, or two side by side in split
@@ -71,6 +88,12 @@ export class TabManager {
   private splitView: SplitViewState | null = null;
   private focusMode = false;
   private sidebarVisible = true;
+  /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
+  private grabbedTabId: string | null = null;
+  /** Armed while a tab is grabbed; see `armSpaceHoldTimeout`. */
+  private spaceHoldTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Set once per grab, never reset by repeats; see `GRAB_MAX_DURATION_MS`. */
+  private grabMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Bumped on every `toggleSidebar` call so an in-flight animation can tell it's been superseded and stop early. */
   private sidebarAnimationToken = 0;
   private readonly terminals: TerminalManager;
@@ -99,6 +122,16 @@ export class TabManager {
       },
       (id) => this.patchTerminalState(id, { exited: true }),
     );
+
+    // The Ctrl+Space reorder gesture also needs to work when OS keyboard
+    // focus is on the chrome itself rather than a tab's own webContents
+    // (e.g. right after a mouse drag-and-drop of a tab, or a click on a
+    // workspace pill) — every other per-tab shortcut's fallback for that
+    // case is a menu accelerator, which this stateful, held-key gesture
+    // can't be expressed as (see `handleReorderGestureInput`).
+    this.window.webContents.on('before-input-event', (event, input) => {
+      this.handleReorderGestureInput(event, input);
+    });
   }
 
   // ── Tabs ─────────────────────────────────────────────────────────────
@@ -210,6 +243,45 @@ export class TabManager {
   }
 
   /**
+   * Reorders a tab (the tab bar's drag-and-drop) by moving it to just
+   * before `beforeId` in tab order. A no-op if `id` doesn't exist, if
+   * `beforeId` doesn't exist or belongs to a different workspace than `id`
+   * (dragging never moves a tab between workspaces, only reorders within
+   * one), or if the two ids are the same. `states` is a `Map`, whose
+   * insertion order is what `getState().tabs` iterates in and the tab bar
+   * renders — reordering means rebuilding it in the new order rather than
+   * mutating any one entry, since a `Map` has no "move to position"
+   * primitive of its own.
+   * @param id The tab being dragged.
+   * @param beforeId The tab it should land before, or `null` to move it to the end of its workspace's tabs.
+   * @returns The full browser state after the reorder.
+   */
+  public moveTab(id: string, beforeId: string | null): BrowserState {
+    const moving = this.states.get(id);
+    if (!moving || id === beforeId) {
+      return this.getState();
+    }
+    if (beforeId !== null) {
+      const target = this.states.get(beforeId);
+      if (!target || target.workspaceId !== moving.workspaceId) {
+        return this.getState();
+      }
+    }
+
+    const entries = Array.from(this.states.entries()).filter(([tabId]) => tabId !== id);
+    const insertAt = beforeId === null ? entries.length : entries.findIndex(([tabId]) => tabId === beforeId);
+    entries.splice(insertAt === -1 ? entries.length : insertAt, 0, [id, moving]);
+
+    this.states.clear();
+    for (const [tabId, state] of entries) {
+      this.states.set(tabId, state);
+    }
+
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
    * Closes a tab. If it was the active tab, activates a neighbor in the
    * same workspace; if none remain there, opens a fresh home tab in that
    * workspace instead of jumping to an unrelated one. If the tab was part
@@ -221,6 +293,9 @@ export class TabManager {
     const closedState = this.states.get(id);
     if (!closedState) {
       return this.getState();
+    }
+    if (this.grabbedTabId === id) {
+      this.grabbedTabId = null;
     }
 
     if (closedState.kind === 'terminal') {
@@ -296,13 +371,25 @@ export class TabManager {
   }
 
   /**
-   * Closes this window outright (Ctrl+Alt+W) — the deliberate "actually
-   * quit" action, distinct from `closeTab` (plain Ctrl+W), which always
-   * leaves at least one tab open and never closes the window itself, no
-   * matter how few tabs remain.
+   * Closes every tab in the active workspace (Ctrl+Shift+W), routing each
+   * one through `closeTab` so it inherits that method's own closed-tab
+   * history and split-view handling. Closing the last of them trips
+   * `closeTab`'s own last-tab reset, so this always ends with exactly one
+   * fresh home tab in the workspace — the same place you'd land pressing
+   * plain Ctrl+W repeatedly.
+   * @returns The full browser state after the reset.
    */
-  public closeWindow(): void {
-    this.window.close();
+  public closeAllTabs(): BrowserState {
+    const workspaceId = this.activeWorkspaceId;
+    const idsToClose = Array.from(this.states.entries())
+      .filter(([, state]) => state.workspaceId === workspaceId)
+      .map(([tabId]) => tabId);
+
+    for (const id of idsToClose) {
+      this.closeTab(id);
+    }
+
+    return this.getState();
   }
 
   /**
@@ -536,6 +623,9 @@ export class TabManager {
       }
       this.views.delete(tabId);
       this.states.delete(tabId);
+      if (this.grabbedTabId === tabId) {
+        this.grabbedTabId = null;
+      }
     }
     this.workspaces.delete(id);
     this.lastActiveTabIdByWorkspace.delete(id);
@@ -549,6 +639,26 @@ export class TabManager {
       this.emitState();
     }
     return this.getState();
+  }
+
+  /**
+   * Closes every workspace except the active one (Ctrl+Shift+Alt+W), then
+   * resets that survivor's own tabs via `closeAllTabs` — the workspace
+   * equivalent of `closeAllTabs` itself, and routed through the same two
+   * methods so it inherits their tab/workspace teardown instead of
+   * duplicating it. Always ends with exactly one workspace containing
+   * exactly one fresh home tab, same as pressing Ctrl+Alt+W repeatedly
+   * until only one workspace is left, then Ctrl+Shift+W.
+   * @returns The full browser state after the reset.
+   */
+  public closeAllWorkspaces(): BrowserState {
+    const idsToRemove = Array.from(this.workspaces.keys()).filter(
+      (id) => id !== this.activeWorkspaceId,
+    );
+    for (const id of idsToRemove) {
+      this.removeWorkspace(id);
+    }
+    return this.closeAllTabs();
   }
 
   // ── Bookmarks ────────────────────────────────────────────────────────
@@ -724,6 +834,164 @@ export class TabManager {
     return this.switchWorkspace(workspaceIds[nextIndex]!);
   }
 
+  /**
+   * Grabs a tab for keyboard reordering (Ctrl+Space held) — the keyboard
+   * equivalent of picking it up with the mouse, down to sharing the same
+   * `--dragging` blue highlight in the tab bar (see `TabBar.tsx`, which
+   * reads `grabbedTabId` off this state the same way it reads a live
+   * mouse-drag's `draggedId`). `nudgeTab` moves it while held; releasing
+   * Ctrl or Space (`releaseGrabbedTab`) drops it in place.
+   * @param id The tab to grab. A no-op if it doesn't exist.
+   */
+  public grabTabForReorder(id: string): void {
+    if (!this.states.has(id)) {
+      return;
+    }
+    this.grabbedTabId = id;
+    if (this.grabMaxDurationTimeout !== null) {
+      clearTimeout(this.grabMaxDurationTimeout);
+    }
+    this.grabMaxDurationTimeout = setTimeout(() => this.releaseGrabbedTab(), GRAB_MAX_DURATION_MS);
+    this.emitState();
+  }
+
+  /** Ends keyboard reorder mode, if it's active — dropping the grabbed tab wherever `nudgeTab` last left it. */
+  public releaseGrabbedTab(): void {
+    this.disarmSpaceHoldTimeout();
+    if (this.grabMaxDurationTimeout !== null) {
+      clearTimeout(this.grabMaxDurationTimeout);
+      this.grabMaxDurationTimeout = null;
+    }
+    if (this.grabbedTabId === null) {
+      return;
+    }
+    this.grabbedTabId = null;
+    this.emitState();
+  }
+
+  /**
+   * (Re)starts the grace-period timer that stands in for Space's own
+   * `keyUp`. Electron's `before-input-event` doesn't reliably deliver a
+   * `keyUp` for a key whose `keyDown` was `preventDefault`-ed — which every
+   * Space keydown is, while grabbed — so waiting for that event to release
+   * the grab left it stuck blue with no way out. Control has no such
+   * problem (its own keydown is never prevented, so its keyup is trustworthy
+   * and still handled directly), but Space needs this instead: called on
+   * the initial grab and on every subsequent Space repeat, so it only ever
+   * fires once repeats actually stop, i.e. once Space is physically let go.
+   */
+  private armSpaceHoldTimeout(): void {
+    this.disarmSpaceHoldTimeout();
+    this.spaceHoldTimeout = setTimeout(() => this.releaseGrabbedTab(), SPACE_HOLD_GRACE_MS);
+  }
+
+  /** Cancels the pending timer from `armSpaceHoldTimeout`, if any. */
+  private disarmSpaceHoldTimeout(): void {
+    if (this.spaceHoldTimeout !== null) {
+      clearTimeout(this.spaceHoldTimeout);
+      this.spaceHoldTimeout = null;
+    }
+  }
+
+  /**
+   * Moves the grabbed tab one position left or right within its own
+   * workspace — each Left/Right arrow press while Ctrl+Space is held. A
+   * no-op past either end of its workspace's tabs. Expressed as a call to
+   * `moveTab` (itself "insert before this id"), so it inherits that
+   * method's own same-workspace guard and `states` rebuild rather than
+   * duplicating them.
+   * @param id The grabbed tab.
+   * @param direction `1` to move it right (later), `-1` to move it left (earlier).
+   */
+  public nudgeTab(id: string, direction: 1 | -1): void {
+    const workspaceId = this.states.get(id)?.workspaceId;
+    const workspaceTabIds = Array.from(this.states.entries())
+      .filter(([, state]) => state.workspaceId === workspaceId)
+      .map(([tabId]) => tabId);
+    const currentIndex = workspaceTabIds.indexOf(id);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= workspaceTabIds.length) {
+      return;
+    }
+    const beforeId = direction === 1 ? (workspaceTabIds[targetIndex + 1] ?? null) : workspaceTabIds[targetIndex]!;
+    this.moveTab(id, beforeId);
+  }
+
+  /**
+   * The Ctrl+Space keyboard-reorder gesture's input handling — grab,
+   * nudge, release — shared between every tab's own `before-input-event`
+   * (`wireEvents`) and the chrome window's own (wired in the constructor).
+   * Both are needed: a mouse drag-and-drop, a click on a workspace pill,
+   * or Tab-navigating into the tab bar can all leave OS keyboard focus on
+   * the chrome instead of tab content, and unlike the tab-scoped shortcuts
+   * below (which have a menu-accelerator fallback for exactly that case),
+   * this gesture has no accelerator equivalent — accelerators fire once
+   * per press, with no notion of "held" or a matching key-up.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @returns Whether this event belonged to the gesture and was fully
+   *   handled — callers should stop processing it themselves when `true`.
+   */
+  private handleReorderGestureInput(event: Electron.Event, input: Electron.Input): boolean {
+    const key = input.key.toLowerCase();
+
+    if (input.type === 'keyUp') {
+      if (key === 'control' || key === ' ') {
+        this.releaseGrabbedTab();
+        return true;
+      }
+      return false;
+    }
+
+    if (input.type !== 'keyDown') {
+      return false;
+    }
+
+    // While a tab is grabbed, every key involved in the gesture is fully
+    // consumed here — Left/Right nudges it (auto-repeat deliberately
+    // allowed, unlike every other shortcut in this app, so holding an
+    // arrow keeps nudging). Space's own repeats (not just the very first
+    // press) re-arm the grace-period timer that stands in for its
+    // unreliable `keyUp` — see `armSpaceHoldTimeout`. Control's repeats
+    // are left alone entirely (not even `preventDefault`-ed): unlike
+    // Space, its keydown is never prevented in the first place, so its
+    // own keyUp stays a trustworthy release signal.
+    if (this.grabbedTabId !== null) {
+      if (key === 'arrowleft' || key === 'arrowright') {
+        event.preventDefault();
+        this.nudgeTab(this.grabbedTabId, key === 'arrowright' ? 1 : -1);
+        return true;
+      }
+      if (key === ' ') {
+        event.preventDefault();
+        // A brand-new (non-repeat) Ctrl+Space while something's already
+        // grabbed resets the grab onto whatever tab is active *now*,
+        // instead of just extending the existing hold. This is also the
+        // escape hatch if a grab ever gets stuck (its release signal
+        // missed for whatever reason): pressing Ctrl+Space again always
+        // breaks out of it rather than silently doing nothing forever.
+        if (input.control && !input.isAutoRepeat && this.activeTabId) {
+          this.grabTabForReorder(this.activeTabId);
+        }
+        this.armSpaceHoldTimeout();
+      }
+      return true;
+    }
+
+    // Ctrl+Space grabs the active tab for keyboard reordering; see
+    // `grabTabForReorder` and the grabbed-mode branch just above.
+    if (input.control && key === ' ' && !input.isAutoRepeat) {
+      if (this.activeTabId) {
+        event.preventDefault();
+        this.grabTabForReorder(this.activeTabId);
+        this.armSpaceHoldTimeout();
+      }
+      return true;
+    }
+
+    return false;
+  }
+
   // ── Cross-window UI requests ─────────────────────────────────────────
 
   /**
@@ -782,6 +1050,7 @@ export class TabManager {
       splitView: this.splitView,
       focusMode: this.focusMode,
       sidebarVisible: this.sidebarVisible,
+      grabbedTabId: this.grabbedTabId,
     };
   }
 
@@ -934,6 +1203,14 @@ export class TabManager {
       canGoForward: wc.navigationHistory.canGoForward(),
     });
 
+    // Safety net for the Ctrl+Space keyboard-reorder gesture below: if this
+    // view loses OS focus mid-hold (e.g. a click elsewhere, or the tab
+    // being nudged out from under the cursor), its `keyUp` for Space might
+    // never arrive here at all, since keyup goes to whichever surface has
+    // focus at release time, not necessarily this one. Blurring is treated
+    // the same as releasing the keys, so the grab can't get stuck.
+    wc.on('blur', () => this.releaseGrabbedTab());
+
     wc.on('page-title-updated', (_event, title) => this.patchState(id, { title }));
     wc.on('page-favicon-updated', (_event, favicons) => {
       this.patchState(id, { favicon: favicons[0] ?? null });
@@ -973,7 +1250,7 @@ export class TabManager {
 
     // Belt-and-suspenders for the browser-chrome shortcuts also bound as
     // menu accelerators in buildMenu.ts (close/new/reopen tab, bookmark,
-    // close workspace, toggle sidebar, cycle tabs/workspaces, home,
+    // close all tabs, toggle sidebar, cycle tabs/workspaces, home,
     // back/forward): Electron's menu accelerators are unreliable once a
     // WebContentsView (as opposed to the chrome window's own webContents)
     // has OS focus — which, for a browser, tab content has almost all the
@@ -983,10 +1260,17 @@ export class TabManager {
     // menu's focus quirks and beats the page's own keydown handling since
     // `before-input-event` runs first.
     wc.on('before-input-event', (event, input) => {
-      if (input.type !== 'keyDown' || input.isAutoRepeat) {
+      if (this.handleReorderGestureInput(event, input)) {
+        return;
+      }
+      if (input.type !== 'keyDown') {
         return;
       }
       const key = input.key.toLowerCase();
+
+      if (input.isAutoRepeat) {
+        return;
+      }
       const cmdOrCtrl = input.control || input.meta;
 
       if (input.alt && !cmdOrCtrl && !input.shift) {
@@ -1000,12 +1284,20 @@ export class TabManager {
         return;
       }
 
-      if (cmdOrCtrl && input.alt && !input.shift && key === 'w') {
-        // The deliberately-harder-to-hit combo for actually closing the
-        // window — plain Ctrl+W (below) only ever closes a tab, never the
-        // window itself, no matter how few tabs are left.
+      if (cmdOrCtrl && input.alt && key === 'w') {
         event.preventDefault();
-        this.closeWindow();
+        if (input.shift) {
+          // Ctrl+Shift+Alt+W — the workspace equivalent of Ctrl+Shift+W:
+          // closes every workspace and resets the last one, same as
+          // repeating the combo below until only one is left.
+          this.closeAllWorkspaces();
+        } else {
+          // The deliberately-harder-to-hit combo for closing the whole
+          // workspace — plain Ctrl+W (below) only ever closes a tab.
+          // `removeWorkspace` itself refuses to act when this is the last
+          // remaining workspace, so this can never close the window.
+          this.removeWorkspace(this.activeWorkspaceId);
+        }
         return;
       }
 
@@ -1021,7 +1313,7 @@ export class TabManager {
             return;
           case 'w':
             event.preventDefault();
-            this.removeWorkspace(this.activeWorkspaceId);
+            this.closeAllTabs();
             return;
           default:
             return;
@@ -1041,10 +1333,9 @@ export class TabManager {
           event.preventDefault();
           this.createTerminalTab();
           return;
-        case 'a':
-          // Deliberately overrides Select All everywhere, chrome and page
-          // content alike — see buildMenu.ts's hidden "New Workspace"
-          // (Ctrl+A) entry for why.
+        case 'q':
+          // Same action as Ctrl+Shift+N, under a second accelerator — see
+          // buildMenu.ts's hidden "New Workspace" (Ctrl+Q) entry for why.
           event.preventDefault();
           this.createWorkspace();
           return;

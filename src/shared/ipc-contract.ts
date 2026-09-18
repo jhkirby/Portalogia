@@ -14,6 +14,7 @@ export const IpcChannel = {
   TabsCreate: 'tabs:create',
   TabsClose: 'tabs:close',
   TabsActivate: 'tabs:activate',
+  TabsMove: 'tabs:move',
   TabsNavigate: 'tabs:navigate',
   TabsGoBack: 'tabs:go-back',
   TabsGoForward: 'tabs:go-forward',
@@ -66,6 +67,8 @@ export interface NorthstarApi {
   createTab(url?: string): Promise<IpcResult<BrowserState>>;
   closeTab(id: string): Promise<IpcResult<BrowserState>>;
   activateTab(id: string): Promise<IpcResult<BrowserState>>;
+  /** Reorders a tab (drag-and-drop in the tab bar) to just before `beforeId`, or to the end of its workspace's tabs if `beforeId` is `null`. */
+  moveTab(id: string, beforeId: string | null): Promise<IpcResult<BrowserState>>;
   navigate(id: string, url: string): Promise<IpcResult<BrowserState>>;
   goBack(id: string): Promise<IpcResult<BrowserState>>;
   goForward(id: string): Promise<IpcResult<BrowserState>>;

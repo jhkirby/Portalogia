@@ -66,4 +66,6 @@ export interface BrowserState {
   readonly focusMode: boolean;
   /** Whether the workspace sidebar is currently shown (toggled via Ctrl+L). */
   readonly sidebarVisible: boolean;
+  /** The tab currently grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it) — `null` when nothing is grabbed. */
+  readonly grabbedTabId: string | null;
 }

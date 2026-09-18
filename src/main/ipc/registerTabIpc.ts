@@ -12,6 +12,7 @@ import {
   createTabRequestSchema,
   createWorkspaceRequestSchema,
   focusModeRequestSchema,
+  moveTabRequestSchema,
   navigateRequestSchema,
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
@@ -44,6 +45,9 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
   );
   handle(IpcChannel.TabsActivate, tabIdRequestSchema, (request) =>
     getTabManager().activateTab(request.id),
+  );
+  handle(IpcChannel.TabsMove, moveTabRequestSchema, (request) =>
+    getTabManager().moveTab(request.id, request.beforeId),
   );
   handle(IpcChannel.TabsNavigate, navigateRequestSchema, (request) =>
     getTabManager().navigate(request.id, request.url),

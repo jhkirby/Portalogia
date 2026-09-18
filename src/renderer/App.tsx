@@ -39,9 +39,11 @@ export function App() {
     secondaryTab,
     focusMode,
     sidebarVisible,
+    grabbedTabId,
     createTab,
     closeTab,
     activateTab,
+    moveTab,
     navigate,
     goBack,
     goForward,
@@ -119,6 +121,8 @@ export function App() {
               activeTabId={activeTabId}
               onActivate={activateTab}
               onClose={closeTab}
+              onReorder={moveTab}
+              grabbedTabId={grabbedTabId}
               onNewTab={() => createTab()}
             />
           </div>

@@ -49,6 +49,14 @@ export function createMainWindow(): BrowserWindow {
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
+  // By product decision, this window can never be closed — not via Alt+F4,
+  // the titlebar's own close button, a menu accelerator, or `app.quit()`
+  // (which itself just asks every window to close first). Every one of
+  // those paths ends here as a native 'close' request, so blocking it in
+  // this single place is what makes closing the app impossible rather than
+  // merely inconvenient from any one of them.
+  window.on('close', (event) => event.preventDefault());
+
   applyChromeContentSecurityPolicy(window);
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];

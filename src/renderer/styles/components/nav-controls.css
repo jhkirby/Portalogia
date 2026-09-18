@@ -29,6 +29,15 @@
   cursor: pointer;
 }
 
+/* This group sits at the toolbar's left edge — see tooltip.css for the
+   shared `.chrome-tooltip` look this button also carries. Anchored to the
+   button's own left edge and growing rightward (the opposite of
+   `.page-actions__button`'s tooltips) so it stays inside the window
+   instead of overflowing past this edge. */
+.nav-controls__button::after {
+  left: 0;
+}
+
 .nav-controls__button:hover:not(:disabled) {
   background: var(--color-button-hover-bg);
 }

@@ -9,6 +9,13 @@ html,
 body {
   height: 100%;
   margin: 0;
+  /* This chrome is a fixed single-window layout, never a scrollable
+     document — if any descendant (e.g. a tooltip positioned off a
+     right-edge button) ever overflows the window's width, this stops it
+     from growing the page into a horizontally scrollable one, which would
+     let the whole fixed layout shift sideways rather than just clipping
+     the one overflowing element. */
+  overflow-x: hidden;
 
   font-family:
     -apple-system,
