@@ -5,12 +5,16 @@
 
 /* ── TAB BAR ──────────────────────────────────────────────────────────── */
 
-/* Lives inside `.tab-row` (see app.css), which supplies the shared
-   height/background/border — `.tab-bar` itself just needs to flex to fill
-   the space between the workspace pills and the search button. Tabs have
-   no min-width floor (see `.tab-bar__tab`): with `flex-basis: 0` they
-   always shrink evenly to whatever width divides the row exactly, so this
-   never needs to scroll no matter how many tabs are open. */
+/* Lives inside `.titlebar` (see app.css), which supplies the shared
+   height/background/border and is itself an OS drag region, and flexes to
+   fill the space up to WindowControls. Deliberately left draggable itself
+   (unlike its children below) — tabs sit bottom-aligned via
+   `align-items: flex-end`, so this container's own bounding box includes
+   the thin sliver above them, which should stay part of the drag region
+   the same way it would above a native titlebar's tabs. Tabs have no
+   min-width floor (see `.tab-bar__tab`): with `flex-basis: 0` they always
+   shrink evenly to whatever width divides the row exactly, so this never
+   needs to scroll no matter how many tabs are open. */
 .tab-bar {
   display: flex;
   align-items: flex-end;
@@ -45,6 +49,10 @@
   color: var(--color-tab-text);
 
   cursor: pointer;
+
+  /* Opts out of `.tab-bar`'s drag region — otherwise clicking, closing, or
+     dragging a tab would move the window instead. */
+  -webkit-app-region: no-drag;
 }
 
 /* `:not(--active)` so the active tab keeps its own (lighter) background on
@@ -197,6 +205,9 @@
   color: var(--color-tab-text);
 
   cursor: pointer;
+
+  /* Opts out of `.tab-bar`'s drag region — see `.tab-bar__tab` above. */
+  -webkit-app-region: no-drag;
 }
 
 .tab-bar__new:hover {

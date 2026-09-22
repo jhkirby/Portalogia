@@ -4,10 +4,13 @@
 // Last Modified: 2026-09-12
 
 /**
- * Height, in CSS pixels, of the browser chrome (workspace/tab row + address
- * bar) at the top of the window. The main process uses this to position
- * each tab's WebContentsView below the chrome; the renderer uses it to
- * reserve space so the chrome never overlaps the native tab content.
+ * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
+ * the top of the window. The titlebar row doubles as the frameless
+ * window's drag region and its tab strip (see MainWindow.ts's
+ * `frame: false` and `.titlebar` in app.css) — the main process uses this
+ * constant to position each tab's WebContentsView below the chrome; the
+ * renderer uses it to reserve space so the chrome never overlaps the
+ * native tab content.
  *
  * Kept as a fixed constant rather than measured at runtime (e.g. via
  * ResizeObserver + IPC) to keep the first version simple — revisit if the
@@ -16,12 +19,15 @@
 export const CHROME_HEIGHT_PX = 84;
 
 /**
- * Chrome height while Focus Mode is on: the workspace/tab row is hidden
- * entirely, leaving only the toolbar (nav + address bar) — must equal
- * `--size-toolbar-height` in `sizes.css`, the same way `CHROME_HEIGHT_PX`
- * must equal `--size-chrome-height`.
+ * Chrome height while Focus Mode is on — must equal
+ * `--size-chrome-height-focused` in `sizes.css`, the same way
+ * `CHROME_HEIGHT_PX` must equal `--size-chrome-height`. Equal to
+ * `CHROME_HEIGHT_PX`: Focus Mode hides only the tabs inside the titlebar
+ * row (see App.tsx), not the row itself, since it's the frameless window's
+ * only way to be dragged, minimized, maximized, or closed — so the row's
+ * height, and the total chrome height, don't change.
  */
-export const CHROME_HEIGHT_FOCUSED_PX = 44;
+export const CHROME_HEIGHT_FOCUSED_PX = 84;
 
 /**
  * Width, in CSS pixels, of the workspace sidebar on the left edge of the

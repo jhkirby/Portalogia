@@ -10,6 +10,7 @@ import { IpcChannel } from '@shared/ipc-contract';
 import { BookmarkStore } from './browser/BookmarkStore';
 import { TabManager } from './browser/TabManager';
 import { registerTabIpc } from './ipc/registerTabIpc';
+import { registerWindowIpc } from './ipc/registerWindowIpc';
 import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
 import { createMainWindow } from './windows/MainWindow';
@@ -75,6 +76,7 @@ void app.whenReady().then(() => {
     }
     return activeTabManager;
   });
+  registerWindowIpc();
   buildMenu(
     () => activeTabManager,
     () => activeTabManager?.getState().activeTabId ?? null,
@@ -112,4 +114,9 @@ function launchWindow(): void {
   window.on('resize', () => tabManager.updateBounds());
   window.on('closed', () => tabManager.disposeAllTerminals());
   window.webContents.once('did-finish-load', () => tabManager.createTab());
+
+  // Drives WindowControls' maximize/restore icon — the frameless window has
+  // no native titlebar to show that state itself (see MainWindow.ts).
+  window.on('maximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: true }));
+  window.on('unmaximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: false }));
 }

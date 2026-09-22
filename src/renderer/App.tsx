@@ -13,6 +13,7 @@ import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
 import { TabSearch } from './components/TabSearch';
 import { Terminal } from './components/Terminal';
+import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
 import { useTabs } from './hooks/useTabs';
 
@@ -114,8 +115,15 @@ export function App() {
   return (
     <div className="app-shell">
       <div className={`app${focusMode ? ' app--focus-mode' : ''}`}>
-        {!focusMode && (
-          <div className="tab-row">
+        {/* The frameless window's own drag region (see MainWindow.ts's
+            `frame: false`) — the tab strip shares this row with
+            WindowControls rather than sitting on a row of its own, so
+            whatever space the tabs don't fill stays draggable, including a
+            native double-click-to-maximize there. Tabs themselves opt out
+            of dragging (see tab-bar.css) so clicking and reordering them
+            still works. */}
+        <div className="titlebar">
+          {!focusMode && (
             <TabBar
               tabs={workspaceTabs}
               activeTabId={activeTabId}
@@ -125,8 +133,9 @@ export function App() {
               grabbedTabId={grabbedTabId}
               onNewTab={() => createTab()}
             />
-          </div>
-        )}
+          )}
+          <WindowControls />
+        </div>
         <div className="toolbar">
           {activeTab?.kind === 'terminal' ? (
             <span className="toolbar__terminal-label">{activeTab.title}</span>

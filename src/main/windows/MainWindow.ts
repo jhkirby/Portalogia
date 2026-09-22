@@ -32,7 +32,10 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 480,
     show: false,
-    autoHideMenuBar: true,
+    // No native titlebar at all — `.titlebar` (App.tsx) is our own drag
+    // region and window-control buttons, with no OS-drawn icon or title
+    // text alongside them.
+    frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

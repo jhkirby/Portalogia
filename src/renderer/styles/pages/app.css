@@ -68,24 +68,34 @@ body {
 }
 
 /* Focus Mode hides the tab row (and the sidebar — see `App`) entirely, so
-   the chrome only needs to reserve toolbar height — must track
+   the chrome only needs to reserve titlebar + toolbar height — must track
    CHROME_HEIGHT_FOCUSED_PX in src/shared/constants.ts, which the main
    process uses to grow the page into the space this frees up. */
 .app--focus-mode {
-  height: var(--size-toolbar-height);
+  height: var(--size-chrome-height-focused);
 }
 
-/* ── TAB ROW ──────────────────────────────────────────────────────────── */
-/* Houses the (possibly-scrolling) tab strip, sharing the row's
-   background/border/height. */
-
-.tab-row {
+/* ── TITLEBAR ─────────────────────────────────────────────────────────── */
+/* The frameless window's only drag region (see MainWindow.ts's
+   `frame: false`), sharing its row with the tab strip rather than sitting
+   above it — `.tab-bar` opts itself out of dragging (see tab-bar.css), so
+   only the leftover space past the tabs and the "new tab" button stays
+   draggable, WindowControls included. That leftover space also carries
+   Windows' native double-click-to-maximize for a drag region, with no JS
+   needed. Stays visible in Focus Mode (see `.app--focus-mode` above) —
+   with the tab strip hidden there, it's just WindowControls — since it's
+   the only way left to move, minimize, maximize, or close the window. */
+.titlebar {
   display: flex;
   align-items: stretch;
+  justify-content: flex-end;
+  flex-shrink: 0;
   height: var(--size-tab-bar-height);
 
   background: var(--color-chrome-bg);
   border-bottom: 1px solid var(--color-chrome-border);
+
+  -webkit-app-region: drag;
 }
 
 /* ── TOOLBAR ──────────────────────────────────────────────────────────── */

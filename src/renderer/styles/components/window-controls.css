@@ -1,0 +1,44 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-22 */
+
+/* ── WINDOW CONTROLS ──────────────────────────────────────────────────── */
+/* Lives inside `.titlebar` (see app.css), which is the frameless window's
+   drag region — these buttons opt back out of dragging so a click lands
+   on them instead of moving the window. */
+
+.window-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+
+  -webkit-app-region: no-drag;
+}
+
+.window-controls__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.window-controls__button:hover {
+  background: var(--color-button-hover-bg);
+}
+
+/* Matches the OS convention (and the native titlebar this replaces) of a
+   red close button on hover, distinct from the other two. */
+.window-controls__button--close:hover {
+  background: #e81123;
+  color: #ffffff;
+}

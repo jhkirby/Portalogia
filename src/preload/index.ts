@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-12
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { IpcChannel, type IpcResult, type NorthstarApi } from '@shared/ipc-contract';
+import { IpcChannel, type IpcResult, type NorthstarApi, type WindowState } from '@shared/ipc-contract';
 import type { BrowserState } from '@shared/tab-state';
 
 /**
@@ -73,6 +73,17 @@ const api: NorthstarApi = {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
+  },
+
+  minimizeWindow: () => ipcRenderer.send(IpcChannel.WindowMinimize),
+  toggleMaximizeWindow: () => ipcRenderer.send(IpcChannel.WindowToggleMaximize),
+  closeWindow: () => ipcRenderer.send(IpcChannel.WindowClose),
+  onWindowStateChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: WindowState): void => {
+      listener(state);
+    };
+    ipcRenderer.on(IpcChannel.WindowStateChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.WindowStateChanged, handler);
   },
 };
 

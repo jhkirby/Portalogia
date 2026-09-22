@@ -38,6 +38,10 @@ export const IpcChannel = {
   FocusModeSet: 'focus-mode:set',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiFocusAddressBar: 'ui:focus-address-bar',
+  WindowMinimize: 'window:minimize',
+  WindowToggleMaximize: 'window:toggle-maximize',
+  WindowClose: 'window:close',
+  WindowStateChanged: 'window:state-changed',
 } as const;
 
 // Request validation schemas live in `@shared/ipc-schemas` (zod-based,
@@ -55,6 +59,11 @@ export type IpcResult<T> =
 /** Result of a PDF export: the path it was saved to, or `null` if the user canceled the save dialog. */
 export interface ExportPdfResult {
   readonly savedPath: string | null;
+}
+
+/** Pushed whenever the frameless window's maximized state changes, so `WindowControls` can swap its maximize/restore icon. */
+export interface WindowState {
+  readonly isMaximized: boolean;
 }
 
 /**
@@ -108,4 +117,13 @@ export interface NorthstarApi {
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+/) to focus the address bar. */
   onFocusAddressBar(listener: () => void): () => void;
+
+  /** Minimizes the frameless window. Fire-and-forget, same as `sendTerminalInput`. */
+  minimizeWindow(): void;
+  /** Toggles the frameless window between maximized and restored. Fire-and-forget, same as `sendTerminalInput`. */
+  toggleMaximizeWindow(): void;
+  /** Requests the frameless window close — a no-op by product decision (see MainWindow.ts). Fire-and-forget, same as `sendTerminalInput`. */
+  closeWindow(): void;
+  /** Subscribes to the window's maximized state changing; returns an unsubscribe function. */
+  onWindowStateChanged(listener: (state: WindowState) => void): () => void;
 }
