@@ -19,7 +19,7 @@ import {
   WORKSPACE_COLORS,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
-import { IpcChannel } from '@shared/ipc-contract';
+import { IpcChannel, type AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type {
   BrowserState,
@@ -30,6 +30,7 @@ import type {
   WorkspaceState,
 } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
+import { SuggestionsOverlay } from './SuggestionsOverlay';
 import { TerminalManager } from '../terminal/TerminalManager';
 
 interface Rect {
@@ -100,6 +101,7 @@ export class TabManager {
   /** Set for the duration of an in-flight bounds animation (see `animateBoundsInset`) — lets `updateBounds` defer to the animation's own frames instead of fighting them with a one-off instant jump, e.g. from the native 'resize' event `setFullScreen` fires when Focus Mode toggles. */
   private isAnimatingBounds = false;
   private readonly terminals: TerminalManager;
+  private readonly suggestionsOverlay: SuggestionsOverlay;
 
   /**
    * @param window The window whose `contentView` hosts each tab's view.
@@ -128,6 +130,14 @@ export class TabManager {
         this.patchTerminalState(id, { exited: true });
         this.views.get(id)?.webContents.send(IpcChannel.TerminalExited, { id });
       },
+    );
+    this.suggestionsOverlay = new SuggestionsOverlay(
+      this.window,
+      // A row clicked in the overlay's own view only makes sense to
+      // whichever chrome renderer synced the list it's an index into — the
+      // chrome window's own webContents, same target `requestFocusAddressBar`
+      // and friends already push to.
+      (index) => this.window.webContents.send(IpcChannel.AddressSuggestionsSelect, index),
     );
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
@@ -293,6 +303,16 @@ export class TabManager {
   /** Kills every terminal tab's shell process — call this when the window itself closes. */
   public disposeAllTerminals(): void {
     this.terminals.disposeAll();
+  }
+
+  /** Applies the address bar's latest suggestions-dropdown sync — see `SuggestionsOverlay.sync`. */
+  public syncAddressSuggestions(payload: AddressSuggestionsSyncPayload): void {
+    this.suggestionsOverlay.sync(payload);
+  }
+
+  /** Removes the suggestions overlay's view for good — call this when the window itself closes. */
+  public disposeSuggestionsOverlay(): void {
+    this.suggestionsOverlay.dispose();
   }
 
   /**
@@ -481,9 +501,15 @@ export class TabManager {
     // fresh view loads content, but not reliably true for a view that's
     // simply being reattached after being hidden, which is what every tab
     // switch after the first is.
+    //
+    // Always inserted at index 0 (the bottom of the child-view stack)
+    // rather than appended (the default, which would make it the topmost)
+    // — `SuggestionsOverlay`'s own view relies on tab views never
+    // outranking it so its dropdown can sit above the live page without
+    // that page ever needing to be hidden; see its class doc comment.
     const view = this.views.get(id);
     if (view) {
-      this.window.contentView.addChildView(view);
+      this.window.contentView.addChildView(view, 0);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
       view.webContents.focus();
     }
@@ -767,20 +793,22 @@ export class TabManager {
 
   /**
    * Captures the active browser tab's current frame and hides its native
-   * `WebContentsView` — the main-process half of any chrome-drawn overlay
-   * that needs to sit visually over the page (`BookmarkPopup`, and the
-   * address bar's bookmark-suggestions dropdown). The view has to
+   * `WebContentsView` — what `BookmarkPopup` shows blurred behind itself
+   * instead of the live page, since it's a true modal. The view has to
    * actually come off the window, not just be covered by chrome-drawn UI,
    * since it's a separate native surface layered above the chrome (same
    * reason `activateTab` needs `webContents.focus()` — see there) that
-   * would otherwise render on top of the overlay and swallow every click
+   * would otherwise render on top of the popup and swallow every click
    * meant for it. A no-op (returns `null`, nothing hidden) for anything
    * but the active browser tab.
+   *
+   * Not used by the address bar's suggestions dropdown — that one has its
+   * own dedicated `SuggestionsOverlay` view instead, specifically so the
+   * page never has to stop being live just because the dropdown is open.
    * @param id The tab to preview and hide.
    * @returns A data URL of the tab's last-painted frame, or `null` if it
-   *   couldn't be captured — a caller that wants it blurred behind its
-   *   overlay falls back to a plain scrim; one that doesn't need it (the
-   *   dropdown) just ignores it.
+   *   couldn't be captured — the view is hidden either way, and the popup
+   *   falls back to a plain scrim.
    */
   public async beginTabPreview(id: string): Promise<string | null> {
     const view = this.views.get(id);
@@ -812,7 +840,8 @@ export class TabManager {
   public restoreTabPreview(id: string): BrowserState {
     const view = this.views.get(id);
     if (view && id === this.activeTabId) {
-      this.window.contentView.addChildView(view);
+      // Index 0 — see `activateTab`'s own `addChildView` call for why.
+      this.window.contentView.addChildView(view, 0);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
       view.webContents.focus();
     }
@@ -845,7 +874,8 @@ export class TabManager {
 
     this.teardownSplitView();
     this.splitView = { primaryTabId: primaryId, secondaryTabId: secondaryId };
-    this.window.contentView.addChildView(secondaryView);
+    // Index 0 — see `activateTab`'s own `addChildView` call for why.
+    this.window.contentView.addChildView(secondaryView, 0);
     this.updateBounds();
     this.emitState();
     return this.getState();

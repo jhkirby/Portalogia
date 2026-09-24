@@ -8,6 +8,7 @@ import type { ZodType } from 'zod';
 import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-contract';
 import {
   addBookmarkRequestSchema,
+  addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
   createTabRequestSchema,
   createWorkspaceRequestSchema,
@@ -161,6 +162,16 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
     const parsed = terminalResizeRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
       getTabManager().resizeTerminal(parsed.data.id, parsed.data.cols, parsed.data.rows);
+    }
+  });
+
+  // Same fire-and-forget shape as the terminal channels above — the address
+  // bar pushes a fresh sync on essentially every keystroke while its
+  // dropdown is open, and there's nothing meaningful to reply with.
+  ipcMain.on(IpcChannel.AddressSuggestionsSync, (_event, rawRequest: unknown) => {
+    const parsed = addressSuggestionsSyncRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      getTabManager().syncAddressSuggestions(parsed.data);
     }
   });
 }

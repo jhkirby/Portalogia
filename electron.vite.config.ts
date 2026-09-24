@@ -27,14 +27,16 @@ export default defineConfig({
     resolve: { alias: sharedAlias },
     build: {
       rollupOptions: {
-        // `terminal` is the second, narrower preload for a terminal tab's
-        // own `WebContentsView` (see `src/preload/terminal.ts`) — a
-        // separate bundle so a terminal view's sandboxed renderer never
-        // even has the full chrome-facing `NorthstarApi` in its preload,
-        // only the handful of terminal-specific channels it needs.
+        // `terminal` and `suggestions` are narrower preloads for a
+        // terminal tab's and the address bar's suggestions overlay's own
+        // `WebContentsView`s (see `src/preload/terminal.ts` and
+        // `src/preload/suggestions.ts`) — separate bundles so neither
+        // sandboxed renderer ever has the full chrome-facing `NorthstarApi`
+        // in its preload, only the handful of channels each one needs.
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
           terminal: resolve(__dirname, 'src/preload/terminal.ts'),
+          suggestions: resolve(__dirname, 'src/preload/suggestions.ts'),
         },
         // Sandboxed preload scripts are loaded through a synchronous
         // CommonJS loader and can't use `import` — with the package set to
@@ -50,12 +52,14 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        // `terminal` is a second page (`terminal.html`/`terminal-main.tsx`)
-        // for a terminal tab's own `WebContentsView` to load — see
-        // `TabManager.createTerminalTab`.
+        // `terminal` and `suggestions` are additional pages for a terminal
+        // tab's and the address bar's suggestions overlay's own
+        // `WebContentsView`s to load — see `TabManager.createTerminalTab`
+        // and `SuggestionsOverlay`.
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
           terminal: resolve(__dirname, 'src/renderer/terminal.html'),
+          suggestions: resolve(__dirname, 'src/renderer/suggestions.html'),
         },
       },
     },

@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-11
 
-import type { NorthstarApi, NorthstarTerminalApi } from '@shared/ipc-contract';
+import type { NorthstarAddressSuggestionsApi, NorthstarApi, NorthstarTerminalApi } from '@shared/ipc-contract';
 
 declare global {
   interface Window {
@@ -11,6 +11,8 @@ declare global {
     readonly northstar: NorthstarApi;
     /** The bridge exposed by a terminal tab's own preload script (`src/preload/terminal.ts`). Only present in `terminal.html`'s page. */
     readonly northstarTerminal: NorthstarTerminalApi;
+    /** The bridge exposed by the address suggestions overlay's own preload script (`src/preload/suggestions.ts`). Only present in `suggestions.html`'s page. */
+    readonly northstarSuggestions: NorthstarAddressSuggestionsApi;
   }
 }
 

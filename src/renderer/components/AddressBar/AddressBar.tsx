@@ -4,10 +4,8 @@
 // Last Modified: 2026-09-24
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
 import type { BookmarkState } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
-import { BookmarkStarIcon } from '../icons';
 
 interface AddressBarProps {
   /** The active tab's current URL; used to keep the field in sync with navigation. */
@@ -17,16 +15,13 @@ interface AddressBarProps {
   readonly onNavigate: (input: string) => void;
   /** Every saved bookmark, filtered locally against the draft to power the suggestions dropdown. */
   readonly bookmarks: readonly BookmarkState[];
-  /** The active tab — needed to hide/restore its native view while the dropdown is open; `null` only briefly during startup, before this bar would even be focusable. */
-  readonly activeTabId: string | null;
-  /** Hides the active tab's `WebContentsView` so the dropdown can render over it — see `TabManager.beginTabPreview`. */
-  readonly onBeginTabPreview: (id: string) => Promise<string | null>;
-  /** Re-shows the view `onBeginTabPreview` hid. */
-  readonly onEndTabPreview: (id: string) => void;
 }
 
-/** How many bookmark suggestions to show at once — the dropdown scrolls internally past this rather than growing without bound. */
+/** How many bookmark suggestions to show at once. */
 const MAX_SUGGESTIONS = 8;
+
+/** Vertical gap, in CSS pixels, between the address bar's own bottom edge and the suggestions overlay below it. */
+const DROPDOWN_GAP_PX = 6;
 
 /**
  * The unified address/search bar. Kept as local, editable "draft" state
@@ -37,34 +32,22 @@ const MAX_SUGGESTIONS = 8;
  * the current draft would navigate or search, so it reads as one
  * "search-or-go" box the way other browsers' omniboxes do.
  *
- * While focused with a non-empty draft that matches at least one
- * bookmark, also shows those matches as a dropdown below the field —
- * Up/Down moves the highlight, Enter (or a click) navigates to the
- * highlighted one instead of submitting the typed text. The dropdown has
- * to render over the tab's own content area, which — unlike the rest of
- * this chrome — is a separate native `WebContentsView` layered above it,
- * so showing it means hiding that view for as long as the dropdown stays
- * open (see `onBeginTabPreview`), the same mechanism `BookmarkPopup` uses.
- *
- * The dropdown itself is portaled to `document.body` rather than rendered
- * as a normal child here: `.app` (App.tsx's outermost chrome wrapper)
- * pins itself to a fixed height with `overflow: hidden` so Focus Mode's
- * slide-away animation has something to clip against, and this bar lives
- * inside it — a dropdown extending below the toolbar would just get
- * silently clipped away by that same rule. Escaping to `document.body`
- * and positioning it with `position: fixed` off this bar's own measured
- * `getBoundingClientRect()` (see the layout effect below) sidesteps that
- * without touching `.app`'s clipping, which Focus Mode still needs.
+ * While focused with a non-empty draft that matches at least one bookmark,
+ * also shows those matches as a dropdown below the field — Up/Down moves
+ * the highlight, Enter (or a click) navigates to the highlighted one
+ * instead of submitting the typed text. That dropdown isn't rendered here
+ * at all, or anywhere in this chrome's own DOM: it lives entirely in its
+ * own dedicated `WebContentsView` (`suggestions.html`, see
+ * `SuggestionsOverlay` on the main-process side), specifically so the
+ * active tab's own view never has to be hidden or frozen just because the
+ * dropdown is open — unlike `BookmarkPopup`, a real modal, this dropdown
+ * is meant to look like it's simply floating over a page that's still
+ * fully live underneath it. This component's job is just to compute the
+ * match list and keyboard-selected index, measure where the dropdown
+ * should sit, and push both down via `syncAddressSuggestions` — the only
+ * channel that connects the two.
  */
-export function AddressBar({
-  url,
-  isLoading,
-  onNavigate,
-  bookmarks,
-  activeTabId,
-  onBeginTabPreview,
-  onEndTabPreview,
-}: AddressBarProps) {
+export function AddressBar({ url, isLoading, onNavigate, bookmarks }: AddressBarProps) {
   const [draft, setDraft] = useState(url);
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -98,24 +81,10 @@ export function AddressBar({
   const isDropdownOpen = isFocused && suggestions.length > 0;
   const clampedIndex = suggestions.length === 0 ? 0 : Math.min(selectedIndex, suggestions.length - 1);
 
-  // Only re-runs on the dropdown's own open/closed transition (or a tab
-  // switch, though this component remounts per-tab anyway — see its `key`
-  // in App.tsx), never per keystroke while it's already open: `isDropdownOpen`
-  // only flips when the match count crosses zero, not on every character
-  // typed while matches already exist.
-  useEffect(() => {
-    if (!isDropdownOpen || !activeTabId) {
-      return;
-    }
-    const id = activeTabId;
-    void onBeginTabPreview(id);
-    return () => onEndTabPreview(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `onBeginTabPreview`/`onEndTabPreview` are stable (empty-deps useCallback in useTabs.ts); only the open/closed transition and which tab should re-run this.
-  }, [isDropdownOpen, activeTabId]);
-
   // Measured fresh each time the dropdown opens (and on window resize while
-  // it's open) — see this component's own doc comment for why it's
-  // positioned this way instead of as a normal descendant.
+  // it's open) — this is the position the main process sizes and mounts
+  // the overlay view at (see the sync effect below), the same values this
+  // bar's own portal-based dropdown used to position itself with directly.
   useLayoutEffect(() => {
     if (!isDropdownOpen) {
       setDropdownRect(null);
@@ -132,6 +101,34 @@ export function AddressBar({
     return () => window.removeEventListener('resize', updateRect);
   }, [isDropdownOpen]);
 
+  // Pushes this bar's current dropdown state to its overlay on every
+  // change — open/closed, position, matches, and keyboard selection.
+  // Fire-and-forget (see `syncAddressSuggestions`'s own doc comment); the
+  // overlay's own view mounts/unmounts and resizes itself in response.
+  useEffect(() => {
+    if (!isDropdownOpen || !dropdownRect) {
+      window.northstar.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
+      return;
+    }
+    window.northstar.syncAddressSuggestions({
+      open: true,
+      rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
+      suggestions: suggestions.map((bookmark) => ({ id: bookmark.id, title: bookmark.title, url: bookmark.url })),
+      selectedIndex: clampedIndex,
+    });
+  }, [isDropdownOpen, dropdownRect, suggestions, clampedIndex]);
+
+  // Belt-and-suspenders close on unmount (this component remounts per tab
+  // — see its `key` in App.tsx) — the effect above already syncs `open:
+  // false` on the dropdown's own closed transition, but a tab switch while
+  // it's open skips straight to unmount without that transition firing.
+  useEffect(
+    () => () => {
+      window.northstar.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
+    },
+    [],
+  );
+
   const closeDropdown = (): void => {
     setIsFocused(false);
     inputRef.current?.blur();
@@ -142,6 +139,21 @@ export function AddressBar({
     setDraft(bookmark.url);
     closeDropdown();
   };
+
+  // A row clicked in the overlay's own separate view can't dispatch a
+  // normal DOM click here — it reports back over IPC by index instead
+  // (see `SuggestionsOverlay`). Re-subscribed whenever `suggestions`
+  // changes so the index always resolves against the list the overlay was
+  // actually showing when the click happened, rather than a stale closure.
+  useEffect(() => {
+    return window.northstar.onAddressSuggestionSelected((index) => {
+      const target = suggestions[index];
+      if (target) {
+        selectBookmark(target);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `selectBookmark` closes over stable setters (`onNavigate` is effectively fixed per mounted tab — see this component's own `key` in App.tsx) and would otherwise force a re-subscribe on every render for no benefit.
+  }, [suggestions]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -198,49 +210,17 @@ export function AddressBar({
           event.currentTarget.select();
           setIsFocused(true);
         }}
-        // Dropdown rows preventDefault their own `mousedown`, so a click on
-        // one never gets here — this only fires for a real "focus went
-        // elsewhere" (clicking outside, Tab, a tab switch), which is
-        // exactly when the dropdown should close.
         onBlur={() => setIsFocused(false)}
         onKeyDown={handleKeyDown}
         aria-label="Search the internet..."
         role="combobox"
         aria-expanded={isDropdownOpen}
         aria-autocomplete="list"
-        aria-controls="address-bar-suggestions"
         placeholder="Search the internet..."
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"
       />
-      {isDropdownOpen &&
-        dropdownRect &&
-        createPortal(
-          <ul
-            id="address-bar-suggestions"
-            className="address-bar__suggestions"
-            role="listbox"
-            style={{ top: dropdownRect.top + 6, left: dropdownRect.left, width: dropdownRect.width }}
-          >
-            {suggestions.map((bookmark, index) => (
-              <li
-                key={bookmark.id}
-                role="option"
-                aria-selected={index === clampedIndex}
-                className={`address-bar__suggestion${index === clampedIndex ? ' address-bar__suggestion--selected' : ''}`}
-                onMouseEnter={() => setSelectedIndex(index)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => selectBookmark(bookmark)}
-              >
-                <BookmarkStarIcon filled size={13} />
-                <span className="address-bar__suggestion-title">{bookmark.title}</span>
-                <span className="address-bar__suggestion-url">{bookmark.url}</span>
-              </li>
-            ))}
-          </ul>,
-          document.body,
-        )}
     </form>
   );
 }

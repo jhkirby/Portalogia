@@ -36,6 +36,8 @@ export const IpcChannel = {
   BookmarksRemove: 'bookmarks:remove',
   TabsBeginTabPreview: 'tabs:begin-tab-preview',
   TabsEndTabPreview: 'tabs:end-tab-preview',
+  AddressSuggestionsSync: 'address-suggestions:sync',
+  AddressSuggestionsSelect: 'address-suggestions:select',
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
@@ -69,6 +71,30 @@ export interface ExportPdfResult {
 /** Pushed whenever the frameless window's maximized state changes, so `WindowControls` can swap its maximize/restore icon. */
 export interface WindowState {
   readonly isMaximized: boolean;
+}
+
+/** One bookmark match shown as a row in the address bar's suggestions dropdown. */
+export interface AddressSuggestionItem {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+}
+
+/**
+ * What the address bar pushes to its dedicated suggestions overlay every
+ * time its dropdown's own state changes — see `syncAddressSuggestions` and
+ * `SuggestionsOverlay`. `rect` is `null` whenever `open` is `false`; when
+ * `open` is `true` it's always present, measured in the same CSS-pixel
+ * coordinate space `WebContentsView.setBounds` already uses elsewhere in
+ * this app (see `TabManager.computeMainBounds`) — no unit conversion
+ * needed between the chrome's own `getBoundingClientRect()` and the
+ * overlay view's bounds, since both live in the same window.
+ */
+export interface AddressSuggestionsSyncPayload {
+  readonly open: boolean;
+  readonly rect: { readonly top: number; readonly left: number; readonly width: number } | null;
+  readonly suggestions: readonly AddressSuggestionItem[];
+  readonly selectedIndex: number;
 }
 
 /**
@@ -116,22 +142,36 @@ export interface NorthstarApi {
   removeBookmark(id: string): Promise<IpcResult<BrowserState>>;
 
   /**
-   * Captures the given (must be the active) browser tab's current frame
-   * and hides its native `WebContentsView` — the shared mechanism behind
-   * any chrome-drawn overlay that needs to sit visually over the page,
-   * `BookmarkPopup` and the address bar's bookmark-suggestions dropdown
-   * both included. The view has to actually come off the window, not just
-   * be covered by chrome-drawn UI, since it's a separate native surface
-   * layered above the chrome that would otherwise swallow every click and
-   * render on top of whatever the overlay tried to show.
-   * @returns A data URL of the tab's last-painted frame, or `null` if it
-   *   couldn't be captured — the view is hidden either way; a caller that
-   *   wants to show it blurred behind the overlay falls back to a plain
-   *   scrim, one that doesn't need it (e.g. the dropdown) just ignores it.
+   * Captures the active browser tab's current frame and hides its native
+   * `WebContentsView` — what `BookmarkPopup` sits over instead of the live
+   * page while it's a true modal. The view has to actually come off the
+   * window, not just be covered by chrome-drawn UI, since it's a separate
+   * native surface layered above the chrome that would otherwise swallow
+   * every click and render on top of the popup. Not used by the address
+   * bar's suggestions dropdown — see `syncAddressSuggestions` for why that
+   * one doesn't need the page to ever stop being live.
+   * @returns A data URL of the tab's last-painted frame, shown blurred
+   *   behind the popup, or `null` if it couldn't be captured — the view is
+   *   hidden either way; `null` just falls back to a plain scrim.
    */
   beginTabPreview(id: string): Promise<IpcResult<string | null>>;
-  /** Re-shows the view `beginTabPreview` hid — called once the overlay using it closes, however it closed. */
+  /** Re-shows the view `beginTabPreview` hid — called once `BookmarkPopup` closes, however it closed. */
   endTabPreview(id: string): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Pushes the address bar's current suggestions-dropdown state — open or
+   * closed, its position, its matches, and which one is keyboard-selected
+   * — to its dedicated overlay `WebContentsView` (see `SuggestionsOverlay`).
+   * Fire-and-forget, same as `sendTerminalInput`: nothing meaningful to
+   * reply with, and the overlay's own render is what matters. Deliberately
+   * the *only* thing that couples the dropdown to the page — unlike
+   * `BookmarkPopup`, the active tab's own view is never touched by this,
+   * so the page keeps rendering and animating exactly as if the dropdown
+   * didn't exist.
+   */
+  syncAddressSuggestions(payload: AddressSuggestionsSyncPayload): void;
+  /** Subscribes to a row being clicked in the suggestions overlay — the index is into whichever list this address bar most recently synced. */
+  onAddressSuggestionSelected(listener: (index: number) => void): () => void;
 
   enterSplitView(secondaryId: string): Promise<IpcResult<BrowserState>>;
   exitSplitView(): Promise<IpcResult<BrowserState>>;
@@ -177,4 +217,20 @@ export interface NorthstarTerminalApi {
   onTerminalData(listener: (id: string, data: string) => void): () => void;
   /** Subscribes to this tab's shell process exiting on its own (e.g. the user typed `exit`) — distinct from the tab being closed. */
   onTerminalExited(listener: (id: string) => void): () => void;
+}
+
+/**
+ * The narrower API surface exposed to the address bar's own suggestions
+ * overlay `WebContentsView` (`src/preload/suggestions.ts`,
+ * `suggestions.html`) — like `NorthstarTerminalApi`, deliberately separate
+ * from `NorthstarApi`: this view renders nothing but the dropdown's own
+ * row list, so its preload only needs the two channels that cross that
+ * boundary. See `SuggestionsOverlay` for how this view is created and
+ * positioned.
+ */
+export interface NorthstarAddressSuggestionsApi {
+  /** Subscribes to the chrome's latest `syncAddressSuggestions` push. */
+  onSync(listener: (payload: AddressSuggestionsSyncPayload) => void): () => void;
+  /** Reports a row click back to the chrome's address bar, by index into the list it last synced. Fire-and-forget, same as `sendTerminalInput`. */
+  select(index: number): void;
 }

@@ -32,6 +32,13 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 640,
     minHeight: 480,
     show: false,
+    // Packaged Windows/macOS builds get their icon baked into the exe/app
+    // bundle by electron-builder (see the `build.win.icon`/`mac.icon`
+    // config in package.json, both pointing at this same file) — that
+    // config alone doesn't reach `npm run dev`, though, which is still
+    // just bare `electron.exe` and would otherwise show Electron's own
+    // default icon in the taskbar. Setting it explicitly here covers both.
+    icon: join(__dirname, '../../resources/icon.ico'),
     // No native titlebar at all — `.titlebar` (App.tsx) is our own drag
     // region and window-control buttons, with no OS-drawn icon or title
     // text alongside them.

@@ -75,6 +75,25 @@ export const SEARCH_URL_TEMPLATE = 'https://www.google.com/search?q=';
 export const DEFAULT_WORKSPACE_ID = 'default';
 export const DEFAULT_WORKSPACE_NAME = 'Home';
 
+/**
+ * Height, in CSS pixels, of one row in the address bar's bookmark
+ * suggestions dropdown — the main process uses this (with
+ * `ADDRESS_SUGGESTIONS_PADDING_PX`) to size the dropdown's own dedicated
+ * `WebContentsView` to exactly its visible content, no more and no less
+ * (see `SuggestionsOverlay`). Must equal `.address-bar__suggestion`'s
+ * `height` in `suggestions-overlay.css`, the same relationship
+ * `CHROME_HEIGHT_PX` has with `--size-chrome-height`.
+ */
+export const ADDRESS_SUGGESTION_ROW_HEIGHT_PX = 32;
+
+/**
+ * Padding, in CSS pixels, above and below the suggestion rows inside the
+ * dropdown — must equal `--size-spacing-xs` in `sizes.css`, the value
+ * `.address-bar__suggestions`'s own `padding` in `suggestions-overlay.css`
+ * resolves to. See `ADDRESS_SUGGESTION_ROW_HEIGHT_PX`.
+ */
+export const ADDRESS_SUGGESTIONS_PADDING_PX = 4;
+
 /** Accent colors cycled through, in order, as new workspaces are created. */
 export const WORKSPACE_COLORS = [
   '#4285f4',

@@ -106,7 +106,10 @@ function launchWindow(): void {
   activeTabManager = tabManager;
 
   window.on('resize', () => tabManager.updateBounds());
-  window.on('closed', () => tabManager.disposeAllTerminals());
+  window.on('closed', () => {
+    tabManager.disposeAllTerminals();
+    tabManager.disposeSuggestionsOverlay();
+  });
   window.webContents.once('did-finish-load', () => tabManager.createTab());
 
   // Drives WindowControls' maximize/restore icon — the frameless window has

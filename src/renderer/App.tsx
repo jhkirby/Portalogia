@@ -215,9 +215,6 @@ export function App() {
                   isLoading={browserTab?.isLoading ?? false}
                   onNavigate={(input) => activeTabId && navigate(activeTabId, input)}
                   bookmarks={bookmarks}
-                  activeTabId={activeTabId}
-                  onBeginTabPreview={beginTabPreview}
-                  onEndTabPreview={endTabPreview}
                 />
               </>
             )}

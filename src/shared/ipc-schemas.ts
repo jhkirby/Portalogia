@@ -87,6 +87,28 @@ export const terminalResizeRequestSchema = z.object({
 });
 export type TerminalResizeRequest = z.infer<typeof terminalResizeRequestSchema>;
 
+export const addressSuggestionsSyncRequestSchema = z.object({
+  open: z.boolean(),
+  rect: z
+    .object({
+      top: z.number(),
+      left: z.number(),
+      width: z.number(),
+    })
+    .nullable(),
+  suggestions: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      url: z.string(),
+    }),
+  ),
+  selectedIndex: z.number().int().nonnegative(),
+});
+export type AddressSuggestionsSyncRequest = z.infer<typeof addressSuggestionsSyncRequestSchema>;
+
+export const addressSuggestionSelectRequestSchema = z.number().int().nonnegative();
+
 export const themeSetRequestSchema = z.object({
   theme: z.enum(['light', 'dark']),
 });

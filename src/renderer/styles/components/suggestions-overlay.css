@@ -1,0 +1,97 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-24 */
+
+/* ── SUGGESTIONS OVERLAY ──────────────────────────────────────────────── */
+/* The address bar's suggestions dropdown's whole page (`suggestions.html`)
+   — a dedicated `WebContentsView` the main process sizes to exactly this
+   list's own content and stacks above the active tab's view (see
+   `SuggestionsOverlay`), rather than chrome-drawn HTML the way
+   `BookmarkPopup` is. Its bounds are always exactly the list's rendered
+   size (`ADDRESS_SUGGESTION_ROW_HEIGHT_PX`/`ADDRESS_SUGGESTIONS_PADDING_PX`
+   in `@shared/constants` mirror the two pixel values below), so unlike
+   `.address-bar__suggestions` when this markup lived in the chrome's own
+   portal, there's no `position: fixed`, no `max-height`/scrolling, and no
+   box-shadow — a shadow would just get clipped at the view's own tight
+   edge instead of spilling past it. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* This page's own document never inherits `app.css`'s `html, body`
+     font-family — that rule only reaches the chrome's page (`index.html`).
+     Must stay in sync with it, same relationship this file's colors have
+     with `colors.css` via `data-theme` (see `suggestions-main.tsx`). */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+.address-bar__suggestions {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: var(--size-spacing-xs);
+  list-style: none;
+
+  background: var(--color-panel-bg);
+}
+
+.address-bar__suggestion {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text-active);
+
+  cursor: pointer;
+}
+
+.address-bar__suggestion:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.address-bar__suggestion svg {
+  flex-shrink: 0;
+  color: var(--color-accent-text);
+}
+
+.address-bar__suggestion--selected {
+  background: var(--color-selection-bg);
+}
+
+.address-bar__suggestion-title {
+  overflow: hidden;
+  flex-shrink: 0;
+  max-width: 45%;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  font-size: var(--size-font-md);
+}
+
+.address-bar__suggestion-url {
+  overflow: hidden;
+  flex: 1;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
+}

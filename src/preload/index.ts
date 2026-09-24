@@ -50,6 +50,12 @@ const api: NorthstarApi = {
   removeBookmark: (id) => invoke(IpcChannel.BookmarksRemove, { id }),
   beginTabPreview: (id) => invoke(IpcChannel.TabsBeginTabPreview, { id }),
   endTabPreview: (id) => invoke(IpcChannel.TabsEndTabPreview, { id }),
+  syncAddressSuggestions: (payload) => ipcRenderer.send(IpcChannel.AddressSuggestionsSync, payload),
+  onAddressSuggestionSelected: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, index: number): void => listener(index);
+    ipcRenderer.on(IpcChannel.AddressSuggestionsSelect, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.AddressSuggestionsSelect, handler);
+  },
 
   enterSplitView: (secondaryId) => invoke(IpcChannel.SplitEnter, { secondaryId }),
   exitSplitView: () => invoke(IpcChannel.SplitExit),
