@@ -22,7 +22,7 @@
 }
 
 /* The tab's last frame before its `WebContentsView` came off the window
-   (see `TabManager.beginBookmarkPreview`) — a still image, not the live
+   (see `TabManager.beginTabPreview`) — a still image, not the live
    page. `--color-overlay-backdrop` (painted by `.bookmark-popup__scrim`
    just above it in DOM order) is already light/dark-theme-aware, so
    tinting a blurred snapshot this way looks right in either theme without

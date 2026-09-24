@@ -67,8 +67,8 @@ export function App() {
     removeWorkspace,
     addBookmark,
     removeBookmark,
-    beginBookmarkPreview,
-    endBookmarkPreview,
+    beginTabPreview,
+    endTabPreview,
     enterSplitView,
     exitSplitView,
     setFocusMode,
@@ -136,7 +136,7 @@ export function App() {
       return;
     }
     const tabId = activeTabId;
-    void beginBookmarkPreview(tabId).then((previewImage) => {
+    void beginTabPreview(tabId).then((previewImage) => {
       setBookmarkPopup({ tabId, url: browserTab.url, title: browserTab.title, previewImage });
     });
   };
@@ -146,7 +146,7 @@ export function App() {
       return;
     }
     addBookmark(name, url);
-    endBookmarkPreview(bookmarkPopup.tabId);
+    endTabPreview(bookmarkPopup.tabId);
     setBookmarkPopup(null);
   };
 
@@ -154,7 +154,7 @@ export function App() {
     if (!bookmarkPopup) {
       return;
     }
-    endBookmarkPreview(bookmarkPopup.tabId);
+    endTabPreview(bookmarkPopup.tabId);
     setBookmarkPopup(null);
   };
 
@@ -214,6 +214,10 @@ export function App() {
                   url={isHome ? '' : (browserTab?.url ?? '')}
                   isLoading={browserTab?.isLoading ?? false}
                   onNavigate={(input) => activeTabId && navigate(activeTabId, input)}
+                  bookmarks={bookmarks}
+                  activeTabId={activeTabId}
+                  onBeginTabPreview={beginTabPreview}
+                  onEndTabPreview={endTabPreview}
                 />
               </>
             )}

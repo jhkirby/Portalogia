@@ -767,20 +767,22 @@ export class TabManager {
 
   /**
    * Captures the active browser tab's current frame and hides its native
-   * `WebContentsView` — the main-process half of `BookmarkPopup`'s blurred
-   * backdrop. The view has to actually come off the window, not just be
-   * covered by chrome-drawn UI, since it's a separate native surface
-   * layered above the chrome (same reason `activateTab` needs
-   * `webContents.focus()` — see there) that would otherwise render on top
-   * of the popup and swallow every click meant for it or its "click
-   * outside to cancel" backdrop. A no-op (returns `null`, nothing hidden)
-   * for anything but the active browser tab — the bookmark button is
-   * already disabled for a terminal tab or when nothing's active.
+   * `WebContentsView` — the main-process half of any chrome-drawn overlay
+   * that needs to sit visually over the page (`BookmarkPopup`, and the
+   * address bar's bookmark-suggestions dropdown). The view has to
+   * actually come off the window, not just be covered by chrome-drawn UI,
+   * since it's a separate native surface layered above the chrome (same
+   * reason `activateTab` needs `webContents.focus()` — see there) that
+   * would otherwise render on top of the overlay and swallow every click
+   * meant for it. A no-op (returns `null`, nothing hidden) for anything
+   * but the active browser tab.
    * @param id The tab to preview and hide.
    * @returns A data URL of the tab's last-painted frame, or `null` if it
-   *   couldn't be captured (the caller falls back to a plain scrim).
+   *   couldn't be captured — a caller that wants it blurred behind its
+   *   overlay falls back to a plain scrim; one that doesn't need it (the
+   *   dropdown) just ignores it.
    */
-  public async beginBookmarkPreview(id: string): Promise<string | null> {
+  public async beginTabPreview(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
     if (!view || !state || state.kind !== 'browser' || id !== this.activeTabId) {
@@ -801,13 +803,13 @@ export class TabManager {
   }
 
   /**
-   * Re-shows the view `beginBookmarkPreview` hid — called on both Save and
-   * cancel/close, since either way the popup is done with it. A no-op if
-   * the tab closed or stopped being active while the popup was open.
+   * Re-shows the view `beginTabPreview` hid — called once whatever overlay
+   * was using it closes, however it closed. A no-op if the tab closed or
+   * stopped being active while the overlay was open.
    * @param id The tab to re-show.
    * @returns The full browser state after re-mounting it.
    */
-  public restoreBookmarkPreview(id: string): BrowserState {
+  public restoreTabPreview(id: string): BrowserState {
     const view = this.views.get(id);
     if (view && id === this.activeTabId) {
       this.window.contentView.addChildView(view);

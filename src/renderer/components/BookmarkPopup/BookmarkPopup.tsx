@@ -10,7 +10,7 @@ interface BookmarkPopupProps {
   readonly url: string;
   /** The active tab's title when the popup opened — editable before saving. */
   readonly title: string;
-  /** A data URL of the tab's last-painted frame (see `TabManager.beginBookmarkPreview`), shown blurred behind the popup — `null` falls back to a plain scrim. */
+  /** A data URL of the tab's last-painted frame (see `TabManager.beginTabPreview`), shown blurred behind the popup — `null` falls back to a plain scrim. */
   readonly previewImage: string | null;
   /** Commits the bookmark with whatever the two fields hold at the time. */
   readonly onSave: (name: string, url: string) => void;
@@ -28,7 +28,7 @@ interface BookmarkPopupProps {
  *
  * The blurred backdrop is a still image, not the live page — the tab's own
  * `WebContentsView` is a separate native surface layered above the chrome
- * (see `TabManager.beginBookmarkPreview`) and has to come off the window
+ * (see `TabManager.beginTabPreview`) and has to come off the window
  * entirely for this popup to be visible or clickable at all, so what's
  * shown here is a snapshot taken the instant the popup opened.
  */

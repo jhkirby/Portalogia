@@ -48,8 +48,8 @@ const api: NorthstarApi = {
 
   addBookmark: (title, url) => invoke(IpcChannel.BookmarksAdd, { title, url }),
   removeBookmark: (id) => invoke(IpcChannel.BookmarksRemove, { id }),
-  beginBookmarkPreview: (id) => invoke(IpcChannel.TabsBeginBookmarkPreview, { id }),
-  endBookmarkPreview: (id) => invoke(IpcChannel.TabsEndBookmarkPreview, { id }),
+  beginTabPreview: (id) => invoke(IpcChannel.TabsBeginTabPreview, { id }),
+  endTabPreview: (id) => invoke(IpcChannel.TabsEndTabPreview, { id }),
 
   enterSplitView: (secondaryId) => invoke(IpcChannel.SplitEnter, { secondaryId }),
   exitSplitView: () => invoke(IpcChannel.SplitExit),

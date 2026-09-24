@@ -5,24 +5,7 @@
 
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
-
-/** A four-pointed star/sparkle, straight-edged rather than curved-edged so it reads clearly at 16px. Shared by both the filled (bookmarked) and outline (not bookmarked) states below — only the fill/stroke differ. */
-const STAR_PATH = 'M12 2.5 L14.6 9.4 L21.5 12 L14.6 14.6 L12 21.5 L9.4 14.6 L2.5 12 L9.4 9.4 Z';
-
-/** The bookmark button's icon — filled when the page is already bookmarked, outline otherwise. */
-function BookmarkStarIcon({ filled }: { readonly filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <path
-        d={STAR_PATH}
-        fill={filled ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth={filled ? 0 : 1.6}
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+import { BookmarkStarIcon } from '../icons';
 
 interface PageActionsProps {
   /** Whether the active tab's URL is already bookmarked. */

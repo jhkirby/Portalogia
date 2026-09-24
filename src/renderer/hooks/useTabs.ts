@@ -134,13 +134,13 @@ export function useTabs() {
     void window.northstar.removeBookmark(id).then(logIfFailed);
   }, []);
 
-  const beginBookmarkPreview = useCallback(async (id: string): Promise<string | null> => {
-    const result = await window.northstar.beginBookmarkPreview(id);
+  const beginTabPreview = useCallback(async (id: string): Promise<string | null> => {
+    const result = await window.northstar.beginTabPreview(id);
     logIfFailed(result);
     return result.ok ? result.data : null;
   }, []);
-  const endBookmarkPreview = useCallback((id: string) => {
-    void window.northstar.endBookmarkPreview(id).then(logIfFailed);
+  const endTabPreview = useCallback((id: string) => {
+    void window.northstar.endTabPreview(id).then(logIfFailed);
   }, []);
 
   const enterSplitView = useCallback((secondaryId: string) => {
@@ -187,8 +187,8 @@ export function useTabs() {
 
     addBookmark,
     removeBookmark,
-    beginBookmarkPreview,
-    endBookmarkPreview,
+    beginTabPreview,
+    endTabPreview,
 
     enterSplitView,
     exitSplitView,

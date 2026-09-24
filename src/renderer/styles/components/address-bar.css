@@ -6,6 +6,7 @@
 /* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
 
 .address-bar {
+  position: relative;
   display: flex;
   align-items: center;
   flex: 1;
@@ -68,4 +69,70 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ── SUGGESTIONS DROPDOWN ─────────────────────────────────────────────── */
+/* Portaled to `document.body` (see `AddressBar`'s own doc comment for why:
+   `.app`, an ancestor of this bar, clips anything extending past its own
+   fixed height, which this dropdown always would). `top`/`left`/`width`
+   come from that portal's inline style, measured off `.address-bar`'s own
+   `getBoundingClientRect()` — this file only owns its box's own look. */
+.address-bar__suggestions {
+  position: fixed;
+  z-index: 100;
+  overflow-y: auto;
+  max-height: 20rem;
+  margin: 0;
+  padding: var(--size-spacing-xs);
+  list-style: none;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.address-bar__suggestion {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text-active);
+
+  cursor: pointer;
+}
+
+.address-bar__suggestion svg {
+  flex-shrink: 0;
+  color: var(--color-accent-text);
+}
+
+.address-bar__suggestion--selected {
+  background: var(--color-selection-bg);
+}
+
+.address-bar__suggestion-title {
+  overflow: hidden;
+  flex-shrink: 0;
+  max-width: 45%;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  font-size: var(--size-font-md);
+}
+
+.address-bar__suggestion-url {
+  overflow: hidden;
+  flex: 1;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
 }
