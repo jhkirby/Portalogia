@@ -32,6 +32,15 @@ interface TabBarProps {
   readonly grabbedTabId: string | null;
   /** Called when the user clicks the "new tab" button. */
   readonly onNewTab: () => void;
+  /**
+   * Called when a tab drag ends without landing on any drop target this
+   * chrome itself recognizes (an in-bar reorder, or a `WorkspaceBar` pill)
+   * — `screenX`/`screenY` are the drag's OS screen coordinates at release,
+   * for main to decide whether the release point actually left this
+   * window (see `tearOffTab`), which alone means "open this tab in a new
+   * window."
+   */
+  readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
 }
 
 /** Which half of a tab the dragged tab is currently hovering over — drives both the drop position and its visual indicator. */
@@ -43,7 +52,16 @@ interface DropTarget {
 }
 
 /** The row of open tabs at the top of the window, plus a "new tab" button. */
-export function TabBar({ tabs, activeTabId, onActivate, onClose, onReorder, grabbedTabId, onNewTab }: TabBarProps) {
+export function TabBar({
+  tabs,
+  activeTabId,
+  onActivate,
+  onClose,
+  onReorder,
+  grabbedTabId,
+  onNewTab,
+  onDragEndOutside,
+}: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
@@ -104,6 +122,7 @@ export function TabBar({ tabs, activeTabId, onActivate, onClose, onReorder, grab
           onDragStart={() => setDraggedId(tab.id)}
           onDragOver={(position) => setDropTarget({ id: tab.id, position })}
           onDragEnd={endDrag}
+          onDragEndOutside={onDragEndOutside}
         />
       ))}
       <button
@@ -131,6 +150,8 @@ interface TabProps {
   readonly onDragStart: () => void;
   readonly onDragOver: (position: DropPosition) => void;
   readonly onDragEnd: () => void;
+  /** See `TabBarProps.onDragEndOutside` — forwarded straight through, this tab already has its own `id` in scope. */
+  readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
 }
 
 /** One tab. A `div[role=tab]` rather than a `<button>` because it hosts its own close `<button>`. */
@@ -144,6 +165,7 @@ function Tab({
   onDragStart,
   onDragOver,
   onDragEnd,
+  onDragEndOutside,
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
 
@@ -182,6 +204,22 @@ function Tab({
     onDragOver(isLeftHalf ? 'before' : 'after');
   };
 
+  // `dropEffect` reflects whatever the drop target's own `dragover`
+  // handler last set before the drop (or `'none'` if the release never
+  // landed on a target that called `preventDefault` at all — including a
+  // release outside this OS window entirely, which never dispatches a
+  // `drop` event here in the first place). Both this tab bar's own
+  // in-place reorder and `WorkspaceBar`'s pills set `'move'` when they
+  // accept a drop, so `'none'` uniquely means "didn't land on either" —
+  // main gets the final say on whether that point was actually outside
+  // the window (see `tearOffTab`'s own doc comment).
+  const handleDragEnd = (event: DragEvent<HTMLDivElement>): void => {
+    if (event.dataTransfer.dropEffect === 'none') {
+      onDragEndOutside(tab.id, event.screenX, event.screenY);
+    }
+    onDragEnd();
+  };
+
   const dropClass =
     dropPosition === 'before'
       ? ' tab-bar__tab--drop-before'
@@ -200,7 +238,7 @@ function Tab({
       onKeyDown={handleKeyDown}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
-      onDragEnd={onDragEnd}
+      onDragEnd={handleDragEnd}
     >
       {tab.kind === 'terminal' ? (
         <span className="tab-bar__terminal-icon" aria-hidden="true">

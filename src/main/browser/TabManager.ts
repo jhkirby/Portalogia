@@ -30,6 +30,7 @@ import type {
   WorkspaceState,
 } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
+import type { SessionSnapshot, SessionStore } from './SessionStore';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
 import { TerminalManager } from '../terminal/TerminalManager';
 
@@ -108,11 +109,15 @@ export class TabManager {
    * @param onStateChange Called with the full state after any change, so
    *   the caller can push it to the renderer over IPC.
    * @param bookmarkStore Persisted bookmark list this window's chrome reads and writes.
+   * @param sessionStore Persisted tabs/workspaces this window's chrome
+   *   restores from on launch (see `restoreSession`) and keeps up to date
+   *   on every change (see `emitState`).
    */
   public constructor(
     private readonly window: BrowserWindow,
     private readonly onStateChange: (state: BrowserState) => void,
     private readonly bookmarkStore: BookmarkStore,
+    private readonly sessionStore: SessionStore,
   ) {
     this.workspaces.set(DEFAULT_WORKSPACE_ID, {
       id: DEFAULT_WORKSPACE_ID,
@@ -149,6 +154,69 @@ export class TabManager {
     this.window.webContents.on('before-input-event', (event, input) => {
       this.handleReorderGestureInput(event, input);
     });
+  }
+
+  // ── Session restore ──────────────────────────────────────────────────
+
+  /**
+   * Recreates whatever tabs/workspaces were open when the app last closed
+   * (see `SessionStore`), or opens a single fresh home tab if there's no
+   * saved session yet (first launch) or it was empty. Call this once,
+   * right after the chrome page itself finishes loading.
+   *
+   * Each tab is recreated via `createTab`/`createTerminalTab` rather than
+   * restored in place — a terminal's actual shell process is long gone by
+   * the next launch regardless, and a browser tab's own navigation history
+   * was never persisted either (`SessionSnapshot` only keeps its current
+   * URL, same as `ClosedTab` does for "reopen last closed tab") — so this
+   * is a fresh tab that happens to load the same page, not a resurrection
+   * of the old one. Both creators call `activateTab` internally, which
+   * would otherwise leave whichever tab was created last active; the
+   * explicit `activateTab`/`switchWorkspace` call at the end corrects that
+   * to whichever tab/workspace the snapshot actually says was active.
+   * @returns The full browser state after restoring (or starting fresh).
+   */
+  public restoreSession(): BrowserState {
+    const snapshot = this.sessionStore.get();
+    if (!snapshot || snapshot.tabs.length === 0) {
+      return this.createTab();
+    }
+
+    this.workspaces.clear();
+    for (const workspace of snapshot.workspaces) {
+      this.workspaces.set(workspace.id, workspace);
+    }
+    if (this.workspaces.size === 0) {
+      // Every tab below needs a workspace to land in — falls back to the
+      // same single default workspace a first launch gets.
+      this.workspaces.set(DEFAULT_WORKSPACE_ID, {
+        id: DEFAULT_WORKSPACE_ID,
+        name: DEFAULT_WORKSPACE_NAME,
+        color: WORKSPACE_COLORS[0]!,
+      });
+    }
+
+    let activeId: string | null = null;
+    for (const tab of snapshot.tabs) {
+      const workspaceId = this.workspaces.has(tab.workspaceId)
+        ? tab.workspaceId
+        : (this.workspaces.keys().next().value as string);
+      const state =
+        tab.kind === 'terminal'
+          ? this.createTerminalTab(workspaceId)
+          : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
+      if (tab.active) {
+        activeId = state.activeTabId;
+      }
+    }
+
+    if (activeId) {
+      this.activateTab(activeId);
+    } else {
+      this.switchWorkspace(snapshot.activeWorkspaceId);
+    }
+
+    return this.getState();
   }
 
   // ── Tabs ─────────────────────────────────────────────────────────────
@@ -355,14 +423,116 @@ export class TabManager {
   }
 
   /**
+   * Moves a tab into a different workspace (dragging it onto one of
+   * `WorkspaceBar`'s pills) — the tab, its view, and its history all
+   * survive; only which workspace's row it belongs to changes. A no-op if
+   * the tab or workspace doesn't exist, or it's already there.
+   *
+   * If the moved tab was mounted (the active tab, or either half of split
+   * view), it's unmounted first: leaving it on screen would make the tab
+   * strip (always filtered to `activeWorkspaceId`) and the visible page
+   * disagree about what's actually in the current workspace. Whatever
+   * `closeTab` would activate next in its place — the same
+   * neighbor-in-this-workspace-else-fresh-tab fallback — becomes active
+   * instead, exactly as if the tab had been closed rather than relocated;
+   * dragging a tab to another workspace shouldn't also switch you into it.
+   * @param id The tab to move.
+   * @param workspaceId The workspace to move it into.
+   * @returns The full browser state after the move.
+   */
+  public moveTabToWorkspace(id: string, workspaceId: string): BrowserState {
+    const state = this.states.get(id);
+    if (!state || !this.workspaces.has(workspaceId) || state.workspaceId === workspaceId) {
+      return this.getState();
+    }
+
+    const oldWorkspaceId = state.workspaceId;
+    const view = this.views.get(id);
+
+    // Delete-then-set rather than a plain `set` on the existing key: a
+    // `Map` keeps an updated key at its *original* insertion position,
+    // which would leave the tab wherever it happened to fall among every
+    // workspace's tabs (interleaved by creation order across all of them)
+    // instead of at the end of its new row — re-inserting moves it to the
+    // end of `states`' own iteration order, which is the end of *every*
+    // workspace's filtered tab list, the target one included, since
+    // nothing belonging to it was inserted after this point.
+    const relocate = (): void => {
+      this.states.delete(id);
+      this.states.set(id, { ...state, workspaceId });
+    };
+
+    if (this.grabbedTabId === id) {
+      this.grabbedTabId = null;
+    }
+
+    if (this.splitView?.secondaryTabId === id) {
+      if (view) {
+        this.window.contentView.removeChildView(view);
+      }
+      this.splitView = null;
+      relocate();
+      this.updateBounds();
+      this.emitState();
+      return this.getState();
+    }
+
+    if (this.splitView?.primaryTabId === id) {
+      const secondaryId = this.splitView.secondaryTabId;
+      this.splitView = null;
+      if (view) {
+        this.window.contentView.removeChildView(view);
+      }
+      relocate();
+      this.activeTabId = null;
+      if (this.states.has(secondaryId)) {
+        this.activateTab(secondaryId);
+      } else {
+        this.createTab(undefined, oldWorkspaceId);
+      }
+      return this.getState();
+    }
+
+    const wasActive = this.activeTabId === id;
+    relocate();
+
+    if (!wasActive) {
+      this.emitState();
+      return this.getState();
+    }
+
+    if (view) {
+      this.window.contentView.removeChildView(view);
+    }
+    this.activeTabId = null;
+
+    const remainingInOldWorkspace = Array.from(this.states.entries())
+      .filter(([tabId, tabState]) => tabId !== id && tabState.workspaceId === oldWorkspaceId)
+      .map(([tabId]) => tabId);
+    const next = remainingInOldWorkspace[remainingInOldWorkspace.length - 1];
+    if (next) {
+      this.activateTab(next);
+    } else {
+      this.createTab(undefined, oldWorkspaceId);
+    }
+
+    return this.getState();
+  }
+
+  /**
    * Closes a tab. If it was the active tab, activates a neighbor in the
    * same workspace; if none remain there, opens a fresh home tab in that
    * workspace instead of jumping to an unrelated one. If the tab was part
    * of an active split view, the other pane simply takes over full width.
    * @param id The tab to close.
+   * @param options.recordClosed Whether a closed browser tab goes into
+   *   `closedTabs` for `restoreLastClosedTab` (Ctrl+Shift+T) to find.
+   *   Defaults to `true`; `tearOffTab` (main/index.ts) passes `false` — a
+   *   torn-off tab isn't gone, just relocated to a new window, so it
+   *   shouldn't be resurrectable as a duplicate back in this one.
    * @returns The full browser state after the tab is closed.
    */
-  public closeTab(id: string): BrowserState {
+  public closeTab(id: string, options: { recordClosed?: boolean } = {}): BrowserState {
     const closedState = this.states.get(id);
     if (!closedState) {
       return this.getState();
@@ -373,7 +543,7 @@ export class TabManager {
 
     if (closedState.kind === 'terminal') {
       this.terminals.dispose(id);
-    } else {
+    } else if (options.recordClosed ?? true) {
       this.closedTabs.push({ url: closedState.url, workspaceId: closedState.workspaceId });
       if (this.closedTabs.length > CLOSED_TAB_HISTORY_LIMIT) {
         this.closedTabs.shift();
@@ -661,6 +831,34 @@ export class TabManager {
     const state = this.switchWorkspace(id);
     this.focusAddressBarPastTabLoad(state.activeTabId);
     return state;
+  }
+
+  /**
+   * Creates a new workspace containing exactly one tab — moved there as
+   * its first (and only) tab — and switches to it: `WorkspaceBar`'s
+   * drag-onto-"+ New workspace" gesture. Builds the workspace directly
+   * rather than via `createWorkspace` followed by `moveTabToWorkspace`:
+   * `createWorkspace`'s own `switchWorkspace` call would open a fresh home
+   * tab in it first (its usual empty-workspace fallback), leaving the
+   * dragged tab second rather than first. Doesn't steal address-bar focus
+   * the way `createWorkspace` does either — that tab already has real
+   * content, unlike a brand-new empty one. A no-op if `tabId` doesn't exist.
+   * @param tabId The tab to move into the new workspace.
+   * @returns The full browser state after the change.
+   */
+  public createWorkspaceWithTab(tabId: string): BrowserState {
+    if (!this.states.has(tabId)) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    const color = WORKSPACE_COLORS[this.workspaces.size % WORKSPACE_COLORS.length]!;
+    this.workspaces.set(id, {
+      id,
+      name: `Workspace ${this.workspaces.size + 1}`,
+      color,
+    });
+    this.moveTabToWorkspace(tabId, id);
+    return this.switchWorkspace(id);
   }
 
   /**
@@ -1266,7 +1464,12 @@ export class TabManager {
    */
   private focusWorkspaceDefaultTab(workspaceId: string): void {
     const lastActive = this.lastActiveTabIdByWorkspace.get(workspaceId);
-    if (lastActive && this.states.has(lastActive)) {
+    // Also checks the recorded tab's *current* workspace, not just that it
+    // still exists — `moveTabToWorkspace` can leave a workspace's
+    // last-active entry pointing at a tab that's since relocated
+    // elsewhere, which would otherwise resurrect it in the wrong
+    // workspace's tab strip.
+    if (lastActive && this.states.get(lastActive)?.workspaceId === workspaceId) {
       this.activateTab(lastActive);
       return;
     }
@@ -1395,9 +1598,24 @@ export class TabManager {
     this.emitState();
   }
 
-  /** Pushes the current state to the registered listener. */
+  /** Pushes the current state to the registered listener, and schedules the same change to be persisted (see `SessionStore.scheduleSave`). */
   private emitState(): void {
     this.onStateChange(this.getState());
+    this.sessionStore.scheduleSave(this.buildSessionSnapshot());
+  }
+
+  /** @returns The current tabs/workspaces reduced to `SessionStore`'s minimal recreatable shape — see `restoreSession` for why it's not the full `TabState`. */
+  private buildSessionSnapshot(): SessionSnapshot {
+    return {
+      workspaces: Array.from(this.workspaces.values()),
+      tabs: Array.from(this.states.values()).map((state) => ({
+        kind: state.kind,
+        url: state.kind === 'browser' ? state.url : '',
+        workspaceId: state.workspaceId,
+        active: state.id === this.activeTabId,
+      })),
+      activeWorkspaceId: this.activeWorkspaceId,
+    };
   }
 
   /**

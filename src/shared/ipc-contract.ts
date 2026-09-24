@@ -15,6 +15,8 @@ export const IpcChannel = {
   TabsClose: 'tabs:close',
   TabsActivate: 'tabs:activate',
   TabsMove: 'tabs:move',
+  TabsMoveToWorkspace: 'tabs:move-to-workspace',
+  TabsTearOff: 'tabs:tear-off',
   TabsNavigate: 'tabs:navigate',
   TabsGoBack: 'tabs:go-back',
   TabsGoForward: 'tabs:go-forward',
@@ -29,6 +31,7 @@ export const IpcChannel = {
   TerminalData: 'terminal:data',
   TerminalExited: 'terminal:exited',
   WorkspacesCreate: 'workspaces:create',
+  WorkspacesCreateWithTab: 'workspaces:create-with-tab',
   WorkspacesSwitch: 'workspaces:switch',
   WorkspacesRename: 'workspaces:rename',
   WorkspacesRemove: 'workspaces:remove',
@@ -118,6 +121,20 @@ export interface NorthstarApi {
   activateTab(id: string): Promise<IpcResult<BrowserState>>;
   /** Reorders a tab (drag-and-drop in the tab bar) to just before `beforeId`, or to the end of its workspace's tabs if `beforeId` is `null`. */
   moveTab(id: string, beforeId: string | null): Promise<IpcResult<BrowserState>>;
+  /** Moves a tab into a different workspace — dragging it onto one of `WorkspaceBar`'s pills. A no-op if it's already there. */
+  moveTabToWorkspace(id: string, workspaceId: string): Promise<IpcResult<BrowserState>>;
+  /**
+   * Reports a tab drag that ended outside the tab bar's own drop targets —
+   * `screenX`/`screenY` are the drag's OS screen coordinates at release
+   * (`DragEvent.screenX`/`screenY`), not viewport-relative. Main decides
+   * whether that point actually landed outside this window's own bounds
+   * (a drop inside the window that simply missed every `TabBar`/
+   * `WorkspaceBar` target — e.g. over the page's own native view — isn't a
+   * tear-off) before spinning up a new window for it. Fire-and-forget: the
+   * eventual result is just this window's own `onStateChanged` push once
+   * the tab is gone, same as any other tab removal.
+   */
+  tearOffTab(id: string, screenX: number, screenY: number): void;
   navigate(id: string, url: string): Promise<IpcResult<BrowserState>>;
   goBack(id: string): Promise<IpcResult<BrowserState>>;
   goForward(id: string): Promise<IpcResult<BrowserState>>;
@@ -134,6 +151,15 @@ export interface NorthstarApi {
   createTerminalTab(): Promise<IpcResult<BrowserState>>;
 
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;
+  /**
+   * Creates a new workspace containing exactly this one tab, moved there as
+   * its first (and only) tab, and switches to it — `WorkspaceBar`'s
+   * drag-onto-"+ New workspace" gesture. Deliberately not just
+   * `createWorkspace` followed by `moveTabToWorkspace`: `createWorkspace`
+   * always opens its own fresh home tab first, which would leave the
+   * dragged tab second rather than first.
+   */
+  createWorkspaceWithTab(tabId: string): Promise<IpcResult<BrowserState>>;
   switchWorkspace(id: string): Promise<IpcResult<BrowserState>>;
   renameWorkspace(id: string, name: string): Promise<IpcResult<BrowserState>>;
   removeWorkspace(id: string): Promise<IpcResult<BrowserState>>;

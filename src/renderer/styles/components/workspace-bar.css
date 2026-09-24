@@ -85,6 +85,15 @@
   color: var(--color-tab-text-active);
 }
 
+/* A tab dragged from `TabBar` is currently hovering this pill (see
+   `WorkspaceBar`'s own `handleDragOver`) — an outline rather than a
+   background swap so it stays visible over `--active`'s own background
+   too, same reasoning as `.tab-bar__tab--drop-before/after` using
+   `box-shadow` instead of competing with `--active`'s background. */
+.workspace-bar__pill--drop-target {
+  box-shadow: inset 0 0 0 2px var(--color-accent-text);
+}
+
 .workspace-bar__dot {
   width: 8px;
   height: 8px;
@@ -181,6 +190,12 @@
 
 .workspace-bar__new:hover {
   background: var(--color-button-hover-bg);
+}
+
+/* A tab dragged from `TabBar` is currently hovering this button — same
+   drop-target treatment as `.workspace-bar__pill--drop-target`. */
+.workspace-bar__new--drop-target {
+  box-shadow: inset 0 0 0 2px var(--color-accent-text);
 }
 
 /* Same reasoning as `.workspace-bar__remove::after` above — kept inside

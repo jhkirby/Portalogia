@@ -12,8 +12,10 @@ import {
   bookmarkIdRequestSchema,
   createTabRequestSchema,
   createWorkspaceRequestSchema,
+  createWorkspaceWithTabRequestSchema,
   focusModeRequestSchema,
   moveTabRequestSchema,
+  moveTabToWorkspaceRequestSchema,
   navigateRequestSchema,
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
@@ -50,6 +52,9 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
   handle(IpcChannel.TabsMove, moveTabRequestSchema, (request) =>
     getTabManager().moveTab(request.id, request.beforeId),
   );
+  handle(IpcChannel.TabsMoveToWorkspace, moveTabToWorkspaceRequestSchema, (request) =>
+    getTabManager().moveTabToWorkspace(request.id, request.workspaceId),
+  );
   handle(IpcChannel.TabsNavigate, navigateRequestSchema, (request) =>
     getTabManager().navigate(request.id, request.url),
   );
@@ -66,6 +71,9 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
 
   handle(IpcChannel.WorkspacesCreate, createWorkspaceRequestSchema, (request) =>
     getTabManager().createWorkspace(request.name),
+  );
+  handle(IpcChannel.WorkspacesCreateWithTab, createWorkspaceWithTabRequestSchema, (request) =>
+    getTabManager().createWorkspaceWithTab(request.tabId),
   );
   handle(IpcChannel.WorkspacesSwitch, workspaceIdRequestSchema, (request) =>
     getTabManager().switchWorkspace(request.id),

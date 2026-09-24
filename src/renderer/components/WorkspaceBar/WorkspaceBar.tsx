@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-12
 
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { WorkspaceState } from '@shared/tab-state';
 import { formatShortcut } from '../../lib/shortcuts';
 
@@ -16,6 +16,10 @@ interface WorkspaceBarProps {
   readonly onCreate: () => void;
   readonly onRename: (id: string, name: string) => void;
   readonly onRemove: (id: string) => void;
+  /** Called when a tab dragged from `TabBar` is dropped onto a workspace pill — moves it into that workspace. Tab id first, same argument order as every other tab action (`moveTab`, `activateTab`, ...). */
+  readonly onDropTab: (tabId: string, workspaceId: string) => void;
+  /** Called when a tab dragged from `TabBar` is dropped onto the "+ New workspace" button — creates a new workspace with that tab as its first (and only) one. */
+  readonly onDropTabToNewWorkspace: (tabId: string) => void;
 }
 
 /**
@@ -32,9 +36,15 @@ export function WorkspaceBar({
   onCreate,
   onRename,
   onRemove,
+  onDropTab,
+  onDropTabToNewWorkspace,
 }: WorkspaceBarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  /** Which pill a dragged tab is currently hovering over, if any — drives its drop-target highlight. */
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  /** Whether a dragged tab is currently hovering the "+ New workspace" button — drives its own drop-target highlight, same idea as `dropTargetId` for the pills above it. */
+  const [isNewWorkspaceDropTarget, setNewWorkspaceDropTarget] = useState(false);
 
   const startEditing = (workspace: WorkspaceState): void => {
     setEditingId(workspace.id);
@@ -62,6 +72,31 @@ export function WorkspaceBar({
         {workspaces.map((workspace) => {
           const isActive = workspace.id === activeWorkspaceId;
           const isEditing = editingId === workspace.id;
+          const isDropTarget = dropTargetId === workspace.id;
+
+          // Accepts a tab dragged from `TabBar` (its own `handleDragStart`
+          // puts the dragged tab's id on `dataTransfer` as `text/plain`) —
+          // `preventDefault` in `dragover` is what marks this a valid drop
+          // target at all, same reasoning as `TabBar`'s own in-bar reorder
+          // targets, and is also what makes this drop's `dropEffect`
+          // (`'move'`) show up on the dragged tab's own `dragend`, which is
+          // how it knows *not* to treat this as a tear-off-to-new-window.
+          const handleDragOver = (event: DragEvent<HTMLDivElement>): void => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            setDropTargetId(workspace.id);
+          };
+          const handleDragLeave = (): void => {
+            setDropTargetId((current) => (current === workspace.id ? null : current));
+          };
+          const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
+            event.preventDefault();
+            const tabId = event.dataTransfer.getData('text/plain');
+            if (tabId) {
+              onDropTab(tabId, workspace.id);
+            }
+            setDropTargetId(null);
+          };
 
           return (
             <div
@@ -69,9 +104,12 @@ export function WorkspaceBar({
               role="tab"
               tabIndex={0}
               aria-selected={isActive}
-              className={`workspace-bar__pill${isActive ? ' workspace-bar__pill--active' : ''}`}
+              className={`workspace-bar__pill${isActive ? ' workspace-bar__pill--active' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}`}
               onClick={() => !isEditing && onSwitch(workspace.id)}
               onDoubleClick={() => startEditing(workspace)}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
               <span
                 className="workspace-bar__dot"
@@ -111,10 +149,24 @@ export function WorkspaceBar({
       </div>
       <button
         type="button"
-        className="workspace-bar__new chrome-tooltip"
+        className={`workspace-bar__new chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
         aria-label="New workspace"
         onClick={onCreate}
         data-tooltip={`New workspace (${formatShortcut('Shift+N')})`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          setNewWorkspaceDropTarget(true);
+        }}
+        onDragLeave={() => setNewWorkspaceDropTarget(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          const tabId = event.dataTransfer.getData('text/plain');
+          if (tabId) {
+            onDropTabToNewWorkspace(tabId);
+          }
+          setNewWorkspaceDropTarget(false);
+        }}
       >
         <span className="workspace-bar__new-icon" aria-hidden="true">
           +

@@ -54,6 +54,9 @@ export function App() {
     closeTab,
     activateTab,
     moveTab,
+    moveTabToWorkspace,
+    tearOffTab,
+    createWorkspaceWithTab,
     navigate,
     goBack,
     goForward,
@@ -191,6 +194,7 @@ export function App() {
               onReorder={moveTab}
               grabbedTabId={grabbedTabId}
               onNewTab={() => createTab()}
+              onDragEndOutside={tearOffTab}
             />
             <WindowControls />
           </div>
@@ -262,6 +266,8 @@ export function App() {
           onCreate={() => createWorkspace()}
           onRename={renameWorkspace}
           onRemove={removeWorkspace}
+          onDropTab={moveTabToWorkspace}
+          onDropTabToNewWorkspace={createWorkspaceWithTab}
         />
         {/* Every tab, browser or terminal, renders below via the main
             process's own native WebContentsViews, positioned directly

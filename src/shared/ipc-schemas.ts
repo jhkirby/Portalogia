@@ -31,6 +31,19 @@ export const moveTabRequestSchema = z.object({
 });
 export type MoveTabRequest = z.infer<typeof moveTabRequestSchema>;
 
+export const moveTabToWorkspaceRequestSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+});
+export type MoveTabToWorkspaceRequest = z.infer<typeof moveTabToWorkspaceRequestSchema>;
+
+export const tearOffTabRequestSchema = z.object({
+  id: z.string().min(1),
+  screenX: z.number(),
+  screenY: z.number(),
+});
+export type TearOffTabRequest = z.infer<typeof tearOffTabRequestSchema>;
+
 export const navigateRequestSchema = z.object({
   id: z.string().min(1),
   url: z.string().min(1),
@@ -46,6 +59,11 @@ export const workspaceIdRequestSchema = z.object({
   id: z.string().min(1),
 });
 export type WorkspaceIdRequest = z.infer<typeof workspaceIdRequestSchema>;
+
+export const createWorkspaceWithTabRequestSchema = z.object({
+  tabId: z.string().min(1),
+});
+export type CreateWorkspaceWithTabRequest = z.infer<typeof createWorkspaceWithTabRequestSchema>;
 
 export const renameWorkspaceRequestSchema = z.object({
   id: z.string().min(1),
