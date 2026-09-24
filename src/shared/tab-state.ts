@@ -19,9 +19,10 @@ export interface BrowserTabState {
 
 /**
  * A shell session backed by a `node-pty` process in the main process and
- * rendered with `xterm.js` directly in the chrome's own DOM — unlike a
- * browser tab, it has no `WebContentsView` of its own (see `TerminalManager`
- * and the `Terminal` component). No URL, favicon, or navigation state applies.
+ * rendered with `xterm.js` in its own `WebContentsView` (`terminal.html`),
+ * same as a browser tab's page — see `TerminalManager` and
+ * `TabManager.createTerminalTab`. No URL, favicon, or navigation state
+ * applies.
  */
 export interface TerminalTabState {
   readonly kind: 'terminal';

@@ -3,7 +3,12 @@
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
    Last Modified: 2026-09-11 */
 
-:root {
+/* `useTheme` sets `data-theme` on `<html>` before first paint (see its
+   `useLayoutEffect`) reflecting either a stored choice or, on first ever
+   launch, the OS's own light/dark preference — so by the time anything
+   renders, one of these two blocks always applies; there's no third,
+   `prefers-color-scheme`-driven block left to fall back to. */
+:root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
   --color-chrome-border: #d7d9db;
 
@@ -37,38 +42,36 @@
   --color-tooltip-text: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-chrome-bg: #202124;
-    --color-chrome-border: #3c4043;
+:root[data-theme='dark'] {
+  --color-chrome-bg: #202124;
+  --color-chrome-border: #3c4043;
 
-    --color-tab-bg: transparent;
-    --color-tab-bg-active: #35363a;
-    --color-tab-text: #bdc1c6;
-    --color-tab-text-active: #e8eaed;
-    --color-tab-hover-bg: #3c4043;
-    --color-close-hover-bg: rgba(255, 255, 255, 0.22);
-    --color-tab-dragging-bg: rgba(138, 180, 248, 0.35);
+  --color-tab-bg: transparent;
+  --color-tab-bg-active: #35363a;
+  --color-tab-text: #bdc1c6;
+  --color-tab-text-active: #e8eaed;
+  --color-tab-hover-bg: #3c4043;
+  --color-close-hover-bg: rgba(255, 255, 255, 0.22);
+  --color-tab-dragging-bg: rgba(138, 180, 248, 0.35);
 
-    --color-address-bg: #303134;
-    --color-address-border: #5f6368;
-    --color-address-border-focus: #8ab4f8;
-    --color-address-text: #e8eaed;
-    --color-address-placeholder: #9aa0a6;
+  --color-address-bg: #303134;
+  --color-address-border: #5f6368;
+  --color-address-border-focus: #8ab4f8;
+  --color-address-text: #e8eaed;
+  --color-address-placeholder: #9aa0a6;
 
-    --color-button-hover-bg: #3c4043;
-    --color-button-disabled-text: #5f6368;
+  --color-button-hover-bg: #3c4043;
+  --color-button-disabled-text: #5f6368;
 
-    --color-spinner-track: #5f6368;
-    --color-spinner-active: #8ab4f8;
+  --color-spinner-track: #5f6368;
+  --color-spinner-active: #8ab4f8;
 
-    --color-panel-bg: #2d2e31;
-    --color-panel-border: #5f6368;
-    --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
-    --color-selection-bg: #3c4043;
-    --color-accent-text: #8ab4f8;
+  --color-panel-bg: #2d2e31;
+  --color-panel-border: #5f6368;
+  --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
+  --color-selection-bg: #3c4043;
+  --color-accent-text: #8ab4f8;
 
-    --color-tooltip-bg: #5f6368;
-    --color-tooltip-text: #ffffff;
-  }
+  --color-tooltip-bg: #5f6368;
+  --color-tooltip-text: #ffffff;
 }

@@ -44,6 +44,15 @@ export function createMainWindow(): BrowserWindow {
       webSecurity: true,
       allowRunningInsecureContent: false,
       experimentalFeatures: false,
+      // This window's own webContents renders the chrome, including every
+      // terminal tab's xterm.js instance — but a tab's *content* lives in
+      // a separate WebContentsView layered on top and typically holds OS
+      // keyboard focus, which left this one "backgrounded" from
+      // Chromium's perspective. Defends against that throttling timers
+      // and rendering; see `Terminal.tsx` for the separate recovery this
+      // window still needs against xterm's own internal render-scheduling
+      // getting stuck regardless of this setting.
+      backgroundThrottling: false,
     },
   });
 

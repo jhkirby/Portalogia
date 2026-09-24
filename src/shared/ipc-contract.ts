@@ -27,6 +27,7 @@ export const IpcChannel = {
   TerminalInput: 'terminal:input',
   TerminalResize: 'terminal:resize',
   TerminalData: 'terminal:data',
+  TerminalExited: 'terminal:exited',
   WorkspacesCreate: 'workspaces:create',
   WorkspacesSwitch: 'workspaces:switch',
   WorkspacesRename: 'workspaces:rename',
@@ -38,6 +39,8 @@ export const IpcChannel = {
   FocusModeSet: 'focus-mode:set',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiFocusAddressBar: 'ui:focus-address-bar',
+  UiToggleTheme: 'ui:toggle-theme',
+  ThemeSet: 'theme:set',
   WindowMinimize: 'window:minimize',
   WindowToggleMaximize: 'window:toggle-maximize',
   WindowClose: 'window:close',
@@ -67,6 +70,15 @@ export interface WindowState {
 }
 
 /**
+ * Light/dark theme choice reported to main via `setNativeTheme`, kept in
+ * sync with the renderer's own `useTheme` state (the source of truth) so
+ * Electron's `nativeTheme.themeSource` — and anything that follows it,
+ * like the `northstar://home` page's `prefers-color-scheme` styling —
+ * matches the chrome instead of drifting to whatever the OS prefers.
+ */
+export type ThemePreference = 'light' | 'dark';
+
+/**
  * The API surface exposed to the renderer via `contextBridge`. Preload
  * implements this exactly (`satisfies NorthstarApi`); the renderer declares
  * `window.northstar` as this type. Keeping the interface here means both sides
@@ -92,12 +104,6 @@ export interface NorthstarApi {
 
   /** Opens a new terminal tab (Ctrl+S, the toolbar terminal button, or File > New Terminal). */
   createTerminalTab(): Promise<IpcResult<BrowserState>>;
-  /** Sends raw keystroke/paste bytes from xterm.js to the tab's pty. Fire-and-forget: latency matters more than delivery confirmation. */
-  sendTerminalInput(id: string, data: string): void;
-  /** Tells the tab's pty its terminal grid resized (e.g. the window or sidebar resized). Fire-and-forget, same as `sendTerminalInput`. */
-  resizeTerminal(id: string, cols: number, rows: number): void;
-  /** Subscribes to output bytes streamed from any terminal tab's pty; the listener filters by id itself. */
-  onTerminalData(listener: (id: string, data: string) => void): () => void;
 
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;
   switchWorkspace(id: string): Promise<IpcResult<BrowserState>>;
@@ -118,6 +124,11 @@ export interface NorthstarApi {
   /** Subscribes to the menu/accelerator-driven request (Ctrl+/) to focus the address bar. */
   onFocusAddressBar(listener: () => void): () => void;
 
+  /** Subscribes to the menu/accelerator-driven request (Ctrl+D) to toggle the light/dark theme — see `useTheme`. */
+  onToggleTheme(listener: () => void): () => void;
+  /** Reports the renderer's current theme so main can mirror it onto `nativeTheme.themeSource` — see `ThemePreference`. Fire-and-forget, same as `sendTerminalInput`. */
+  setNativeTheme(theme: ThemePreference): void;
+
   /** Minimizes the frameless window. Fire-and-forget, same as `sendTerminalInput`. */
   minimizeWindow(): void;
   /** Toggles the frameless window between maximized and restored. Fire-and-forget, same as `sendTerminalInput`. */
@@ -126,4 +137,24 @@ export interface NorthstarApi {
   closeWindow(): void;
   /** Subscribes to the window's maximized state changing; returns an unsubscribe function. */
   onWindowStateChanged(listener: (state: WindowState) => void): () => void;
+}
+
+/**
+ * The narrower API surface exposed to a terminal tab's own `WebContentsView`
+ * (`src/preload/terminal.ts`, `terminal.html`) — deliberately separate from
+ * `NorthstarApi`: this view renders a single tab's `xterm.js` instance and
+ * nothing else, so its preload has no business seeing tab/workspace/bookmark
+ * management at all, only the byte-level pty channels for the one terminal
+ * it's dedicated to (its id comes from its own URL's `?id=` query, not this
+ * API). See `TabManager.createTerminalTab` for how this view is created.
+ */
+export interface NorthstarTerminalApi {
+  /** Sends raw keystroke/paste bytes from xterm.js to this tab's pty. Fire-and-forget: latency matters more than delivery confirmation. */
+  sendTerminalInput(id: string, data: string): void;
+  /** Tells this tab's pty its terminal grid resized (e.g. the window resized). Fire-and-forget, same as `sendTerminalInput`. */
+  resizeTerminal(id: string, cols: number, rows: number): void;
+  /** Subscribes to output bytes streamed from this tab's pty. */
+  onTerminalData(listener: (id: string, data: string) => void): () => void;
+  /** Subscribes to this tab's shell process exiting on its own (e.g. the user typed `exit`) — distinct from the tab being closed. */
+  onTerminalExited(listener: (id: string) => void): () => void;
 }

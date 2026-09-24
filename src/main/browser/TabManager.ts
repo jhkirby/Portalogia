@@ -5,7 +5,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
-import { BrowserWindow, WebContentsView, dialog } from 'electron';
+import { join } from 'node:path';
+import { app, BrowserWindow, WebContentsView, dialog, type WebContents } from 'electron';
 import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
@@ -94,8 +95,10 @@ export class TabManager {
   private spaceHoldTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Set once per grab, never reset by repeats; see `GRAB_MAX_DURATION_MS`. */
   private grabMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null;
-  /** Bumped on every `toggleSidebar` call so an in-flight animation can tell it's been superseded and stop early. */
-  private sidebarAnimationToken = 0;
+  /** Bumped on every `toggleSidebar`/`setFocusMode` call so an in-flight bounds animation can tell it's been superseded and stop early. */
+  private boundsAnimationToken = 0;
+  /** Set for the duration of an in-flight bounds animation (see `animateBoundsInset`) — lets `updateBounds` defer to the animation's own frames instead of fighting them with a one-off instant jump, e.g. from the native 'resize' event `setFullScreen` fires when Focus Mode toggles. */
+  private isAnimatingBounds = false;
   private readonly terminals: TerminalManager;
 
   /**
@@ -116,11 +119,15 @@ export class TabManager {
     });
     this.activeWorkspaceId = DEFAULT_WORKSPACE_ID;
     this.terminals = new TerminalManager(
-      (id, data) => {
-        console.log('[DEBUG] sending TerminalData to renderer', id, data.length, 'destroyed=', this.window.webContents.isDestroyed());
-        this.window.webContents.send(IpcChannel.TerminalData, { id, data });
+      // Pushed to the terminal tab's own `WebContentsView`, not the chrome
+      // window — each terminal renders in its own page now (see
+      // `createTerminalTab`), so that's the only webContents actually
+      // listening for it.
+      (id, data) => this.views.get(id)?.webContents.send(IpcChannel.TerminalData, { id, data }),
+      (id) => {
+        this.patchTerminalState(id, { exited: true });
+        this.views.get(id)?.webContents.send(IpcChannel.TerminalExited, { id });
       },
-      (id) => this.patchTerminalState(id, { exited: true }),
     );
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
@@ -203,19 +210,57 @@ export class TabManager {
 
   /**
    * Opens a new terminal tab (Ctrl+S, the toolbar button, or File > New
-   * Terminal) and makes it active. Unlike `createTab`, there's no
-   * `WebContentsView` or URL — `activateTab` already treats a tab with no
-   * view as "nothing to mount," and the renderer's `Terminal` component
-   * (rendered directly in the chrome's own DOM, not a separate native
-   * view) picks it up as soon as `activeTabId` matches its own tab id.
-   * Focus lands in the terminal itself rather than the address bar — that
-   * component focuses its own xterm instance whenever it becomes active,
-   * so no `focusAddressBarPastTabLoad`-style handoff is needed here.
+   * Terminal) and makes it active. Like `createTab`, it gets its own
+   * `WebContentsView` — loading `terminal.html` (its own small bundle,
+   * bridged by its own narrower preload, `src/preload/terminal.ts`)
+   * instead of an arbitrary URL — so it gets exactly the same native
+   * mount/focus handling `activateTab` already gives a browser tab, rather
+   * than needing its own special case for either. Focus lands in the
+   * terminal itself rather than the address bar — `Terminal.tsx` focuses
+   * its own xterm instance as soon as it mounts, so no
+   * `focusAddressBarPastTabLoad`-style handoff is needed here.
+   *
+   * The shell itself isn't spawned until this view's `did-finish-load`
+   * fires, deliberately — spawning it any earlier risks the pty's first
+   * output (worst case, the shell's very first prompt) arriving before
+   * `terminal.html` has loaded and subscribed to it, which `webContents.send`
+   * would then simply drop (Electron doesn't queue IPC for a not-yet-
+   * listening page). A real shell taking its own OS-level time to spawn
+   * and print that first prompt keeps this comfortably ahead of it.
    * @param workspaceId Workspace to create it in; defaults to the active workspace.
    * @returns The full browser state after the tab is created.
    */
   public createTerminalTab(workspaceId?: string): BrowserState {
     const id = randomUUID();
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: join(__dirname, '../preload/terminal.cjs'),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+      },
+    });
+
+    // Trusted, app-owned content (unlike a browser tab's arbitrary page) —
+    // it should never navigate away from itself or spawn a bare OS window,
+    // same reasoning as the chrome window itself (see MainWindow.ts).
+    view.webContents.on('will-navigate', (event) => event.preventDefault());
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.wireSharedInputHandling(id, view.webContents);
+    view.webContents.once('did-finish-load', () => {
+      // The tab could already have been closed again by the time this
+      // fires (e.g. opened then immediately closed) — `states` no longer
+      // having it is that signal, and spawning a shell for a tab that's
+      // already gone would leak the process.
+      if (this.states.has(id)) {
+        this.terminals.create(id);
+      }
+    });
+
+    this.views.set(id, view);
     this.states.set(id, {
       kind: 'terminal',
       id,
@@ -223,8 +268,16 @@ export class TabManager {
       exited: false,
       workspaceId: workspaceId ?? this.activeWorkspaceId,
     });
-    this.terminals.create(id);
-    return this.activateTab(id);
+    this.activateTab(id);
+
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+    if (!app.isPackaged && devServerUrl) {
+      void view.webContents.loadURL(`${devServerUrl}/terminal.html?id=${id}`);
+    } else {
+      void view.webContents.loadFile(join(__dirname, '../renderer/terminal.html'), { query: { id } });
+    }
+
+    return this.getState();
   }
 
   /** Forwards a terminal tab's keystroke/paste bytes to its pty. A no-op if `id` isn't a live terminal tab. */
@@ -419,14 +472,20 @@ export class TabManager {
       }
     }
 
-    // A terminal tab has no `WebContentsView` — nothing to mount here.
-    // Leaving the content area clear is exactly what it needs: the
-    // renderer's `Terminal` component, always mounted in the chrome's own
-    // DOM, shows through as soon as `activeTabId` matches its tab id.
+    // Every tab, browser or terminal, has its own `WebContentsView` (see
+    // `createTab`/`createTerminalTab`) — mounting it and explicitly asking
+    // for native OS keyboard focus is what makes it actually receive
+    // keystrokes rather than them going nowhere (or to whatever view last
+    // held focus, even after it's been removed above). Explicit rather
+    // than relying on mounting alone to grab focus: true the first time a
+    // fresh view loads content, but not reliably true for a view that's
+    // simply being reattached after being hidden, which is what every tab
+    // switch after the first is.
     const view = this.views.get(id);
     if (view) {
       this.window.contentView.addChildView(view);
-      view.setBounds(this.computeMainBoundsForLeftInset(this.targetLeftInset()));
+      view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
+      view.webContents.focus();
     }
     this.activeTabId = id;
 
@@ -443,13 +502,17 @@ export class TabManager {
   /**
    * Navigates a tab. Re-validates and re-normalizes the URL on this side
    * of the IPC boundary rather than trusting the renderer's normalization.
+   * A no-op for a terminal tab — it has a real `WebContentsView` like a
+   * browser tab now (see `createTerminalTab`), but navigating it would
+   * blow away its `terminal.html` page (and the live xterm instance on
+   * it) rather than doing anything meaningful.
    * @param id The tab to navigate.
    * @param url Raw address bar text or a URL.
    * @returns The full browser state (loading flags update asynchronously).
    */
   public navigate(id: string, url: string): BrowserState {
     const view = this.views.get(id);
-    if (!view) {
+    if (!view || this.states.get(id)?.kind !== 'browser') {
       return this.getState();
     }
 
@@ -462,32 +525,40 @@ export class TabManager {
     return this.getState();
   }
 
-  /** Navigates a tab to the home page — the same destination the toolbar's Home button uses. */
+  /** Navigates a tab to the home page — the same destination the toolbar's Home button uses. A no-op for a terminal tab; see `navigate`. */
   public goHome(id: string): BrowserState {
     return this.navigate(id, HOME_URL);
   }
 
-  /** Navigates a tab back one entry in its history, if possible. */
+  /** Navigates a tab back one entry in its history, if possible. A no-op for a terminal tab; see `navigate`. */
   public goBack(id: string): BrowserState {
-    this.views.get(id)?.webContents.navigationHistory.goBack();
+    if (this.states.get(id)?.kind === 'browser') {
+      this.views.get(id)?.webContents.navigationHistory.goBack();
+    }
     return this.getState();
   }
 
-  /** Navigates a tab forward one entry in its history, if possible. */
+  /** Navigates a tab forward one entry in its history, if possible. A no-op for a terminal tab; see `navigate`. */
   public goForward(id: string): BrowserState {
-    this.views.get(id)?.webContents.navigationHistory.goForward();
+    if (this.states.get(id)?.kind === 'browser') {
+      this.views.get(id)?.webContents.navigationHistory.goForward();
+    }
     return this.getState();
   }
 
-  /** Reloads a tab's current page. */
+  /** Reloads a tab's current page. A no-op for a terminal tab — reloading its `terminal.html` page would kill the live xterm instance on it (its pty survives; a fresh page would just never reattach to it). */
   public reload(id: string): BrowserState {
-    this.views.get(id)?.webContents.reload();
+    if (this.states.get(id)?.kind === 'browser') {
+      this.views.get(id)?.webContents.reload();
+    }
     return this.getState();
   }
 
-  /** Stops a tab's in-flight navigation. */
+  /** Stops a tab's in-flight navigation. A no-op for a terminal tab; see `navigate`. */
   public stop(id: string): BrowserState {
-    this.views.get(id)?.webContents.stop();
+    if (this.states.get(id)?.kind === 'browser') {
+      this.views.get(id)?.webContents.stop();
+    }
     return this.getState();
   }
 
@@ -522,7 +593,7 @@ export class TabManager {
   public async exportToPdf(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state) {
+    if (!view || !state || state.kind !== 'browser') {
       return null;
     }
 
@@ -698,7 +769,10 @@ export class TabManager {
 
   /**
    * Puts the active tab and one other tab side by side. A no-op if either
-   * id is invalid or they're the same tab.
+   * id is invalid, they're the same tab, or either is a terminal tab —
+   * split view is browser-tab-only by product decision (the renderer's own
+   * tab/split pickers already exclude terminal tabs; this is the same rule
+   * enforced on the main-process side too).
    * @param secondaryId The tab to show alongside the current active tab.
    * @returns The full browser state after the change.
    */
@@ -709,6 +783,9 @@ export class TabManager {
     }
     const secondaryView = this.views.get(secondaryId);
     if (!secondaryView || !this.views.has(primaryId)) {
+      return this.getState();
+    }
+    if (this.states.get(primaryId)?.kind !== 'browser' || this.states.get(secondaryId)?.kind !== 'browser') {
       return this.getState();
     }
 
@@ -734,15 +811,23 @@ export class TabManager {
   // ── Focus mode ───────────────────────────────────────────────────────
 
   /**
-   * Toggles Focus Mode: hides the workspace/tab row so only the toolbar
-   * and page remain, and grows the page to fill the freed space.
+   * Toggles Focus Mode: puts the window into true OS fullscreen (covering
+   * the taskbar too) and slides away every bit of chrome — titlebar, tab
+   * strip, toolbar, sidebar — so only the page fills the screen, animating
+   * the native content's bounds in step with the chrome's own CSS
+   * transition the same way `toggleSidebar` already does (see
+   * `animateBoundsInset`). Exits the same way, back to the window's prior
+   * (non-fullscreen) bounds.
    * @param enabled Whether Focus Mode should be on.
    * @returns The full browser state after the change.
    */
   public setFocusMode(enabled: boolean): BrowserState {
+    const fromLeft = this.targetLeftInset();
+    const fromTop = this.targetTopInset();
     this.focusMode = enabled;
-    this.updateBounds();
+    this.window.setFullScreen(enabled);
     this.emitState();
+    this.animateBoundsInset(fromLeft, this.targetLeftInset(), fromTop, this.targetTopInset());
     return this.getState();
   }
 
@@ -758,7 +843,8 @@ export class TabManager {
    * content's bounds and (via the pushed `sidebarVisible` state) the
    * sidebar's own CSS transition together, so the content edge and the
    * sliding sidebar move in step instead of one snapping ahead of the
-   * other.
+   * other. The top inset doesn't move — `fromTop`/`toTop` are both
+   * whatever Focus Mode currently has it at.
    * @returns The full browser state after the change (the animation
    *   itself keeps running past this point; bounds settle asynchronously).
    */
@@ -766,33 +852,42 @@ export class TabManager {
     const wasVisible = this.sidebarVisible;
     this.sidebarVisible = !wasVisible;
     this.emitState();
-    this.animateLeftInset(wasVisible ? SIDEBAR_WIDTH_PX : 0, this.targetLeftInset());
+    const top = this.targetTopInset();
+    this.animateBoundsInset(wasVisible ? SIDEBAR_WIDTH_PX : 0, this.targetLeftInset(), top, top);
     return this.getState();
   }
 
   /**
-   * Drives the sidebar's show/hide transition frame by frame, since a
-   * native `WebContentsView`'s bounds — unlike a CSS `width` — don't
-   * animate on their own. Cancels itself if superseded by a newer toggle
-   * (`sidebarAnimationToken` changes) so rapid double-toggles don't fight
-   * over the view's bounds.
-   * @param fromLeft Inset at the start of the animation.
-   * @param toLeft Inset the animation settles on.
+   * Drives the sidebar's and/or chrome's show/hide transition frame by
+   * frame, since a native `WebContentsView`'s bounds — unlike a CSS
+   * `width`/`height` — don't animate on their own. Used by both
+   * `toggleSidebar` (left inset only) and `setFocusMode` (left and top
+   * together, since entering Focus Mode hides the sidebar too). Cancels
+   * itself if superseded by a newer call (`boundsAnimationToken` changes)
+   * so rapid toggles don't fight over the view's bounds.
+   * @param fromLeft Left inset at the start of the animation.
+   * @param toLeft Left inset the animation settles on.
+   * @param fromTop Top inset at the start of the animation.
+   * @param toTop Top inset the animation settles on.
    */
-  private animateLeftInset(fromLeft: number, toLeft: number): void {
-    const token = ++this.sidebarAnimationToken;
+  private animateBoundsInset(fromLeft: number, toLeft: number, fromTop: number, toTop: number): void {
+    const token = ++this.boundsAnimationToken;
+    this.isAnimatingBounds = true;
     const start = Date.now();
     const step = (): void => {
-      if (token !== this.sidebarAnimationToken) {
+      if (token !== this.boundsAnimationToken) {
         return;
       }
       const t = Math.min(1, (Date.now() - start) / SIDEBAR_TOGGLE_DURATION_MS);
       // Ease-out cubic — matches the `cubic-bezier(0.33, 1, 0.68, 1)` timing
-      // function on the sidebar's own CSS transition (see workspace-bar.css).
+      // function on the sidebar's and chrome's own CSS transitions (see
+      // workspace-bar.css and app.css).
       const eased = 1 - (1 - t) ** 3;
-      this.applyBoundsForLeftInset(fromLeft + (toLeft - fromLeft) * eased);
+      this.applyBounds(fromLeft + (toLeft - fromLeft) * eased, fromTop + (toTop - fromTop) * eased);
       if (t < 1) {
         setTimeout(step, 16);
+      } else {
+        this.isAnimatingBounds = false;
       }
     };
     step();
@@ -1017,6 +1112,17 @@ export class TabManager {
   }
 
   /**
+   * Asks this window's chrome to toggle its light/dark theme
+   * (menu/accelerator-driven, Ctrl+D). A purely client-local UI
+   * preference (see `useTheme`), not a text input — unlike
+   * `requestTabSearch`/`requestFocusAddressBar`, there's no keyboard
+   * focus to hand back to the chrome first.
+   */
+  public requestToggleTheme(): void {
+    this.window.webContents.send(IpcChannel.UiToggleTheme);
+  }
+
+  /**
    * Focuses the address bar now, and again the next time `tabId`'s own
    * `WebContentsView` grabs native OS focus for itself — which a freshly
    * created tab does on its own once it's attached and showing content
@@ -1054,9 +1160,18 @@ export class TabManager {
     };
   }
 
-  /** Re-fits the mounted view(s) to the window; call this on resize. */
+  /**
+   * Re-fits the mounted view(s) to the window; call this on resize. A
+   * no-op while `animateBoundsInset` is running (see `isAnimatingBounds`)
+   * — that includes the native 'resize' event `setFullScreen` fires when
+   * Focus Mode toggles, which would otherwise jump straight to the
+   * animation's final bounds one frame early instead of animating there.
+   */
   public updateBounds(): void {
-    this.applyBoundsForLeftInset(this.targetLeftInset());
+    if (this.isAnimatingBounds) {
+      return;
+    }
+    this.applyBounds(this.targetLeftInset(), this.targetTopInset());
   }
 
   /**
@@ -1096,20 +1211,29 @@ export class TabManager {
   /**
    * The sidebar's resting horizontal inset: 0 when there's no sidebar to
    * clear (Focus Mode, or the sidebar toggled hidden via `toggleSidebar`),
-   * else `SIDEBAR_WIDTH_PX`. Mid-toggle, `applyBoundsForLeftInset` is
-   * driven by the animation loop instead — this is only the value things
-   * settle back to.
+   * else `SIDEBAR_WIDTH_PX`. Mid-toggle, `applyBounds` is driven by the
+   * animation loop instead — this is only the value things settle back to.
    */
   private targetLeftInset(): number {
     return this.focusMode || !this.sidebarVisible ? 0 : SIDEBAR_WIDTH_PX;
   }
 
-  /** @returns The bounds a single full-width tab view should occupy for a given sidebar inset, below the chrome. */
-  private computeMainBoundsForLeftInset(left: number): Rect {
+  /**
+   * The chrome's resting vertical inset: `CHROME_HEIGHT_FOCUSED_PX` (the
+   * whole titlebar/tab-strip/toolbar slid away) in Focus Mode, else
+   * `CHROME_HEIGHT_PX`. Mid-toggle, `applyBounds` is driven by
+   * `animateBoundsInset` instead — this is only the value things settle
+   * back to, same relationship `targetLeftInset` has with the sidebar.
+   */
+  private targetTopInset(): number {
+    return this.focusMode ? CHROME_HEIGHT_FOCUSED_PX : CHROME_HEIGHT_PX;
+  }
+
+  /** @returns The bounds a single full-width tab view should occupy for a given sidebar/chrome inset. */
+  private computeMainBounds(left: number, top: number): Rect {
     // Electron types getContentSize() as number[], not a fixed tuple, so
     // noUncheckedIndexedAccess sees each element as possibly undefined.
     const [width = 0, height = 0] = this.window.getContentSize();
-    const top = this.focusMode ? CHROME_HEIGHT_FOCUSED_PX : CHROME_HEIGHT_PX;
     return { x: left, y: top, width: Math.max(0, width - left), height: Math.max(0, height - top) };
   }
 
@@ -1134,13 +1258,15 @@ export class TabManager {
   }
 
   /**
-   * Applies bounds for a given sidebar inset to whichever view(s) are
-   * currently mounted — the single shared code path for both the settled
-   * state (`updateBounds`) and every frame of `toggleSidebar`'s animation.
+   * Applies bounds for a given sidebar/chrome inset to whichever view(s)
+   * are currently mounted — the single shared code path for both the
+   * settled state (`updateBounds`) and every frame of
+   * `animateBoundsInset`'s animation.
    * @param left Horizontal inset to clear, in CSS pixels.
+   * @param top Vertical inset to clear, in CSS pixels.
    */
-  private applyBoundsForLeftInset(left: number): void {
-    const main = this.computeMainBoundsForLeftInset(left);
+  private applyBounds(left: number, top: number): void {
+    const main = this.computeMainBounds(left, top);
     if (this.splitView) {
       const { primary, secondary } = this.computeSplitBoundsFor(main);
       this.views.get(this.splitView.primaryTabId)?.setBounds(primary);
@@ -1203,13 +1329,7 @@ export class TabManager {
       canGoForward: wc.navigationHistory.canGoForward(),
     });
 
-    // Safety net for the Ctrl+Space keyboard-reorder gesture below: if this
-    // view loses OS focus mid-hold (e.g. a click elsewhere, or the tab
-    // being nudged out from under the cursor), its `keyUp` for Space might
-    // never arrive here at all, since keyup goes to whichever surface has
-    // focus at release time, not necessarily this one. Blurring is treated
-    // the same as releasing the keys, so the grab can't get stuck.
-    wc.on('blur', () => this.releaseGrabbedTab());
+    this.wireSharedInputHandling(id, wc);
 
     wc.on('page-title-updated', (_event, title) => this.patchState(id, { title }));
     wc.on('page-favicon-updated', (_event, favicons) => {
@@ -1247,18 +1367,44 @@ export class TabManager {
         event.preventDefault();
       }
     });
+  }
 
-    // Belt-and-suspenders for the browser-chrome shortcuts also bound as
-    // menu accelerators in buildMenu.ts (close/new/reopen tab, bookmark,
-    // close all tabs, toggle sidebar, cycle tabs/workspaces, home,
-    // back/forward): Electron's menu accelerators are unreliable once a
-    // WebContentsView (as opposed to the chrome window's own webContents)
-    // has OS focus — which, for a browser, tab content has almost all the
-    // time — so a page could otherwise swallow Ctrl+W etc. or the
-    // accelerator could simply not fire. Handling it here too, directly
-    // on the tab's own webContents, means it fires regardless of the
-    // menu's focus quirks and beats the page's own keydown handling since
-    // `before-input-event` runs first.
+  /**
+   * Wires the OS-focus/keyboard-shortcut handling every tab's own
+   * `WebContentsView` needs, regardless of kind — shared by `wireEvents`
+   * (browser tabs) and `createTerminalTab`, since a terminal's own view is
+   * just as capable of holding OS keyboard focus (in fact holds it most of
+   * the time, same as a browser tab's page) and needs the exact same
+   * safety nets.
+   *
+   * The blur handler is a safety net for the Ctrl+Space keyboard-reorder
+   * gesture: if this view loses OS focus mid-hold (e.g. a click elsewhere,
+   * or the tab being nudged out from under the cursor), its `keyUp` for
+   * Space might never arrive here at all, since keyup goes to whichever
+   * surface has focus at release time, not necessarily this one. Blurring
+   * is treated the same as releasing the keys, so the grab can't get stuck.
+   *
+   * The `before-input-event` handler is belt-and-suspenders for the
+   * chrome-wide shortcuts also bound as menu accelerators in buildMenu.ts
+   * (close/new/reopen tab, bookmark, close all tabs, toggle sidebar, cycle
+   * tabs/workspaces, home, back/forward): Electron's menu accelerators are
+   * unreliable once a WebContentsView (as opposed to the chrome window's
+   * own webContents) has OS focus — which, for a tab's content, is almost
+   * all the time — so a page (or a shell's own readline bindings) could
+   * otherwise swallow Ctrl+W etc. or the accelerator could simply not
+   * fire. Handling it here too, directly on the tab's own webContents,
+   * means it fires regardless of the menu's focus quirks and beats the
+   * page's own keydown handling since `before-input-event` runs first. The
+   * actions themselves (`goHome`, `toggleBookmark`, `goBack`/`goForward`)
+   * are already guarded to browser-kind tabs, so routing every tab's
+   * shortcuts through the same switch here is safe for a terminal tab too
+   * — it just no-ops on the browser-only ones.
+   * @param id The tab this view belongs to.
+   * @param wc The view's own webContents.
+   */
+  private wireSharedInputHandling(id: string, wc: WebContents): void {
+    wc.on('blur', () => this.releaseGrabbedTab());
+
     wc.on('before-input-event', (event, input) => {
       if (this.handleReorderGestureInput(event, input)) {
         return;
@@ -1271,6 +1417,16 @@ export class TabManager {
       if (input.isAutoRepeat) {
         return;
       }
+
+      // No modifier, so it falls outside the `cmdOrCtrl`-gated switch
+      // below — Escape only ever does one thing here anyway, exit Focus
+      // Mode, and only while it's actually on.
+      if (key === 'escape' && this.focusMode) {
+        event.preventDefault();
+        this.setFocusMode(false);
+        return;
+      }
+
       const cmdOrCtrl = input.control || input.meta;
 
       if (input.alt && !cmdOrCtrl && !input.shift) {
@@ -1314,6 +1470,10 @@ export class TabManager {
           case 'w':
             event.preventDefault();
             this.closeAllTabs();
+            return;
+          case 'f':
+            event.preventDefault();
+            this.toggleFocusMode();
             return;
           default:
             return;

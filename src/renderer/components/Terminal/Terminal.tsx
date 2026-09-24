@@ -1,47 +1,71 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-16
+// Last Modified: 2026-09-24
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
   readonly id: string;
-  /** Whether this is the tab currently on screen — hidden (but still mounted) terminals keep their pty and scrollback alive underneath. */
-  readonly isActive: boolean;
-  /** Whether the shell process itself has already exited (e.g. the user typed `exit`). */
-  readonly exited: boolean;
+}
+
+/**
+ * A no-op stand-in for the real `IntersectionObserver`. xterm.js's own
+ * `RenderService` creates one of these to track whether its element is
+ * actually on screen, and pauses its render scheduling — permanently, with
+ * no public API to un-stick it — the moment that observer reports (even
+ * momentarily or incorrectly) that it isn't. Standing in for the observer
+ * for as long as this `XTerm` instance exists (see the
+ * `window.IntersectionObserver` swap around `new XTerm()`/`term.open()`
+ * below, restored on unmount) means that pause condition can never trigger.
+ * This view is its own dedicated `WebContentsView` (see `TabManager`), so
+ * it no longer gets hidden/shown via CSS the way the old chrome-hosted
+ * version did — but Electron detaching/reattaching that view from the
+ * window still risks the same underlying occlusion signal, so this stays
+ * as cheap insurance.
+ */
+class NoopIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '';
+  readonly thresholds: readonly number[] = [];
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
 }
 
 /**
  * One tab's real bash session: an `xterm.js` instance wired to the main
- * process's `node-pty`-backed shell over IPC. Kept mounted for as long as
- * its tab exists — `App` renders one of these per terminal tab and toggles
- * `isActive` rather than mounting/unmounting on tab switches, so scrollback
- * and the shell's own process both survive switching away and back, the
- * same way a browser tab's `WebContentsView` does.
- *
- * Unlike a browser tab, this renders directly in the chrome's own DOM
- * rather than a separate `WebContentsView` — see `TabManager.activateTab`
- * for why that's the right split for something this app itself owns.
+ * process's `node-pty`-backed shell over IPC. Fills its own dedicated
+ * `WebContentsView` (`terminal.html`, one per terminal tab) — see
+ * `TabManager.createTerminalTab` for why that's the right split (the same
+ * native-focus and mount/unmount handling every browser tab already gets
+ * for free, instead of re-implementing it for a chrome-hosted DOM node).
+ * That view is only ever mounted into the window while its tab is the
+ * active one, but Electron keeps its process (and this pty) alive
+ * regardless, so switching away and back preserves scrollback exactly like
+ * a background browser tab preserves its page state.
  */
-export function Terminal({ id, isActive, exited }: TerminalProps) {
+export function Terminal({ id }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const [exited, setExited] = useState(false);
 
-  // Create the xterm instance and wire it to this tab's pty exactly once —
-  // never on `isActive`/`exited` changes, which would tear down a live
-  // session just for switching tabs.
   useEffect(() => {
-    console.log('[DEBUG] Terminal effect MOUNT', id);
     const container = containerRef.current;
     if (!container) {
       return;
     }
+
+    // See `NoopIntersectionObserver`'s own doc comment.
+    const RealIntersectionObserver = window.IntersectionObserver;
+    window.IntersectionObserver = NoopIntersectionObserver;
 
     const term = new XTerm({
       cursorBlink: true,
@@ -52,60 +76,60 @@ export function Terminal({ id, isActive, exited }: TerminalProps) {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(container);
-    term.write('\r\nSECOND_LINE_TEXT\r\n', () => {
-      term.refresh(0, term.rows - 1);
-    });
+    term.focus();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    const dataDisposable = term.onData((data) => window.northstar.sendTerminalInput(id, data));
-    const resizeDisposable = term.onResize(({ cols, rows }) => window.northstar.resizeTerminal(id, cols, rows));
-    const unsubscribeData = window.northstar.onTerminalData((dataId, data) => {
-      console.log('[DEBUG] renderer got terminal data', dataId, 'mine=', id, 'match=', dataId === id, data.length);
+    const dataDisposable = term.onData((data) => window.northstarTerminal.sendTerminalInput(id, data));
+    const resizeDisposable = term.onResize(({ cols, rows }) => window.northstarTerminal.resizeTerminal(id, cols, rows));
+    const unsubscribeData = window.northstarTerminal.onTerminalData((dataId, data) => {
       if (dataId === id) {
-        term.write(data);
+        // Cheap belt-and-suspenders alongside the `IntersectionObserver`
+        // stand-in above: forces the just-written rows to actually paint
+        // rather than trusting xterm's own scheduling to complete on its
+        // own, in case anything else ever manages to pause it.
+        term.write(data, () => term.refresh(0, term.rows - 1));
+      }
+    });
+    const unsubscribeExited = window.northstarTerminal.onTerminalExited((exitedId) => {
+      if (exitedId === id) {
+        setExited(true);
       }
     });
 
-    // Catches every layout change that could resize this terminal's own
-    // container while it's visible (window resize, sidebar toggle, Focus
-    // Mode) — a plain window 'resize' listener would miss the latter two,
-    // neither of which resizes the window itself.
-    const resizeObserver = new ResizeObserver(() => {
-      console.log('[DEBUG] resizeObserver fired, offsetParent=', containerRef.current?.offsetParent, 'proposed=', JSON.stringify(fitAddon.proposeDimensions()));
-      if (containerRef.current?.offsetParent !== null) {
-        fitAddon.fit();
-        console.log('[DEBUG] after fit, term.cols/rows=', term.cols, term.rows);
-      }
-    });
+    // This page's own top-level `focus` fires when its `WebContentsView`
+    // regains native OS focus — e.g. `TabManager.activateTab` switching
+    // back to this tab after another was active. A plain DOM `.focus()`
+    // call on the hidden textarea isn't enough on its own for keystrokes to
+    // actually land here; this is what makes them.
+    const handleWindowFocus = (): void => term.focus();
+    window.addEventListener('focus', handleWindowFocus);
+
+    // Catches every layout change that could resize this view (window
+    // resize, sidebar toggle, Focus Mode) — the container fills the whole
+    // page, so this is equivalent to a window 'resize' listener but also
+    // catches the DPI/zoom-driven resizes that don't fire one.
+    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
     resizeObserver.observe(container);
 
     return () => {
-      console.log('[DEBUG] Terminal effect CLEANUP', id);
+      window.IntersectionObserver = RealIntersectionObserver;
+      window.removeEventListener('focus', handleWindowFocus);
       dataDisposable.dispose();
       resizeDisposable.dispose();
       unsubscribeData();
+      unsubscribeExited();
       resizeObserver.disconnect();
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once; see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once; `id` is this page's own, fixed at load.
   }, [id]);
 
-  // Becoming the active tab can follow a resize that happened while this
-  // terminal was `display: none` (and thus un-measurable), so re-fit before
-  // focusing rather than trusting whatever size it last fit to.
-  useEffect(() => {
-    if (isActive) {
-      fitAddonRef.current?.fit();
-      termRef.current?.focus();
-    }
-  }, [isActive]);
-
   return (
-    <div className={`terminal${isActive ? ' terminal--active' : ''}`}>
+    <div className="terminal">
       <div ref={containerRef} className="terminal__surface" />
       {exited && (
         <div className="terminal__exited-banner" role="status">

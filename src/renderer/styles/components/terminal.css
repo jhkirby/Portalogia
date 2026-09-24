@@ -1,24 +1,28 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-16 */
+   Last Modified: 2026-09-24 */
 
 /* ── TERMINAL ─────────────────────────────────────────────────────────── */
-/* One tab's xterm.js instance, absolutely positioned to fill `.tab-content`
-   (see app.css) exactly like a browser tab's native `WebContentsView`
-   would. Every terminal tab's instance stays mounted here for as long as
-   its tab exists — `display: none` while inactive, rather than unmounting
-   — so switching tabs never interrupts its shell or clears its scrollback;
-   see the `Terminal` component. */
+/* One terminal tab's whole page (`terminal.html`), a dedicated
+   `WebContentsView` the main process mounts/unmounts as its tab is
+   activated/backgrounded — see `TabManager.createTerminalTab`. Unlike the
+   chrome's own page, this is the entire document, so it fills the actual
+   viewport rather than some inset area of a larger layout. */
 
-.terminal {
-  position: absolute;
-  inset: 0;
-  display: none;
+html,
+body {
+  height: 100%;
+  margin: 0;
 }
 
-.terminal--active {
-  display: block;
+#root {
+  height: 100%;
+}
+
+.terminal {
+  position: relative;
+  height: 100%;
 }
 
 .terminal__surface {

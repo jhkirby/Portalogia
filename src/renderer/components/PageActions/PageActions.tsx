@@ -3,6 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-18
 
+import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 
 interface PageActionsProps {
@@ -11,23 +12,27 @@ interface PageActionsProps {
   /** Whether there's an active tab to bookmark or export at all. */
   readonly canActOnPage: boolean;
   readonly focusMode: boolean;
+  readonly theme: Theme;
   readonly onToggleBookmark: () => void;
   readonly onExportPdf: () => void;
   readonly onNewTerminal: () => void;
   readonly onOpenTabSearch: () => void;
   readonly onToggleFocusMode: () => void;
+  readonly onToggleTheme: () => void;
 }
 
-/** Actions on the current page (bookmark, export, new terminal, search tabs) plus the window-level Focus Mode toggle. */
+/** Actions on the current page (bookmark, export, new terminal, search tabs) plus the window-level Focus Mode and theme toggles. */
 export function PageActions({
   isBookmarked,
   canActOnPage,
   focusMode,
+  theme,
   onToggleBookmark,
   onExportPdf,
   onNewTerminal,
   onOpenTabSearch,
   onToggleFocusMode,
+  onToggleTheme,
 }: PageActionsProps) {
   return (
     <div className="page-actions">
@@ -79,6 +84,15 @@ export function PageActions({
         data-tooltip={`${focusMode ? 'Exit Focus Mode' : 'Enter Focus Mode'} (${formatShortcut('Shift+F')})`}
       >
         ⛶
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onToggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        data-tooltip={`${theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} (${formatShortcut('D')})`}
+      >
+        {theme === 'dark' ? '☾︎' : '☀︎'}
       </button>
     </div>
   );

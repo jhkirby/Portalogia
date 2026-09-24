@@ -11,7 +11,7 @@
    `.main-row`'s default flex `align-items: stretch`, not an explicit
    rule here, so only `width` needs setting; the actual tab content still
    starts at that same x-offset regardless of the sidebar's own content —
-   see TabManager.computeMainBoundsForLeftInset() in the main process for
+   see TabManager.computeMainBounds() in the main process for
    how a browser tab's native view is shifted right by --size-sidebar-width
    to clear it (Terminal, `.tab-content`'s other occupant, clears it via
    plain CSS flow instead). */

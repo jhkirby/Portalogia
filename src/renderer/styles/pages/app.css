@@ -28,6 +28,19 @@ body {
   height: 100%;
 }
 
+/* The OS/browser default keyboard-focus outline (a gold ring on this
+   Windows box) shows up on any focusable chrome element — a tab, a
+   button — that doesn't already style its own focus state, since none of
+   this chrome opts into it deliberately. Suppressed everywhere rather
+   than per-component so no future focusable element can reintroduce it by
+   omission; each element's existing hover/active/selected styling (tab
+   background, button background, etc.) carries the visual feedback
+   instead. Scoped to this document only — a tab's own page content is a
+   separate native `WebContentsView`, unaffected by this rule. */
+* {
+  outline: none;
+}
+
 /* Column of [full-width top bar, main row]. The top bar owns the entire
    top-left corner — the sidebar starts below it rather than competing
    with it there — so it must come first in source order and span the
@@ -42,7 +55,7 @@ body {
    below the top bar. A browser tab's actual content is a native
    `WebContentsView` the main process positions directly over
    `.tab-content`'s area, entirely outside this DOM — see
-   TabManager.computeMainBoundsForLeftInset(). A terminal tab is the one
+   TabManager.computeMainBounds(). A terminal tab is the one
    exception, rendered right inside `.tab-content` (see `Terminal`). */
 .main-row {
   display: flex;
@@ -63,16 +76,41 @@ body {
   /* The BrowserWindow itself is much taller; everything below this is the
      native WebContentsView the main process draws, not part of this DOM. */
   height: var(--size-chrome-height);
+  overflow: hidden;
 
   background: var(--color-chrome-bg);
+
+  /* Animates in step with `.app__bar`'s own `transform` transition below,
+     and with TabManager.ts's `animateBoundsInset` for the native tab
+     content — all three share the same duration/easing so the chrome
+     visibly slides up rather than the content underneath just snapping to
+     fill the freed space a beat early or late. */
+  transition: height var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* Focus Mode hides the tab row (and the sidebar — see `App`) entirely, so
-   the chrome only needs to reserve titlebar + toolbar height — must track
-   CHROME_HEIGHT_FOCUSED_PX in src/shared/constants.ts, which the main
-   process uses to grow the page into the space this frees up. */
+/* Entering Focus Mode also puts the window into true OS fullscreen (see
+   `setFocusMode` in TabManager.ts) — must track CHROME_HEIGHT_FOCUSED_PX
+   in src/shared/constants.ts (0), which the main process uses to grow the
+   page into the space this frees up. */
 .app--focus-mode {
   height: var(--size-chrome-height-focused);
+}
+
+/* Both bars move together as this row's own child (see App.tsx) —
+   `height: var(--size-chrome-height)` on `.app` is a fixed target `.app`
+   itself shrinks away from, not this element's own height, so this stays
+   its natural size throughout and just slides upward out of `.app`'s
+   now-clipped (`overflow: hidden`) box. */
+.app__bar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+
+  transition: transform var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.app--focus-mode .app__bar {
+  transform: translateY(-100%);
 }
 
 /* ── TITLEBAR ─────────────────────────────────────────────────────────── */
@@ -82,9 +120,7 @@ body {
    only the leftover space past the tabs and the "new tab" button stays
    draggable, WindowControls included. That leftover space also carries
    Windows' native double-click-to-maximize for a drag region, with no JS
-   needed. Stays visible in Focus Mode (see `.app--focus-mode` above) —
-   with the tab strip hidden there, it's just WindowControls — since it's
-   the only way left to move, minimize, maximize, or close the window. */
+   needed. */
 .titlebar {
   display: flex;
   align-items: stretch;

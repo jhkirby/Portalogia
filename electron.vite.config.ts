@@ -27,7 +27,15 @@ export default defineConfig({
     resolve: { alias: sharedAlias },
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/preload/index.ts') },
+        // `terminal` is the second, narrower preload for a terminal tab's
+        // own `WebContentsView` (see `src/preload/terminal.ts`) — a
+        // separate bundle so a terminal view's sandboxed renderer never
+        // even has the full chrome-facing `NorthstarApi` in its preload,
+        // only the handful of terminal-specific channels it needs.
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          terminal: resolve(__dirname, 'src/preload/terminal.ts'),
+        },
         // Sandboxed preload scripts are loaded through a synchronous
         // CommonJS loader and can't use `import` — with the package set to
         // "type": "module", the default ESM output produces a `.mjs` file
@@ -42,7 +50,13 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/renderer/index.html') },
+        // `terminal` is a second page (`terminal.html`/`terminal-main.tsx`)
+        // for a terminal tab's own `WebContentsView` to load — see
+        // `TabManager.createTerminalTab`.
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          terminal: resolve(__dirname, 'src/renderer/terminal.html'),
+        },
       },
     },
   },

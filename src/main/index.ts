@@ -10,6 +10,7 @@ import { IpcChannel } from '@shared/ipc-contract';
 import { BookmarkStore } from './browser/BookmarkStore';
 import { TabManager } from './browser/TabManager';
 import { registerTabIpc } from './ipc/registerTabIpc';
+import { registerThemeIpc } from './ipc/registerThemeIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
 import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
@@ -28,14 +29,6 @@ protocol.registerSchemesAsPrivileged([
     privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false },
   },
 ]);
-
-// TEMP DEBUG: forward every webContents' console output to this process's
-// stdout so it's visible in the terminal without having to drive DevTools.
-app.on('web-contents-created', (_event, contents) => {
-  contents.on('console-message', (_event, _level, message, line, sourceId) => {
-    console.log(`[renderer:${contents.id}] ${message} (${sourceId}:${line})`);
-  });
-});
 
 // Tracks whichever window is currently frontmost, so the one set of
 // `ipcMain.handle` registrations (below) and the application menu always
@@ -77,6 +70,7 @@ void app.whenReady().then(() => {
     return activeTabManager;
   });
   registerWindowIpc();
+  registerThemeIpc();
   buildMenu(
     () => activeTabManager,
     () => activeTabManager?.getState().activeTabId ?? null,

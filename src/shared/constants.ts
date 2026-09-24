@@ -19,15 +19,14 @@
 export const CHROME_HEIGHT_PX = 84;
 
 /**
- * Chrome height while Focus Mode is on — must equal
- * `--size-chrome-height-focused` in `sizes.css`, the same way
- * `CHROME_HEIGHT_PX` must equal `--size-chrome-height`. Equal to
- * `CHROME_HEIGHT_PX`: Focus Mode hides only the tabs inside the titlebar
- * row (see App.tsx), not the row itself, since it's the frameless window's
- * only way to be dragged, minimized, maximized, or closed — so the row's
- * height, and the total chrome height, don't change.
+ * Chrome height while Focus Mode is on: 0 — the titlebar row and toolbar
+ * both slide fully out of view (see `.app--focus-mode` in app.css) and the
+ * window itself goes OS-fullscreen (`setFocusMode` in TabManager.ts), so
+ * the page has the entire screen to itself with no chrome reserved at all.
+ * Must equal `--size-chrome-height-focused` in `sizes.css`, the same way
+ * `CHROME_HEIGHT_PX` must equal `--size-chrome-height`.
  */
-export const CHROME_HEIGHT_FOCUSED_PX = 84;
+export const CHROME_HEIGHT_FOCUSED_PX = 0;
 
 /**
  * Width, in CSS pixels, of the workspace sidebar on the left edge of the
@@ -42,11 +41,13 @@ export const SIDEBAR_WIDTH_PX = 180;
 
 /**
  * How long the sidebar's show/hide slide takes, in milliseconds, when
- * toggled via `toggleSidebar` (Ctrl+L). Must equal
+ * toggled via `toggleSidebar` (Ctrl+L) — and also how long the chrome's
+ * slide-away takes when Focus Mode (Ctrl+Shift+F) toggles, since both
+ * reuse the same `animateBoundsInset` in TabManager.ts. Must equal
  * `--size-sidebar-toggle-duration` in `sizes.css` — the main process
  * animates the native tab content's bounds over exactly this long so it
- * moves in step with the sidebar's own CSS transition rather than
- * snapping ahead of or behind it.
+ * moves in step with the sidebar's/chrome's own CSS transitions rather
+ * than snapping ahead of or behind them.
  */
 export const SIDEBAR_TOGGLE_DURATION_MS = 220;
 

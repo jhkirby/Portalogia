@@ -11,11 +11,10 @@ const DEFAULT_ROWS = 24;
 
 /**
  * Owns one real `node-pty` process per terminal tab — the main-process half
- * of a terminal tab, mirroring how `TabManager` owns each browser tab's
- * `WebContentsView`. Unlike a browser tab, there's no view to position: the
- * renderer's `Terminal` component (xterm.js) renders directly in the
- * chrome's own DOM and reaches this class purely over IPC (`registerTabIpc`)
- * for input, resize, and output.
+ * of a terminal tab. `TabManager` separately owns that tab's own
+ * `WebContentsView` (`terminal.html`, see `createTerminalTab`), which
+ * reaches this class purely over IPC (`registerTabIpc`) for input, resize,
+ * and output.
  */
 export class TerminalManager {
   private readonly sessions = new Map<string, pty.IPty>();
@@ -35,7 +34,6 @@ export class TerminalManager {
   /** Spawns a new shell for tab `id`, using the platform's resolved default shell. */
   public create(id: string): void {
     const shell = resolveDefaultShell();
-    console.log('[DEBUG] TerminalManager.create', id, JSON.stringify(shell));
     const session = pty.spawn(shell.file, [...shell.args], {
       name: 'xterm-256color',
       cols: DEFAULT_COLS,
@@ -43,14 +41,9 @@ export class TerminalManager {
       cwd: shell.cwd,
       env: process.env as Record<string, string>,
     });
-    console.log('[DEBUG] pty.spawn returned, pid=', session.pid);
 
-    session.onData((data) => {
-      console.log('[DEBUG] onData', id, JSON.stringify(data.slice(0, 100)));
-      this.onData(id, data);
-    });
-    session.onExit(({ exitCode, signal }) => {
-      console.log('[DEBUG] onExit', id, exitCode, signal);
+    session.onData((data) => this.onData(id, data));
+    session.onExit(() => {
       this.sessions.delete(id);
       this.onExit(id);
     });

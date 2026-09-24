@@ -206,6 +206,11 @@ export function buildMenu(
           click: () => getTabManager()?.toggleFocusMode(),
         },
         {
+          label: 'Toggle Theme',
+          accelerator: 'CmdOrCtrl+D',
+          click: () => getTabManager()?.requestToggleTheme(),
+        },
+        {
           label: 'Exit Split View',
           click: () => getTabManager()?.exitSplitView(),
         },

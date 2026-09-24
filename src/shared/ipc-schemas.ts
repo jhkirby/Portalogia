@@ -86,3 +86,8 @@ export const terminalResizeRequestSchema = z.object({
   rows: z.number().int().positive(),
 });
 export type TerminalResizeRequest = z.infer<typeof terminalResizeRequestSchema>;
+
+export const themeSetRequestSchema = z.object({
+  theme: z.enum(['light', 'dark']),
+});
+export type ThemeSetRequest = z.infer<typeof themeSetRequestSchema>;

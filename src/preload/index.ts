@@ -40,15 +40,6 @@ const api: NorthstarApi = {
   exportToPdf: (id) => invoke(IpcChannel.TabsExportPdf, { id }),
 
   createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
-  sendTerminalInput: (id, data) => ipcRenderer.send(IpcChannel.TerminalInput, { id, data }),
-  resizeTerminal: (id, cols, rows) => ipcRenderer.send(IpcChannel.TerminalResize, { id, cols, rows }),
-  onTerminalData: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, payload: { id: string; data: string }): void => {
-      listener(payload.id, payload.data);
-    };
-    ipcRenderer.on(IpcChannel.TerminalData, handler);
-    return () => ipcRenderer.removeListener(IpcChannel.TerminalData, handler);
-  },
 
   createWorkspace: (name) => invoke(IpcChannel.WorkspacesCreate, { name }),
   switchWorkspace: (id) => invoke(IpcChannel.WorkspacesSwitch, { id }),
@@ -74,6 +65,12 @@ const api: NorthstarApi = {
     ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
   },
+  onToggleTheme: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.UiToggleTheme, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiToggleTheme, handler);
+  },
+  setNativeTheme: (theme) => ipcRenderer.send(IpcChannel.ThemeSet, { theme }),
 
   minimizeWindow: () => ipcRenderer.send(IpcChannel.WindowMinimize),
   toggleMaximizeWindow: () => ipcRenderer.send(IpcChannel.WindowToggleMaximize),
