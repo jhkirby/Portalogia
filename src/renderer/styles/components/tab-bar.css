@@ -16,6 +16,7 @@
    shrink evenly to whatever width divides the row exactly, so this never
    needs to scroll no matter how many tabs are open. */
 .tab-bar {
+  position: relative;
   display: flex;
   align-items: flex-end;
   flex: 1;
@@ -77,16 +78,28 @@
   background: var(--color-tab-dragging-bg);
 }
 
-/* Drop-position indicator: a thin line on whichever edge the dragged tab
-   would land against, driven by which half of the hovered tab the cursor
-   is over (see TabBar.tsx's `handleDragOver`). `box-shadow` rather than
-   `border` so it doesn't nudge the tab's own layout width. */
-.tab-bar__tab--drop-before {
-  box-shadow: inset 2px 0 0 0 var(--color-accent-text);
-}
+/* Drop-position indicator: one floating line at the boundary between two
+   tabs (or past the last tab, past the row's own edge), positioned via
+   `indicatorX` (TabBar.tsx) rather than drawn as either neighboring tab's
+   own edge — hovering the right half of one tab and the left half of the
+   next are the same boundary and must render identically, which drawing
+   it as a `box-shadow` on whichever tab happens to be underneath the
+   cursor can't guarantee. `.tab-bar`'s own `position: relative` is what
+   this anchors against; centered on the boundary point via `margin-left`
+   rather than `transform: translateX` so its pixel `left` (already an
+   integer from `getBoundingClientRect`) doesn't pick up a sub-pixel
+   offset that would blur it. */
+.tab-bar__drop-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
 
-.tab-bar__tab--drop-after {
-  box-shadow: inset -2px 0 0 0 var(--color-accent-text);
+  background: var(--color-accent-text);
+  border-radius: 1px;
+
+  pointer-events: none;
 }
 
 .tab-bar__favicon {

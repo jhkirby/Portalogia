@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-18
 
-import { useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { TabState } from '@shared/tab-state';
 import { formatShortcut } from '../../lib/shortcuts';
 
@@ -43,7 +43,7 @@ interface TabBarProps {
   readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
 }
 
-/** Which half of a tab the dragged tab is currently hovering over — drives both the drop position and its visual indicator. */
+/** Which half of a tab the dragged tab is currently hovering over — drives which side of it `beforeId` resolves to on drop. */
 type DropPosition = 'before' | 'after';
 
 interface DropTarget {
@@ -64,17 +64,42 @@ export function TabBar({
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  // The floating drop-indicator line's x position, in pixels relative to
+  // `.tab-bar`'s own left edge (`tabBarRef`) — a single line shared by
+  // every tab rather than each one drawing its own edge highlight, so
+  // hovering the right half of one tab and the left half of its neighbor
+  // (the same boundary, reported by two different `Tab`s) visibly render
+  // as the exact same line instead of two different-looking edges.
+  const [indicatorX, setIndicatorX] = useState<number | null>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
 
   const endDrag = (): void => {
     setDraggedId(null);
     setDropTarget(null);
+    setIndicatorX(null);
   };
 
-  const handleDrop = (): void => {
-    if (draggedId && dropTarget) {
+  const setIndicatorAtClientX = (edgeClientX: number): void => {
+    const barRect = tabBarRef.current?.getBoundingClientRect();
+    if (barRect) {
+      setIndicatorX(edgeClientX - barRect.left);
+    }
+  };
+
+  // Reads the dragged tab's id from `dataTransfer`, not the local
+  // `draggedId` state — `draggedId` is only ever set by this *same*
+  // window's own `Tab.onDragStart` (see below), so it stays `null` for a
+  // drag dragged in from another window's tab bar, which never fires that
+  // handler here. `dataTransfer` carries the id regardless of which
+  // window's DOM started the drag, since it's the OS-level drag session's
+  // own payload, not any one renderer's local state — same reasoning
+  // `WorkspaceBar`'s own drop handlers already use.
+  const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
+    const draggedTabId = event.dataTransfer.getData('text/plain');
+    if (draggedTabId && dropTarget) {
       const targetIndex = tabs.findIndex((tab) => tab.id === dropTarget.id);
       const insertIndex = dropTarget.position === 'before' ? targetIndex : targetIndex + 1;
-      onReorder(draggedId, tabs[insertIndex]?.id ?? null);
+      onReorder(draggedTabId, tabs[insertIndex]?.id ?? null);
     }
     endDrag();
   };
@@ -94,16 +119,22 @@ export function TabBar({
     const lastTab = tabs[tabs.length - 1];
     if (!overTab && lastTab) {
       setDropTarget({ id: lastTab.id, position: 'after' });
+      const lastTabEl = event.currentTarget.querySelector('.tab-bar__tab:last-of-type');
+      const lastTabRect = lastTabEl?.getBoundingClientRect();
+      if (lastTabRect) {
+        setIndicatorAtClientX(lastTabRect.right);
+      }
     }
   };
 
   const handleContainerDrop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
-    handleDrop();
+    handleDrop(event);
   };
 
   return (
     <div
+      ref={tabBarRef}
       className="tab-bar"
       role="tablist"
       aria-label="Open tabs"
@@ -118,9 +149,11 @@ export function TabBar({
           onActivate={onActivate}
           onClose={onClose}
           isDragging={tab.id === draggedId || tab.id === grabbedTabId}
-          dropPosition={dropTarget?.id === tab.id ? dropTarget.position : null}
           onDragStart={() => setDraggedId(tab.id)}
-          onDragOver={(position) => setDropTarget({ id: tab.id, position })}
+          onDragOver={(position, edgeClientX) => {
+            setDropTarget({ id: tab.id, position });
+            setIndicatorAtClientX(edgeClientX);
+          }}
           onDragEnd={endDrag}
           onDragEndOutside={onDragEndOutside}
         />
@@ -134,6 +167,10 @@ export function TabBar({
       >
         +
       </button>
+      {/* One floating line shared by every tab — see `indicatorX`'s own doc comment for why this isn't drawn per-tab. */}
+      {indicatorX !== null && (
+        <div className="tab-bar__drop-indicator" style={{ left: indicatorX }} aria-hidden="true" />
+      )}
     </div>
   );
 }
@@ -145,10 +182,9 @@ interface TabProps {
   readonly onClose: (id: string) => void;
   /** Whether this is the tab currently being dragged (mouse) or grabbed (Ctrl+Space) — either way, drives its in-place `--dragging` highlight. */
   readonly isDragging: boolean;
-  /** Which half of this tab the dragged tab is hovering over, if any — drives the drop-indicator line. */
-  readonly dropPosition: DropPosition | null;
   readonly onDragStart: () => void;
-  readonly onDragOver: (position: DropPosition) => void;
+  /** Reports which half of this tab is being hovered and that half's edge, in client (viewport) coordinates — `TabBar` turns the latter into `indicatorX`, its one shared floating drop-indicator line's position. */
+  readonly onDragOver: (position: DropPosition, edgeClientX: number) => void;
   readonly onDragEnd: () => void;
   /** See `TabBarProps.onDragEndOutside` — forwarded straight through, this tab already has its own `id` in scope. */
   readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
@@ -161,7 +197,6 @@ function Tab({
   onActivate,
   onClose,
   isDragging,
-  dropPosition,
   onDragStart,
   onDragOver,
   onDragEnd,
@@ -201,7 +236,7 @@ function Tab({
     event.dataTransfer.dropEffect = 'move';
     const rect = event.currentTarget.getBoundingClientRect();
     const isLeftHalf = event.clientX - rect.left < rect.width / 2;
-    onDragOver(isLeftHalf ? 'before' : 'after');
+    onDragOver(isLeftHalf ? 'before' : 'after', isLeftHalf ? rect.left : rect.right);
   };
 
   // `dropEffect` reflects whatever the drop target's own `dragover`
@@ -220,20 +255,13 @@ function Tab({
     onDragEnd();
   };
 
-  const dropClass =
-    dropPosition === 'before'
-      ? ' tab-bar__tab--drop-before'
-      : dropPosition === 'after'
-        ? ' tab-bar__tab--drop-after'
-        : '';
-
   return (
     <div
       role="tab"
       tabIndex={0}
       aria-selected={isActive}
       draggable
-      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}${dropClass}`}
+      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}`}
       onClick={activate}
       onKeyDown={handleKeyDown}
       onDragStart={handleDragStart}

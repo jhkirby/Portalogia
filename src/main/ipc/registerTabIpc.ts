@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-09-24
 
-import { ipcMain } from 'electron';
+import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
 import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-contract';
 import {
@@ -14,7 +14,6 @@ import {
   createWorkspaceRequestSchema,
   createWorkspaceWithTabRequestSchema,
   focusModeRequestSchema,
-  moveTabRequestSchema,
   moveTabToWorkspaceRequestSchema,
   navigateRequestSchema,
   renameWorkspaceRequestSchema,
@@ -35,99 +34,119 @@ import type { TabManager } from '../browser/TabManager';
  *
  * Call this exactly once for the app's lifetime — `ipcMain.handle` allows
  * only one handler per channel, so a second window must not re-register.
- * `getTabManager` is resolved on every call rather than captured once, so
- * it can point at whichever window's `TabManager` is currently active.
- * @param getTabManager Resolves the `TabManager` a request should act on.
+ *
+ * @param resolveTabManager Resolves the `TabManager` that OWNS the
+ *   window a request was actually sent from (`event.sender`) — not
+ *   "whichever window is currently focused": a tab click, a URL
+ *   navigation, closing a tab, all of it must act on the window the user
+ *   is actually interacting with, which since `tearOffTab` (main/index.ts)
+ *   made more than one window possible at once, is no longer guaranteed
+ *   to be the focused one (clicking into a background window's tab is a
+ *   perfectly ordinary thing to do). Every channel here is invoked from
+ *   the chrome's own top-level `webContents` — never a tab's own child
+ *   `WebContentsView` — so `event.sender` always resolves unambiguously.
+ * @param resolveTabManagerForTab Resolves whichever `TabManager` currently
+ *   owns a specific tab id, for the two channels (`terminal:input`,
+ *   `terminal:resize`) that come from a *different* webContents than the
+ *   chrome's own: a terminal tab's own child `WebContentsView`. Scoping by
+ *   the tab id it's already keyed on sidesteps needing `event.sender` to
+ *   resolve correctly for a child view at all.
  */
-export function registerTabIpc(getTabManager: () => TabManager): void {
-  handle(IpcChannel.TabsCreate, createTabRequestSchema, (request) =>
-    getTabManager().createTabAndFocusAddressBar(request.url),
+export function registerTabIpc(
+  resolveTabManager: (event: { sender: Electron.WebContents }) => TabManager,
+  resolveTabManagerForTab: (tabId: string) => TabManager | undefined,
+): void {
+  handle(IpcChannel.TabsCreate, createTabRequestSchema, (request, event) =>
+    resolveTabManager(event).createTabAndFocusAddressBar(request.url),
   );
-  handle(IpcChannel.TabsClose, tabIdRequestSchema, (request) =>
-    getTabManager().closeTab(request.id),
+  handle(IpcChannel.TabsClose, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).closeTab(request.id),
   );
-  handle(IpcChannel.TabsActivate, tabIdRequestSchema, (request) =>
-    getTabManager().activateTab(request.id),
+  handle(IpcChannel.TabsActivate, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).activateTab(request.id),
   );
-  handle(IpcChannel.TabsMove, moveTabRequestSchema, (request) =>
-    getTabManager().moveTab(request.id, request.beforeId),
+  // `tabs:move` (TabBar's own drag-reorder) is NOT registered here — it
+  // needs to resolve the dragged tab's *source* window too, which may not
+  // be the same window the drop landed in (a cross-window tab drag). See
+  // `registerCrossWindowTabMoveIpc` in main/index.ts.
+  handle(IpcChannel.TabsMoveToWorkspace, moveTabToWorkspaceRequestSchema, (request, event) =>
+    resolveTabManager(event).moveTabToWorkspace(request.id, request.workspaceId),
   );
-  handle(IpcChannel.TabsMoveToWorkspace, moveTabToWorkspaceRequestSchema, (request) =>
-    getTabManager().moveTabToWorkspace(request.id, request.workspaceId),
+  handle(IpcChannel.TabsNavigate, navigateRequestSchema, (request, event) =>
+    resolveTabManager(event).navigate(request.id, request.url),
   );
-  handle(IpcChannel.TabsNavigate, navigateRequestSchema, (request) =>
-    getTabManager().navigate(request.id, request.url),
+  handle(IpcChannel.TabsGoBack, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).goBack(request.id),
   );
-  handle(IpcChannel.TabsGoBack, tabIdRequestSchema, (request) =>
-    getTabManager().goBack(request.id),
+  handle(IpcChannel.TabsGoForward, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).goForward(request.id),
   );
-  handle(IpcChannel.TabsGoForward, tabIdRequestSchema, (request) =>
-    getTabManager().goForward(request.id),
+  handle(IpcChannel.TabsReload, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).reload(request.id),
   );
-  handle(IpcChannel.TabsReload, tabIdRequestSchema, (request) =>
-    getTabManager().reload(request.id),
-  );
-  handle(IpcChannel.TabsStop, tabIdRequestSchema, (request) => getTabManager().stop(request.id));
-
-  handle(IpcChannel.WorkspacesCreate, createWorkspaceRequestSchema, (request) =>
-    getTabManager().createWorkspace(request.name),
-  );
-  handle(IpcChannel.WorkspacesCreateWithTab, createWorkspaceWithTabRequestSchema, (request) =>
-    getTabManager().createWorkspaceWithTab(request.tabId),
-  );
-  handle(IpcChannel.WorkspacesSwitch, workspaceIdRequestSchema, (request) =>
-    getTabManager().switchWorkspace(request.id),
-  );
-  handle(IpcChannel.WorkspacesRename, renameWorkspaceRequestSchema, (request) =>
-    getTabManager().renameWorkspace(request.id, request.name),
-  );
-  handle(IpcChannel.WorkspacesRemove, workspaceIdRequestSchema, (request) =>
-    getTabManager().removeWorkspace(request.id),
+  handle(IpcChannel.TabsStop, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).stop(request.id),
   );
 
-  handle(IpcChannel.BookmarksAdd, addBookmarkRequestSchema, (request) =>
-    getTabManager().addBookmark(request.title, request.url),
+  handle(IpcChannel.WorkspacesCreate, createWorkspaceRequestSchema, (request, event) =>
+    resolveTabManager(event).createWorkspace(request.name),
   );
-  handle(IpcChannel.BookmarksRemove, bookmarkIdRequestSchema, (request) =>
-    getTabManager().removeBookmark(request.id),
+  handle(IpcChannel.WorkspacesCreateWithTab, createWorkspaceWithTabRequestSchema, (request, event) =>
+    resolveTabManager(event).createWorkspaceWithTab(request.tabId),
+  );
+  handle(IpcChannel.WorkspacesSwitch, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).switchWorkspace(request.id),
+  );
+  handle(IpcChannel.WorkspacesRename, renameWorkspaceRequestSchema, (request, event) =>
+    resolveTabManager(event).renameWorkspace(request.id, request.name),
+  );
+  handle(IpcChannel.WorkspacesRemove, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).removeWorkspace(request.id),
+  );
+
+  handle(IpcChannel.BookmarksAdd, addBookmarkRequestSchema, (request, event) =>
+    resolveTabManager(event).addBookmark(request.title, request.url),
+  );
+  handle(IpcChannel.BookmarksRemove, bookmarkIdRequestSchema, (request, event) =>
+    resolveTabManager(event).removeBookmark(request.id),
   );
 
   ipcMain.handle(
     IpcChannel.TabsBeginTabPreview,
-    async (_event, rawRequest: unknown): Promise<IpcResult<string | null>> => {
+    async (event, rawRequest: unknown): Promise<IpcResult<string | null>> => {
       const parsed = tabIdRequestSchema.safeParse(rawRequest);
       if (!parsed.success) {
         return { ok: false, code: 'invalid-request', message: parsed.error.message };
       }
       try {
-        return { ok: true, data: await getTabManager().beginTabPreview(parsed.data.id) };
+        return { ok: true, data: await resolveTabManager(event).beginTabPreview(parsed.data.id) };
       } catch (error) {
         return toErrorResult(error);
       }
     },
   );
-  handle(IpcChannel.TabsEndTabPreview, tabIdRequestSchema, (request) =>
-    getTabManager().restoreTabPreview(request.id),
+  handle(IpcChannel.TabsEndTabPreview, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).restoreTabPreview(request.id),
   );
 
-  handle(IpcChannel.SplitEnter, splitEnterRequestSchema, (request) =>
-    getTabManager().enterSplitView(request.secondaryId),
+  handle(IpcChannel.SplitEnter, splitEnterRequestSchema, (request, event) =>
+    resolveTabManager(event).enterSplitView(request.secondaryId),
   );
-  ipcMain.handle(IpcChannel.SplitExit, (): IpcResult<BrowserState> => {
+  ipcMain.handle(IpcChannel.SplitExit, (event): IpcResult<BrowserState> => {
     try {
-      return { ok: true, data: getTabManager().exitSplitView() };
+      return { ok: true, data: resolveTabManager(event).exitSplitView() };
     } catch (error) {
       return toErrorResult(error);
     }
   });
 
-  handle(IpcChannel.FocusModeSet, focusModeRequestSchema, (request) =>
-    getTabManager().setFocusMode(request.enabled),
+  handle(IpcChannel.FocusModeSet, focusModeRequestSchema, (request, event) =>
+    resolveTabManager(event).setFocusMode(request.enabled),
   );
 
-  ipcMain.handle(IpcChannel.TabsGetState, (): IpcResult<BrowserState> => {
+  ipcMain.handle(IpcChannel.TabsGetState, (event): IpcResult<BrowserState> => {
     try {
-      return { ok: true, data: getTabManager().getState() };
+      return { ok: true, data: resolveTabManager(event).getState() };
     } catch (error) {
       return toErrorResult(error);
     }
@@ -135,13 +154,13 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
 
   ipcMain.handle(
     IpcChannel.TabsExportPdf,
-    async (_event, rawRequest: unknown): Promise<IpcResult<ExportPdfResult>> => {
+    async (event, rawRequest: unknown): Promise<IpcResult<ExportPdfResult>> => {
       const parsed = tabIdRequestSchema.safeParse(rawRequest);
       if (!parsed.success) {
         return { ok: false, code: 'invalid-request', message: parsed.error.message };
       }
       try {
-        const savedPath = await getTabManager().exportToPdf(parsed.data.id);
+        const savedPath = await resolveTabManager(event).exportToPdf(parsed.data.id);
         return { ok: true, data: { savedPath } };
       } catch (error) {
         return toErrorResult(error);
@@ -149,9 +168,9 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
     },
   );
 
-  ipcMain.handle(IpcChannel.TabsCreateTerminal, (): IpcResult<BrowserState> => {
+  ipcMain.handle(IpcChannel.TabsCreateTerminal, (event): IpcResult<BrowserState> => {
     try {
-      return { ok: true, data: getTabManager().createTerminalTab() };
+      return { ok: true, data: resolveTabManager(event).createTerminalTab() };
     } catch (error) {
       return toErrorResult(error);
     }
@@ -159,27 +178,32 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
 
   // `terminal:input`/`terminal:resize` are fire-and-forget (`ipcRenderer.send`,
   // not `invoke`) — keystroke latency matters more than a reply round-trip,
-  // and there's nothing meaningful to reply with anyway.
-  ipcMain.on(IpcChannel.TerminalInput, (_event, rawRequest: unknown) => {
+  // and there's nothing meaningful to reply with anyway. Sent from a
+  // terminal tab's own child `WebContentsView`, not the chrome's top-level
+  // one — resolved by tab id (`resolveTabManagerForTab`) rather than
+  // `event.sender`, see this function's own doc comment for why.
+  ipcMain.on(IpcChannel.TerminalInput, (_event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = terminalInputRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      getTabManager().sendTerminalInput(parsed.data.id, parsed.data.data);
+      resolveTabManagerForTab(parsed.data.id)?.sendTerminalInput(parsed.data.id, parsed.data.data);
     }
   });
-  ipcMain.on(IpcChannel.TerminalResize, (_event, rawRequest: unknown) => {
+  ipcMain.on(IpcChannel.TerminalResize, (_event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = terminalResizeRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      getTabManager().resizeTerminal(parsed.data.id, parsed.data.cols, parsed.data.rows);
+      resolveTabManagerForTab(parsed.data.id)?.resizeTerminal(parsed.data.id, parsed.data.cols, parsed.data.rows);
     }
   });
 
   // Same fire-and-forget shape as the terminal channels above — the address
   // bar pushes a fresh sync on essentially every keystroke while its
-  // dropdown is open, and there's nothing meaningful to reply with.
-  ipcMain.on(IpcChannel.AddressSuggestionsSync, (_event, rawRequest: unknown) => {
+  // dropdown is open, and there's nothing meaningful to reply with. Sent
+  // from the chrome's own top-level webContents (AddressBar.tsx), unlike
+  // the terminal channels above, so `event.sender` resolves it directly.
+  ipcMain.on(IpcChannel.AddressSuggestionsSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = addressSuggestionsSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      getTabManager().syncAddressSuggestions(parsed.data);
+      resolveTabManager(event).syncAddressSuggestions(parsed.data);
     }
   });
 }
@@ -189,20 +213,22 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
  * returns the full `BrowserState` — the shape nearly every action shares.
  * @param channel Channel name from `IpcChannel`.
  * @param schema Zod schema the raw payload must satisfy.
- * @param action Handler invoked with the parsed, trusted payload.
+ * @param action Handler invoked with the parsed, trusted payload and the
+ *   raw IPC event (so it can resolve which window's `TabManager` to act
+ *   on — see `registerTabIpc`'s own doc comment).
  */
 function handle<T>(
   channel: string,
   schema: ZodType<T>,
-  action: (request: T) => BrowserState,
+  action: (request: T, event: IpcMainInvokeEvent) => BrowserState,
 ): void {
-  ipcMain.handle(channel, (_event, rawRequest: unknown): IpcResult<BrowserState> => {
+  ipcMain.handle(channel, (event, rawRequest: unknown): IpcResult<BrowserState> => {
     const parsed = schema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
     try {
-      return { ok: true, data: action(parsed.data) };
+      return { ok: true, data: action(parsed.data, event) };
     } catch (error) {
       return toErrorResult(error);
     }

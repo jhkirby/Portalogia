@@ -156,6 +156,17 @@ export class TabManager {
     });
   }
 
+  /**
+   * Whether this `TabManager` owns a tab with this id — used to resolve a
+   * cross-window tab drag's *source* window (main/index.ts's
+   * `registerCrossWindowTabMoveIpc`): the window a drop lands in only
+   * knows the dragged tab's id, not which window (itself or another one)
+   * currently owns it.
+   */
+  public hasTab(id: string): boolean {
+    return this.states.has(id);
+  }
+
   // ── Session restore ──────────────────────────────────────────────────
 
   /**
