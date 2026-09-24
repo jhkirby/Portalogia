@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
+import { currentXtermTheme, XTERM_DARK_THEME, XTERM_LIGHT_THEME } from './xtermThemes';
 
 interface TerminalProps {
   readonly id: string;
@@ -71,7 +72,7 @@ export function Terminal({ id }: TerminalProps) {
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Consolas, "Cascadia Code", monospace',
-      theme: { background: '#1e1e1e' },
+      theme: currentXtermTheme(),
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -98,6 +99,17 @@ export function Terminal({ id }: TerminalProps) {
       }
     });
 
+    // Toggling the chrome's theme (toolbar button or Ctrl+D) changes
+    // `nativeTheme.themeSource`, which flips `prefers-color-scheme` here
+    // too (see `currentXtermTheme`'s doc comment) — this keeps an
+    // already-open terminal in step with that instead of only picking up
+    // the theme it happened to be created under.
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (event: MediaQueryListEvent): void => {
+      term.options.theme = event.matches ? XTERM_DARK_THEME : XTERM_LIGHT_THEME;
+    };
+    media.addEventListener('change', handleThemeChange);
+
     // This page's own top-level `focus` fires when its `WebContentsView`
     // regains native OS focus — e.g. `TabManager.activateTab` switching
     // back to this tab after another was active. A plain DOM `.focus()`
@@ -115,6 +127,7 @@ export function Terminal({ id }: TerminalProps) {
 
     return () => {
       window.IntersectionObserver = RealIntersectionObserver;
+      media.removeEventListener('change', handleThemeChange);
       window.removeEventListener('focus', handleWindowFocus);
       dataDisposable.dispose();
       resizeDisposable.dispose();

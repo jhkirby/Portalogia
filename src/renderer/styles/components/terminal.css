@@ -10,6 +10,14 @@
    chrome's own page, this is the entire document, so it fills the actual
    viewport rather than some inset area of a larger layout. */
 
+html {
+  /* Lets `light-dark()` below (and `prefers-color-scheme` for
+     `xtermThemes.ts`) follow `nativeTheme.themeSource` instead of always
+     the OS default — same mechanism as the `northstar://home` page
+     (see homePage.ts and `useTheme`'s doc comment). */
+  color-scheme: light dark;
+}
+
 html,
 body {
   height: 100%;
@@ -29,8 +37,10 @@ body {
   width: 100%;
   height: 100%;
   /* xterm.js paints its own background from the `theme` option passed in
-     `Terminal.tsx`; this is just the instant it takes for that to happen. */
-  background: #1e1e1e;
+     `Terminal.tsx` (see `xtermThemes.ts`); this is just the instant it
+     takes for that to happen, so it should match rather than always
+     flashing dark first in light mode. */
+  background: light-dark(#ffffff, #1e1e1e);
 }
 
 .terminal__exited-banner {
