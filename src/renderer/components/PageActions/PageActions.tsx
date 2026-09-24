@@ -62,7 +62,7 @@ export function PageActions({
         className="page-actions__button chrome-tooltip"
         onClick={onNewTerminal}
         aria-label="New terminal"
-        data-tooltip={`New terminal (${formatShortcut('S')})`}
+        data-tooltip={`New terminal (${formatShortcut('>')})`}
       >
         {'>_'}
       </button>

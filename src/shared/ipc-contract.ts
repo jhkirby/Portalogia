@@ -102,7 +102,7 @@ export interface NorthstarApi {
   /** Renders the active tab's current page to a PDF the user chooses where to save; `null` path means they canceled. */
   exportToPdf(id: string): Promise<IpcResult<ExportPdfResult>>;
 
-  /** Opens a new terminal tab (Ctrl+S, the toolbar terminal button, or File > New Terminal). */
+  /** Opens a new terminal tab (Ctrl+>, the toolbar terminal button, or File > New Terminal). */
   createTerminalTab(): Promise<IpcResult<BrowserState>>;
 
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;

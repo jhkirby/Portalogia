@@ -209,7 +209,7 @@ export class TabManager {
   }
 
   /**
-   * Opens a new terminal tab (Ctrl+S, the toolbar button, or File > New
+   * Opens a new terminal tab (Ctrl+>, the toolbar button, or File > New
    * Terminal) and makes it active. Like `createTab`, it gets its own
    * `WebContentsView` — loading `terminal.html` (its own small bundle,
    * bridged by its own narrower preload, `src/preload/terminal.ts`)
@@ -1475,6 +1475,14 @@ export class TabManager {
             event.preventDefault();
             this.toggleFocusMode();
             return;
+          case '>':
+            // Shift is what actually produces '>' (it's Shift+Period on a
+            // US layout) — this is Ctrl+> from a key-event's perspective,
+            // not a separate Ctrl+Shift+> binding, same as buildMenu.ts's
+            // `CmdOrCtrl+>` accelerator for the same action.
+            event.preventDefault();
+            this.createTerminalTab();
+            return;
           default:
             return;
         }
@@ -1488,10 +1496,6 @@ export class TabManager {
         case 'n':
           event.preventDefault();
           this.createTabAndFocusAddressBar();
-          return;
-        case 's':
-          event.preventDefault();
-          this.createTerminalTab();
           return;
         case 'q':
           // Same action as Ctrl+Shift+N, under a second accelerator — see

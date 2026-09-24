@@ -36,10 +36,8 @@ export function buildMenu(
           click: () => getTabManager()?.createTabAndFocusAddressBar(),
         },
         {
-          // Not the conventional "Save" binding — deliberately repurposed
-          // per product decision, since this app has nothing to save.
           label: 'New Terminal',
-          accelerator: 'CmdOrCtrl+S',
+          accelerator: 'CmdOrCtrl+>',
           click: () => getTabManager()?.createTerminalTab(),
         },
         {
