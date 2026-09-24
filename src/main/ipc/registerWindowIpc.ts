@@ -33,10 +33,9 @@ export function registerWindowIpc(): void {
     }
   });
 
-  // `close()` still goes through the window's own 'close' handler in
-  // MainWindow.ts, which prevents it by product decision — this channel
-  // exists so the custom close button behaves identically to the (removed)
-  // native one, not to actually close the window.
+  // Closes the window the same way the (removed) native close button
+  // would — the app quits once every window is closed (see `main/index.ts`'s
+  // `window-all-closed` handler).
   ipcMain.on(IpcChannel.WindowClose, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
   });

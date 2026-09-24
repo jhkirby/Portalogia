@@ -133,7 +133,7 @@ export interface NorthstarApi {
   minimizeWindow(): void;
   /** Toggles the frameless window between maximized and restored. Fire-and-forget, same as `sendTerminalInput`. */
   toggleMaximizeWindow(): void;
-  /** Requests the frameless window close — a no-op by product decision (see MainWindow.ts). Fire-and-forget, same as `sendTerminalInput`. */
+  /** Closes the frameless window (and quits the app, once every window is closed). Fire-and-forget, same as `sendTerminalInput`. */
   closeWindow(): void;
   /** Subscribes to the window's maximized state changing; returns an unsubscribe function. */
   onWindowStateChanged(listener: (state: WindowState) => void): () => void;
