@@ -34,6 +34,8 @@ export const IpcChannel = {
   WorkspacesRemove: 'workspaces:remove',
   BookmarksAdd: 'bookmarks:add',
   BookmarksRemove: 'bookmarks:remove',
+  TabsBeginBookmarkPreview: 'tabs:begin-bookmark-preview',
+  TabsEndBookmarkPreview: 'tabs:end-bookmark-preview',
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
@@ -112,6 +114,21 @@ export interface NorthstarApi {
 
   addBookmark(title: string, url: string): Promise<IpcResult<BrowserState>>;
   removeBookmark(id: string): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Captures the given (must be the active) browser tab's current frame
+   * and hides its native `WebContentsView` — see `BookmarkPopup`. The view
+   * has to actually come off the window, not just be covered by
+   * chrome-drawn UI, since it's a separate native surface layered above
+   * the chrome that would otherwise swallow every click meant for the
+   * popup or its "click outside to cancel" backdrop.
+   * @returns A data URL of the tab's last-painted frame to show blurred
+   *   behind the popup, or `null` if it couldn't be captured — the view is
+   *   hidden either way, so the caller falls back to a plain scrim.
+   */
+  beginBookmarkPreview(id: string): Promise<IpcResult<string | null>>;
+  /** Re-shows the view `beginBookmarkPreview` hid — called on both Save and cancel/close, since either way the popup is done with it. */
+  endBookmarkPreview(id: string): Promise<IpcResult<BrowserState>>;
 
   enterSplitView(secondaryId: string): Promise<IpcResult<BrowserState>>;
   exitSplitView(): Promise<IpcResult<BrowserState>>;

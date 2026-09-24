@@ -1,0 +1,178 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-24 */
+
+/* ── BOOKMARK POPUP ───────────────────────────────────────────────────── */
+
+/* `.tab-content` (App.tsx) is this backdrop's positioning parent, not the
+   viewport — it already has exactly the bounds the tab's own
+   `WebContentsView` occupies (below the toolbar, right of the sidebar), so
+   anchoring to it rather than `position: fixed`ing to the whole window is
+   what keeps the blur off the chrome above/left of it. */
+.bookmark-popup__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  cursor: default;
+}
+
+/* The tab's last frame before its `WebContentsView` came off the window
+   (see `TabManager.beginBookmarkPreview`) — a still image, not the live
+   page. `--color-overlay-backdrop` (painted by `.bookmark-popup__scrim`
+   just above it in DOM order) is already light/dark-theme-aware, so
+   tinting a blurred snapshot this way looks right in either theme without
+   this file needing its own light/dark split. */
+.bookmark-popup__preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+
+  filter: blur(20px);
+  /* Scaled past its own box so blur's own edge softening never reveals a
+     sliver of unblurred content at the frame's edge — relies on
+     `.tab-content`'s own `overflow: hidden` (app.css) to actually clip
+     that overscan; without it, the scaled-up image paints past
+     `.tab-content`'s bounds and bleeds into the toolbar/sidebar above and
+     beside it instead of stopping at the edge. */
+  transform: scale(1.1);
+}
+
+.bookmark-popup__scrim {
+  position: absolute;
+  inset: 0;
+
+  background: var(--color-overlay-backdrop);
+}
+
+.bookmark-popup {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(24rem, 90vw);
+  padding: var(--size-spacing-md);
+  gap: var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.bookmark-popup__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bookmark-popup__title {
+  margin: 0;
+
+  font-size: var(--size-font-md);
+  font-weight: 600;
+  color: var(--color-tab-text-active);
+}
+
+.bookmark-popup__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.bookmark-popup__close:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.bookmark-popup__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-spacing-xs);
+}
+
+.bookmark-popup__label {
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
+}
+
+.bookmark-popup__input {
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+  color: var(--color-address-text);
+}
+
+.bookmark-popup__input::placeholder {
+  color: var(--color-address-placeholder);
+}
+
+.bookmark-popup__input:focus {
+  outline: none;
+  border-color: var(--color-address-border-focus);
+}
+
+.bookmark-popup__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--size-spacing-sm);
+}
+
+.bookmark-popup__cancel,
+.bookmark-popup__save {
+  height: 30px;
+  padding: 0 var(--size-spacing-md);
+
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+
+  cursor: pointer;
+}
+
+.bookmark-popup__cancel {
+  background: transparent;
+  border: 1px solid var(--color-panel-border);
+  color: var(--color-tab-text-active);
+}
+
+.bookmark-popup__cancel:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.bookmark-popup__save {
+  background: var(--color-accent-text);
+  border: 1px solid transparent;
+  color: #ffffff;
+}
+
+.bookmark-popup__save:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.bookmark-popup__save:disabled {
+  background: var(--color-button-disabled-text);
+
+  cursor: default;
+}

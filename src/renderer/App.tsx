@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
 import { AddressBar } from './components/AddressBar';
+import { BookmarkPopup } from './components/BookmarkPopup';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
 import { SplitIndicator } from './components/SplitIndicator';
@@ -16,6 +17,14 @@ import { WorkspaceBar } from './components/WorkspaceBar';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
 
+/** `BookmarkPopup`'s state while open — captured once, when the star button is clicked, not re-derived live, since the popup edits its own copy of the name/URL independent of whatever the tab does in the meantime. */
+interface BookmarkPopupState {
+  readonly tabId: string;
+  readonly url: string;
+  readonly title: string;
+  readonly previewImage: string | null;
+}
+
 /**
  * The browser chrome: a full-width top bar (tab strip, back/forward/
  * reload, address bar, and the overlays/toggles layered on top of it —
@@ -24,7 +33,9 @@ import { useTheme } from './hooks/useTheme';
  * and the tab content area filling what's left. No tab's actual content is
  * rendered here at all, browser or terminal — it's one or two native
  * `WebContentsView`s the main process positions directly over that same
- * area (see `TabManager`).
+ * area (see `TabManager`). `BookmarkPopup` is the one thing that does live
+ * in that area's own DOM node (`.tab-content`) — see its render below for
+ * why.
  */
 export function App() {
   const {
@@ -56,12 +67,15 @@ export function App() {
     removeWorkspace,
     addBookmark,
     removeBookmark,
+    beginBookmarkPreview,
+    endBookmarkPreview,
     enterSplitView,
     exitSplitView,
     setFocusMode,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
+  const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
   const { theme, toggleTheme } = useTheme();
 
   // The chrome window can lose OS focus to whatever tab's WebContentsView
@@ -110,15 +124,38 @@ export function App() {
     }
   };
 
+  // Already-bookmarked stays an instant toggle (no popup, nothing to
+  // confirm) — the popup is only for the "not yet bookmarked" case, where
+  // there's a real name/URL choice to make before committing.
   const handleToggleBookmark = (): void => {
-    if (!browserTab) {
+    if (!browserTab || !activeTabId) {
       return;
     }
     if (activeBookmark) {
       removeBookmark(activeBookmark.id);
-    } else {
-      addBookmark(browserTab.title, browserTab.url);
+      return;
     }
+    const tabId = activeTabId;
+    void beginBookmarkPreview(tabId).then((previewImage) => {
+      setBookmarkPopup({ tabId, url: browserTab.url, title: browserTab.title, previewImage });
+    });
+  };
+
+  const handleSaveBookmark = (name: string, url: string): void => {
+    if (!bookmarkPopup) {
+      return;
+    }
+    addBookmark(name, url);
+    endBookmarkPreview(bookmarkPopup.tabId);
+    setBookmarkPopup(null);
+  };
+
+  const handleCloseBookmarkPopup = (): void => {
+    if (!bookmarkPopup) {
+      return;
+    }
+    endBookmarkPreview(bookmarkPopup.tabId);
+    setBookmarkPopup(null);
   };
 
   const handleSplitWithActive = (secondaryId: string): void => {
@@ -227,9 +264,23 @@ export function App() {
         />
         {/* Every tab, browser or terminal, renders below via the main
             process's own native WebContentsViews, positioned directly
-            beneath this (empty) area by TabManager — see App's doc
-            comment. */}
-        <div className="tab-content" />
+            beneath this area by TabManager — see App's doc comment.
+            `BookmarkPopup` is the one thing actually in this DOM node: it
+            needs to cover exactly the page area (not the toolbar/sidebar
+            too), and this element's bounds already match that natively —
+            same area the hidden `WebContentsView` it's standing in for
+            would otherwise occupy. */}
+        <div className="tab-content">
+          {bookmarkPopup && (
+            <BookmarkPopup
+              url={bookmarkPopup.url}
+              title={bookmarkPopup.title}
+              previewImage={bookmarkPopup.previewImage}
+              onSave={handleSaveBookmark}
+              onClose={handleCloseBookmarkPopup}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -83,6 +83,24 @@ export function registerTabIpc(getTabManager: () => TabManager): void {
     getTabManager().removeBookmark(request.id),
   );
 
+  ipcMain.handle(
+    IpcChannel.TabsBeginBookmarkPreview,
+    async (_event, rawRequest: unknown): Promise<IpcResult<string | null>> => {
+      const parsed = tabIdRequestSchema.safeParse(rawRequest);
+      if (!parsed.success) {
+        return { ok: false, code: 'invalid-request', message: parsed.error.message };
+      }
+      try {
+        return { ok: true, data: await getTabManager().beginBookmarkPreview(parsed.data.id) };
+      } catch (error) {
+        return toErrorResult(error);
+      }
+    },
+  );
+  handle(IpcChannel.TabsEndBookmarkPreview, tabIdRequestSchema, (request) =>
+    getTabManager().restoreBookmarkPreview(request.id),
+  );
+
   handle(IpcChannel.SplitEnter, splitEnterRequestSchema, (request) =>
     getTabManager().enterSplitView(request.secondaryId),
   );

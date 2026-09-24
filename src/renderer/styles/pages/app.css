@@ -11,11 +11,17 @@ body {
   margin: 0;
   /* This chrome is a fixed single-window layout, never a scrollable
      document — if any descendant (e.g. a tooltip positioned off a
-     right-edge button) ever overflows the window's width, this stops it
-     from growing the page into a horizontally scrollable one, which would
-     let the whole fixed layout shift sideways rather than just clipping
-     the one overflowing element. */
-  overflow-x: hidden;
+     right-edge button, or a sub-pixel rounding overshoot from the
+     sidebar's/Focus Mode's own animated resize) ever overflows the
+     window's bounds by even a little, this stops the whole page from
+     becoming a scrollable document over it. Without `overflow-y` here
+     too, that's exactly what happened: the tiniest vertical overflow was
+     enough for a stray scroll (a wheel tick over the wrong element,
+     nothing has to scroll it back) to shift the entire fixed layout up,
+     permanently exposing blank space below `.app-shell` — including
+     under `BookmarkPopup`'s blurred backdrop, since it's sized to
+     `.tab-content`, which shifted along with everything else. */
+  overflow: hidden;
 
   font-family:
     -apple-system,
@@ -52,11 +58,11 @@ body {
 }
 
 /* Row of [sidebar, tab content] filling the rest of `.app-shell`'s height
-   below the top bar. A browser tab's actual content is a native
-   `WebContentsView` the main process positions directly over
+   below the top bar. Every tab's actual content, browser or terminal, is
+   a native `WebContentsView` the main process positions directly over
    `.tab-content`'s area, entirely outside this DOM — see
-   TabManager.computeMainBounds(). A terminal tab is the one
-   exception, rendered right inside `.tab-content` (see `Terminal`). */
+   TabManager.computeMainBounds(). `BookmarkPopup` is the one thing that
+   does render inside `.tab-content` (see App.tsx). */
 .main-row {
   display: flex;
   flex: 1;
@@ -65,6 +71,7 @@ body {
 
 .tab-content {
   position: relative;
+  overflow: hidden;
   flex: 1;
   min-width: 0;
 }

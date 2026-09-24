@@ -765,6 +765,58 @@ export class TabManager {
     return this.getState();
   }
 
+  /**
+   * Captures the active browser tab's current frame and hides its native
+   * `WebContentsView` — the main-process half of `BookmarkPopup`'s blurred
+   * backdrop. The view has to actually come off the window, not just be
+   * covered by chrome-drawn UI, since it's a separate native surface
+   * layered above the chrome (same reason `activateTab` needs
+   * `webContents.focus()` — see there) that would otherwise render on top
+   * of the popup and swallow every click meant for it or its "click
+   * outside to cancel" backdrop. A no-op (returns `null`, nothing hidden)
+   * for anything but the active browser tab — the bookmark button is
+   * already disabled for a terminal tab or when nothing's active.
+   * @param id The tab to preview and hide.
+   * @returns A data URL of the tab's last-painted frame, or `null` if it
+   *   couldn't be captured (the caller falls back to a plain scrim).
+   */
+  public async beginBookmarkPreview(id: string): Promise<string | null> {
+    const view = this.views.get(id);
+    const state = this.states.get(id);
+    if (!view || !state || state.kind !== 'browser' || id !== this.activeTabId) {
+      return null;
+    }
+
+    let dataUrl: string | null = null;
+    try {
+      const image = await view.webContents.capturePage();
+      dataUrl = image.toDataURL();
+    } catch {
+      // Falls back to a plain scrim behind the popup — still fully
+      // functional, just without the blurred page behind it.
+    }
+
+    this.window.contentView.removeChildView(view);
+    return dataUrl;
+  }
+
+  /**
+   * Re-shows the view `beginBookmarkPreview` hid — called on both Save and
+   * cancel/close, since either way the popup is done with it. A no-op if
+   * the tab closed or stopped being active while the popup was open.
+   * @param id The tab to re-show.
+   * @returns The full browser state after re-mounting it.
+   */
+  public restoreBookmarkPreview(id: string): BrowserState {
+    const view = this.views.get(id);
+    if (view && id === this.activeTabId) {
+      this.window.contentView.addChildView(view);
+      view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
+      view.webContents.focus();
+    }
+    return this.getState();
+  }
+
   // ── Split view ───────────────────────────────────────────────────────
 
   /**
