@@ -173,8 +173,29 @@ export class TabManager {
     // workspace pill) — every other per-tab shortcut's fallback for that
     // case is a menu accelerator, which this stateful, held-key gesture
     // can't be expressed as (see `handleReorderGestureInput`).
+    //
+    // Ctrl+` rides along here too, for the reverse direction of
+    // `wireSharedInputHandling`'s own Ctrl+`: that one moves focus *out*
+    // of a terminal tab into the chrome; this one moves it back *in*,
+    // whenever the chrome has OS focus and the active tab happens to be a
+    // terminal. Not a menu accelerator for the same reason the reorder
+    // gesture isn't — it needs to check the active tab's kind, which a
+    // static accelerator can't express.
     this.window.webContents.on('before-input-event', (event, input) => {
-      this.handleReorderGestureInput(event, input);
+      if (this.handleReorderGestureInput(event, input)) {
+        return;
+      }
+      if (
+        input.type === 'keyDown' &&
+        !input.isAutoRepeat &&
+        (input.control || input.meta) &&
+        !input.alt &&
+        !input.shift &&
+        input.key.toLowerCase() === '`'
+      ) {
+        event.preventDefault();
+        this.focusActiveTerminal();
+      }
     });
   }
 
@@ -1577,6 +1598,35 @@ export class TabManager {
   }
 
   /**
+   * Hands native OS keyboard focus back to this window's own chrome
+   * `webContents` — the Ctrl+` escape hatch out of a terminal tab (see
+   * `wireSharedInputHandling`), so every other chrome shortcut (which is
+   * otherwise deliberately left alone while a terminal tab holds the
+   * keyboard, to avoid stealing keys the shell itself binds) starts
+   * working again. Unlike `requestFocusAddressBar`/`requestTabSearch`,
+   * there's no specific control to focus afterward — a terminal tab has no
+   * address bar — so this is just the bare `webContents.focus()` half.
+   */
+  public focusChrome(): void {
+    this.window.webContents.focus();
+  }
+
+  /**
+   * Hands native OS keyboard focus into the active tab's own view, if it's
+   * a terminal — the constructor's chrome-wide Ctrl+` handler's other
+   * half, for whenever that's pressed while the chrome (rather than a
+   * terminal tab) currently has OS focus. A no-op if the active tab is a
+   * browser tab or there isn't one — Ctrl+` only ever means "move the
+   * cursor into the terminal," never "activate one."
+   */
+  private focusActiveTerminal(): void {
+    if (!this.activeTabId || this.states.get(this.activeTabId)?.kind !== 'terminal') {
+      return;
+    }
+    this.views.get(this.activeTabId)?.webContents.focus();
+  }
+
+  /**
    * Asks this window's chrome to toggle its light/dark theme
    * (menu/accelerator-driven, Ctrl+D). A purely client-local UI
    * preference (see `useTheme`), not a text input — unlike
@@ -1865,15 +1915,23 @@ export class TabManager {
    * tabs/workspaces, home, back/forward): Electron's menu accelerators are
    * unreliable once a WebContentsView (as opposed to the chrome window's
    * own webContents) has OS focus — which, for a tab's content, is almost
-   * all the time — so a page (or a shell's own readline bindings) could
-   * otherwise swallow Ctrl+W etc. or the accelerator could simply not
-   * fire. Handling it here too, directly on the tab's own webContents,
-   * means it fires regardless of the menu's focus quirks and beats the
-   * page's own keydown handling since `before-input-event` runs first. The
-   * actions themselves (`goHome`, `toggleBookmark`, `goBack`/`goForward`)
-   * are already guarded to browser-kind tabs, so routing every tab's
-   * shortcuts through the same switch here is safe for a terminal tab too
-   * — it just no-ops on the browser-only ones.
+   * all the time — so a page could otherwise swallow Ctrl+W etc. or the
+   * accelerator could simply not fire. Handling it here too, directly on
+   * the tab's own webContents, means it fires regardless of the menu's
+   * focus quirks and beats the page's own keydown handling since
+   * `before-input-event` runs first.
+   *
+   * A terminal tab is the one exception, and deliberately skips this
+   * switch entirely rather than "just no-op[ping] on the browser-only
+   * ones" the way it used to: a shell's own readline bindings overlap
+   * these letters for real (Ctrl+L clears the screen, Ctrl+W deletes a
+   * word, Ctrl+T transposes two characters, Ctrl+Space sets the mark,
+   * Ctrl+Left/Right jumps by word — all live keys the person is actively
+   * relying on), so stealing them here wouldn't no-op, it would silently
+   * eat shell input. While a terminal tab actually holds OS keyboard
+   * focus, every one of these chrome shortcuts is left alone and passed
+   * straight through untouched; the sole exception is Ctrl+` (see below),
+   * the escape hatch back to the chrome's own shortcuts.
    * @param id The tab this view belongs to.
    * @param wc The view's own webContents.
    */
@@ -1896,6 +1954,27 @@ export class TabManager {
 
     wc.on('before-input-event', (event, input) => {
       const owner = owningManager();
+
+      if (this.states.get(id)?.kind === 'terminal') {
+        // Ctrl+` (no shell or readline binding uses backtick) is the one
+        // shortcut still handled here — it hands OS keyboard focus back to
+        // the chrome, so every other shortcut works normally again. See
+        // this method's own doc comment for why nothing else in this
+        // switch runs while a terminal tab actually has the keyboard.
+        if (
+          input.type === 'keyDown' &&
+          !input.isAutoRepeat &&
+          (input.control || input.meta) &&
+          !input.alt &&
+          !input.shift &&
+          input.key.toLowerCase() === '`'
+        ) {
+          event.preventDefault();
+          owner.focusChrome();
+        }
+        return;
+      }
+
       if (owner.handleReorderGestureInput(event, input)) {
         return;
       }
