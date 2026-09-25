@@ -11,12 +11,12 @@
   gap: 2px;
 }
 
-/* The pill behind the percent field — a persistent "well" look (not just
-   on hover/focus, unlike `.page-actions__button`) so it reads as a small
-   editable readout rather than another toolbar button. Its own flex
-   centers the input+suffix pair as one group, which is what keeps the
-   number visually centered in the bubble even though the input itself is
-   right-aligned against the tightly-following "%" (see `.zoom-control__input`). */
+/* The pill behind the percent field — shown on hover/focus like
+   `.page-actions__button`, so it stays quiet until interacted with. Its
+   own flex centers the input+suffix pair as one group, which is what
+   keeps the number visually centered in the bubble even though the input
+   itself is right-aligned against the tightly-following "%" (see
+   `.zoom-control__input`). */
 .zoom-control__bubble {
   position: relative;
   display: flex;
@@ -25,8 +25,13 @@
   height: 30px;
   padding: 0 var(--size-spacing-sm);
 
-  background: var(--color-button-hover-bg);
+  background: transparent;
   border-radius: var(--size-radius-pill);
+}
+
+.zoom-control__bubble:hover,
+.zoom-control__bubble:focus-within {
+  background: var(--color-button-hover-bg);
 }
 
 .zoom-control__bubble:focus-within {
