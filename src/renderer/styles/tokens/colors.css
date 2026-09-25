@@ -8,6 +8,17 @@
    launch, the OS's own light/dark preference — so by the time anything
    renders, one of these two blocks always applies; there's no third,
    `prefers-color-scheme`-driven block left to fall back to. */
+/* `--color-accent-rgb` is every theme's single source for "the app's
+   blue" — `useAccentColor` overwrites it with an inline style on this
+   same element once `ColorPicker` has anything to say (persisted, so a
+   relaunch keeps it too), which beats a selector's specificity in either
+   theme. The literal triplets below are only what's on screen before
+   that hook's first paint (and if storage is ever unavailable) — the
+   light theme's original accent blue, Google's Material "blue 600". */
+:root {
+  --color-accent-rgb: 26, 115, 232;
+}
+
 :root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
   --color-chrome-border: #d7d9db;
@@ -18,11 +29,11 @@
   --color-tab-text-active: #1a1a1a;
   --color-tab-hover-bg: #e4e6e7;
   --color-close-hover-bg: rgba(0, 0, 0, 0.18);
-  --color-tab-dragging-bg: rgba(26, 115, 232, 0.35);
+  --color-tab-dragging-bg: rgba(var(--color-accent-rgb), 0.35);
 
   --color-address-bg: #ffffff;
   --color-address-border: #d7d9db;
-  --color-address-border-focus: #8ab4f8;
+  --color-address-border-focus: rgb(var(--color-accent-rgb));
   --color-address-text: #1a1a1a;
   --color-address-placeholder: #8a8d91;
 
@@ -30,13 +41,16 @@
   --color-button-disabled-text: #b7b9bb;
 
   --color-spinner-track: #d7d9db;
-  --color-spinner-active: #4285f4;
+  --color-spinner-active: rgb(var(--color-accent-rgb));
 
   --color-panel-bg: #ffffff;
   --color-panel-border: #d7d9db;
   --color-overlay-backdrop: rgba(32, 33, 36, 0.35);
-  --color-selection-bg: #e8f0fe;
-  --color-accent-text: #1a73e8;
+  /* A pale tint of the accent rather than a fixed blue, so a selected
+     row/pressed button still reads as "accent-colored" no matter what
+     color `ColorPicker` lands on. */
+  --color-selection-bg: color-mix(in srgb, rgb(var(--color-accent-rgb)) 12%, white);
+  --color-accent-text: rgb(var(--color-accent-rgb));
 
   --color-tooltip-bg: #202124;
   --color-tooltip-text: #ffffff;
@@ -52,11 +66,11 @@
   --color-tab-text-active: #e8eaed;
   --color-tab-hover-bg: #3c4043;
   --color-close-hover-bg: rgba(255, 255, 255, 0.22);
-  --color-tab-dragging-bg: rgba(138, 180, 248, 0.35);
+  --color-tab-dragging-bg: rgba(var(--color-accent-rgb), 0.35);
 
   --color-address-bg: #303134;
   --color-address-border: #5f6368;
-  --color-address-border-focus: #8ab4f8;
+  --color-address-border-focus: rgb(var(--color-accent-rgb));
   --color-address-text: #e8eaed;
   --color-address-placeholder: #9aa0a6;
 
@@ -64,13 +78,18 @@
   --color-button-disabled-text: #5f6368;
 
   --color-spinner-track: #5f6368;
-  --color-spinner-active: #8ab4f8;
+  --color-spinner-active: rgb(var(--color-accent-rgb));
 
   --color-panel-bg: #2d2e31;
   --color-panel-border: #5f6368;
   --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
+  /* Neutral gray rather than an accent tint, deliberately — unlike the
+     light theme's pale-blue selection wash, a pale tint of an arbitrary
+     accent color reads poorly against this theme's dark panels at low
+     opacity, so dark selection stays theme-neutral instead of tracking
+     the picker. */
   --color-selection-bg: #3c4043;
-  --color-accent-text: #8ab4f8;
+  --color-accent-text: rgb(var(--color-accent-rgb));
 
   --color-tooltip-bg: #5f6368;
   --color-tooltip-text: #ffffff;

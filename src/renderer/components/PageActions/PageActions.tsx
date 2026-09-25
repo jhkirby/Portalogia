@@ -5,6 +5,7 @@
 
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
+import { ColorPicker } from '../ColorPicker';
 import { BookmarkStarIcon } from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
@@ -17,6 +18,8 @@ interface PageActionsProps {
   readonly canZoom: boolean;
   /** The active tab's current zoom, 25–200. */
   readonly zoomPercent: number;
+  /** The active tab's id, if any — `ColorPicker` needs it to hide/restore that tab's native view while its dropdown is open (see its own doc comment for why). */
+  readonly activeTabId: string | null;
   readonly focusMode: boolean;
   readonly theme: Theme;
   readonly onToggleBookmark: () => void;
@@ -36,6 +39,7 @@ export function PageActions({
   canActOnPage,
   canZoom,
   zoomPercent,
+  activeTabId,
   focusMode,
   theme,
   onToggleBookmark,
@@ -100,6 +104,7 @@ export function PageActions({
       >
         ⛶
       </button>
+      <ColorPicker activeTabId={activeTabId} />
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

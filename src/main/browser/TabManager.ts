@@ -1209,15 +1209,18 @@ export class TabManager {
   }
 
   /**
-   * Captures the active browser tab's current frame and hides its native
-   * `WebContentsView` — what `BookmarkPopup` shows blurred behind itself
-   * instead of the live page, since it's a true modal. The view has to
-   * actually come off the window, not just be covered by chrome-drawn UI,
-   * since it's a separate native surface layered above the chrome (same
-   * reason `activateTab` needs `webContents.focus()` — see there) that
-   * would otherwise render on top of the popup and swallow every click
-   * meant for it. A no-op (returns `null`, nothing hidden) for anything
-   * but the active browser tab.
+   * Captures the active tab's current frame and hides its native
+   * `WebContentsView` — what `BookmarkPopup` and `ColorPicker` show
+   * blurred behind themselves instead of the live page, since both are
+   * true modals while open. The view has to actually come off the window,
+   * not just be covered by chrome-drawn UI, since it's a separate native
+   * surface layered above the chrome (same reason `activateTab` needs
+   * `webContents.focus()` — see there) that would otherwise render on top
+   * of the popup and swallow every click meant for it. Works for either
+   * tab kind (`capturePage` isn't browser-specific — a terminal tab's view
+   * is still just a `webContents` rendering `terminal.html`); a no-op
+   * (returns `null`, nothing hidden) only for a tab that isn't the active
+   * one.
    *
    * Not used by the address bar's suggestions dropdown — that one has its
    * own dedicated `SuggestionsOverlay` view instead, specifically so the
@@ -1230,7 +1233,7 @@ export class TabManager {
   public async beginTabPreview(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || state.kind !== 'browser' || id !== this.activeTabId) {
+    if (!view || !state || id !== this.activeTabId) {
       return null;
     }
 

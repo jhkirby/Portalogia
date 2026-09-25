@@ -1,0 +1,245 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-25 */
+
+/* ── COLOR PICKER ─────────────────────────────────────────────────────── */
+
+/* Portalled to `document.body` (see `ColorPicker`'s own doc comment for
+   why) — `position: fixed` here is relative to the viewport, not `.app`'s
+   clipped, 84px-tall box the button itself lives in. Covers the whole
+   window so a click anywhere outside the panel closes it, same pattern as
+   `.bookmark-popup__backdrop`. */
+.color-picker__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+
+  cursor: default;
+}
+
+/* Sized and positioned in JS (`ColorPicker`'s `contentRect`) to exactly
+   match `.tab-content`'s own bounds — the same rectangle the active tab's
+   `WebContentsView` was just hidden out of (`beginTabPreview`), so the
+   snapshot standing in for it beneath fills exactly the area that view
+   used to. */
+.color-picker__backdrop-frame {
+  position: fixed;
+  overflow: hidden;
+}
+
+/* Deliberately crisp, not blurred or dimmed — this is standing in for a
+   page that's still live, not a modal backdrop the user's attention
+   should move away from (contrast `.bookmark-popup__preview`, which is
+   blurred on purpose since that popup really is a modal). */
+.color-picker__preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.color-picker__panel {
+  position: fixed;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-spacing-sm);
+  width: 224px;
+  padding: var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  cursor: default;
+}
+
+/* Holds the hue ring and the saturation/value square as two layered
+   circles — see `ColorPicker`'s own doc comment for why a ring at all.
+   Square root of 2, then some — `WHEEL_SIZE_PX` (192) — 2 ×
+   `RING_THICKNESS_PX` (16) leaves a 160px hole for `.color-picker__square`
+   (100px) to sit inside with room on every side, corners included. */
+.color-picker__wheel {
+  position: relative;
+  width: 192px;
+  height: 192px;
+  margin: 0 auto;
+}
+
+/* The hue ring itself: a fixed rainbow, not derived from the current
+   color at all (unlike the square's own gradient) — stops placed at
+   exactly the hues `hueToRgb` returns pure red/yellow/green/cyan/
+   blue/magenta for (0/60/120/180/240/300/360°), so every point on the
+   ring is the same color `hsvToRgb({ h: <that angle>, s: 1, v: 1 })`
+   would compute. `conic-gradient` starts at the top and runs clockwise
+   by default, which is also what `updateFromRingPointer`'s angle math
+   assumes — the two have to agree, since one paints the wheel and the
+   other reads angles back off it. */
+.color-picker__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+
+  background: conic-gradient(
+    #ff0000 0deg,
+    #ffff00 60deg,
+    #00ff00 120deg,
+    #00ffff 180deg,
+    #0000ff 240deg,
+    #ff00ff 300deg,
+    #ff0000 360deg
+  );
+
+  cursor: pointer;
+  /* Same reasoning as `.color-picker__square`'s own `touch-action`. */
+  touch-action: none;
+}
+
+.color-picker__ring-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+
+  pointer-events: none;
+}
+
+/* A same-color-as-the-panel disc laid over the ring's own middle,
+   `RING_THICKNESS_PX` (16px) in from every edge — this is what turns a
+   filled circle into a *ring*: it's opaque, so a click landing here (or
+   past it, in the wheel's square corners, also covered by this element's
+   own square-under-a-circle-clip stacking) never reaches
+   `.color-picker__ring`'s own pointer handlers underneath, exactly the
+   same way `.color-picker__square` sitting on top of it stops a click
+   meant for the square from reaching the ring either. */
+.color-picker__square-well {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+
+  background: var(--color-panel-bg);
+}
+
+/* Saturation/value square for the current hue — three stacked gradients
+   (first-listed paints on top): black-to-transparent bottom-to-top darkens
+   toward the bottom edge (value), white-to-transparent left-to-right
+   lightens toward the left edge (inverse saturation), and the pure hue
+   color underneath is what both are tinting. `--picker-hue-color` is set
+   inline per-render (`ColorPicker`) from the current color's own hue —
+   dragging inside only ever changes saturation/value; `.color-picker__ring`
+   around it is what changes hue instead. */
+.color-picker__square {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: var(--size-radius-sm);
+
+  background:
+    linear-gradient(to top, #000000, transparent),
+    linear-gradient(to right, #ffffff, transparent),
+    var(--picker-hue-color);
+
+  cursor: crosshair;
+  /* A drag can move the pointer faster than the square's own bounds
+     redraw — this keeps the browser from also trying to select/scroll
+     the page underneath a fast drag. */
+  touch-action: none;
+}
+
+.color-picker__square-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+
+  pointer-events: none;
+}
+
+.color-picker__recents {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--size-spacing-xs);
+}
+
+.color-picker__recent {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+
+  background: var(--color-button-hover-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 50%;
+
+  cursor: pointer;
+}
+
+.color-picker__recent:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.color-picker__recent:disabled {
+  /* An empty slot — no color has filled it yet — shown as a plain hollow
+     ring rather than a swatch, and not interactive. */
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+
+.color-picker__fields {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+}
+
+.color-picker__field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 2px;
+  height: 28px;
+  padding: 0 var(--size-spacing-xs);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+}
+
+.color-picker__field:focus-within {
+  border-color: var(--color-address-border-focus);
+}
+
+/* Fits "RRGGBB" (6 hex digits) where the RGB fields only need 3 — wider
+   so the flex row doesn't crowd the field that actually needs the room. */
+.color-picker__field--hex {
+  flex: 1.6;
+}
+
+.color-picker__field-label {
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
+}
+
+.color-picker__field-input {
+  width: 100%;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  outline: none;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-address-text);
+}
