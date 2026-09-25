@@ -21,18 +21,12 @@ import {
 import { escapeHtml } from '@shared/html';
 import { IpcChannel, type AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
-import type {
-  BrowserState,
-  BrowserTabState,
-  SplitViewState,
-  TabState,
-  TerminalTabState,
-  WorkspaceState,
-} from '@shared/tab-state';
+import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
+import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
-import { TerminalManager } from '../terminal/TerminalManager';
+import type { TerminalManager } from '../terminal/TerminalManager';
 
 interface Rect {
   readonly x: number;
@@ -81,9 +75,13 @@ const GRAB_MAX_DURATION_MS = 15_000;
  * it, never replaces the active-tab invariant.
  */
 export class TabManager {
-  private readonly views = new Map<string, WebContentsView>();
-  private readonly states = new Map<string, TabState>();
-  private readonly workspaces = new Map<string, WorkspaceState>();
+  // Aliases onto `SharedTabRegistry`'s own maps (see its class doc comment)
+  // rather than each window's own copy — every existing method below that
+  // reads/writes `this.views`/`this.states`/`this.workspaces` keeps working
+  // completely unchanged, now operating on data every window shares.
+  private readonly views: Map<string, WebContentsView>;
+  private readonly states: Map<string, TabState>;
+  private readonly workspaces: Map<string, WorkspaceState>;
   private readonly lastActiveTabIdByWorkspace = new Map<string, string>();
   private readonly closedTabs: ClosedTab[] = [];
   private activeTabId: string | null = null;
@@ -103,6 +101,8 @@ export class TabManager {
   private isAnimatingBounds = false;
   private readonly terminals: TerminalManager;
   private readonly suggestionsOverlay: SuggestionsOverlay;
+  /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
+  private readonly unregisterFromRegistry: () => void;
 
   /**
    * @param window The window whose `contentView` hosts each tab's view.
@@ -112,30 +112,52 @@ export class TabManager {
    * @param sessionStore Persisted tabs/workspaces this window's chrome
    *   restores from on launch (see `restoreSession`) and keeps up to date
    *   on every change (see `emitState`).
+   * @param registry The tabs/workspaces/views every open window shares —
+   *   see its own class doc comment. Not scoped to this window at all;
+   *   `main/index.ts` constructs exactly one and passes the same instance
+   *   to every `TabManager`.
+   * @param terminals Every open terminal tab's own pty process — like
+   *   `registry`, one shared instance passed to every `TabManager` rather
+   *   than each owning its own, since a terminal tab (and the shell
+   *   process behind it) can now move between windows the same as a
+   *   browser tab can.
    */
   public constructor(
     private readonly window: BrowserWindow,
     private readonly onStateChange: (state: BrowserState) => void,
     private readonly bookmarkStore: BookmarkStore,
     private readonly sessionStore: SessionStore,
+    private readonly registry: SharedTabRegistry,
+    terminals: TerminalManager,
   ) {
-    this.workspaces.set(DEFAULT_WORKSPACE_ID, {
-      id: DEFAULT_WORKSPACE_ID,
-      name: DEFAULT_WORKSPACE_NAME,
-      color: WORKSPACE_COLORS[0],
-    });
+    this.views = registry.views;
+    this.states = registry.states;
+    this.workspaces = registry.workspaces;
+    this.terminals = terminals;
+
+    // Only seed the default workspace the very first time — every
+    // `TabManager` after the first constructs against a `registry` that
+    // already has one (and possibly already renamed/recolored by the
+    // user), which a second unconditional `.set()` here would silently
+    // stomp back to its defaults.
+    if (this.workspaces.size === 0) {
+      this.workspaces.set(DEFAULT_WORKSPACE_ID, {
+        id: DEFAULT_WORKSPACE_ID,
+        name: DEFAULT_WORKSPACE_NAME,
+        color: WORKSPACE_COLORS[0],
+      });
+    }
+    // A transient default — whatever `main/index.ts` passes as this
+    // window's `onReady` (`restoreSession`, or `tearOffTab`'s own
+    // `activateTab` callback) always immediately sets this to the
+    // correct value before the window is ever shown.
     this.activeWorkspaceId = DEFAULT_WORKSPACE_ID;
-    this.terminals = new TerminalManager(
-      // Pushed to the terminal tab's own `WebContentsView`, not the chrome
-      // window — each terminal renders in its own page now (see
-      // `createTerminalTab`), so that's the only webContents actually
-      // listening for it.
-      (id, data) => this.views.get(id)?.webContents.send(IpcChannel.TerminalData, { id, data }),
-      (id) => {
-        this.patchTerminalState(id, { exited: true });
-        this.views.get(id)?.webContents.send(IpcChannel.TerminalExited, { id });
-      },
-    );
+
+    this.unregisterFromRegistry = registry.registerWindow(window, () => {
+      this.onStateChange(this.getState());
+      this.sessionStore.scheduleSave(this.buildSessionSnapshot());
+    });
+
     this.suggestionsOverlay = new SuggestionsOverlay(
       this.window,
       // A row clicked in the overlay's own view only makes sense to
@@ -379,19 +401,25 @@ export class TabManager {
     this.terminals.resize(id, cols, rows);
   }
 
-  /** Kills every terminal tab's shell process — call this when the window itself closes. */
-  public disposeAllTerminals(): void {
-    this.terminals.disposeAll();
-  }
-
   /** Applies the address bar's latest suggestions-dropdown sync — see `SuggestionsOverlay.sync`. */
   public syncAddressSuggestions(payload: AddressSuggestionsSyncPayload): void {
     this.suggestionsOverlay.sync(payload);
   }
 
-  /** Removes the suggestions overlay's view for good — call this when the window itself closes. */
-  public disposeSuggestionsOverlay(): void {
+  /**
+   * Releases this window's own resources — call this when the window
+   * itself closes. Deliberately does *not* touch shared tabs/workspaces or
+   * kill any terminal's shell process: those are shared with every other
+   * open window now (see `SharedTabRegistry`, and `terminals`'s own class
+   * doc comment) and survive this window closing, same as a tab surviving
+   * `moveTabToWorkspace` taking it elsewhere. Terminal processes are only
+   * ever killed by `closeTab` (that specific tab closing) or
+   * `TerminalManager.disposeAll` (the whole app quitting — see
+   * `main/index.ts`'s `window-all-closed` handler).
+   */
+  public dispose(): void {
     this.suggestionsOverlay.dispose();
+    this.unregisterFromRegistry();
   }
 
   /**
@@ -447,6 +475,11 @@ export class TabManager {
    * neighbor-in-this-workspace-else-fresh-tab fallback — becomes active
    * instead, exactly as if the tab had been closed rather than relocated;
    * dragging a tab to another workspace shouldn't also switch you into it.
+   * Delegates entirely to the tab's actual owner (`SharedTabRegistry.mountOwners`)
+   * if that isn't `this` — a workspace pill can be clicked from *any*
+   * window now that workspaces are shared, but only the window actually
+   * showing the dragged tab can correctly answer "was this my active tab"
+   * and unmount it from the right place.
    * @param id The tab to move.
    * @param workspaceId The workspace to move it into.
    * @returns The full browser state after the move.
@@ -457,8 +490,14 @@ export class TabManager {
       return this.getState();
     }
 
+    const owner = this.registry.mountOwners.get(id);
+    if (owner && owner !== this) {
+      return owner.moveTabToWorkspace(id, workspaceId);
+    }
+
     const oldWorkspaceId = state.workspaceId;
     const view = this.views.get(id);
+    this.registry.mountOwners.delete(id);
 
     // Delete-then-set rather than a plain `set` on the existing key: a
     // `Map` keeps an updated key at its *original* insertion position,
@@ -548,6 +587,17 @@ export class TabManager {
     if (!closedState) {
       return this.getState();
     }
+
+    // Delegates to the tab's actual owner first — same reasoning as
+    // `moveTabToWorkspace`'s identical check: a tab's own close button
+    // renders in every window showing its (now-shared) workspace, not
+    // just whichever window happens to have it mounted right now.
+    const owner = this.registry.mountOwners.get(id);
+    if (owner && owner !== this) {
+      return owner.closeTab(id, options);
+    }
+    this.registry.mountOwners.delete(id);
+
     if (this.grabbedTabId === id) {
       this.grabbedTabId = null;
     }
@@ -654,12 +704,25 @@ export class TabManager {
    * on a consistent workspace instead of showing a tab no visible pill
    * claims — and always exits split view first: a tab-bar click is treated
    * as "show exactly this tab," never as "keep the other split pane too."
+   * Also steals `id` away from whichever *other* window currently has it
+   * mounted, if any (`SharedTabRegistry.mountOwners`) — a `WebContentsView`
+   * can only ever be attached to one window's `contentView` at a time, so
+   * with tabs shared across every open window now, clicking a tab that's
+   * currently live in a different window has to relocate it here rather
+   * than mount a second copy. That other window falls back to a neighbor
+   * exactly as if the tab had been closed on it (`releaseTab`), without
+   * actually removing the tab anywhere.
    * @param id The tab to bring to the front.
    * @returns The full browser state after the switch.
    */
   public activateTab(id: string): BrowserState {
     if (!this.states.has(id)) {
       return this.getState();
+    }
+
+    const owner = this.registry.mountOwners.get(id);
+    if (owner && owner !== this) {
+      owner.releaseTab(id);
     }
 
     if (this.splitView) {
@@ -671,6 +734,7 @@ export class TabManager {
       if (previous) {
         this.window.contentView.removeChildView(previous);
       }
+      this.registry.mountOwners.delete(this.activeTabId);
     }
 
     // Every tab, browser or terminal, has its own `WebContentsView` (see
@@ -690,9 +754,11 @@ export class TabManager {
     // that page ever needing to be hidden; see its class doc comment.
     const view = this.views.get(id);
     if (view) {
+      this.registry.detachViewFromAllWindows(view);
       this.window.contentView.addChildView(view, 0);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
       view.webContents.focus();
+      this.registry.mountOwners.set(id, this);
     }
     this.activeTabId = id;
 
@@ -704,6 +770,72 @@ export class TabManager {
 
     this.emitState();
     return this.getState();
+  }
+
+  /**
+   * Unmounts a tab from this window if it's currently the one showing it
+   * (the active tab, or either half of split view), activating a
+   * fallback in its place exactly as `closeTab` would — without removing
+   * the tab itself from the shared registry, since it isn't gone, just
+   * being taken over by a different window. Called on whichever window's
+   * `TabManager` actually owns a tab (`SharedTabRegistry.mountOwners`)
+   * right before a *different* window claims it via `activateTab`. A
+   * no-op if this window isn't currently displaying `id` anywhere.
+   * @param id The tab being taken over by a different window.
+   */
+  public releaseTab(id: string): void {
+    if (this.splitView?.secondaryTabId === id) {
+      const view = this.views.get(id);
+      if (view) {
+        this.window.contentView.removeChildView(view);
+      }
+      this.registry.mountOwners.delete(id);
+      this.splitView = null;
+      this.updateBounds();
+      this.emitState();
+      return;
+    }
+
+    if (this.splitView?.primaryTabId === id) {
+      const secondaryId = this.splitView.secondaryTabId;
+      const view = this.views.get(id);
+      if (view) {
+        this.window.contentView.removeChildView(view);
+      }
+      this.registry.mountOwners.delete(id);
+      this.splitView = null;
+      this.activeTabId = null;
+      if (this.states.has(secondaryId)) {
+        this.activateTab(secondaryId);
+      } else {
+        this.createTab(undefined, this.states.get(id)?.workspaceId);
+      }
+      return;
+    }
+
+    if (this.activeTabId !== id) {
+      return;
+    }
+
+    const view = this.views.get(id);
+    if (view) {
+      this.window.contentView.removeChildView(view);
+    }
+    this.registry.mountOwners.delete(id);
+    this.activeTabId = null;
+
+    const workspaceId = this.states.get(id)?.workspaceId;
+    const remaining = Array.from(this.states.entries())
+      .filter(([tabId, tabState]) => tabId !== id && tabState.workspaceId === workspaceId)
+      .map(([tabId]) => tabId);
+    const next = remaining[remaining.length - 1];
+    if (next) {
+      this.activateTab(next);
+    } else if (workspaceId) {
+      this.createTab(undefined, workspaceId);
+    } else {
+      this.emitState();
+    }
   }
 
   /**
@@ -870,6 +1002,37 @@ export class TabManager {
     });
     this.moveTabToWorkspace(tabId, id);
     return this.switchWorkspace(id);
+  }
+
+  /**
+   * Creates a new workspace and reassigns one tab into it, like
+   * `createWorkspaceWithTab`, but doesn't switch *this* window to it or
+   * activate anything here — `tearOffTab`'s (main/index.ts) own
+   * workspace half. The tab is about to be shown in a brand-new window
+   * that doesn't exist yet, not this one, so this only needs to (a) give
+   * it a fresh, standalone workspace of its own rather than colliding
+   * with the real, now-shared "Home" (see `SharedTabRegistry`'s own doc
+   * comment for why tearing off used to create a second, unrelated "Home"
+   * before workspaces were shared), and (b) release it from wherever it's
+   * currently mounted (`moveTabToWorkspace` already does this) — the new
+   * window's own `activateTab` call handles actually mounting it once it
+   * exists.
+   * @param tabId The tab to give its own new workspace.
+   * @returns The new workspace's id, or `null` if `tabId` doesn't exist.
+   */
+  public createStandaloneWorkspaceFor(tabId: string): string | null {
+    if (!this.states.has(tabId)) {
+      return null;
+    }
+    const id = randomUUID();
+    const color = WORKSPACE_COLORS[this.workspaces.size % WORKSPACE_COLORS.length]!;
+    this.workspaces.set(id, {
+      id,
+      name: `Workspace ${this.workspaces.size + 1}`,
+      color,
+    });
+    this.moveTabToWorkspace(tabId, id);
+    return id;
   }
 
   /**
@@ -1065,7 +1228,9 @@ export class TabManager {
    * split view is browser-tab-only by product decision (the renderer's own
    * tab/split pickers already exclude terminal tabs; this is the same rule
    * enforced on the main-process side too).
-   * @param secondaryId The tab to show alongside the current active tab.
+   * @param secondaryId The tab to show alongside the current active tab —
+   *   stolen from whichever other window currently has it mounted, if
+   *   any, same as `activateTab`.
    * @returns The full browser state after the change.
    */
   public enterSplitView(secondaryId: string): BrowserState {
@@ -1081,10 +1246,17 @@ export class TabManager {
       return this.getState();
     }
 
+    const owner = this.registry.mountOwners.get(secondaryId);
+    if (owner && owner !== this) {
+      owner.releaseTab(secondaryId);
+    }
+
     this.teardownSplitView();
     this.splitView = { primaryTabId: primaryId, secondaryTabId: secondaryId };
+    this.registry.detachViewFromAllWindows(secondaryView);
     // Index 0 — see `activateTab`'s own `addChildView` call for why.
     this.window.contentView.addChildView(secondaryView, 0);
+    this.registry.mountOwners.set(secondaryId, this);
     this.updateBounds();
     this.emitState();
     return this.getState();
@@ -1503,6 +1675,7 @@ export class TabManager {
     if (secondaryView) {
       this.window.contentView.removeChildView(secondaryView);
     }
+    this.registry.mountOwners.delete(this.splitView.secondaryTabId);
     this.splitView = null;
   }
 
@@ -1591,28 +1764,17 @@ export class TabManager {
   }
 
   /**
-   * Merges a partial update into one terminal tab's state and notifies the
-   * caller — `patchState`'s counterpart for the fields a terminal tab has
-   * instead of a browser tab's (currently just `exited`).
-   * @param id Terminal tab to update.
-   * @param patch Fields to overwrite.
+   * Notifies every open window (this one included) that shared tab/
+   * workspace data changed — each pushes its own fresh `BrowserState` to
+   * its own renderer and reschedules a session save (see
+   * `SharedTabRegistry.registerWindow`, where that per-window push is
+   * actually registered). Every existing call site of this method
+   * (unchanged from before tabs/workspaces were shared) still means
+   * exactly what it always did: "something changed, tell whoever's
+   * listening" — it just has more listeners now.
    */
-  private patchTerminalState(
-    id: string,
-    patch: Partial<Omit<TerminalTabState, 'kind' | 'id' | 'workspaceId'>>,
-  ): void {
-    const current = this.states.get(id);
-    if (!current || current.kind !== 'terminal') {
-      return;
-    }
-    this.states.set(id, { ...current, ...patch });
-    this.emitState();
-  }
-
-  /** Pushes the current state to the registered listener, and schedules the same change to be persisted (see `SessionStore.scheduleSave`). */
   private emitState(): void {
-    this.onStateChange(this.getState());
-    this.sessionStore.scheduleSave(this.buildSessionSnapshot());
+    this.registry.notifyAll();
   }
 
   /** @returns The current tabs/workspaces reduced to `SessionStore`'s minimal recreatable shape — see `restoreSession` for why it's not the full `TabState`. */
@@ -1716,10 +1878,25 @@ export class TabManager {
    * @param wc The view's own webContents.
    */
   private wireSharedInputHandling(id: string, wc: WebContents): void {
-    wc.on('blur', () => this.releaseGrabbedTab());
+    // Resolved fresh on every event rather than captured as `this` — this
+    // listener is attached once, at tab-creation time, but the tab itself
+    // can outlive that: `activateTab` lets any window steal it away (a
+    // shared-workspace tab click, or `tearOffTab` mounting it into a brand
+    // new window) without ever re-wiring its input handling. Without this,
+    // every shortcut below would keep acting on whichever window happened
+    // to create the tab, even after a different window is the one actually
+    // showing it and holding OS focus on it — e.g. Ctrl+L toggling the
+    // *origin* window's sidebar while the torn-off window's own content
+    // fills the screen. Falls back to `this` for a tab that's currently
+    // unmounted everywhere (`mountOwners` has no entry), which can't
+    // actually receive input anyway but keeps this total.
+    const owningManager = (): TabManager => this.registry.mountOwners.get(id) ?? this;
+
+    wc.on('blur', () => owningManager().releaseGrabbedTab());
 
     wc.on('before-input-event', (event, input) => {
-      if (this.handleReorderGestureInput(event, input)) {
+      const owner = owningManager();
+      if (owner.handleReorderGestureInput(event, input)) {
         return;
       }
       if (input.type !== 'keyDown') {
@@ -1734,9 +1911,9 @@ export class TabManager {
       // No modifier, so it falls outside the `cmdOrCtrl`-gated switch
       // below — Escape only ever does one thing here anyway, exit Focus
       // Mode, and only while it's actually on.
-      if (key === 'escape' && this.focusMode) {
+      if (key === 'escape' && owner.focusMode) {
         event.preventDefault();
-        this.setFocusMode(false);
+        owner.setFocusMode(false);
         return;
       }
 
@@ -1745,10 +1922,10 @@ export class TabManager {
       if (input.alt && !cmdOrCtrl && !input.shift) {
         if (key === 'arrowleft') {
           event.preventDefault();
-          this.goBack(id);
+          owner.goBack(id);
         } else if (key === 'arrowright') {
           event.preventDefault();
-          this.goForward(id);
+          owner.goForward(id);
         }
         return;
       }
@@ -1759,13 +1936,13 @@ export class TabManager {
           // Ctrl+Shift+Alt+W — the workspace equivalent of Ctrl+Shift+W:
           // closes every workspace and resets the last one, same as
           // repeating the combo below until only one is left.
-          this.closeAllWorkspaces();
+          owner.closeAllWorkspaces();
         } else {
           // The deliberately-harder-to-hit combo for closing the whole
           // workspace — plain Ctrl+W (below) only ever closes a tab.
           // `removeWorkspace` itself refuses to act when this is the last
           // remaining workspace, so this can never close the window.
-          this.removeWorkspace(this.activeWorkspaceId);
+          owner.removeWorkspace(owner.activeWorkspaceId);
         }
         return;
       }
@@ -1778,15 +1955,15 @@ export class TabManager {
         switch (key) {
           case 't':
             event.preventDefault();
-            this.restoreLastClosedTab();
+            owner.restoreLastClosedTab();
             return;
           case 'w':
             event.preventDefault();
-            this.closeAllTabs();
+            owner.closeAllTabs();
             return;
           case 'f':
             event.preventDefault();
-            this.toggleFocusMode();
+            owner.toggleFocusMode();
             return;
           case '>':
             // Shift is what actually produces '>' (it's Shift+Period on a
@@ -1794,7 +1971,7 @@ export class TabManager {
             // not a separate Ctrl+Shift+> binding, same as buildMenu.ts's
             // `CmdOrCtrl+>` accelerator for the same action.
             event.preventDefault();
-            this.createTerminalTab();
+            owner.createTerminalTab();
             return;
           default:
             return;
@@ -1804,53 +1981,53 @@ export class TabManager {
       switch (key) {
         case 'w':
           event.preventDefault();
-          this.closeTab(id);
+          owner.closeTab(id);
           return;
         case 'n':
           event.preventDefault();
-          this.createTabAndFocusAddressBar();
+          owner.createTabAndFocusAddressBar();
           return;
         case 'q':
           // Same action as Ctrl+Shift+N, under a second accelerator — see
           // buildMenu.ts's hidden "New Workspace" (Ctrl+Q) entry for why.
           event.preventDefault();
-          this.createWorkspace();
+          owner.createWorkspace();
           return;
         case 't':
           event.preventDefault();
-          this.restoreLastClosedTab();
+          owner.restoreLastClosedTab();
           return;
         case 'b':
           event.preventDefault();
-          this.toggleBookmark(id);
+          owner.toggleBookmark(id);
           return;
         case 'h':
           event.preventDefault();
-          this.goHome(id);
+          owner.goHome(id);
           return;
         case 'l':
           event.preventDefault();
-          this.toggleSidebar();
+          owner.toggleSidebar();
           return;
         case '/':
           event.preventDefault();
-          this.requestFocusAddressBar();
+          owner.requestFocusAddressBar();
           return;
         case 'arrowleft':
           event.preventDefault();
-          this.cycleTab(-1);
+          owner.cycleTab(-1);
           return;
         case 'arrowright':
           event.preventDefault();
-          this.cycleTab(1);
+          owner.cycleTab(1);
           return;
         case 'arrowup':
           event.preventDefault();
-          this.cycleWorkspace(-1);
+          owner.cycleWorkspace(-1);
           return;
         case 'arrowdown':
           event.preventDefault();
-          this.cycleWorkspace(1);
+          owner.cycleWorkspace(1);
           return;
         default:
           return;

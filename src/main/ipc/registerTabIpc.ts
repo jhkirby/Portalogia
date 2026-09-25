@@ -14,6 +14,7 @@ import {
   createWorkspaceRequestSchema,
   createWorkspaceWithTabRequestSchema,
   focusModeRequestSchema,
+  moveTabRequestSchema,
   moveTabToWorkspaceRequestSchema,
   navigateRequestSchema,
   renameWorkspaceRequestSchema,
@@ -65,10 +66,24 @@ export function registerTabIpc(
   handle(IpcChannel.TabsActivate, tabIdRequestSchema, (request, event) =>
     resolveTabManager(event).activateTab(request.id),
   );
-  // `tabs:move` (TabBar's own drag-reorder) is NOT registered here — it
-  // needs to resolve the dragged tab's *source* window too, which may not
-  // be the same window the drop landed in (a cross-window tab drag). See
-  // `registerCrossWindowTabMoveIpc` in main/index.ts.
+  // `TabBar`'s drag-and-drop reorder gesture. Tabs/workspaces are shared
+  // across every open window (`SharedTabRegistry`), so a plain
+  // `moveTab` already repositions the dragged tab correctly regardless of
+  // which window's `TabManager` instance is asked to do it — the one
+  // extra step needed for a genuinely *cross-window* drag (dropped into a
+  // window showing a different workspace than the tab's own) is
+  // reassigning that workspace first, exactly like dragging onto a
+  // `WorkspaceBar` pill would, before positioning it at the exact
+  // boundary the drop landed on.
+  handle(IpcChannel.TabsMove, moveTabRequestSchema, (request, event) => {
+    const manager = resolveTabManager(event);
+    const draggedTab = manager.getState().tabs.find((tab) => tab.id === request.id);
+    const destinationWorkspaceId = manager.getState().activeWorkspaceId;
+    if (draggedTab && draggedTab.workspaceId !== destinationWorkspaceId) {
+      manager.moveTabToWorkspace(request.id, destinationWorkspaceId);
+    }
+    return manager.moveTab(request.id, request.beforeId);
+  });
   handle(IpcChannel.TabsMoveToWorkspace, moveTabToWorkspaceRequestSchema, (request, event) =>
     resolveTabManager(event).moveTabToWorkspace(request.id, request.workspaceId),
   );

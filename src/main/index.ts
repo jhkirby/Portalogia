@@ -1,22 +1,23 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-09-24
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, session } from 'electron';
 import { NORTHSTAR_SCHEME } from '@shared/constants';
-import { IpcChannel, type IpcResult } from '@shared/ipc-contract';
-import { moveTabRequestSchema, tearOffTabRequestSchema } from '@shared/ipc-schemas';
-import type { BrowserState } from '@shared/tab-state';
+import { IpcChannel } from '@shared/ipc-contract';
+import { tearOffTabRequestSchema } from '@shared/ipc-schemas';
 import { BookmarkStore } from './browser/BookmarkStore';
 import { SessionStore } from './browser/SessionStore';
+import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
 import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
+import { TerminalManager } from './terminal/TerminalManager';
 import { createMainWindow } from './windows/MainWindow';
 
 // Electron requires this to be set before `app.whenReady()`.
@@ -33,16 +34,19 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-// Tracks whichever window is currently frontmost, so the one set of
-// `ipcMain.handle` registrations (below) and the application menu always
-// act on the right window's tabs even if more than one is ever opened.
+// Tracks whichever window is currently frontmost, so the application menu
+// (accelerators like Ctrl+T act on whichever window is actually focused,
+// the correct behavior for a native app menu — unlike `registerTabIpc`'s
+// channels, see its own doc comment for why those resolve per-request
+// instead) always acts on the right window.
 let activeTabManager: TabManager | null = null;
 
 // Every open window's own `TabManager`, keyed by `BrowserWindow.id` —
-// unlike `activeTabManager`, this resolves a *specific* window regardless
-// of focus, which `tearOffTab` needs: the drag's source window is whichever
-// one sent the IPC message (`BrowserWindow.fromWebContents(event.sender)`),
-// not necessarily whichever window last had OS focus.
+// resolves a *specific* window regardless of focus, which `registerTabIpc`
+// and `tearOffTab` need: a request's sending window
+// (`BrowserWindow.fromWebContents(event.sender)`) isn't necessarily
+// whichever window last had OS focus (clicking into a background window is
+// ordinary, not a focus-stealing gesture).
 const tabManagersByWindowId = new Map<number, TabManager>();
 
 // Bookmarks aren't scoped to a window — one store, shared by every
@@ -55,6 +59,37 @@ const bookmarkStore = new BookmarkStore(join(app.getPath('userData'), 'bookmarks
 // situation a plain restart is, just without the process itself exiting
 // first.
 const sessionStore = new SessionStore(join(app.getPath('userData'), 'session.json'));
+
+// The tabs, workspaces, and their native views — one set, shared by every
+// window's `TabManager` rather than each owning its own independent copy.
+// See its own class doc comment for why: without this, every window got
+// its own separate "Home" workspace, a new workspace created in one window
+// never showed up in another's sidebar, and a tab created in one window
+// was invisible — and unreachable — from any other.
+const sharedRegistry = new SharedTabRegistry();
+
+// Every open terminal tab's own pty process — one instance shared the same
+// way `sharedRegistry` is, since a terminal tab can now move between
+// windows the same as a browser tab can (dragged into another window's tab
+// bar, or dragged out to tear off into a new one), and its shell process
+// has to stay reachable regardless of which window currently displays it.
+const sharedTerminalManager = new TerminalManager(
+  // Pushed to the terminal tab's own `WebContentsView`, not any chrome
+  // window — each terminal renders in its own page (see
+  // `TabManager.createTerminalTab`), so that's the only webContents
+  // actually listening for it, and it's reachable through
+  // `sharedRegistry.views` regardless of which window currently has that
+  // view mounted.
+  (id, data) => sharedRegistry.views.get(id)?.webContents.send(IpcChannel.TerminalData, { id, data }),
+  (id) => {
+    const state = sharedRegistry.states.get(id);
+    if (state?.kind === 'terminal') {
+      sharedRegistry.states.set(id, { ...state, exited: true });
+    }
+    sharedRegistry.views.get(id)?.webContents.send(IpcChannel.TerminalExited, { id });
+    sharedRegistry.notifyAll();
+  },
+);
 
 void app.whenReady().then(() => {
   // Deny every site permission request (camera, mic, geolocation, ...) by
@@ -84,7 +119,6 @@ void app.whenReady().then(() => {
   registerWindowIpc();
   registerThemeIpc();
   registerTearOffIpc();
-  registerCrossWindowTabMoveIpc();
   buildMenu(
     () => activeTabManager,
     () => activeTabManager?.getState().activeTabId ?? null,
@@ -100,6 +134,12 @@ void app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // Every terminal's shell process is shared app-wide now (`sharedTerminalManager`),
+  // not owned by any one window — killed here, once, rather than by
+  // whichever window happens to close (which might not even be the last
+  // one, and might not be the window that originally spawned a given
+  // shell).
+  sharedTerminalManager.disposeAll();
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -128,8 +168,11 @@ function resolveTabManagerForEvent(event: { sender: Electron.WebContents }): Tab
  * Resolves whichever `TabManager` currently owns a specific tab id —
  * `registerTabIpc`'s terminal channels need this instead of
  * `resolveTabManagerForEvent`, since they're sent from a terminal tab's
- * own child `WebContentsView`, not the chrome's top-level one.
- * @param tabId The tab to find the owning window for.
+ * own child `WebContentsView`, not the chrome's top-level one. Any
+ * manager that knows about the tab works equally well here (they all
+ * share the same `sharedTerminalManager`) — this just needs *a* valid one
+ * to call through.
+ * @param tabId The tab to find an owning window for.
  */
 function resolveTabManagerForTab(tabId: string): TabManager | undefined {
   for (const manager of tabManagersByWindowId.values()) {
@@ -164,6 +207,8 @@ function launchWindow(
     (state) => window.webContents.send(IpcChannel.TabsStateChanged, state),
     bookmarkStore,
     sessionStore,
+    sharedRegistry,
+    sharedTerminalManager,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);
@@ -175,8 +220,7 @@ function launchWindow(
 
   window.on('resize', () => tabManager.updateBounds());
   window.on('closed', () => {
-    tabManager.disposeAllTerminals();
-    tabManager.disposeSuggestionsOverlay();
+    tabManager.dispose();
     tabManagersByWindowId.delete(window.id);
     // `SessionStore.scheduleSave` debounces its actual disk write — flush
     // it immediately here rather than let a just-scheduled write get cut
@@ -230,115 +274,25 @@ function registerTearOffIpc(): void {
       return;
     }
 
-    const tornTab = sourceManager.getState().tabs.find((tab) => tab.id === id);
-    if (!tornTab) {
+    // Gives the tab its own brand-new, standalone workspace rather than
+    // dumping it into a new "Home" — tabs/workspaces are shared across
+    // every window now (`sharedRegistry`), so the new window's own
+    // "Home" would be the *same* Home every other window already shows,
+    // not a fresh one to redecorate. `createStandaloneWorkspaceFor` also
+    // releases the tab from wherever it's currently mounted; a no-op
+    // `null` return means the tab's already gone.
+    const newWorkspaceId = sourceManager.createStandaloneWorkspaceFor(id);
+    if (!newWorkspaceId) {
       return;
     }
 
-    // Removes it from the source window first, with the same fallback
-    // bookkeeping an ordinary close would use (activates a neighbor,
-    // exits split view, etc.) — but not recorded in `closedTabs`: it isn't
-    // gone, just moving to a new window, so Ctrl+Shift+T back in the
-    // source window shouldn't be able to resurrect a duplicate of it.
-    sourceManager.closeTab(id, { recordClosed: false });
-
     launchWindow(
-      (tabManager) =>
-        tornTab.kind === 'terminal' ? tabManager.createTerminalTab() : tabManager.createTab(tornTab.url),
-      // Only the URL/kind survive into the new window, not the live page
-      // itself — same tradeoff `SessionStore`/`restoreLastClosedTab`
-      // already make ("enough to reopen it, not to replay its history"),
-      // and it sidesteps actually having to transplant a `WebContentsView`
-      // (and every listener `wireEvents` attached to it) from one
-      // `TabManager` to another.
+      // Mounts the tab's own already-existing view into the new window —
+      // its live page, navigation history, everything, survives the
+      // move intact, unlike the URL-only recreate this used to need
+      // before tabs were shared across windows.
+      (tabManager) => tabManager.activateTab(id),
       { x: screenX - 150, y: screenY - 20 },
     );
-  });
-}
-
-/**
- * Registers `TabsMove` (`moveTab` in `NorthstarApi`) — `TabBar`'s
- * drag-and-drop reorder gesture. Unlike `registerTabIpc`'s other channels,
- * this one can't assume the request should act on "whichever window is
- * currently active": a drop lands in whichever window's own `TabBar` the
- * drag was released over, which doesn't require that window to have OS
- * focus first (the same reasoning `registerTearOffIpc` already applies to
- * resolving a tear-off's source window). So this resolves the
- * *destination* window directly from `event.sender` instead, and — new
- * since cross-window dragging exists — searches every other open window
- * for whichever one currently owns the dragged tab, exactly when it isn't
- * this window's own: same-window reorder and cross-window move are, from
- * here, the same gesture with a different source.
- */
-function registerCrossWindowTabMoveIpc(): void {
-  ipcMain.handle(IpcChannel.TabsMove, (event, rawRequest: unknown): IpcResult<BrowserState> => {
-    const parsed = moveTabRequestSchema.safeParse(rawRequest);
-    if (!parsed.success) {
-      return { ok: false, code: 'invalid-request', message: parsed.error.message };
-    }
-
-    const destWindow = BrowserWindow.fromWebContents(event.sender);
-    const destManager = destWindow ? tabManagersByWindowId.get(destWindow.id) : undefined;
-    if (!destManager) {
-      return { ok: false, code: 'no-window', message: 'No window is open for this request' };
-    }
-
-    const { id, beforeId } = parsed.data;
-
-    if (destManager.hasTab(id)) {
-      // The common case — reordering within a single window's own tab
-      // bar — is unchanged: `TabManager.moveTab` just repositions it
-      // within its own tab list.
-      return { ok: true, data: destManager.moveTab(id, beforeId) };
-    }
-
-    let sourceManager: TabManager | undefined;
-    for (const manager of tabManagersByWindowId.values()) {
-      if (manager !== destManager && manager.hasTab(id)) {
-        sourceManager = manager;
-        break;
-      }
-    }
-    if (!sourceManager) {
-      // The dragged tab closed (or belonged to a window that's since
-      // closed) before this drop landed — nothing left to insert.
-      return { ok: true, data: destManager.getState() };
-    }
-
-    const tornTab = sourceManager.getState().tabs.find((tab) => tab.id === id);
-    if (!tornTab) {
-      return { ok: true, data: destManager.getState() };
-    }
-
-    // Same trade-off `tearOffTab` makes, and for the same reason: only the
-    // URL/kind survive into the destination window, not the live page
-    // itself, rather than transplanting a `WebContentsView` (and every
-    // listener `wireEvents` attached to it) between two `TabManager`s.
-    // Removed from the source first, with the same fallback bookkeeping
-    // an ordinary close would use, and not recorded in `closedTabs` — it
-    // isn't gone, just relocating, so Ctrl+Shift+T in the source window
-    // shouldn't resurrect a duplicate of it.
-    sourceManager.closeTab(id, { recordClosed: false });
-
-    // Lands in whichever workspace is currently visible in the
-    // destination window — the same workspace `beforeId`'s own tab
-    // belongs to, since that's the row the drop actually landed in.
-    // Unlike `moveTabToWorkspace`'s drag-onto-a-pill gesture, this one
-    // *does* become the active tab: dropping a tab directly into a
-    // window's own visible tab strip reads as "bring this here and look
-    // at it now," the same way it does dragging a tab between two
-    // windows in Chrome, not "file this away in the background."
-    const destWorkspaceId = destManager.getState().activeWorkspaceId;
-    const created =
-      tornTab.kind === 'terminal'
-        ? destManager.createTerminalTab(destWorkspaceId)
-        : destManager.createTab(tornTab.url, destWorkspaceId);
-
-    // `createTab`/`createTerminalTab` always activate the tab they create
-    // (see their own doc comments), so `activeTabId` is always the new
-    // tab's id here — reposition it from wherever it landed (appended at
-    // the end) to the exact boundary the drop was released on.
-    const newId = created.activeTabId;
-    return { ok: true, data: newId ? destManager.moveTab(newId, beforeId) : created };
   });
 }
