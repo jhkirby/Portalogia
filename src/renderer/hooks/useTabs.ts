@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-12
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_WORKSPACE_ID } from '@shared/constants';
+import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { IpcResult } from '@shared/ipc-contract';
 import type { BrowserState } from '@shared/tab-state';
 
@@ -18,6 +18,7 @@ const EMPTY_STATE: BrowserState = {
   focusMode: false,
   sidebarVisible: true,
   grabbedTabId: null,
+  zoomPercent: ZOOM_PERCENT_DEFAULT,
 };
 
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
@@ -169,6 +170,9 @@ export function useTabs() {
   const zoomOut = useCallback(() => {
     void window.northstar.zoomOut().then(logIfFailed);
   }, []);
+  const setZoom = useCallback((percent: number) => {
+    void window.northstar.setZoom(percent).then(logIfFailed);
+  }, []);
 
   return {
     tabs: state.tabs,
@@ -213,7 +217,9 @@ export function useTabs() {
     exitSplitView,
 
     setFocusMode,
+    zoomPercent: state.zoomPercent,
     zoomIn,
     zoomOut,
+    setZoom,
   };
 }

@@ -68,6 +68,7 @@ const api: NorthstarApi = {
   zoomIn: () => invoke(IpcChannel.ZoomIn),
   zoomOut: () => invoke(IpcChannel.ZoomOut),
   resetZoom: () => invoke(IpcChannel.ZoomReset),
+  setZoom: (percent) => invoke(IpcChannel.ZoomSet, { percent }),
 
   onOpenTabSearch: (listener) => {
     const handler = (): void => listener();
@@ -79,6 +80,11 @@ const api: NorthstarApi = {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
+  },
+  onFocusZoom: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.UiFocusZoom, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiFocusZoom, handler);
   },
   onToggleTheme: (listener) => {
     const handler = (): void => listener();

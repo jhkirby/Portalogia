@@ -69,4 +69,6 @@ export interface BrowserState {
   readonly sidebarVisible: boolean;
   /** The tab currently grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it) — `null` when nothing is grabbed. */
   readonly grabbedTabId: string | null;
+  /** The active tab's own zoom, as a whole percent (25–200, 100 = native size) — never the chrome's, which is never zoomed. */
+  readonly zoomPercent: number;
 }

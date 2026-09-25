@@ -94,6 +94,16 @@ export const ADDRESS_SUGGESTION_ROW_HEIGHT_PX = 32;
  */
 export const ADDRESS_SUGGESTIONS_PADDING_PX = 4;
 
+/**
+ * A tab's own zoom range and default, as a whole percent — shared by main
+ * (`TabManager.setZoom`/`clampZoomPercent`, the actual enforcement point)
+ * and the renderer (`ZoomPercentInput`, which restricts what a person can
+ * even type to this same range) so the two can't quietly drift apart.
+ */
+export const ZOOM_PERCENT_MIN = 25;
+export const ZOOM_PERCENT_MAX = 200;
+export const ZOOM_PERCENT_DEFAULT = 100;
+
 /** Accent colors cycled through, in order, as new workspaces are created. */
 export const WORKSPACE_COLORS = [
   '#4285f4',

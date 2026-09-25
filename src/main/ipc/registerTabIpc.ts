@@ -23,6 +23,7 @@ import {
   terminalInputRequestSchema,
   terminalResizeRequestSchema,
   workspaceIdRequestSchema,
+  zoomSetRequestSchema,
 } from '@shared/ipc-schemas';
 import type { BrowserState } from '@shared/tab-state';
 import type { TabManager } from '../browser/TabManager';
@@ -180,6 +181,9 @@ export function registerTabIpc(
       return toErrorResult(error);
     }
   });
+  handle(IpcChannel.ZoomSet, zoomSetRequestSchema, (request, event) =>
+    resolveTabManager(event).setZoom(request.percent),
+  );
 
   ipcMain.handle(IpcChannel.TabsGetState, (event): IpcResult<BrowserState> => {
     try {

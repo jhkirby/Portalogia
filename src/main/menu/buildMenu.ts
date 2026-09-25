@@ -273,6 +273,11 @@ export function buildMenu(
           accelerator: 'CmdOrCtrl+-',
           click: () => getTabManager()?.zoomOut(),
         },
+        {
+          label: 'Focus Zoom',
+          accelerator: 'CmdOrCtrl+Shift+0',
+          click: () => getTabManager()?.requestFocusZoom(),
+        },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],

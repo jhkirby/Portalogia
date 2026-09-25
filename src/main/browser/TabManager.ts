@@ -17,6 +17,9 @@ import {
   SIDEBAR_TOGGLE_DURATION_MS,
   SIDEBAR_WIDTH_PX,
   WORKSPACE_COLORS,
+  ZOOM_PERCENT_DEFAULT,
+  ZOOM_PERCENT_MAX,
+  ZOOM_PERCENT_MIN,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
 import { IpcChannel, type AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
@@ -61,18 +64,8 @@ const SPACE_HOLD_GRACE_MS = 600;
  */
 const GRAB_MAX_DURATION_MS = 15_000;
 
-/**
- * How much `zoomIn`/`zoomOut` moves a tab's `webContents.zoomLevel` per
- * press — Chromium's zoom is logarithmic (`zoomFactor = 1.2 ** zoomLevel`),
- * and half a level lands close to each of Chrome's own preset zoom stops.
- */
-const ZOOM_STEP = 0.5;
-
-/** Zoom-level floor `adjustZoom` clamps to — roughly Chrome's own 25% zoom floor (`1.2 ** -8 ≈ 0.23`). */
-const ZOOM_LEVEL_MIN = -8;
-
-/** Zoom-level ceiling `adjustZoom` clamps to — roughly Chrome's own 500% zoom ceiling (`1.2 ** 9 ≈ 5.16`). */
-const ZOOM_LEVEL_MAX = 9;
+/** How many percentage points `zoomIn`/`zoomOut` (buttons, Ctrl+=/-, menu) move per press — `ZOOM_PERCENT_MIN`/`MAX`/`DEFAULT` themselves live in `@shared/constants`, shared with the renderer's `ZoomPercentInput`. */
+const ZOOM_PERCENT_STEP = 10;
 
 /**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
@@ -637,7 +630,7 @@ export class TabManager {
       return owner.closeTab(id, options);
     }
     this.registry.mountOwners.delete(id);
-    this.registry.zoomLevelByTabId.delete(id);
+    this.registry.zoomPercentByTabId.delete(id);
 
     if (this.grabbedTabId === id) {
       this.grabbedTabId = null;
@@ -1133,7 +1126,7 @@ export class TabManager {
       }
       this.views.delete(tabId);
       this.states.delete(tabId);
-      this.registry.zoomLevelByTabId.delete(tabId);
+      this.registry.zoomPercentByTabId.delete(tabId);
       if (this.grabbedTabId === tabId) {
         this.grabbedTabId = null;
       }
@@ -1351,86 +1344,101 @@ export class TabManager {
    * toolbar), which is what Electron's built-in `zoomIn` menu role would
    * otherwise zoom instead. Works identically for a terminal tab, since
    * it's just as much its own `WebContentsView` as a browser tab's page.
-   * @returns The full browser state after the change (zoom itself isn't
-   *   part of it — nothing in `BrowserState` reads it — but every action
-   *   here returns it for consistency with the rest of this class).
+   * @returns The full browser state after the change, including the new
+   *   `zoomPercent` (`ZoomPercentInput` reads it from there).
    */
   public zoomIn(): BrowserState {
-    this.adjustZoom(ZOOM_STEP);
+    this.adjustZoom(ZOOM_PERCENT_STEP);
     return this.getState();
   }
 
   /** Zooms out on the active tab's own content. See `zoomIn`. */
   public zoomOut(): BrowserState {
-    this.adjustZoom(-ZOOM_STEP);
+    this.adjustZoom(-ZOOM_PERCENT_STEP);
     return this.getState();
   }
 
   /** Resets the active tab's own content back to its native 100% zoom. */
   public resetZoom(): BrowserState {
     if (this.activeTabId) {
-      this.setZoomLevel(this.activeTabId, 0);
+      this.setZoomPercent(this.activeTabId, ZOOM_PERCENT_DEFAULT);
     }
     return this.getState();
   }
 
   /**
-   * Chromium's zoom is logarithmic (`zoomFactor = 1.2 ** zoomLevel`, `0` =
-   * 100%), unlike the linear percentages a person actually reads — `±0.5`
-   * per step lands close to each of Chrome's own preset zoom stops (67%,
-   * 80%, 90%, 100%, 110%, 125%, …) without having to hand-map to them.
-   * Clamped to roughly Chrome's own 25%–500% range so repeated presses
-   * can't zoom content into illegibility (or invisibility) in either
-   * direction.
-   * @param delta `±ZOOM_STEP`.
+   * Sets the active tab's zoom to an exact percent — `ZoomPercentInput`,
+   * typing a number directly rather than stepping by `ZOOM_PERCENT_STEP`.
+   * Clamped and rounded to a whole number regardless of what's passed; the
+   * input itself already restricts what a person can type to digits within
+   * range (see that component), but this is the actual enforcement point.
+   * @param percent The requested zoom percent.
+   * @returns The full browser state after the change.
    */
-  private adjustZoom(delta: number): void {
+  public setZoom(percent: number): BrowserState {
+    if (this.activeTabId) {
+      this.setZoomPercent(this.activeTabId, clampZoomPercent(percent));
+    }
+    return this.getState();
+  }
+
+  /**
+   * @param deltaPercent `±ZOOM_PERCENT_STEP`.
+   */
+  private adjustZoom(deltaPercent: number): void {
     if (!this.activeTabId) {
       return;
     }
-    const current = this.registry.zoomLevelByTabId.get(this.activeTabId) ?? 0;
-    const next = Math.min(ZOOM_LEVEL_MAX, Math.max(ZOOM_LEVEL_MIN, current + delta));
-    this.setZoomLevel(this.activeTabId, next);
+    const current = this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT;
+    this.setZoomPercent(this.activeTabId, clampZoomPercent(current + deltaPercent));
   }
 
   /**
-   * Records `id`'s zoom level and pushes it straight to that tab's own
-   * view — via its preload's `zoom:apply` listener (`webFrame.setZoomLevel`),
-   * not `view.webContents.zoomLevel` set directly from here. That setter
-   * applies **per origin**, shared by every `webContents` currently
-   * showing (or later loading) the same origin — which, since a terminal
-   * tab's `terminal.html` and the chrome's own page are typically served
-   * from the very same origin (the dev server in development; a `file:`/
-   * custom-protocol origin in a packaged build too, depending on how the
-   * chrome and a tab happen to be loaded), meant zooming a terminal tab
-   * also silently zoomed the sidebar and toolbar right along with it.
-   * `webFrame.setZoomLevel`, called from inside that specific renderer
-   * instead, is scoped to that one frame only — nothing else on the same
-   * origin is affected.
+   * Records `id`'s zoom percent, pushes it to that tab's own view (see
+   * `applyZoom`), and pushes the change to every window's own renderer —
+   * unlike `applyZoom` alone (also called after a fresh navigation, where
+   * nothing about the zoom itself changed), this is the entry point that
+   * actually changes what `zoomPercent` a person reading `BrowserState`
+   * sees.
    * @param id The tab to zoom.
-   * @param level The new zoom level (already clamped by the caller).
+   * @param percent The new zoom percent (already clamped by the caller).
    */
-  private setZoomLevel(id: string, level: number): void {
-    this.registry.zoomLevelByTabId.set(id, level);
+  private setZoomPercent(id: string, percent: number): void {
+    this.registry.zoomPercentByTabId.set(id, percent);
     this.applyZoom(id);
+    this.emitState();
   }
 
   /**
-   * Re-sends `id`'s current stored zoom level to its own view — called
-   * once after `setZoomLevel` changes it, and again after every fresh
-   * navigation (`wireEvents`'s `did-finish-load`), since `webFrame.setZoomLevel`
-   * is scoped to one document instance: a new page loaded into the same
-   * tab starts back at 0 unless this reapplies whatever the tab's own
-   * zoom actually is. A no-op if the tab was never zoomed (nothing stored)
-   * or no longer exists.
-   * @param id The tab whose stored zoom level to (re)apply.
+   * Re-sends `id`'s current stored zoom percent to its own view — via its
+   * preload's `zoom:apply` listener (`webFrame.setZoomLevel`, converting
+   * from percent to Chromium's own logarithmic units right at the point of
+   * sending), not `view.webContents.zoomLevel` set directly from here.
+   * That setter applies **per origin**, shared by every `webContents`
+   * currently showing (or later loading) the same origin — which, since a
+   * terminal tab's `terminal.html` and the chrome's own page are typically
+   * served from the very same origin (the dev server in development; a
+   * `file:`/custom-protocol origin in a packaged build too, depending on
+   * how the chrome and a tab happen to be loaded), meant zooming a
+   * terminal tab also silently zoomed the sidebar and toolbar right along
+   * with it. `webFrame.setZoomLevel`, called from inside that specific
+   * renderer instead, is scoped to that one frame only.
+   *
+   * Called both by `setZoomPercent` (something actually changed) and by
+   * `wireEvents`'s `did-finish-load` (nothing changed, but a fresh
+   * navigation is a fresh document, which resets `webFrame`'s own
+   * frame-local zoom back to 0 unless this reapplies whatever the tab's
+   * own zoom actually is). A no-op if the tab was never zoomed (nothing
+   * stored, native 100% is already correct) or no longer exists.
+   * @param id The tab whose stored zoom percent to (re)apply.
    */
   private applyZoom(id: string): void {
-    const level = this.registry.zoomLevelByTabId.get(id);
-    if (level === undefined) {
+    const percent = this.registry.zoomPercentByTabId.get(id);
+    if (percent === undefined) {
       return;
     }
-    this.views.get(id)?.webContents.send(IpcChannel.ZoomApply, level);
+    const zoomLevel = Math.log(percent / 100) / Math.log(1.2);
+    this.views.get(id)?.webContents.send(IpcChannel.ZoomApply, zoomLevel);
   }
 
   // ── Sidebar ──────────────────────────────────────────────────────────
@@ -1709,6 +1717,17 @@ export class TabManager {
   }
 
   /**
+   * Asks this window's chrome to focus (and select) `ZoomControl`'s
+   * percent field (menu/accelerator-driven, Ctrl+Shift+0). See
+   * `requestTabSearch` for why `webContents.focus()` has to happen here
+   * too.
+   */
+  public requestFocusZoom(): void {
+    this.window.webContents.focus();
+    this.window.webContents.send(IpcChannel.UiFocusZoom);
+  }
+
+  /**
    * Hands native OS keyboard focus back to this window's own chrome
    * `webContents` — the Ctrl+` escape hatch out of a terminal tab (see
    * `wireSharedInputHandling`), so every other chrome shortcut (which is
@@ -1783,6 +1802,9 @@ export class TabManager {
       focusMode: this.focusMode,
       sidebarVisible: this.sidebarVisible,
       grabbedTabId: this.grabbedTabId,
+      zoomPercent: this.activeTabId
+        ? (this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT)
+        : ZOOM_PERCENT_DEFAULT,
     };
   }
 
@@ -2106,7 +2128,15 @@ export class TabManager {
           owner.zoomOut();
         } else if (input.code === 'Digit0' || input.code === 'Numpad0') {
           event.preventDefault();
-          owner.resetZoom();
+          // Shift is the one thing that *does* still matter for this one
+          // key — Ctrl+0 resets the zoom, Ctrl+Shift+0 jumps the cursor to
+          // `ZoomControl`'s own percent field instead of touching zoom at
+          // all, same pairing as the browser-tab switch below.
+          if (input.shift) {
+            owner.requestFocusZoom();
+          } else {
+            owner.resetZoom();
+          }
         }
         return;
       }
@@ -2184,7 +2214,15 @@ export class TabManager {
       }
       if (input.code === 'Digit0' || input.code === 'Numpad0') {
         event.preventDefault();
-        owner.resetZoom();
+        // Ctrl+Shift+0 jumps the cursor to `ZoomControl`'s own percent
+        // field instead of resetting the zoom — Shift is the one thing
+        // that still distinguishes this key, since every other zoom key
+        // above deliberately ignores it.
+        if (input.shift) {
+          owner.requestFocusZoom();
+        } else {
+          owner.resetZoom();
+        }
         return;
       }
 
@@ -2301,4 +2339,19 @@ export class TabManager {
 function sanitizeFileName(title: string): string {
   const cleaned = title.replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
   return cleaned || 'page';
+}
+
+/**
+ * Clamps and rounds a requested zoom percent to `ZOOM_PERCENT_MIN`–`ZOOM_PERCENT_MAX`.
+ * @param percent The requested percent — `NaN`-safe: `Math.max`/`Math.min`
+ *   propagate a `NaN` input straight through rather than clamping it, so an
+ *   invalid value (in practice, `ZoomPercentInput` never sends one) falls
+ *   back to `ZOOM_PERCENT_DEFAULT` instead of setting an actual `NaN` zoom.
+ * @returns A whole number within range.
+ */
+function clampZoomPercent(percent: number): number {
+  if (!Number.isFinite(percent)) {
+    return ZOOM_PERCENT_DEFAULT;
+  }
+  return Math.min(ZOOM_PERCENT_MAX, Math.max(ZOOM_PERCENT_MIN, Math.round(percent)));
 }

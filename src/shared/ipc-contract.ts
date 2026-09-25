@@ -47,6 +47,7 @@ export const IpcChannel = {
   ZoomIn: 'zoom:in',
   ZoomOut: 'zoom:out',
   ZoomReset: 'zoom:reset',
+  ZoomSet: 'zoom:set',
   // Pushed from main straight to a tab's own `WebContentsView` (its
   // `tabZoom`/`terminal` preload, not the chrome) — not part of
   // `NorthstarApi` since the chrome renderer never sends or receives it.
@@ -55,6 +56,7 @@ export const IpcChannel = {
   ZoomApply: 'zoom:apply',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiFocusAddressBar: 'ui:focus-address-bar',
+  UiFocusZoom: 'ui:focus-zoom',
   UiToggleTheme: 'ui:toggle-theme',
   ThemeSet: 'theme:set',
   WindowMinimize: 'window:minimize',
@@ -222,12 +224,17 @@ export interface NorthstarApi {
   zoomIn(): Promise<IpcResult<BrowserState>>;
   zoomOut(): Promise<IpcResult<BrowserState>>;
   resetZoom(): Promise<IpcResult<BrowserState>>;
+  /** Sets the active tab's zoom to an exact percent (`ZoomPercentInput`, typing directly) — clamped to 25–200 on the main-process side regardless of what's passed. */
+  setZoom(percent: number): Promise<IpcResult<BrowserState>>;
 
   /** Subscribes to the menu/accelerator-driven request to open the tab search overlay. */
   onOpenTabSearch(listener: () => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+/) to focus the address bar. */
   onFocusAddressBar(listener: () => void): () => void;
+
+  /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+0) to focus and select `ZoomControl`'s percent field. */
+  onFocusZoom(listener: () => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+D) to toggle the light/dark theme — see `useTheme`. */
   onToggleTheme(listener: () => void): () => void;

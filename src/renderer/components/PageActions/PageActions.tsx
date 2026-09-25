@@ -6,6 +6,7 @@
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
+import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
   /** Whether the active tab's URL is already bookmarked. */
@@ -14,6 +15,8 @@ interface PageActionsProps {
   readonly canActOnPage: boolean;
   /** Whether there's an active tab to zoom — unlike `canActOnPage`, true for a terminal tab too (zoom isn't browser-only). */
   readonly canZoom: boolean;
+  /** The active tab's current zoom, 25–200. */
+  readonly zoomPercent: number;
   readonly focusMode: boolean;
   readonly theme: Theme;
   readonly onToggleBookmark: () => void;
@@ -22,6 +25,7 @@ interface PageActionsProps {
   readonly onOpenTabSearch: () => void;
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
+  readonly onSetZoom: (percent: number) => void;
   readonly onToggleFocusMode: () => void;
   readonly onToggleTheme: () => void;
 }
@@ -31,6 +35,7 @@ export function PageActions({
   isBookmarked,
   canActOnPage,
   canZoom,
+  zoomPercent,
   focusMode,
   theme,
   onToggleBookmark,
@@ -39,6 +44,7 @@ export function PageActions({
   onOpenTabSearch,
   onZoomOut,
   onZoomIn,
+  onSetZoom,
   onToggleFocusMode,
   onToggleTheme,
 }: PageActionsProps) {
@@ -83,26 +89,7 @@ export function PageActions({
       >
         ⌕
       </button>
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onZoomOut}
-        disabled={!canZoom}
-        aria-label="Zoom out"
-        data-tooltip={`Zoom out (${formatShortcut('-')})`}
-      >
-        −
-      </button>
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onZoomIn}
-        disabled={!canZoom}
-        aria-label="Zoom in"
-        data-tooltip={`Zoom in (${formatShortcut('=')})`}
-      >
-        +
-      </button>
+      <ZoomControl percent={zoomPercent} canZoom={canZoom} onZoomOut={onZoomOut} onZoomIn={onZoomIn} onSetZoom={onSetZoom} />
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

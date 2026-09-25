@@ -43,7 +43,7 @@ export class SharedTabRegistry {
    */
   public readonly mountOwners = new Map<string, TabManager>();
   /**
-   * Each tab's own zoom level (Chromium's logarithmic units, `0` = 100%),
+   * Each tab's own zoom, as a whole percent (25–200, 100 = native size),
    * keyed by tab id. A property of the tab itself — like `states` — not of
    * whichever window happens to be showing it, so it lives here rather
    * than per-`TabManager`. Absent means never zoomed (100%). See
@@ -54,7 +54,7 @@ export class SharedTabRegistry {
    * doesn't persist across a browser tab's own navigations on its own the
    * way the per-origin `contents.zoomLevel` used to.
    */
-  public readonly zoomLevelByTabId = new Map<string, number>();
+  public readonly zoomPercentByTabId = new Map<string, number>();
 
   private readonly windows = new Set<BrowserWindow>();
   private readonly listeners = new Set<() => void>();

@@ -75,8 +75,10 @@ export function App() {
     enterSplitView,
     exitSplitView,
     setFocusMode,
+    zoomPercent,
     zoomIn,
     zoomOut,
+    setZoom,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
@@ -232,6 +234,7 @@ export function App() {
               isBookmarked={activeBookmark !== null}
               canActOnPage={browserTab !== null}
               canZoom={activeTabId !== null}
+              zoomPercent={zoomPercent}
               focusMode={focusMode}
               theme={theme}
               onToggleBookmark={handleToggleBookmark}
@@ -240,6 +243,7 @@ export function App() {
               onOpenTabSearch={() => setTabSearchOpen(true)}
               onZoomOut={zoomOut}
               onZoomIn={zoomIn}
+              onSetZoom={setZoom}
               onToggleFocusMode={() => setFocusMode(!focusMode)}
               onToggleTheme={toggleTheme}
             />

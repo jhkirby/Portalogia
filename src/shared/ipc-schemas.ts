@@ -92,6 +92,15 @@ export const focusModeRequestSchema = z.object({
 });
 export type FocusModeRequest = z.infer<typeof focusModeRequestSchema>;
 
+// Deliberately not `.min(25).max(200)` here — `TabManager.setZoom` clamps
+// to that range itself, the same as `zoomIn`/`zoomOut` clamp their own
+// step, so an out-of-range value here isn't a malformed request, just one
+// that lands on a clamped result instead of a rejection.
+export const zoomSetRequestSchema = z.object({
+  percent: z.number(),
+});
+export type ZoomSetRequest = z.infer<typeof zoomSetRequestSchema>;
+
 export const terminalInputRequestSchema = z.object({
   id: z.string().min(1),
   data: z.string(),
