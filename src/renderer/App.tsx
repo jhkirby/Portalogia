@@ -200,7 +200,10 @@ export function App() {
           </div>
           <div className="toolbar">
             {activeTab?.kind === 'terminal' ? (
-              <span className="toolbar__terminal-label">{activeTab.title}</span>
+              // Empty on purpose — occupies the same flex space
+              // NavControls + AddressBar would, so PageActions stays
+              // right-aligned, without showing the tab's title text.
+              <span className="toolbar__terminal-label" />
             ) : (
               <>
                 <NavControls
