@@ -62,6 +62,19 @@ const SPACE_HOLD_GRACE_MS = 600;
 const GRAB_MAX_DURATION_MS = 15_000;
 
 /**
+ * How much `zoomIn`/`zoomOut` moves a tab's `webContents.zoomLevel` per
+ * press — Chromium's zoom is logarithmic (`zoomFactor = 1.2 ** zoomLevel`),
+ * and half a level lands close to each of Chrome's own preset zoom stops.
+ */
+const ZOOM_STEP = 0.5;
+
+/** Zoom-level floor `adjustZoom` clamps to — roughly Chrome's own 25% zoom floor (`1.2 ** -8 ≈ 0.23`). */
+const ZOOM_LEVEL_MIN = -8;
+
+/** Zoom-level ceiling `adjustZoom` clamps to — roughly Chrome's own 500% zoom ceiling (`1.2 ** 9 ≈ 5.16`). */
+const ZOOM_LEVEL_MAX = 9;
+
+/**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
  * groups tabs into workspaces, and positions the on-screen view(s) beneath
  * the chrome (one full-width view normally, or two side by side in split
@@ -288,6 +301,12 @@ export class TabManager {
     const id = randomUUID();
     const view = new WebContentsView({
       webPreferences: {
+        // Exposes nothing to the page itself (no `contextBridge` call in
+        // it at all) — its only job is applying a main-process-pushed
+        // zoom level to this specific view. See `applyZoom`'s own comment
+        // for why that has to go through a preload rather than
+        // `contents.zoomLevel` set directly from here.
+        preload: join(__dirname, '../preload/tabZoom.cjs'),
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
@@ -618,6 +637,7 @@ export class TabManager {
       return owner.closeTab(id, options);
     }
     this.registry.mountOwners.delete(id);
+    this.registry.zoomLevelByTabId.delete(id);
 
     if (this.grabbedTabId === id) {
       this.grabbedTabId = null;
@@ -1113,6 +1133,7 @@ export class TabManager {
       }
       this.views.delete(tabId);
       this.states.delete(tabId);
+      this.registry.zoomLevelByTabId.delete(tabId);
       if (this.grabbedTabId === tabId) {
         this.grabbedTabId = null;
       }
@@ -1320,6 +1341,96 @@ export class TabManager {
   /** Toggles Focus Mode to whichever state it isn't currently in. */
   public toggleFocusMode(): BrowserState {
     return this.setFocusMode(!this.focusMode);
+  }
+
+  // ── Zoom ─────────────────────────────────────────────────────────────
+
+  /**
+   * Zooms in on the active tab's own content — its `WebContentsView` only,
+   * never `this.window.webContents` (the chrome's sidebar, tab strip, and
+   * toolbar), which is what Electron's built-in `zoomIn` menu role would
+   * otherwise zoom instead. Works identically for a terminal tab, since
+   * it's just as much its own `WebContentsView` as a browser tab's page.
+   * @returns The full browser state after the change (zoom itself isn't
+   *   part of it — nothing in `BrowserState` reads it — but every action
+   *   here returns it for consistency with the rest of this class).
+   */
+  public zoomIn(): BrowserState {
+    this.adjustZoom(ZOOM_STEP);
+    return this.getState();
+  }
+
+  /** Zooms out on the active tab's own content. See `zoomIn`. */
+  public zoomOut(): BrowserState {
+    this.adjustZoom(-ZOOM_STEP);
+    return this.getState();
+  }
+
+  /** Resets the active tab's own content back to its native 100% zoom. */
+  public resetZoom(): BrowserState {
+    if (this.activeTabId) {
+      this.setZoomLevel(this.activeTabId, 0);
+    }
+    return this.getState();
+  }
+
+  /**
+   * Chromium's zoom is logarithmic (`zoomFactor = 1.2 ** zoomLevel`, `0` =
+   * 100%), unlike the linear percentages a person actually reads — `±0.5`
+   * per step lands close to each of Chrome's own preset zoom stops (67%,
+   * 80%, 90%, 100%, 110%, 125%, …) without having to hand-map to them.
+   * Clamped to roughly Chrome's own 25%–500% range so repeated presses
+   * can't zoom content into illegibility (or invisibility) in either
+   * direction.
+   * @param delta `±ZOOM_STEP`.
+   */
+  private adjustZoom(delta: number): void {
+    if (!this.activeTabId) {
+      return;
+    }
+    const current = this.registry.zoomLevelByTabId.get(this.activeTabId) ?? 0;
+    const next = Math.min(ZOOM_LEVEL_MAX, Math.max(ZOOM_LEVEL_MIN, current + delta));
+    this.setZoomLevel(this.activeTabId, next);
+  }
+
+  /**
+   * Records `id`'s zoom level and pushes it straight to that tab's own
+   * view — via its preload's `zoom:apply` listener (`webFrame.setZoomLevel`),
+   * not `view.webContents.zoomLevel` set directly from here. That setter
+   * applies **per origin**, shared by every `webContents` currently
+   * showing (or later loading) the same origin — which, since a terminal
+   * tab's `terminal.html` and the chrome's own page are typically served
+   * from the very same origin (the dev server in development; a `file:`/
+   * custom-protocol origin in a packaged build too, depending on how the
+   * chrome and a tab happen to be loaded), meant zooming a terminal tab
+   * also silently zoomed the sidebar and toolbar right along with it.
+   * `webFrame.setZoomLevel`, called from inside that specific renderer
+   * instead, is scoped to that one frame only — nothing else on the same
+   * origin is affected.
+   * @param id The tab to zoom.
+   * @param level The new zoom level (already clamped by the caller).
+   */
+  private setZoomLevel(id: string, level: number): void {
+    this.registry.zoomLevelByTabId.set(id, level);
+    this.applyZoom(id);
+  }
+
+  /**
+   * Re-sends `id`'s current stored zoom level to its own view — called
+   * once after `setZoomLevel` changes it, and again after every fresh
+   * navigation (`wireEvents`'s `did-finish-load`), since `webFrame.setZoomLevel`
+   * is scoped to one document instance: a new page loaded into the same
+   * tab starts back at 0 unless this reapplies whatever the tab's own
+   * zoom actually is. A no-op if the tab was never zoomed (nothing stored)
+   * or no longer exists.
+   * @param id The tab whose stored zoom level to (re)apply.
+   */
+  private applyZoom(id: string): void {
+    const level = this.registry.zoomLevelByTabId.get(id);
+    if (level === undefined) {
+      return;
+    }
+    this.views.get(id)?.webContents.send(IpcChannel.ZoomApply, level);
   }
 
   // ── Sidebar ──────────────────────────────────────────────────────────
@@ -1864,6 +1975,11 @@ export class TabManager {
     wc.on('did-stop-loading', () => this.patchState(id, { isLoading: false, ...historyFlags() }));
     wc.on('did-navigate', (_event, url) => this.patchState(id, { url, ...historyFlags() }));
     wc.on('did-navigate-in-page', (_event, url) => this.patchState(id, { url }));
+    // A fresh navigation is a fresh document, which resets `webFrame`'s own
+    // frame-local zoom back to 0 — reapply whatever this tab's own zoom
+    // actually is (a no-op if it was never zoomed) so it survives clicking
+    // a link or typing a new address, not just page reloads.
+    wc.on('did-finish-load', () => this.applyZoom(id));
 
     wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       // -3 is ERR_ABORTED, which fires on ordinary cancelled/redirected
@@ -1930,8 +2046,10 @@ export class TabManager {
    * relying on), so stealing them here wouldn't no-op, it would silently
    * eat shell input. While a terminal tab actually holds OS keyboard
    * focus, every one of these chrome shortcuts is left alone and passed
-   * straight through untouched; the sole exception is Ctrl+` (see below),
-   * the escape hatch back to the chrome's own shortcuts.
+   * straight through untouched; the only exceptions are Ctrl+` (the
+   * escape hatch back to the chrome) and zoom in/out/reset (no shell binds
+   * those either, and — unlike every other shortcut here — zoom is
+   * something a terminal tab needs just as much as a browser one).
    * @param id The tab this view belongs to.
    * @param wc The view's own webContents.
    */
@@ -1956,21 +2074,39 @@ export class TabManager {
       const owner = owningManager();
 
       if (this.states.get(id)?.kind === 'terminal') {
-        // Ctrl+` (no shell or readline binding uses backtick) is the one
-        // shortcut still handled here — it hands OS keyboard focus back to
-        // the chrome, so every other shortcut works normally again. See
-        // this method's own doc comment for why nothing else in this
-        // switch runs while a terminal tab actually has the keyboard.
-        if (
-          input.type === 'keyDown' &&
-          !input.isAutoRepeat &&
-          (input.control || input.meta) &&
-          !input.alt &&
-          !input.shift &&
-          input.key.toLowerCase() === '`'
-        ) {
+        if (input.type !== 'keyDown' || input.isAutoRepeat) {
+          return;
+        }
+        const cmdOrCtrl = input.control || input.meta;
+        if (!cmdOrCtrl || input.alt) {
+          return;
+        }
+        // Ctrl+` (no shell or readline binding uses backtick) hands OS
+        // keyboard focus back to the chrome, so every other shortcut works
+        // normally again. See this method's own doc comment for why
+        // nothing else here runs while a terminal tab has the keyboard.
+        if (!input.shift && input.key.toLowerCase() === '`') {
           event.preventDefault();
           owner.focusChrome();
+          return;
+        }
+        // Zoom, unlike every other chrome shortcut, isn't suppressed here
+        // — a terminal tab's text needs to be resizable exactly as much as
+        // a page's does, and no shell binds these either. Matched on
+        // `input.code` (the physical key, e.g. "Equal") rather than
+        // `input.key` (the character it produces): that keeps Shift out of
+        // it entirely — no separate "Shift produces '+' on this layout"
+        // case needed — and numpad +/-/0 report their own distinct codes
+        // that still mean the same thing here.
+        if (input.code === 'Equal' || input.code === 'NumpadAdd') {
+          event.preventDefault();
+          owner.zoomIn();
+        } else if (input.code === 'Minus' || input.code === 'NumpadSubtract') {
+          event.preventDefault();
+          owner.zoomOut();
+        } else if (input.code === 'Digit0' || input.code === 'Numpad0') {
+          event.preventDefault();
+          owner.resetZoom();
         }
         return;
       }
@@ -2027,6 +2163,28 @@ export class TabManager {
       }
 
       if (!cmdOrCtrl || input.alt) {
+        return;
+      }
+
+      // Zoom, checked by physical key (`input.code`) rather than the
+      // character it produces (`key`, used by every case below) — that
+      // way it fires the same whether or not Shift is held (some layouts
+      // need it to actually produce '+'), and ahead of the Shift/non-Shift
+      // switches below so neither needs its own copy of this check. Same
+      // reasoning as the terminal branch's own version above.
+      if (input.code === 'Equal' || input.code === 'NumpadAdd') {
+        event.preventDefault();
+        owner.zoomIn();
+        return;
+      }
+      if (input.code === 'Minus' || input.code === 'NumpadSubtract') {
+        event.preventDefault();
+        owner.zoomOut();
+        return;
+      }
+      if (input.code === 'Digit0' || input.code === 'Numpad0') {
+        event.preventDefault();
+        owner.resetZoom();
         return;
       }
 

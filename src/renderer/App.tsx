@@ -75,6 +75,8 @@ export function App() {
     enterSplitView,
     exitSplitView,
     setFocusMode,
+    zoomIn,
+    zoomOut,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
@@ -229,12 +231,15 @@ export function App() {
             <PageActions
               isBookmarked={activeBookmark !== null}
               canActOnPage={browserTab !== null}
+              canZoom={activeTabId !== null}
               focusMode={focusMode}
               theme={theme}
               onToggleBookmark={handleToggleBookmark}
               onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
               onNewTerminal={createTerminalTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}
+              onZoomOut={zoomOut}
+              onZoomIn={zoomIn}
               onToggleFocusMode={() => setFocusMode(!focusMode)}
               onToggleTheme={toggleTheme}
             />

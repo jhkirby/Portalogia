@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-24
 
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import type { NorthstarTerminalApi } from '@shared/ipc-contract';
 
 // Deliberately NOT importing the `IpcChannel` runtime object from
@@ -22,6 +22,15 @@ const TerminalInput = 'terminal:input';
 const TerminalResize = 'terminal:resize';
 const TerminalData = 'terminal:data';
 const TerminalExited = 'terminal:exited';
+const ZoomApply = 'zoom:apply';
+
+// `webFrame.setZoomLevel`, not `contextBridge` — see
+// `src/preload/tabZoom.ts` (the same listener, for a browser tab's own
+// view) for why this has to be frame-local rather than the main-process
+// `contents.zoomLevel` it used to be pushed through.
+ipcRenderer.on(ZoomApply, (_event, level: number) => {
+  webFrame.setZoomLevel(level);
+});
 
 const api: NorthstarTerminalApi = {
   sendTerminalInput: (id, data) => ipcRenderer.send(TerminalInput, { id, data }),

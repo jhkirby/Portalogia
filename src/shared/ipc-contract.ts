@@ -44,6 +44,15 @@ export const IpcChannel = {
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
+  ZoomIn: 'zoom:in',
+  ZoomOut: 'zoom:out',
+  ZoomReset: 'zoom:reset',
+  // Pushed from main straight to a tab's own `WebContentsView` (its
+  // `tabZoom`/`terminal` preload, not the chrome) — not part of
+  // `NorthstarApi` since the chrome renderer never sends or receives it.
+  // See `TabManager.applyZoom` for why this exists instead of just setting
+  // `contents.zoomLevel` from main.
+  ZoomApply: 'zoom:apply',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiFocusAddressBar: 'ui:focus-address-bar',
   UiToggleTheme: 'ui:toggle-theme',
@@ -203,6 +212,16 @@ export interface NorthstarApi {
   exitSplitView(): Promise<IpcResult<BrowserState>>;
 
   setFocusMode(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Zooms in/out/back-to-100% on the active tab's own content only — never
+   * the chrome (sidebar, tab strip, toolbar), which always stays at native
+   * size. Works for a terminal tab exactly like a browser one, since both
+   * are just a `WebContentsView` main can zoom independently.
+   */
+  zoomIn(): Promise<IpcResult<BrowserState>>;
+  zoomOut(): Promise<IpcResult<BrowserState>>;
+  resetZoom(): Promise<IpcResult<BrowserState>>;
 
   /** Subscribes to the menu/accelerator-driven request to open the tab search overlay. */
   onOpenTabSearch(listener: () => void): () => void;

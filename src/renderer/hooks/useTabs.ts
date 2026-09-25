@@ -163,6 +163,13 @@ export function useTabs() {
     void window.northstar.setFocusMode(enabled).then(logIfFailed);
   }, []);
 
+  const zoomIn = useCallback(() => {
+    void window.northstar.zoomIn().then(logIfFailed);
+  }, []);
+  const zoomOut = useCallback(() => {
+    void window.northstar.zoomOut().then(logIfFailed);
+  }, []);
+
   return {
     tabs: state.tabs,
     activeTab,
@@ -206,5 +213,7 @@ export function useTabs() {
     exitSplitView,
 
     setFocusMode,
+    zoomIn,
+    zoomOut,
   };
 }

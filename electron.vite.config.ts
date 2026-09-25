@@ -27,16 +27,18 @@ export default defineConfig({
     resolve: { alias: sharedAlias },
     build: {
       rollupOptions: {
-        // `terminal` and `suggestions` are narrower preloads for a
-        // terminal tab's and the address bar's suggestions overlay's own
-        // `WebContentsView`s (see `src/preload/terminal.ts` and
-        // `src/preload/suggestions.ts`) — separate bundles so neither
-        // sandboxed renderer ever has the full chrome-facing `NorthstarApi`
-        // in its preload, only the handful of channels each one needs.
+        // `terminal`, `suggestions`, and `tabZoom` are narrower preloads for
+        // a terminal tab's, the address bar's suggestions overlay's, and a
+        // browser tab's own `WebContentsView`s (see `src/preload/terminal.ts`,
+        // `src/preload/suggestions.ts`, and `src/preload/tabZoom.ts`) —
+        // separate bundles so neither sandboxed renderer ever has the full
+        // chrome-facing `NorthstarApi` in its preload, only the handful of
+        // channels each one needs.
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
           terminal: resolve(__dirname, 'src/preload/terminal.ts'),
           suggestions: resolve(__dirname, 'src/preload/suggestions.ts'),
+          tabZoom: resolve(__dirname, 'src/preload/tabZoom.ts'),
         },
         // Sandboxed preload scripts are loaded through a synchronous
         // CommonJS loader and can't use `import` — with the package set to

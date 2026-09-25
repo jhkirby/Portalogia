@@ -159,6 +159,28 @@ export function registerTabIpc(
     resolveTabManager(event).setFocusMode(request.enabled),
   );
 
+  ipcMain.handle(IpcChannel.ZoomIn, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).zoomIn() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+  ipcMain.handle(IpcChannel.ZoomOut, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).zoomOut() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+  ipcMain.handle(IpcChannel.ZoomReset, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).resetZoom() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   ipcMain.handle(IpcChannel.TabsGetState, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).getState() };

@@ -240,9 +240,39 @@ export function buildMenu(
           click: () => getTabManager()?.cycleWorkspace(-1),
         },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        {
+          // Deliberately not `role: 'resetZoom'`/`'zoomIn'`/`'zoomOut'` —
+          // those built-in roles zoom `browserWindow.webContents`, the
+          // chrome's own top-level page (sidebar, tab strip, toolbar and
+          // all), not the active tab's content. `TabManager.zoomIn` etc.
+          // zoom that tab's own `WebContentsView` instead, leaving the
+          // chrome at native size.
+          label: 'Actual Size',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => getTabManager()?.resetZoom(),
+        },
+        {
+          label: 'Zoom In',
+          // Plain '=' rather than 'Plus' — 'Plus' matches only the
+          // Shift-held report of the key on most layouts, which is why
+          // this used to require Ctrl+Shift+= instead of just Ctrl+=.
+          accelerator: 'CmdOrCtrl+=',
+          click: () => getTabManager()?.zoomIn(),
+        },
+        {
+          // Same action under the accelerator some keyboard layouts need
+          // Shift to actually produce '+' on — hidden so the menu doesn't
+          // show two entries for one action.
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+Shift+=',
+          visible: false,
+          click: () => getTabManager()?.zoomIn(),
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => getTabManager()?.zoomOut(),
+        },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],

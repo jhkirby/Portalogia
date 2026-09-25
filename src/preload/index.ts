@@ -65,6 +65,10 @@ const api: NorthstarApi = {
 
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
 
+  zoomIn: () => invoke(IpcChannel.ZoomIn),
+  zoomOut: () => invoke(IpcChannel.ZoomOut),
+  resetZoom: () => invoke(IpcChannel.ZoomReset),
+
   onOpenTabSearch: (listener) => {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.UiOpenTabSearch, handler);
