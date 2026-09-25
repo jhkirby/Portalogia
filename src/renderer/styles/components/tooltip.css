@@ -29,6 +29,14 @@
   z-index: 10;
   margin-bottom: 6px;
   padding: 4px 8px;
+  /* A `max-width` consumer (again, the sidebar's collapsed-state
+     tooltips) means that width to actually be the on-screen box, padding
+     included — without this, `max-width` only caps the content area and
+     this rule's own 8px+8px of horizontal padding gets added back on top
+     of it, which was quietly pushing the box a few pixels past the
+     chrome-owned area those `max-width`s were computed to fit exactly
+     inside, right back off the window edge. */
+  box-sizing: border-box;
 
   background: var(--color-tooltip-bg);
   border-radius: var(--size-radius-sm);
@@ -37,6 +45,16 @@
   font-weight: 400;
   color: var(--color-tooltip-text);
   white-space: nowrap;
+  /* A consumer that overrides `white-space: normal` with a tight
+     `max-width` (the sidebar's own collapsed-state tooltips, currently
+     the only ones narrow enough for this to matter) needs this too —
+     without it, a single word wider than that `max-width` (e.g.
+     "workspace") doesn't wrap at all, it just overflows past the box
+     un-broken, which defeats the whole point of capping the width to stay
+     inside the chrome-owned area in the first place. Harmless everywhere
+     else: it only changes anything when a word genuinely wouldn't
+     otherwise fit. */
+  overflow-wrap: break-word;
 
   opacity: 0;
   pointer-events: none;

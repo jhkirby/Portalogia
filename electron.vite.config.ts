@@ -27,10 +27,12 @@ export default defineConfig({
     resolve: { alias: sharedAlias },
     build: {
       rollupOptions: {
-        // `terminal`, `suggestions`, and `tabZoom` are narrower preloads for
-        // a terminal tab's, the address bar's suggestions overlay's, and a
-        // browser tab's own `WebContentsView`s (see `src/preload/terminal.ts`,
-        // `src/preload/suggestions.ts`, and `src/preload/tabZoom.ts`) —
+        // `terminal`, `suggestions`, `tooltip`, and `tabZoom` are narrower
+        // preloads for a terminal tab's, the address bar's suggestions
+        // overlay's, the collapsed sidebar's tooltip overlay's, and a
+        // browser tab's own `WebContentsView`s (see
+        // `src/preload/terminal.ts`, `src/preload/suggestions.ts`,
+        // `src/preload/tooltip.ts`, and `src/preload/tabZoom.ts`) —
         // separate bundles so neither sandboxed renderer ever has the full
         // chrome-facing `NorthstarApi` in its preload, only the handful of
         // channels each one needs.
@@ -38,6 +40,7 @@ export default defineConfig({
           index: resolve(__dirname, 'src/preload/index.ts'),
           terminal: resolve(__dirname, 'src/preload/terminal.ts'),
           suggestions: resolve(__dirname, 'src/preload/suggestions.ts'),
+          tooltip: resolve(__dirname, 'src/preload/tooltip.ts'),
           tabZoom: resolve(__dirname, 'src/preload/tabZoom.ts'),
         },
         // Sandboxed preload scripts are loaded through a synchronous
@@ -54,14 +57,16 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        // `terminal` and `suggestions` are additional pages for a terminal
-        // tab's and the address bar's suggestions overlay's own
-        // `WebContentsView`s to load — see `TabManager.createTerminalTab`
-        // and `SuggestionsOverlay`.
+        // `terminal`, `suggestions`, and `tooltip` are additional pages for
+        // a terminal tab's, the address bar's suggestions overlay's, and
+        // the collapsed sidebar's tooltip overlay's own `WebContentsView`s
+        // to load — see `TabManager.createTerminalTab`, `SuggestionsOverlay`,
+        // and `TooltipOverlay`.
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
           terminal: resolve(__dirname, 'src/renderer/terminal.html'),
           suggestions: resolve(__dirname, 'src/renderer/suggestions.html'),
+          tooltip: resolve(__dirname, 'src/renderer/tooltip.html'),
         },
       },
     },

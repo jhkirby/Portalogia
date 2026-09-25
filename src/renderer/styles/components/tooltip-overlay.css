@@ -1,0 +1,57 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-25 */
+
+/* ── TOOLTIP OVERLAY ──────────────────────────────────────────────────── */
+/* A collapsed-sidebar tooltip's whole page (`tooltip.html`) — a dedicated
+   `WebContentsView` the main process sizes to exactly this text's own
+   measured box and stacks above the active tab's view (see
+   `TooltipOverlay`), rather than the plain CSS `::after` tooltip
+   (tooltip.css) every other `.chrome-tooltip` consumer uses. Its bounds are
+   always exactly `computeTooltipOverlayRect`'s own output, so there's
+   nothing to lay out here beyond the text itself — no positioning, no
+   wrapping, no max-width. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* This page's own document never inherits `app.css`'s `html, body`
+     font-family — same relationship `suggestions-overlay.css` has with it,
+     and must stay in sync with `measureTooltipTextWidth`'s own font string
+     for the same reason `TOOLTIP_OVERLAY_FONT_PX`'s doc comment gives. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+.tooltip-overlay {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  /* Must equal TOOLTIP_OVERLAY_PADDING_Y_PX/TOOLTIP_OVERLAY_PADDING_X_PX in
+     src/shared/constants.ts — the chrome measures this text's width against
+     those same numbers before ever mounting this view. */
+  padding: 4px 8px;
+
+  background: var(--color-tooltip-bg);
+
+  font-size: var(--size-font-sm);
+  font-weight: 400;
+  /* Must equal TOOLTIP_OVERLAY_LINE_HEIGHT_PX — fixed rather than left to
+     the font's natural leading, same reasoning as that constant's own doc
+     comment. */
+  line-height: 16px;
+  color: var(--color-tooltip-text);
+  white-space: nowrap;
+}

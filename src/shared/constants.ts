@@ -34,10 +34,31 @@ export const CHROME_HEIGHT_FOCUSED_PX = 0;
  * right by this much (and shrink its width to match) so it never sits
  * underneath the sidebar — must equal `--size-sidebar-width` in
  * `sizes.css`, the same relationship `CHROME_HEIGHT_PX` has with
- * `--size-chrome-height`. Hidden (width 0) in Focus Mode, alongside the
- * tab row.
+ * `--size-chrome-height`. Collapses to `SIDEBAR_COLLAPSED_WIDTH_PX` when
+ * toggled off (Ctrl+L), or fully to 0 in Focus Mode, alongside the tab row.
  */
 export const SIDEBAR_WIDTH_PX = 180;
+
+/**
+ * Width, in CSS pixels, the sidebar collapses to when toggled off (Ctrl+L)
+ * — not all the way to 0: kept as a narrow icon rail (workspace dots stay
+ * visible *and* clickable, and so does `WorkspaceBar`'s own
+ * `.sidebar__toggle` nub) instead of disappearing outright, which the main
+ * process makes room for by shifting the tab's own native content right by
+ * exactly this much (`TabManager.targetLeftInset`) whenever the sidebar is
+ * off but Focus Mode isn't on. That native content is a separate compositor
+ * surface layered above this chrome, immune to CSS z-index — which is why
+ * `.sidebar__toggle` and `.workspace-bar__new`'s own tooltips switch to
+ * `TooltipOverlay` (a second native view stacked *above* the tab's own,
+ * same idea as `SuggestionsOverlay`) instead of the plain CSS one the rest
+ * of the chrome uses, the moment the sidebar collapses to this width — see
+ * `useOverlayTooltip`. Must equal `--size-sidebar-collapsed-width` in
+ * `sizes.css`, the same relationship `SIDEBAR_WIDTH_PX` has with
+ * `--size-sidebar-width`. Focus Mode collapses all the way to 0 instead —
+ * full immersion, no lingering rail — which is why this is a separate
+ * constant from that 0 rather than the sidebar's only "off" state.
+ */
+export const SIDEBAR_COLLAPSED_WIDTH_PX = 32;
 
 /**
  * How long the sidebar's show/hide slide takes, in milliseconds, when
@@ -103,6 +124,49 @@ export const ADDRESS_SUGGESTIONS_PADDING_PX = 4;
 export const ZOOM_PERCENT_MIN = 25;
 export const ZOOM_PERCENT_MAX = 200;
 export const ZOOM_PERCENT_DEFAULT = 100;
+
+/**
+ * Font size, in CSS pixels, `TooltipOverlay`'s own page renders its text
+ * at — must equal `--size-font-sm` in `sizes.css`. The chrome measures a
+ * tooltip's text at this same size (`measureTooltipTextWidth`) *before*
+ * ever mounting the overlay's view, so the two have to stay in lockstep or
+ * the measured width silently stops matching what actually gets rendered.
+ */
+export const TOOLTIP_OVERLAY_FONT_PX = 12;
+
+/**
+ * Horizontal padding, in CSS pixels, inside `TooltipOverlay`'s own box on
+ * each side — must equal `--size-spacing-sm` in `sizes.css` and
+ * `tooltip-overlay.css`'s own `padding`. See `TOOLTIP_OVERLAY_FONT_PX` for
+ * why this has to be kept in sync rather than read from the CSS directly.
+ */
+export const TOOLTIP_OVERLAY_PADDING_X_PX = 8;
+
+/**
+ * Vertical padding, in CSS pixels, inside `TooltipOverlay`'s own box on
+ * each side — must equal `--size-spacing-xs` in `sizes.css` and
+ * `tooltip-overlay.css`'s own `padding`.
+ */
+export const TOOLTIP_OVERLAY_PADDING_Y_PX = 4;
+
+/**
+ * Line height, in CSS pixels, `TooltipOverlay`'s own page renders its
+ * (always single-line) text at — must equal `tooltip-overlay.css`'s own
+ * `line-height`. Fixed rather than left to the font's natural leading so
+ * the chrome can compute the overlay's exact height up front
+ * (`TOOLTIP_OVERLAY_PADDING_Y_PX * 2 + this`) the same way it computes the
+ * width, with nothing left for the overlay's own page to measure and
+ * report back.
+ */
+export const TOOLTIP_OVERLAY_LINE_HEIGHT_PX = 16;
+
+/**
+ * Gap, in CSS pixels, between `TooltipOverlay`'s own box and the element
+ * it's anchored above — must equal tooltip.css's plain `::after` tooltip's
+ * own `margin-bottom`, the same visual relationship this overlay is
+ * standing in for.
+ */
+export const TOOLTIP_OVERLAY_GAP_PX = 6;
 
 /** Accent colors cycled through, in order, as new workspaces are created. */
 export const WORKSPACE_COLORS = [

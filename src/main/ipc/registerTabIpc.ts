@@ -22,6 +22,7 @@ import {
   tabIdRequestSchema,
   terminalInputRequestSchema,
   terminalResizeRequestSchema,
+  tooltipSyncRequestSchema,
   workspaceIdRequestSchema,
   zoomSetRequestSchema,
 } from '@shared/ipc-schemas';
@@ -156,6 +157,14 @@ export function registerTabIpc(
     }
   });
 
+  ipcMain.handle(IpcChannel.SidebarToggle, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).toggleSidebar() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   handle(IpcChannel.FocusModeSet, focusModeRequestSchema, (request, event) =>
     resolveTabManager(event).setFocusMode(request.enabled),
   );
@@ -245,6 +254,16 @@ export function registerTabIpc(
     const parsed = addressSuggestionsSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
       resolveTabManager(event).syncAddressSuggestions(parsed.data);
+    }
+  });
+
+  // Same fire-and-forget shape as `AddressSuggestionsSync` above — a
+  // collapsed-sidebar button pushes a fresh sync on every hover start/end
+  // (see `useOverlayTooltip`), with nothing meaningful to reply with.
+  ipcMain.on(IpcChannel.TooltipSync, (event: IpcMainEvent, rawRequest: unknown) => {
+    const parsed = tooltipSyncRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      resolveTabManager(event).syncTooltip(parsed.data);
     }
   });
 }

@@ -41,6 +41,7 @@ export const IpcChannel = {
   TabsEndTabPreview: 'tabs:end-tab-preview',
   AddressSuggestionsSync: 'address-suggestions:sync',
   AddressSuggestionsSelect: 'address-suggestions:select',
+  TooltipSync: 'tooltip:sync',
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
@@ -54,6 +55,7 @@ export const IpcChannel = {
   // See `TabManager.applyZoom` for why this exists instead of just setting
   // `contents.zoomLevel` from main.
   ZoomApply: 'zoom:apply',
+  SidebarToggle: 'sidebar:toggle',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiFocusAddressBar: 'ui:focus-address-bar',
   UiFocusZoom: 'ui:focus-zoom',
@@ -109,6 +111,24 @@ export interface AddressSuggestionsSyncPayload {
   readonly rect: { readonly top: number; readonly left: number; readonly width: number } | null;
   readonly suggestions: readonly AddressSuggestionItem[];
   readonly selectedIndex: number;
+}
+
+/**
+ * What a chrome element pushes to `TooltipOverlay` on hover (see
+ * `useOverlayTooltip`) — used only by the handful of collapsed-sidebar
+ * buttons whose plain CSS tooltip (tooltip.css) can't safely grow past
+ * `SIDEBAR_COLLAPSED_WIDTH_PX` without the active tab's native content
+ * painting over it. `rect` is `null` whenever `visible` is `false`, same
+ * relationship `AddressSuggestionsSyncPayload.rect` has with `open`.
+ * Already sized to fit `text` exactly (`computeTooltipOverlayRect`) —
+ * unlike `SuggestionsOverlay`, this overlay's own page never has to
+ * measure and report anything back, since there's no dynamic row count to
+ * account for, only a single line of text the chrome can measure itself.
+ */
+export interface TooltipSyncPayload {
+  readonly visible: boolean;
+  readonly text: string;
+  readonly rect: { readonly top: number; readonly left: number; readonly width: number; readonly height: number } | null;
 }
 
 /**
@@ -210,8 +230,19 @@ export interface NorthstarApi {
   /** Subscribes to a row being clicked in the suggestions overlay — the index is into whichever list this address bar most recently synced. */
   onAddressSuggestionSelected(listener: (index: number) => void): () => void;
 
+  /**
+   * Pushes a collapsed-sidebar tooltip's hover state to `TooltipOverlay` —
+   * see `TooltipSyncPayload` for why this exists alongside the plain CSS
+   * tooltip every other `.chrome-tooltip` consumer still uses. Fire-and-
+   * forget, same as `syncAddressSuggestions`.
+   */
+  syncTooltip(payload: TooltipSyncPayload): void;
+
   enterSplitView(secondaryId: string): Promise<IpcResult<BrowserState>>;
   exitSplitView(): Promise<IpcResult<BrowserState>>;
+
+  /** Shows or hides the workspace sidebar — `WorkspaceBar`'s own `.sidebar__toggle` button doing the same thing Ctrl+L already does. */
+  toggleSidebar(): Promise<IpcResult<BrowserState>>;
 
   setFocusMode(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
@@ -285,4 +316,18 @@ export interface NorthstarAddressSuggestionsApi {
   onSync(listener: (payload: AddressSuggestionsSyncPayload) => void): () => void;
   /** Reports a row click back to the chrome's address bar, by index into the list it last synced. Fire-and-forget, same as `sendTerminalInput`. */
   select(index: number): void;
+}
+
+/**
+ * The narrower API surface exposed to `TooltipOverlay`'s own
+ * `WebContentsView` (`src/preload/tooltip.ts`, `tooltip.html`) — like
+ * `NorthstarAddressSuggestionsApi`, this view renders nothing but the
+ * tooltip's own text, and unlike it, nothing ever needs to travel back the
+ * other way (no clicks land on a tooltip), so this is just the one
+ * channel. See `TooltipOverlay` for how this view is created and
+ * positioned.
+ */
+export interface NorthstarTooltipApi {
+  /** Subscribes to the chrome's latest `syncTooltip` push. */
+  onSync(listener: (payload: TooltipSyncPayload) => void): () => void;
 }

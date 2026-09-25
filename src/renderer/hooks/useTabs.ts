@@ -160,6 +160,10 @@ export function useTabs() {
     void window.northstar.exitSplitView().then(logIfFailed);
   }, []);
 
+  const toggleSidebar = useCallback(() => {
+    void window.northstar.toggleSidebar().then(logIfFailed);
+  }, []);
+
   const setFocusMode = useCallback((enabled: boolean) => {
     void window.northstar.setFocusMode(enabled).then(logIfFailed);
   }, []);
@@ -215,6 +219,8 @@ export function useTabs() {
 
     enterSplitView,
     exitSplitView,
+
+    toggleSidebar,
 
     setFocusMode,
     zoomPercent: state.zoomPercent,

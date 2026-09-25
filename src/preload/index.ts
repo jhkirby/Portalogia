@@ -59,9 +59,12 @@ const api: NorthstarApi = {
     ipcRenderer.on(IpcChannel.AddressSuggestionsSelect, handler);
     return () => ipcRenderer.removeListener(IpcChannel.AddressSuggestionsSelect, handler);
   },
+  syncTooltip: (payload) => ipcRenderer.send(IpcChannel.TooltipSync, payload),
 
   enterSplitView: (secondaryId) => invoke(IpcChannel.SplitEnter, { secondaryId }),
   exitSplitView: () => invoke(IpcChannel.SplitExit),
+
+  toggleSidebar: () => invoke(IpcChannel.SidebarToggle),
 
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
 

@@ -46,6 +46,10 @@
 
 .tab-search__results {
   overflow-y: auto;
+  /* See workspace-bar.css's identical rule on `.workspace-bar` for why
+     this is explicit rather than left to default to `visible` — a lone
+     `overflow-y` computes `overflow-x: auto` too. */
+  overflow-x: hidden;
   margin: 0;
   padding: var(--size-spacing-xs);
   list-style: none;

@@ -14,6 +14,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
   HOME_URL,
+  SIDEBAR_COLLAPSED_WIDTH_PX,
   SIDEBAR_TOGGLE_DURATION_MS,
   SIDEBAR_WIDTH_PX,
   WORKSPACE_COLORS,
@@ -22,13 +23,14 @@ import {
   ZOOM_PERCENT_MIN,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
-import { IpcChannel, type AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
+import { IpcChannel, type AddressSuggestionsSyncPayload, type TooltipSyncPayload } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
+import { TooltipOverlay } from './TooltipOverlay';
 import type { TerminalManager } from '../terminal/TerminalManager';
 
 interface Rect {
@@ -107,6 +109,7 @@ export class TabManager {
   private isAnimatingBounds = false;
   private readonly terminals: TerminalManager;
   private readonly suggestionsOverlay: SuggestionsOverlay;
+  private readonly tooltipOverlay: TooltipOverlay;
   /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
   private readonly unregisterFromRegistry: () => void;
 
@@ -172,6 +175,7 @@ export class TabManager {
       // and friends already push to.
       (index) => this.window.webContents.send(IpcChannel.AddressSuggestionsSelect, index),
     );
+    this.tooltipOverlay = new TooltipOverlay(this.window);
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
     // focus is on the chrome itself rather than a tab's own webContents
@@ -439,6 +443,11 @@ export class TabManager {
     this.suggestionsOverlay.sync(payload);
   }
 
+  /** Applies a collapsed-sidebar tooltip's latest hover sync — see `TooltipOverlay.sync`. */
+  public syncTooltip(payload: TooltipSyncPayload): void {
+    this.tooltipOverlay.sync(payload);
+  }
+
   /**
    * Releases this window's own resources — call this when the window
    * itself closes. Deliberately does *not* touch shared tabs/workspaces or
@@ -452,6 +461,7 @@ export class TabManager {
    */
   public dispose(): void {
     this.suggestionsOverlay.dispose();
+    this.tooltipOverlay.dispose();
     this.unregisterFromRegistry();
   }
 
@@ -1454,11 +1464,17 @@ export class TabManager {
    *   itself keeps running past this point; bounds settle asynchronously).
    */
   public toggleSidebar(): BrowserState {
-    const wasVisible = this.sidebarVisible;
-    this.sidebarVisible = !wasVisible;
+    // Captured before flipping the flag below, same reasoning as
+    // `setFocusMode`'s own `fromLeft` — whatever the sidebar is actually
+    // showing right now (which, mid-Focus-Mode, is 0 regardless of
+    // `sidebarVisible` — see `targetLeftInset`), not assumed from the old
+    // `sidebarVisible` value alone the way this used to (wrongly animating
+    // from `SIDEBAR_WIDTH_PX`/0 even while Focus Mode already had it at 0).
+    const fromLeft = this.targetLeftInset();
+    this.sidebarVisible = !this.sidebarVisible;
     this.emitState();
     const top = this.targetTopInset();
-    this.animateBoundsInset(wasVisible ? SIDEBAR_WIDTH_PX : 0, this.targetLeftInset(), top, top);
+    this.animateBoundsInset(fromLeft, this.targetLeftInset(), top, top);
     return this.getState();
   }
 
@@ -1863,13 +1879,20 @@ export class TabManager {
   }
 
   /**
-   * The sidebar's resting horizontal inset: 0 when there's no sidebar to
-   * clear (Focus Mode, or the sidebar toggled hidden via `toggleSidebar`),
-   * else `SIDEBAR_WIDTH_PX`. Mid-toggle, `applyBounds` is driven by the
-   * animation loop instead — this is only the value things settle back to.
+   * The sidebar's resting horizontal inset: `SIDEBAR_WIDTH_PX` while
+   * shown, 0 in Focus Mode (nothing left to clear — full immersion, no
+   * lingering nub), or `SIDEBAR_COLLAPSED_WIDTH_PX` when toggled off
+   * (`toggleSidebar`) but Focus Mode isn't on — just enough room for
+   * `WorkspaceBar`'s own `.sidebar__toggle` button to stay clear of the
+   * tab's native content instead of being covered by it. Mid-toggle,
+   * `applyBounds` is driven by the animation loop instead — this is only
+   * the value things settle back to.
    */
   private targetLeftInset(): number {
-    return this.focusMode || !this.sidebarVisible ? 0 : SIDEBAR_WIDTH_PX;
+    if (this.focusMode) {
+      return 0;
+    }
+    return this.sidebarVisible ? SIDEBAR_WIDTH_PX : SIDEBAR_COLLAPSED_WIDTH_PX;
   }
 
   /**

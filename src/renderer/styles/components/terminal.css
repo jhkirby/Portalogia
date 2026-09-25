@@ -22,6 +22,16 @@ html,
 body {
   height: 100%;
   margin: 0;
+  /* This page is a fixed single-terminal layout, never meant to be a
+     scrollable document itself — same reasoning as the chrome's own
+     `html, body` rule in app.css. Without this, a sub-pixel mismatch
+     between xterm's own column-fit math (`FitAddon.fit()` in Terminal.tsx)
+     and this container's actual width — routine, not a bug in either one
+     — was enough to leave a permanent horizontal scrollbar across the
+     bottom of every terminal tab. xterm's own scrollback still scrolls
+     fine; that's a separate, deliberately-scrollable element
+     (`.xterm-viewport`) nested inside this one, untouched by this rule. */
+  overflow: hidden;
 }
 
 #root {

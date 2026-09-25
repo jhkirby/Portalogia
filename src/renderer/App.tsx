@@ -74,6 +74,7 @@ export function App() {
     endTabPreview,
     enterSplitView,
     exitSplitView,
+    toggleSidebar,
     setFocusMode,
     zoomPercent,
     zoomIn,
@@ -274,12 +275,14 @@ export function App() {
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
           sidebarVisible={sidebarVisible && !focusMode}
+          focusMode={focusMode}
           onSwitch={switchWorkspace}
           onCreate={() => createWorkspace()}
           onRename={renameWorkspace}
           onRemove={removeWorkspace}
           onDropTab={moveTabToWorkspace}
           onDropTabToNewWorkspace={createWorkspaceWithTab}
+          onToggleSidebar={toggleSidebar}
         />
         {/* Every tab, browser or terminal, renders below via the main
             process's own native WebContentsViews, positioned directly

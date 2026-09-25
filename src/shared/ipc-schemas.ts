@@ -136,6 +136,20 @@ export type AddressSuggestionsSyncRequest = z.infer<typeof addressSuggestionsSyn
 
 export const addressSuggestionSelectRequestSchema = z.number().int().nonnegative();
 
+export const tooltipSyncRequestSchema = z.object({
+  visible: z.boolean(),
+  text: z.string(),
+  rect: z
+    .object({
+      top: z.number(),
+      left: z.number(),
+      width: z.number(),
+      height: z.number(),
+    })
+    .nullable(),
+});
+export type TooltipSyncRequest = z.infer<typeof tooltipSyncRequestSchema>;
+
 export const themeSetRequestSchema = z.object({
   theme: z.enum(['light', 'dark']),
 });

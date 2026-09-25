@@ -79,9 +79,22 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
     setDraft(String(clamped));
   };
 
+  // `select()` (on focus, below) leaves the typed digits highlighted —
+  // Chromium keeps rendering that highlight even once the field is no
+  // longer focused, unless something explicitly collapses it back to a
+  // plain caret position first. `commit` alone doesn't do that (setting
+  // `draft` only changes what text is *shown*, not the input's own
+  // selection range), so every path out of the field goes through this
+  // instead of calling `commit` directly.
+  const handleBlur = (): void => {
+    commit();
+    inputRef.current?.setSelectionRange(0, 0);
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'Enter') {
-      commit();
+      // `blur()` fires `handleBlur`, which commits — not called directly
+      // here too, which would just mean doing it twice.
       inputRef.current?.blur();
     } else if (event.key === 'Escape') {
       setDraft(String(percent));
@@ -125,7 +138,7 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
           disabled={!canZoom}
           onChange={handleChange}
           onFocus={(event) => event.currentTarget.select()}
-          onBlur={commit}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           aria-label="Zoom percent"
         />

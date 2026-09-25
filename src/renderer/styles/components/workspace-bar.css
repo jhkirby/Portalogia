@@ -17,13 +17,21 @@
    plain CSS flow instead). */
 
 .sidebar {
+  /* Anchors `.sidebar__toggle`, an absolutely-positioned child pinned to
+     this element's own right edge (`right: 0` on it) — which, since
+     that's exactly what animates via `width` below, is what makes the
+     button track the sidebar's collapsing/expanding border for free,
+     no separate transition of its own needed. */
+  position: relative;
   display: flex;
   flex-direction: column;
   width: var(--size-sidebar-width);
   min-height: 0;
-  padding: var(--size-spacing-sm);
   box-sizing: border-box;
-  overflow: hidden;
+  /* Was `hidden` on this element directly — moved down to `.sidebar__inner`
+     (see its own comment) so `.sidebar__toggle` isn't clipped away along
+     with everything else as this collapses toward 0. */
+  overflow: visible;
 
   background: var(--color-chrome-bg);
   border-right: 1px solid var(--color-chrome-border);
@@ -34,16 +42,117 @@
      ease-out-cubic curve so the two move in step. */
   transition:
     width var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
-    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
-    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
     border-color var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
+/* An ordinary Ctrl+L toggle, not Focus Mode — collapses to just enough
+   room for `.sidebar__toggle` to stay visible and clickable (see
+   TabManager.targetLeftInset, which shifts the tab's own native content
+   to clear exactly this much). `.sidebar--focus-mode` below overrides
+   this to a true 0 when Focus Mode is what's actually collapsing it. */
 .sidebar--hidden {
+  width: var(--size-sidebar-collapsed-width);
+  border-right-color: transparent;
+}
+
+.sidebar--hidden.sidebar--focus-mode {
   width: 0;
+}
+
+/* Everything that actually needs to disappear as the sidebar collapses —
+   the workspace list and "New workspace" button, but not `.sidebar__toggle`
+   (a sibling, outside this element entirely; see `WorkspaceBar`'s own
+   comment) — clips here instead of on `.sidebar` itself. */
+.sidebar__inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--size-spacing-sm);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.sidebar--hidden .sidebar__inner {
   padding-left: 0;
   padding-right: 0;
-  border-right-color: transparent;
+  /* Collapsed, this still occupies `--size-sidebar-collapsed-width` — not
+     0 (see `.sidebar--hidden` above) — specifically so its squeezed
+     contents stay usable: a workspace pill's colored dot is still
+     clickable to switch to it, and "New workspace"'s icon is still
+     clickable too, even though there's no longer room to show either
+     one's label text (clipped by this element's own `overflow: hidden`,
+     same as it always was). Each one's own tooltip is capped to fit
+     within this same collapsed width now too — see each's own `::after`
+     rule below — rather than this disabling pointer events outright the
+     way it used to, which took those tooltips out of reach by taking the
+     whole squeezed area out of hit-testing, but also blocked the actual
+     clicks this sidebar still needs to support collapsed. */
+}
+
+/* The Ctrl+L handle — a short, rounded, vertically-centered grip (1/8 of
+   the sidebar's own height — tall and thin, not a small circle, but not
+   spanning the full height either, which used to visually cut across the
+   workspace pills near the top whenever it was hovered). Flush against
+   the sidebar's own right border; since `right: 0` tracks it directly,
+   that's what makes it follow that border for free as `.sidebar`'s
+   `width` animates, no separate transition of its own needed. Narrow
+   enough (well inside `--size-sidebar-collapsed-width`) to fit inside the
+   sidebar at its most collapsed without the tab's native content — which
+   starts exactly at that same border — ever painting over it. */
+.sidebar__toggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 12.5%;
+  min-height: 32px;
+  padding: 0;
+
+  background: var(--color-button-hover-bg);
+  border: none;
+  border-radius: 5px;
+  transform: translateY(-50%);
+
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.sidebar__toggle:hover {
+  background: var(--color-close-hover-bg);
+}
+
+/* Anchored right and capped narrow, same reasoning (and the same
+   `max-width`/`white-space: normal` wrap) as `.workspace-bar__remove::after`
+   below — this button sits right at the sidebar's own edge, so a tooltip
+   growing wide from it would spill past the sidebar's own bounds into the
+   tab's native content and get painted over by it. */
+.sidebar__toggle::after {
+  right: 0;
+  max-width: 110px;
+  white-space: normal;
+}
+
+/* Collapsed, `WorkspaceBar` swaps this button's tooltip to `TooltipOverlay`
+   (a native view stacked above the tab's own — see `useOverlayTooltip`)
+   instead of rendering it here, since the plain version above can't grow
+   past `--size-sidebar-collapsed-width` without the tab's native content
+   painting over it — see `SIDEBAR_COLLAPSED_WIDTH_PX`'s own comment.
+   Suppressed outright rather than left narrow, so hovering shows only the
+   overlay's version, never both at once. */
+.sidebar--hidden .sidebar__toggle::after {
+  display: none;
 }
 
 /* ── WORKSPACE LIST ───────────────────────────────────────────────────── */
@@ -55,6 +164,16 @@
   min-height: 0;
   gap: var(--size-spacing-xs);
   overflow-y: auto;
+  /* Explicit rather than left to default to `visible` — the CSS Overflow
+     spec computes a *lone* `overflow-y: auto` as `overflow-x: auto` too
+     (browsers refuse a "scrolls one axis, clips the other" combination),
+     which was quietly giving this list its own native horizontal
+     scrollbar (complete with its own arrow-button ends) the instant its
+     content was even a fraction of a pixel wider than the sidebar —
+     something a vertical list should never need in the first place, since
+     `.workspace-bar__name`'s ellipsis already handles a name too long to
+     fit. */
+  overflow-x: hidden;
 }
 
 .workspace-bar__pill {
@@ -164,6 +283,15 @@
   white-space: normal;
 }
 
+/* Same reasoning as `.sidebar--hidden .sidebar__toggle::after` above —
+   collapsed, this pill is squeezed down to `--size-sidebar-collapsed-width`
+   itself, so its own tooltip needs the same tighter cap to actually stay
+   inside that, not the much roomier `--size-sidebar-width` this pill has
+   when the sidebar is fully expanded. */
+.sidebar--hidden .workspace-bar__remove::after {
+  max-width: calc(var(--size-sidebar-collapsed-width) - 2px);
+}
+
 /* ── NEW WORKSPACE ────────────────────────────────────────────────────── */
 
 .workspace-bar__new {
@@ -207,6 +335,12 @@
   white-space: normal;
 }
 
+/* Same reasoning (and the same `TooltipOverlay` swap) as
+   `.sidebar--hidden .sidebar__toggle::after` above. */
+.sidebar--hidden .workspace-bar__new::after {
+  display: none;
+}
+
 .workspace-bar__new-icon {
   display: flex;
   align-items: center;
@@ -215,4 +349,20 @@
   flex-shrink: 0;
 
   font-size: 14px;
+}
+
+.workspace-bar__new-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Collapsed, there's no room left for the label text at all (the icon
+   alone already uses most of `--size-sidebar-collapsed-width`) — hidden
+   outright rather than left to `.sidebar__inner`'s `overflow: hidden` to
+   quietly clip, which (lacking any width/wrap constraint of its own, the
+   way `.workspace-bar__name`'s ellipsis gives a pill's name one) let it
+   render as raw, unbounded overflow instead. */
+.sidebar--hidden .workspace-bar__new-label {
+  display: none;
 }
