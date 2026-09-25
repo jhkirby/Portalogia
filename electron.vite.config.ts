@@ -59,18 +59,20 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        // `terminal`, `suggestions`, `tooltip`, and `colorPicker` are
-        // additional pages for a terminal tab's, the address bar's
-        // suggestions overlay's, the collapsed sidebar's tooltip overlay's,
-        // and the accent color picker's overlay's own `WebContentsView`s to
-        // load — see `TabManager.createTerminalTab`, `SuggestionsOverlay`,
-        // `TooltipOverlay`, and `ColorPickerOverlay`.
+        // `terminal`, `suggestions`, `tooltip`, `colorPicker`, and
+        // `laserPointer` are additional pages for a terminal tab's, the
+        // address bar's suggestions overlay's, the collapsed sidebar's
+        // tooltip overlay's, the accent color picker's overlay's, and the
+        // laser pointer overlay's own `WebContentsView`s to load — see
+        // `TabManager.createTerminalTab`, `SuggestionsOverlay`,
+        // `TooltipOverlay`, `ColorPickerOverlay`, and `LaserPointerOverlay`.
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
           terminal: resolve(__dirname, 'src/renderer/terminal.html'),
           suggestions: resolve(__dirname, 'src/renderer/suggestions.html'),
           tooltip: resolve(__dirname, 'src/renderer/tooltip.html'),
           colorPicker: resolve(__dirname, 'src/renderer/color-picker.html'),
+          laserPointer: resolve(__dirname, 'src/renderer/laser-pointer.html'),
         },
       },
     },

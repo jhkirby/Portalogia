@@ -218,6 +218,11 @@ export function buildMenu(
           click: () => getTabManager()?.toggleFocusMode(),
         },
         {
+          label: 'Toggle Laser Pointer',
+          accelerator: 'CmdOrCtrl+I',
+          click: () => getTabManager()?.toggleLaserPointer(),
+        },
+        {
           label: 'Toggle Theme',
           accelerator: 'CmdOrCtrl+D',
           click: () => getTabManager()?.requestToggleTheme(),

@@ -6,7 +6,7 @@
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { BookmarkStarIcon } from '../icons';
+import { BookmarkStarIcon, LaserPointerIcon } from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
@@ -21,6 +21,8 @@ interface PageActionsProps {
   /** The active tab's current zoom, 25–200. */
   readonly zoomPercent: number;
   readonly focusMode: boolean;
+  /** Whether the laser pointer overlay is currently on. */
+  readonly laserPointerActive: boolean;
   readonly theme: Theme;
   readonly onToggleBookmark: () => void;
   readonly onExportPdf: () => void;
@@ -30,6 +32,7 @@ interface PageActionsProps {
   readonly onZoomIn: () => void;
   readonly onSetZoom: (percent: number) => void;
   readonly onToggleFocusMode: () => void;
+  readonly onToggleLaserPointer: () => void;
   readonly onToggleTheme: () => void;
 }
 
@@ -41,6 +44,7 @@ export function PageActions({
   canZoom,
   zoomPercent,
   focusMode,
+  laserPointerActive,
   theme,
   onToggleBookmark,
   onExportPdf,
@@ -50,6 +54,7 @@ export function PageActions({
   onZoomIn,
   onSetZoom,
   onToggleFocusMode,
+  onToggleLaserPointer,
   onToggleTheme,
 }: PageActionsProps) {
   return (
@@ -64,6 +69,17 @@ export function PageActions({
         data-tooltip={`${isBookmarked ? 'Remove bookmark' : 'Bookmark this page'} (${formatShortcut('B')})`}
       >
         <BookmarkStarIcon filled={isBookmarked} />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onToggleLaserPointer}
+        disabled={!canExportPdf}
+        aria-pressed={laserPointerActive}
+        aria-label={laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'}
+        data-tooltip={`${laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'} (${formatShortcut('I')})`}
+      >
+        <LaserPointerIcon />
       </button>
       <button
         type="button"

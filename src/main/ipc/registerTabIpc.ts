@@ -15,6 +15,7 @@ import {
   createWorkspaceRequestSchema,
   createWorkspaceWithTabRequestSchema,
   focusModeRequestSchema,
+  laserPointerRequestSchema,
   moveTabRequestSchema,
   moveTabToWorkspaceRequestSchema,
   navigateRequestSchema,
@@ -168,6 +169,10 @@ export function registerTabIpc(
 
   handle(IpcChannel.FocusModeSet, focusModeRequestSchema, (request, event) =>
     resolveTabManager(event).setFocusMode(request.enabled),
+  );
+
+  handle(IpcChannel.LaserPointerSet, laserPointerRequestSchema, (request, event) =>
+    resolveTabManager(event).setLaserPointer(request.enabled),
   );
 
   ipcMain.handle(IpcChannel.ZoomIn, (event): IpcResult<BrowserState> => {

@@ -86,6 +86,7 @@ const api: NorthstarApi = {
   toggleSidebar: () => invoke(IpcChannel.SidebarToggle),
 
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
+  setLaserPointer: (enabled) => invoke(IpcChannel.LaserPointerSet, { enabled }),
 
   zoomIn: () => invoke(IpcChannel.ZoomIn),
   zoomOut: () => invoke(IpcChannel.ZoomOut),

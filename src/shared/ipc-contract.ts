@@ -50,6 +50,7 @@ export const IpcChannel = {
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
+  LaserPointerSet: 'laser-pointer:set',
   ZoomIn: 'zoom:in',
   ZoomOut: 'zoom:out',
   ZoomReset: 'zoom:reset',
@@ -296,6 +297,16 @@ export interface NorthstarApi {
   toggleSidebar(): Promise<IpcResult<BrowserState>>;
 
   setFocusMode(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Turns the laser pointer overlay on or off (Ctrl+I, or the toolbar
+   * button between the bookmark star and PDF export) — see
+   * `LaserPointerOverlay`. While on, a transparent `WebContentsView` covers
+   * the active tab's own content area, replacing the cursor there with a
+   * colored dot (the current accent color) and drawing a fading streak
+   * behind it while the mouse is held down and dragged.
+   */
+  setLaserPointer(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
   /**
    * Zooms in/out/back-to-100% on the active tab's own content only — never

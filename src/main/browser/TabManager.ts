@@ -34,6 +34,7 @@ import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
+import { LaserPointerOverlay } from './LaserPointerOverlay';
 import { trackPageSelectionAccent } from './pageSelectionAccent';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
@@ -105,6 +106,7 @@ export class TabManager {
   private splitView: SplitViewState | null = null;
   private focusMode = false;
   private sidebarVisible = true;
+  private laserPointerActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
   private grabbedTabId: string | null = null;
   /** Armed while a tab is grabbed; see `armSpaceHoldTimeout`. */
@@ -119,6 +121,7 @@ export class TabManager {
   private readonly suggestionsOverlay: SuggestionsOverlay;
   private readonly tooltipOverlay: TooltipOverlay;
   private readonly colorPickerOverlay: ColorPickerOverlay;
+  private readonly laserPointerOverlay: LaserPointerOverlay;
   /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
   private readonly unregisterFromRegistry: () => void;
 
@@ -190,6 +193,7 @@ export class TabManager {
       (payload) => this.window.webContents.send(IpcChannel.ColorPickerColorChanged, payload),
       () => this.window.webContents.send(IpcChannel.ColorPickerCloseRequested),
     );
+    this.laserPointerOverlay = new LaserPointerOverlay(this.window);
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
     // focus is on the chrome itself rather than a tab's own webContents
@@ -483,6 +487,7 @@ export class TabManager {
     this.suggestionsOverlay.dispose();
     this.tooltipOverlay.dispose();
     this.colorPickerOverlay.dispose();
+    this.laserPointerOverlay.dispose();
     this.unregisterFromRegistry();
   }
 
@@ -1383,6 +1388,46 @@ export class TabManager {
     return this.setFocusMode(!this.focusMode);
   }
 
+  // ── Laser pointer ────────────────────────────────────────────────────
+
+  /**
+   * Turns the laser pointer overlay on or off (Ctrl+I, or `PageActions`'
+   * toolbar button) — see `LaserPointerOverlay`. Unlike Focus Mode, this
+   * never changes the window's own bounds, so there's no animation here:
+   * `syncLaserPointerOverlay` just (un)mounts the overlay view in place.
+   * @param enabled Whether the laser pointer should be on.
+   * @returns The full browser state after the change.
+   */
+  public setLaserPointer(enabled: boolean): BrowserState {
+    this.laserPointerActive = enabled;
+    this.syncLaserPointerOverlay();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Toggles the laser pointer to whichever state it isn't currently in. */
+  public toggleLaserPointer(): BrowserState {
+    return this.setLaserPointer(!this.laserPointerActive);
+  }
+
+  /**
+   * Applies the laser pointer's current on/off state to its overlay,
+   * sized to whatever the active tab's own view currently occupies. Called
+   * whenever that could have changed: `setLaserPointer` itself, and every
+   * `applyBounds` call (resize, sidebar toggle, Focus Mode's bounds
+   * animation) — so the overlay never drifts out of alignment with the tab
+   * view beneath it. Off entirely when there's no active tab, same as the
+   * tab view itself would be.
+   */
+  private syncLaserPointerOverlay(): void {
+    const left = this.targetLeftInset();
+    const top = this.targetTopInset();
+    this.laserPointerOverlay.setActive(
+      this.laserPointerActive && this.activeTabId !== null,
+      this.computeMainBounds(left, top),
+    );
+  }
+
   // ── Zoom ─────────────────────────────────────────────────────────────
 
   /**
@@ -1867,6 +1912,7 @@ export class TabManager {
       zoomPercent: this.activeTabId
         ? (this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT)
         : ZOOM_PERCENT_DEFAULT,
+      laserPointerActive: this.laserPointerActive,
     };
   }
 
@@ -1990,6 +2036,7 @@ export class TabManager {
    */
   private applyBounds(left: number, top: number): void {
     const main = this.computeMainBounds(left, top);
+    this.laserPointerOverlay.setActive(this.laserPointerActive && this.activeTabId !== null, main);
     if (this.splitView) {
       const { primary, secondary } = this.computeSplitBoundsFor(main);
       this.views.get(this.splitView.primaryTabId)?.setBounds(primary);

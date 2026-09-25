@@ -71,4 +71,6 @@ export interface BrowserState {
   readonly grabbedTabId: string | null;
   /** The active tab's own zoom, as a whole percent (25–200, 100 = native size) — never the chrome's, which is never zoomed. */
   readonly zoomPercent: number;
+  /** Whether the laser pointer overlay is currently on (Ctrl+I, or the toolbar button) — see `LaserPointerOverlay`. */
+  readonly laserPointerActive: boolean;
 }
