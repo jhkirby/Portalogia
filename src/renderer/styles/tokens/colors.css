@@ -19,6 +19,18 @@
   --color-accent-rgb: 26, 115, 232;
 }
 
+/* The browser's own native text-selection highlight (dragging over a
+   workspace name, an address-bar suggestion's URL, anything selectable
+   in this chrome) — tied to the same accent rather than left at
+   Chromium's default blue, same reasoning as every other `--color-
+   accent-rgb`-derived token above. Every one of this app's own renderer
+   documents loads this file, so this one rule covers all of them; it has
+   no effect on a tab's own page content, which is a separate document
+   entirely — see `applySelectionAccent` (main process) for that half. */
+::selection {
+  background-color: rgba(var(--color-accent-rgb), 0.4);
+}
+
 :root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
   --color-chrome-border: #d7d9db;

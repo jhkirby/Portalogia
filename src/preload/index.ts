@@ -114,6 +114,7 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.UiToggleTheme, handler);
   },
   setNativeTheme: (theme) => ipcRenderer.send(IpcChannel.ThemeSet, { theme }),
+  setAccentColor: (rgb) => ipcRenderer.send(IpcChannel.AccentColorSet, rgb),
 
   minimizeWindow: () => ipcRenderer.send(IpcChannel.WindowMinimize),
   toggleMaximizeWindow: () => ipcRenderer.send(IpcChannel.WindowToggleMaximize),

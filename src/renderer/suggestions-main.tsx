@@ -6,6 +6,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AddressSuggestionsView } from './components/AddressSuggestions';
+import { watchAccentColor } from './lib/accentStorage';
 
 // This page's own document is a separate renderer from the chrome's, so it
 // doesn't inherit `<html data-theme>` the way the chrome's own DOM does
@@ -24,6 +25,11 @@ function applyTheme(): void {
 }
 applyTheme();
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+// Same reasoning as `applyTheme` above, but for the accent color
+// (`.address-bar__suggestion svg`'s color, the selected row's background)
+// — see `watchAccentColor`'s own doc comment.
+watchAccentColor();
 
 const container = document.getElementById('root');
 if (!container) {

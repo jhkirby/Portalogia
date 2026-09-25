@@ -18,8 +18,22 @@ import { BookmarkStarIcon } from '../icons';
  * dropdown's own content (see `SuggestionsOverlay.sync`), so there's
  * nothing to lay out here beyond the list itself — no positioning, no
  * portal, no measuring. Selecting a row doesn't navigate directly; it just
- * reports the click's index back to the chrome's address bar (`select`),
- * which owns the actual bookmark list this index refers into.
+ * reports the index back to the chrome's address bar (`select`), which
+ * owns the actual bookmark list this index refers into.
+ *
+ * A row's selection fires on `mousedown`, not `click` — the address bar's
+ * own input is what's focused while this dropdown is open, and the mouse
+ * press that lands here also moves focus (and therefore OS input) to
+ * *this* separate `WebContentsView`, blurring that input. `AddressBar`
+ * closes the dropdown on that blur (see its own doc comment), which tears
+ * this view's own overlay down — main removes it from the window outright,
+ * same as `SuggestionsOverlay.sync`'s own doc comment explains for why.
+ * Waiting for `click` (which only fires after a matching `mouseup`) risks
+ * that teardown winning the race and this row disappearing — along with
+ * its own pending `mouseup` — before the click ever fires, which is
+ * exactly the "row vanishes, nothing happens" bug this sidesteps: sending
+ * `select` on `mousedown` gets it to the chrome first, before the close
+ * this same press triggers has a chance to catch up.
  */
 export function AddressSuggestionsView() {
   const [payload, setPayload] = useState<AddressSuggestionsSyncPayload | null>(null);
@@ -40,7 +54,16 @@ export function AddressSuggestionsView() {
           className={`address-bar__suggestion${
             index === payload.selectedIndex ? ' address-bar__suggestion--selected' : ''
           }`}
-          onClick={() => window.northstarSuggestions.select(index)}
+          onMouseDown={(event) => {
+            // Not the row's own default action (text-drag-selecting the
+            // title/URL) — this is what lets the address bar's input stay
+            // focused for a keyboard-driven Enter (`AddressBar`'s own
+            // `handleKeyDown`) right up until an actual pointer selection
+            // happens, same idiom the row's own hover-to-select already
+            // relies on not fighting focus either.
+            event.preventDefault();
+            window.northstarSuggestions.select(index);
+          }}
         >
           <BookmarkStarIcon filled size={13} />
           <span className="address-bar__suggestion-title">{item.title}</span>

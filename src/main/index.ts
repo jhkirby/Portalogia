@@ -12,6 +12,7 @@ import { BookmarkStore } from './browser/BookmarkStore';
 import { SessionStore } from './browser/SessionStore';
 import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
+import { registerAccentColorIpc } from './ipc/registerAccentColorIpc';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
@@ -118,6 +119,7 @@ void app.whenReady().then(() => {
   registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
   registerThemeIpc();
+  registerAccentColorIpc();
   registerTearOffIpc();
   buildMenu(
     () => activeTabManager,

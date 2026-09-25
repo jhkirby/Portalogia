@@ -150,7 +150,7 @@ export const tooltipSyncRequestSchema = z.object({
 });
 export type TooltipSyncRequest = z.infer<typeof tooltipSyncRequestSchema>;
 
-const rgbSchema = z.object({
+export const rgbSchema = z.object({
   r: z.number().int().min(0).max(255),
   g: z.number().int().min(0).max(255),
   b: z.number().int().min(0).max(255),

@@ -35,10 +35,26 @@ import { colorPickerColorChangeRequestSchema } from '@shared/ipc-schemas';
  * own — dragging the ring/square, typing a channel or hex value — so what
  * reports back (`onColorChange`) is a full color on every change, not an
  * index.
+ *
+ * Also unlike `SuggestionsOverlay`, this dropdown has to close itself when
+ * the *live page* is clicked, not just on an Escape or a same-chrome-
+ * process click elsewhere (`ColorPicker`'s own `mousedown` listener
+ * already covers that half — see its doc comment). A click on the tab
+ * happens in a third, entirely separate `WebContentsView` chrome's own DOM
+ * never sees any event from, so this class watches for it directly: while
+ * open, it subscribes to the *active* tab's own `webContents`' `'focus'`
+ * event (which Electron fires the moment a real click routes OS input
+ * focus to that view) and treats it exactly like an Escape — `sync` is
+ * called again on the next tab switch too, so `watchActiveView` always
+ * ends up listening to whichever view is actually active right now, not a
+ * stale one left over from when the dropdown first opened.
  */
 export class ColorPickerOverlay {
   private readonly view: WebContentsView;
   private isMounted = false;
+  /** The active tab's view this instance is currently listening to for `'focus'` — see `watchActiveView`. `null` while closed or if there's no active tab at all. */
+  private watchedTabView: WebContentsView | null = null;
+  private readonly handleActiveViewFocused: () => void;
 
   /**
    * @param window The chrome window this overlay's view mounts into/out of.
@@ -46,15 +62,22 @@ export class ColorPickerOverlay {
    *   reports — forwarded up to the chrome's `ColorPicker`, which owns
    *   actually applying it (`--color-accent-rgb`, persistence, the recents
    *   list).
-   * @param onCloseRequested Called when the overlay's own page reports an
-   *   Escape keypress — see `NorthstarColorPickerApi.requestClose`'s own
-   *   doc comment for why the chrome can't just listen for this itself.
+   * @param onCloseRequested Called whenever something asks this dropdown to
+   *   close on its own — the overlay's own page reporting an Escape
+   *   keypress (see `NorthstarColorPickerApi.requestClose`'s own doc
+   *   comment for why the chrome can't just listen for that itself), or
+   *   the active tab's view reporting a click (see this class's own doc
+   *   comment). Either way, this class doesn't close itself — it just
+   *   reports up to the chrome's `ColorPicker`, which owns the actual
+   *   open/closed state and will sync back down once it's flipped.
    */
   public constructor(
     private readonly window: BrowserWindow,
     onColorChange: (payload: ColorPickerColorChangedPayload) => void,
-    onCloseRequested: () => void,
+    private readonly onCloseRequested: () => void,
   ) {
+    this.handleActiveViewFocused = () => this.onCloseRequested();
+
     this.view = new WebContentsView({
       webPreferences: {
         preload: join(__dirname, '../preload/colorPicker.cjs'),
@@ -113,11 +136,15 @@ export class ColorPickerOverlay {
    * (invisible, not destroyed) doesn't by itself change anything in its
    * still-running React tree.
    * @param payload `ColorPicker`'s current dropdown state.
+   * @param activeTabView The currently active tab's own view (`null` if
+   *   there's no active tab at all) — watched for a `'focus'` event the
+   *   whole time this dropdown is open; see this class's own doc comment.
    */
-  public sync(payload: ColorPickerSyncPayload): void {
+  public sync(payload: ColorPickerSyncPayload, activeTabView: WebContentsView | null): void {
     if (!payload.open || !payload.rect) {
       this.view.webContents.send(IpcChannel.ColorPickerSync, payload);
       this.hide();
+      this.watchActiveView(null);
       return;
     }
 
@@ -127,6 +154,7 @@ export class ColorPickerOverlay {
       this.window.contentView.addChildView(this.view);
       this.isMounted = true;
     }
+    this.watchActiveView(activeTabView);
 
     this.view.setBounds({
       x: Math.round(payload.rect.left),
@@ -136,6 +164,22 @@ export class ColorPickerOverlay {
     });
 
     this.view.webContents.send(IpcChannel.ColorPickerSync, payload);
+  }
+
+  /**
+   * Points this instance's `'focus'` listener at `view` instead of
+   * whatever it was watching before — a no-op if that's already the same
+   * view (the common case: `sync` calls this on every push while open,
+   * not just the first). Passing `null` just stops watching, for `sync`'s
+   * own closed branch.
+   */
+  private watchActiveView(view: WebContentsView | null): void {
+    if (this.watchedTabView === view) {
+      return;
+    }
+    this.watchedTabView?.webContents.off('focus', this.handleActiveViewFocused);
+    this.watchedTabView = view;
+    view?.webContents.on('focus', this.handleActiveViewFocused);
   }
 
   /** Unmounts the overlay's view, if currently shown. A no-op otherwise. */
@@ -149,5 +193,6 @@ export class ColorPickerOverlay {
   /** Removes the overlay's view for good — call this when the owning window closes. */
   public dispose(): void {
     this.hide();
+    this.watchActiveView(null);
   }
 }

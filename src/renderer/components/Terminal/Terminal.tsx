@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { currentXtermTheme, XTERM_DARK_THEME, XTERM_LIGHT_THEME } from './xtermThemes';
+import { ACCENT_STORAGE_KEY } from '../../lib/accentStorage';
+import { currentXtermTheme } from './xtermThemes';
 
 interface TerminalProps {
   readonly id: string;
@@ -105,10 +106,24 @@ export function Terminal({ id }: TerminalProps) {
     // already-open terminal in step with that instead of only picking up
     // the theme it happened to be created under.
     const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleThemeChange = (event: MediaQueryListEvent): void => {
-      term.options.theme = event.matches ? XTERM_DARK_THEME : XTERM_LIGHT_THEME;
+    const handleThemeChange = (): void => {
+      term.options.theme = currentXtermTheme();
     };
     media.addEventListener('change', handleThemeChange);
+
+    // Same idea, for `ColorPicker`'s own accent instead of light/dark —
+    // `currentXtermTheme` already recomputes the light theme's
+    // `selectionBackground` from whatever's in storage, so re-calling it
+    // here (rather than only ever at `new XTerm()` above) is what keeps an
+    // already-open terminal's selection highlight in step with a color
+    // picked after it was created, the same live-update `watchAccentColor`
+    // gives every other page.
+    const handleAccentChange = (event: StorageEvent): void => {
+      if (event.key === ACCENT_STORAGE_KEY) {
+        term.options.theme = currentXtermTheme();
+      }
+    };
+    window.addEventListener('storage', handleAccentChange);
 
     // This page's own top-level `focus` fires when its `WebContentsView`
     // regains native OS focus — e.g. `TabManager.activateTab` switching
@@ -128,6 +143,7 @@ export function Terminal({ id }: TerminalProps) {
     return () => {
       window.IntersectionObserver = RealIntersectionObserver;
       media.removeEventListener('change', handleThemeChange);
+      window.removeEventListener('storage', handleAccentChange);
       window.removeEventListener('focus', handleWindowFocus);
       dataDisposable.dispose();
       resizeDisposable.dispose();

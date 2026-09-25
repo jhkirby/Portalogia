@@ -33,6 +33,7 @@ import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
+import { trackPageSelectionAccent } from './pageSelectionAccent';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
@@ -462,7 +463,8 @@ export class TabManager {
 
   /** Applies `ColorPicker`'s latest sync — see `ColorPickerOverlay.sync`. */
   public syncColorPicker(payload: ColorPickerSyncPayload): void {
-    this.colorPickerOverlay.sync(payload);
+    const activeTabView = this.activeTabId ? (this.views.get(this.activeTabId) ?? null) : null;
+    this.colorPickerOverlay.sync(payload, activeTabView);
   }
 
   /**
@@ -2030,6 +2032,7 @@ export class TabManager {
     });
 
     this.wireSharedInputHandling(id, wc);
+    trackPageSelectionAccent(wc);
 
     wc.on('page-title-updated', (_event, title) => this.patchState(id, { title }));
     wc.on('page-favicon-updated', (_event, favicons) => {

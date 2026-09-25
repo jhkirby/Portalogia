@@ -4,6 +4,7 @@
 // Last Modified: 2026-09-24
 
 import type { ITheme } from '@xterm/xterm';
+import { DEFAULT_ACCENT, readStoredAccent } from '../../lib/accentStorage';
 
 /**
  * xterm.js's default ANSI palette (bright yellow/white especially) is
@@ -12,13 +13,19 @@ import type { ITheme } from '@xterm/xterm';
  * background/foreground — this one reuses the same accent colors as the
  * chrome's own light theme (`colors.css`'s `:root[data-theme='light']`)
  * so a terminal tab doesn't look like it wandered in from a different app.
+ *
+ * `selectionBackground` is intentionally missing here — it's the one
+ * color this palette can't hard-code, since it has to track
+ * `ColorPicker`'s own accent (same reasoning `colors.css`'s light theme
+ * has for deriving `--color-selection-bg` from `--color-accent-rgb`
+ * instead of a fixed blue); `currentXtermTheme` fills it in fresh on
+ * every call instead.
  */
-export const XTERM_LIGHT_THEME: ITheme = {
+export const XTERM_LIGHT_THEME: Omit<ITheme, 'selectionBackground'> = {
   background: '#ffffff',
   foreground: '#1a1a1a',
   cursor: '#1a1a1a',
   cursorAccent: '#ffffff',
-  selectionBackground: 'rgba(26, 115, 232, 0.2)',
   black: '#3c4043',
   red: '#d93025',
   green: '#188038',
@@ -54,8 +61,27 @@ export const XTERM_DARK_THEME: ITheme = {
  * `nativeTheme.themeSource` process-wide, and that in turn drives
  * `prefers-color-scheme` for every renderer, this one included. Same
  * mechanism the `northstar://home` page already relies on.
- * @returns The theme to pass to `new XTerm({ theme })`.
+ *
+ * For the dark theme that's the whole story — `XTERM_DARK_THEME` is a
+ * complete, static `ITheme`, its own `selectionBackground` deliberately
+ * a neutral white rather than accent-tinted (same reasoning
+ * `colors.css`'s own `--color-selection-bg` has for staying neutral in
+ * dark mode). The light theme's `selectionBackground` isn't static the
+ * same way: `terminal.html` doesn't read `--color-accent-rgb` at all
+ * (there's no CSS token to inherit it from — xterm paints its own canvas,
+ * not chrome-drawn DOM), so it's computed fresh here from whatever
+ * `useAccentColor` last wrote to `localStorage`, the same source
+ * `watchAccentColor` reads for this app's other, DOM-rendered pages.
+ * Call this again (see `Terminal.tsx`'s own `storage` listener) whenever
+ * that might have changed, not just once at creation — unlike a CSS
+ * custom property, re-assigning `term.options.theme` is the only way
+ * xterm ever picks up a new value.
+ * @returns The theme to pass to `new XTerm({ theme })` or assign to `term.options.theme`.
  */
 export function currentXtermTheme(): ITheme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? XTERM_DARK_THEME : XTERM_LIGHT_THEME;
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return XTERM_DARK_THEME;
+  }
+  const { r, g, b } = readStoredAccent() ?? DEFAULT_ACCENT;
+  return { ...XTERM_LIGHT_THEME, selectionBackground: `rgba(${r}, ${g}, ${b}, 0.2)` };
 }

@@ -91,6 +91,12 @@ export function ColorPicker() {
     [setAccent, commitRecent],
   );
 
+  // Also fires for a click on the still-live page itself — main watches
+  // the active tab's own `webContents` for a `'focus'` event while this
+  // dropdown is open and reports it back through this same channel (see
+  // `ColorPickerOverlay`'s own doc comment), since that's a third,
+  // entirely separate process chrome's own DOM never sees any event from
+  // either.
   useEffect(() => window.northstar.onColorPickerCloseRequested(closePicker), []);
 
   // Escape while focus is still in chrome (e.g. right after opening, before
@@ -98,11 +104,11 @@ export function ColorPicker() {
   // have, `onColorPickerCloseRequested` above is what catches it instead,
   // since a chrome-side `keydown` listener never sees a keystroke typed
   // while focus is inside a different `WebContentsView`). Also closes on
-  // any other same-chrome-process click (e.g. another toolbar button) —
-  // deliberately doesn't try to detect a click landing on the still-live
-  // page itself, which is cross-process the same way the overlay is; the
-  // droplet button, Escape, and `onColorPickerCloseRequested` cover every
-  // other way to dismiss it.
+  // any other same-chrome-process click (e.g. another toolbar button) — a
+  // click on the overlay's own fields or on the live page underneath is
+  // cross-process the same way, so neither ever reaches this listener
+  // either; those two are exactly what `onColorPickerCloseRequested`
+  // above covers instead.
   useEffect(() => {
     if (!isOpen) {
       return;

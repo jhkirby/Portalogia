@@ -46,6 +46,7 @@ export const IpcChannel = {
   ColorPickerSync: 'color-picker:sync',
   ColorPickerColorChanged: 'color-picker:color-changed',
   ColorPickerCloseRequested: 'color-picker:close-requested',
+  AccentColorSet: 'accent-color:set',
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
@@ -321,6 +322,18 @@ export interface NorthstarApi {
   onToggleTheme(listener: () => void): () => void;
   /** Reports the renderer's current theme so main can mirror it onto `nativeTheme.themeSource` — see `ThemePreference`. Fire-and-forget, same as `sendTerminalInput`. */
   setNativeTheme(theme: ThemePreference): void;
+
+  /**
+   * Reports `useAccentColor`'s current accent so main can style a tab's
+   * own page content to match — arbitrary web page content is a separate
+   * document `colors.css`'s `::selection` rule can never reach, the same
+   * reason main needs `theme` reported via `setNativeTheme` instead of
+   * reading it off the chrome's own DOM directly. Fire-and-forget, same as
+   * `sendTerminalInput`. Every window's own `useAccentColor` sends this on
+   * mount and on every change; main just keeps whichever arrived most
+   * recently; see `applySelectionAccent`.
+   */
+  setAccentColor(rgb: RGB): void;
 
   /** Minimizes the frameless window. Fire-and-forget, same as `sendTerminalInput`. */
   minimizeWindow(): void;
