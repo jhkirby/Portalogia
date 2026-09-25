@@ -1713,6 +1713,15 @@ export class TabManager {
       if (key === 'arrowleft' || key === 'arrowright') {
         event.preventDefault();
         this.nudgeTab(this.grabbedTabId, key === 'arrowright' ? 1 : -1);
+        // The OS only auto-repeats whichever key was pressed most
+        // recently, so a Left/Right press while Space is held stops
+        // Space's own repeats from arriving at all — without this, only
+        // `armSpaceHoldTimeout`'s Space-repeat branch below would ever
+        // re-arm the grace timer, which would then fire (and drop the
+        // grab) mid-nudge even though both keys are still physically
+        // held. Nudging is itself proof the gesture is still active, so
+        // it re-arms the same timer Space's own repeats do.
+        this.armSpaceHoldTimeout();
         return true;
       }
       if (key === ' ') {
