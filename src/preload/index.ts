@@ -4,7 +4,13 @@
 // Last Modified: 2026-09-12
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { IpcChannel, type IpcResult, type NorthstarApi, type WindowState } from '@shared/ipc-contract';
+import {
+  IpcChannel,
+  type ColorPickerColorChangedPayload,
+  type IpcResult,
+  type NorthstarApi,
+  type WindowState,
+} from '@shared/ipc-contract';
 import type { BrowserState } from '@shared/tab-state';
 
 /**
@@ -60,6 +66,19 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.AddressSuggestionsSelect, handler);
   },
   syncTooltip: (payload) => ipcRenderer.send(IpcChannel.TooltipSync, payload),
+
+  syncColorPicker: (payload) => ipcRenderer.send(IpcChannel.ColorPickerSync, payload),
+  onColorPickerColorChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ColorPickerColorChangedPayload): void =>
+      listener(payload);
+    ipcRenderer.on(IpcChannel.ColorPickerColorChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.ColorPickerColorChanged, handler);
+  },
+  onColorPickerCloseRequested: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.ColorPickerCloseRequested, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.ColorPickerCloseRequested, handler);
+  },
 
   enterSplitView: (secondaryId) => invoke(IpcChannel.SplitEnter, { secondaryId }),
   exitSplitView: () => invoke(IpcChannel.SplitExit),

@@ -3,6 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-12
 
+import type { RGB } from '@shared/color';
 import type { BrowserState } from '@shared/tab-state';
 
 /**
@@ -42,6 +43,9 @@ export const IpcChannel = {
   AddressSuggestionsSync: 'address-suggestions:sync',
   AddressSuggestionsSelect: 'address-suggestions:select',
   TooltipSync: 'tooltip:sync',
+  ColorPickerSync: 'color-picker:sync',
+  ColorPickerColorChanged: 'color-picker:color-changed',
+  ColorPickerCloseRequested: 'color-picker:close-requested',
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
@@ -129,6 +133,37 @@ export interface TooltipSyncPayload {
   readonly visible: boolean;
   readonly text: string;
   readonly rect: { readonly top: number; readonly left: number; readonly width: number; readonly height: number } | null;
+}
+
+/**
+ * What `ColorPicker` pushes to its dedicated overlay `WebContentsView`
+ * every time its own state changes — see `syncColorPicker` and
+ * `ColorPickerOverlay`. `rect` is `null` whenever `open` is `false`, same
+ * relationship `AddressSuggestionsSyncPayload.rect` has with `open`.
+ * Unlike that payload, there's no `width`/`height` here: the panel's size
+ * never varies (`COLOR_PICKER_PANEL_WIDTH_PX`/`COLOR_PICKER_PANEL_HEIGHT_PX`
+ * in `@shared/constants`), only its position does.
+ */
+export interface ColorPickerSyncPayload {
+  readonly open: boolean;
+  readonly rect: { readonly top: number; readonly left: number } | null;
+  readonly accent: RGB;
+  readonly recentColors: readonly RGB[];
+}
+
+/**
+ * Reported back from the color picker's own overlay page on every drag
+ * pixel, keystroke, or swatch click — see `ColorPickerOverlay`'s own doc
+ * comment for why it's the overlay, not the chrome, that owns the actual
+ * square/ring/fields interaction. `commit` mirrors the same "settle
+ * point" `ColorPicker` used to decide for itself before this became an
+ * overlay: `true` at a pointerup, a field blur/Enter, or a swatch click —
+ * the chrome only files a color into the recents list on those, not on
+ * every intermediate value a drag or a keystroke passes through.
+ */
+export interface ColorPickerColorChangedPayload {
+  readonly rgb: RGB;
+  readonly commit: boolean;
 }
 
 /**
@@ -238,6 +273,21 @@ export interface NorthstarApi {
    */
   syncTooltip(payload: TooltipSyncPayload): void;
 
+  /**
+   * Pushes `ColorPicker`'s latest open/closed state, position, current
+   * accent, and recent-colors list to its dedicated overlay
+   * `WebContentsView` (see `ColorPickerOverlay`). Fire-and-forget, same as
+   * `syncAddressSuggestions` — and for the same reason: the active tab's
+   * own view is never touched by this, so the page stays fully live and
+   * interactive underneath the dropdown instead of freezing the way
+   * `BookmarkPopup` (a real modal) makes it.
+   */
+  syncColorPicker(payload: ColorPickerSyncPayload): void;
+  /** Subscribes to a new color the picker's overlay reports — every drag pixel and keystroke, not just a final choice (see `ColorPickerColorChangedPayload.commit`). */
+  onColorPickerColorChanged(listener: (payload: ColorPickerColorChangedPayload) => void): () => void;
+  /** Subscribes to the overlay's own Escape-key handler asking to close — needed because a chrome-side `keydown` listener never sees a keystroke typed while focus is inside the overlay's own, separate `WebContentsView`. */
+  onColorPickerCloseRequested(listener: () => void): () => void;
+
   enterSplitView(secondaryId: string): Promise<IpcResult<BrowserState>>;
   exitSplitView(): Promise<IpcResult<BrowserState>>;
 
@@ -330,4 +380,24 @@ export interface NorthstarAddressSuggestionsApi {
 export interface NorthstarTooltipApi {
   /** Subscribes to the chrome's latest `syncTooltip` push. */
   onSync(listener: (payload: TooltipSyncPayload) => void): () => void;
+}
+
+/**
+ * The narrower API surface exposed to `ColorPicker`'s own overlay
+ * `WebContentsView` (`src/preload/colorPicker.ts`, `color-picker.html`) —
+ * unlike `NorthstarTooltipApi` (nothing ever travels back) but like
+ * `NorthstarAddressSuggestionsApi` (a click reports back by index), this
+ * view owns real interaction of its own — dragging the ring/square,
+ * typing a channel or hex value — so `changeColor` carries a full color
+ * on every change rather than an index into a list the chrome already
+ * has. See `ColorPickerOverlay` for how this view is created and
+ * positioned.
+ */
+export interface NorthstarColorPickerApi {
+  /** Subscribes to the chrome's latest `syncColorPicker` push. */
+  onSync(listener: (payload: ColorPickerSyncPayload) => void): () => void;
+  /** Reports a new color back to the chrome's `ColorPicker` — see `ColorPickerColorChangedPayload`. Fire-and-forget, same as `select` on `NorthstarAddressSuggestionsApi`. */
+  changeColor(rgb: RGB, commit: boolean): void;
+  /** Reports the overlay's own Escape keypress back to the chrome, which owns actually closing the dropdown. Fire-and-forget, same as `changeColor`. */
+  requestClose(): void;
 }

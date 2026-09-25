@@ -4,64 +4,57 @@
    Last Modified: 2026-09-25 */
 
 /* ── COLOR PICKER ─────────────────────────────────────────────────────── */
+/* `ColorPicker`'s dropdown's whole page (`color-picker.html`) — a
+   dedicated `WebContentsView` the main process sizes to
+   `COLOR_PICKER_PANEL_WIDTH_PX`×`COLOR_PICKER_PANEL_HEIGHT_PX` and stacks
+   above the active tab's view (see `ColorPickerOverlay`), rather than
+   chrome-drawn HTML the way `BookmarkPopup` is. Its bounds are always
+   exactly that fixed size, so — same reasoning as
+   `suggestions-overlay.css` — there's no `position: fixed`, no backdrop,
+   and no box-shadow (it would just get clipped at the view's own tight
+   edge). Corner rounding is native too (`WebContentsView.setBorderRadius`
+   in `ColorPickerOverlay`'s constructor), not CSS `border-radius`. */
 
-/* Portalled to `document.body` (see `ColorPicker`'s own doc comment for
-   why) — `position: fixed` here is relative to the viewport, not `.app`'s
-   clipped, 84px-tall box the button itself lives in. Covers the whole
-   window so a click anywhere outside the panel closes it, same pattern as
-   `.bookmark-popup__backdrop`. */
-.color-picker__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-
-  cursor: default;
-}
-
-/* Sized and positioned in JS (`ColorPicker`'s `contentRect`) to exactly
-   match `.tab-content`'s own bounds — the same rectangle the active tab's
-   `WebContentsView` was just hidden out of (`beginTabPreview`), so the
-   snapshot standing in for it beneath fills exactly the area that view
-   used to. */
-.color-picker__backdrop-frame {
-  position: fixed;
-  overflow: hidden;
-}
-
-/* Deliberately crisp, not blurred or dimmed — this is standing in for a
-   page that's still live, not a modal backdrop the user's attention
-   should move away from (contrast `.bookmark-popup__preview`, which is
-   blurred on purpose since that popup really is a modal). */
-.color-picker__preview {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+html,
+body {
   height: 100%;
-  object-fit: cover;
+  margin: 0;
+  overflow: hidden;
+
+  /* This page's own document never inherits `app.css`'s `html, body`
+     font-family — that rule only reaches the chrome's page (`index.html`).
+     Must stay in sync with it, same relationship this file's colors have
+     with `colors.css` via `data-theme` (see `color-picker-main.tsx`). */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
 }
 
 .color-picker__panel {
-  position: fixed;
-  z-index: 101;
+  box-sizing: border-box;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--size-spacing-sm);
-  width: 224px;
   padding: var(--size-spacing-md);
 
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
-  border-radius: var(--size-radius-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 
   cursor: default;
 }
 
 /* Holds the hue ring and the saturation/value square as two layered
-   circles — see `ColorPicker`'s own doc comment for why a ring at all.
-   Square root of 2, then some — `WHEEL_SIZE_PX` (192) — 2 ×
-   `RING_THICKNESS_PX` (16) leaves a 160px hole for `.color-picker__square`
-   (100px) to sit inside with room on every side, corners included. */
+   circles — see `ColorPickerOverlayView`'s own doc comment for why a ring
+   at all. `WHEEL_SIZE_PX` (192) − 2 × `RING_THICKNESS_PX` (16) leaves a
+   160px hole for `.color-picker__square` (100px) to sit inside with room
+   on every side, corners included. */
 .color-picker__wheel {
   position: relative;
   width: 192px;
@@ -134,9 +127,9 @@
    toward the bottom edge (value), white-to-transparent left-to-right
    lightens toward the left edge (inverse saturation), and the pure hue
    color underneath is what both are tinting. `--picker-hue-color` is set
-   inline per-render (`ColorPicker`) from the current color's own hue —
-   dragging inside only ever changes saturation/value; `.color-picker__ring`
-   around it is what changes hue instead. */
+   inline per-render (`ColorPickerOverlayView`) from the current color's
+   own hue — dragging inside only ever changes saturation/value;
+   `.color-picker__ring` around it is what changes hue instead. */
 .color-picker__square {
   position: relative;
   width: 100px;
@@ -167,15 +160,23 @@
   pointer-events: none;
 }
 
+/* Fixed-pixel swatches (not `1fr`) so this grid's own height is exact,
+   not fractional — `COLOR_PICKER_PANEL_HEIGHT_PX` (@shared/constants) is
+   arithmetic done against this file's own numbers (192 + 8 + 68 + 8 + 28
+   + padding + border = 330), and a `1fr` column would round differently
+   than JS's math expects. Centered rather than stretched to the panel's
+   own width for the same reason `ADDRESS_SUGGESTION_ROW_HEIGHT_PX` is a
+   fixed constant rather than measured — one less thing that could drift. */
 .color-picker__recents {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, 32px);
+  justify-content: center;
   gap: var(--size-spacing-xs);
 }
 
 .color-picker__recent {
-  width: 100%;
-  aspect-ratio: 1;
+  width: 32px;
+  height: 32px;
   padding: 0;
 
   background: var(--color-button-hover-bg);

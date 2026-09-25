@@ -10,6 +10,7 @@ import {
   addBookmarkRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
+  colorPickerSyncRequestSchema,
   createTabRequestSchema,
   createWorkspaceRequestSchema,
   createWorkspaceWithTabRequestSchema,
@@ -264,6 +265,16 @@ export function registerTabIpc(
     const parsed = tooltipSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
       resolveTabManager(event).syncTooltip(parsed.data);
+    }
+  });
+
+  // Same fire-and-forget shape as `AddressSuggestionsSync` above —
+  // `ColorPicker` pushes a fresh sync on every open/close and on every
+  // accent/recents change while it's open.
+  ipcMain.on(IpcChannel.ColorPickerSync, (event: IpcMainEvent, rawRequest: unknown) => {
+    const parsed = colorPickerSyncRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      resolveTabManager(event).syncColorPicker(parsed.data);
     }
   });
 }

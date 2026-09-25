@@ -27,20 +27,22 @@ export default defineConfig({
     resolve: { alias: sharedAlias },
     build: {
       rollupOptions: {
-        // `terminal`, `suggestions`, `tooltip`, and `tabZoom` are narrower
-        // preloads for a terminal tab's, the address bar's suggestions
-        // overlay's, the collapsed sidebar's tooltip overlay's, and a
+        // `terminal`, `suggestions`, `tooltip`, `colorPicker`, and
+        // `tabZoom` are narrower preloads for a terminal tab's, the
+        // address bar's suggestions overlay's, the collapsed sidebar's
+        // tooltip overlay's, the accent color picker's overlay's, and a
         // browser tab's own `WebContentsView`s (see
         // `src/preload/terminal.ts`, `src/preload/suggestions.ts`,
-        // `src/preload/tooltip.ts`, and `src/preload/tabZoom.ts`) —
-        // separate bundles so neither sandboxed renderer ever has the full
-        // chrome-facing `NorthstarApi` in its preload, only the handful of
-        // channels each one needs.
+        // `src/preload/tooltip.ts`, `src/preload/colorPicker.ts`, and
+        // `src/preload/tabZoom.ts`) — separate bundles so neither
+        // sandboxed renderer ever has the full chrome-facing `NorthstarApi`
+        // in its preload, only the handful of channels each one needs.
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
           terminal: resolve(__dirname, 'src/preload/terminal.ts'),
           suggestions: resolve(__dirname, 'src/preload/suggestions.ts'),
           tooltip: resolve(__dirname, 'src/preload/tooltip.ts'),
+          colorPicker: resolve(__dirname, 'src/preload/colorPicker.ts'),
           tabZoom: resolve(__dirname, 'src/preload/tabZoom.ts'),
         },
         // Sandboxed preload scripts are loaded through a synchronous
@@ -57,16 +59,18 @@ export default defineConfig({
     plugins: [react()],
     build: {
       rollupOptions: {
-        // `terminal`, `suggestions`, and `tooltip` are additional pages for
-        // a terminal tab's, the address bar's suggestions overlay's, and
-        // the collapsed sidebar's tooltip overlay's own `WebContentsView`s
-        // to load — see `TabManager.createTerminalTab`, `SuggestionsOverlay`,
-        // and `TooltipOverlay`.
+        // `terminal`, `suggestions`, `tooltip`, and `colorPicker` are
+        // additional pages for a terminal tab's, the address bar's
+        // suggestions overlay's, the collapsed sidebar's tooltip overlay's,
+        // and the accent color picker's overlay's own `WebContentsView`s to
+        // load — see `TabManager.createTerminalTab`, `SuggestionsOverlay`,
+        // `TooltipOverlay`, and `ColorPickerOverlay`.
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
           terminal: resolve(__dirname, 'src/renderer/terminal.html'),
           suggestions: resolve(__dirname, 'src/renderer/suggestions.html'),
           tooltip: resolve(__dirname, 'src/renderer/tooltip.html'),
+          colorPicker: resolve(__dirname, 'src/renderer/color-picker.html'),
         },
       },
     },

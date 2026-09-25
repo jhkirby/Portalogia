@@ -236,7 +236,6 @@ export function App() {
               canActOnPage={browserTab !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
-              activeTabId={activeTabId}
               focusMode={focusMode}
               theme={theme}
               onToggleBookmark={handleToggleBookmark}

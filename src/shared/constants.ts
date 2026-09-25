@@ -168,6 +168,22 @@ export const TOOLTIP_OVERLAY_LINE_HEIGHT_PX = 16;
  */
 export const TOOLTIP_OVERLAY_GAP_PX = 6;
 
+/**
+ * Width/height, in CSS pixels, of `ColorPicker`'s dropdown — the hue
+ * ring, saturation/value square, recent-color swatches, and RGB/hex
+ * fields all together. Unlike the suggestions dropdown, this content
+ * never varies in size (no row count to account for), so the main
+ * process can size `ColorPickerOverlay`'s own `WebContentsView` to these
+ * two fixed constants instead of anything measured. Must equal
+ * `.color-picker__panel`'s own `width`/`height` in color-picker.css —
+ * chosen so the panel's content (192px wheel + gaps + a fixed-size
+ * recents grid + the fields row, all padding and border included) fits
+ * exactly, with `box-sizing: border-box` making the CSS side of that
+ * arithmetic explicit.
+ */
+export const COLOR_PICKER_PANEL_WIDTH_PX = 224;
+export const COLOR_PICKER_PANEL_HEIGHT_PX = 330;
+
 /** Accent colors cycled through, in order, as new workspaces are created. */
 export const WORKSPACE_COLORS = [
   '#4285f4',

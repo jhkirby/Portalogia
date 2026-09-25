@@ -150,6 +150,30 @@ export const tooltipSyncRequestSchema = z.object({
 });
 export type TooltipSyncRequest = z.infer<typeof tooltipSyncRequestSchema>;
 
+const rgbSchema = z.object({
+  r: z.number().int().min(0).max(255),
+  g: z.number().int().min(0).max(255),
+  b: z.number().int().min(0).max(255),
+});
+
+export const colorPickerSyncRequestSchema = z.object({
+  open: z.boolean(),
+  rect: z
+    .object({
+      top: z.number(),
+      left: z.number(),
+    })
+    .nullable(),
+  accent: rgbSchema,
+  recentColors: z.array(rgbSchema),
+});
+export type ColorPickerSyncRequest = z.infer<typeof colorPickerSyncRequestSchema>;
+
+export const colorPickerColorChangeRequestSchema = z.object({
+  rgb: rgbSchema,
+  commit: z.boolean(),
+});
+
 export const themeSetRequestSchema = z.object({
   theme: z.enum(['light', 'dark']),
 });

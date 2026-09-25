@@ -23,10 +23,16 @@ import {
   ZOOM_PERCENT_MIN,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
-import { IpcChannel, type AddressSuggestionsSyncPayload, type TooltipSyncPayload } from '@shared/ipc-contract';
+import {
+  IpcChannel,
+  type AddressSuggestionsSyncPayload,
+  type ColorPickerSyncPayload,
+  type TooltipSyncPayload,
+} from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
+import { ColorPickerOverlay } from './ColorPickerOverlay';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
@@ -110,6 +116,7 @@ export class TabManager {
   private readonly terminals: TerminalManager;
   private readonly suggestionsOverlay: SuggestionsOverlay;
   private readonly tooltipOverlay: TooltipOverlay;
+  private readonly colorPickerOverlay: ColorPickerOverlay;
   /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
   private readonly unregisterFromRegistry: () => void;
 
@@ -176,6 +183,11 @@ export class TabManager {
       (index) => this.window.webContents.send(IpcChannel.AddressSuggestionsSelect, index),
     );
     this.tooltipOverlay = new TooltipOverlay(this.window);
+    this.colorPickerOverlay = new ColorPickerOverlay(
+      this.window,
+      (payload) => this.window.webContents.send(IpcChannel.ColorPickerColorChanged, payload),
+      () => this.window.webContents.send(IpcChannel.ColorPickerCloseRequested),
+    );
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
     // focus is on the chrome itself rather than a tab's own webContents
@@ -448,6 +460,11 @@ export class TabManager {
     this.tooltipOverlay.sync(payload);
   }
 
+  /** Applies `ColorPicker`'s latest sync — see `ColorPickerOverlay.sync`. */
+  public syncColorPicker(payload: ColorPickerSyncPayload): void {
+    this.colorPickerOverlay.sync(payload);
+  }
+
   /**
    * Releases this window's own resources — call this when the window
    * itself closes. Deliberately does *not* touch shared tabs/workspaces or
@@ -462,6 +479,7 @@ export class TabManager {
   public dispose(): void {
     this.suggestionsOverlay.dispose();
     this.tooltipOverlay.dispose();
+    this.colorPickerOverlay.dispose();
     this.unregisterFromRegistry();
   }
 
@@ -1209,22 +1227,20 @@ export class TabManager {
   }
 
   /**
-   * Captures the active tab's current frame and hides its native
-   * `WebContentsView` — what `BookmarkPopup` and `ColorPicker` show
-   * blurred behind themselves instead of the live page, since both are
-   * true modals while open. The view has to actually come off the window,
-   * not just be covered by chrome-drawn UI, since it's a separate native
-   * surface layered above the chrome (same reason `activateTab` needs
-   * `webContents.focus()` — see there) that would otherwise render on top
-   * of the popup and swallow every click meant for it. Works for either
-   * tab kind (`capturePage` isn't browser-specific — a terminal tab's view
-   * is still just a `webContents` rendering `terminal.html`); a no-op
-   * (returns `null`, nothing hidden) only for a tab that isn't the active
-   * one.
+   * Captures the active browser tab's current frame and hides its native
+   * `WebContentsView` — what `BookmarkPopup` shows blurred behind itself
+   * instead of the live page, since it's a true modal. The view has to
+   * actually come off the window, not just be covered by chrome-drawn UI,
+   * since it's a separate native surface layered above the chrome (same
+   * reason `activateTab` needs `webContents.focus()` — see there) that
+   * would otherwise render on top of the popup and swallow every click
+   * meant for it. A no-op (returns `null`, nothing hidden) for anything
+   * but the active browser tab.
    *
-   * Not used by the address bar's suggestions dropdown — that one has its
-   * own dedicated `SuggestionsOverlay` view instead, specifically so the
-   * page never has to stop being live just because the dropdown is open.
+   * Not used by the address bar's suggestions dropdown or `ColorPicker` —
+   * both have their own dedicated overlay `WebContentsView`s instead
+   * (`SuggestionsOverlay`, `ColorPickerOverlay`), specifically so the page
+   * never has to stop being live just because their dropdown is open.
    * @param id The tab to preview and hide.
    * @returns A data URL of the tab's last-painted frame, or `null` if it
    *   couldn't be captured — the view is hidden either way, and the popup
@@ -1233,7 +1249,7 @@ export class TabManager {
   public async beginTabPreview(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || id !== this.activeTabId) {
+    if (!view || !state || state.kind !== 'browser' || id !== this.activeTabId) {
       return null;
     }
 

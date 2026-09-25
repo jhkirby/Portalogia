@@ -3,11 +3,9 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-25
 
-export interface RGB {
-  readonly r: number;
-  readonly g: number;
-  readonly b: number;
-}
+import type { RGB } from '@shared/color';
+
+export type { RGB };
 
 /** `h` in degrees (0–360), `s`/`v` as fractions (0–1). */
 export interface HSV {
