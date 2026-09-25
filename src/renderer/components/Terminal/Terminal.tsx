@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
+import { TERMINAL_PREPARE_PRINT_GLOBAL } from '@shared/constants';
 import { ACCENT_STORAGE_KEY } from '../../lib/accentStorage';
 import { currentXtermTheme } from './xtermThemes';
 
@@ -55,6 +56,7 @@ class NoopIntersectionObserver implements IntersectionObserver {
  */
 export function Terminal({ id }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const printViewRef = useRef<HTMLPreElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [exited, setExited] = useState(false);
@@ -140,6 +142,38 @@ export function Terminal({ id }: TerminalProps) {
     const resizeObserver = new ResizeObserver(() => fitAddon.fit());
     resizeObserver.observe(container);
 
+    // Fills `.terminal__print-view` (see terminal.css's `@media print`
+    // rule) with every row `term`'s buffer currently holds — scrollback
+    // plus the visible viewport, in on-screen order — right before
+    // `TabManager.exportToPdf` calls `printToPDF()`. This, not the live
+    // canvas, is what actually ends up in the PDF: xterm only ever paints
+    // the rows that fit its own fixed-size viewport, so printing the
+    // canvas directly could show nothing but whatever page of scrollback
+    // happened to be scrolled to. A row that's scrolled fully off used to
+    // stop existing in the buffer at all once `clear()`'s "erase
+    // scrollback" sequence ran — so this naturally never reaches further
+    // back than the terminal's last clear, without needing to track that
+    // separately.
+    //
+    // A plain `window` global, not a proper `NorthstarTerminalApi` IPC
+    // channel, is the right tool for main to reach this: `executeJavaScript`
+    // (what `exportToPdf` actually calls) runs in this page's own main
+    // world regardless of `contextIsolation`/`sandbox`, so main can call
+    // straight into it without a round trip through a preload bridge and an
+    // `ipcMain`/`ipcRenderer` reply pair neither side otherwise needs.
+    (window as unknown as Record<string, () => void>)[TERMINAL_PREPARE_PRINT_GLOBAL] = () => {
+      const printView = printViewRef.current;
+      if (!printView) {
+        return;
+      }
+      const buffer = term.buffer.active;
+      const lines: string[] = [];
+      for (let i = 0; i < buffer.length; i++) {
+        lines.push(buffer.getLine(i)?.translateToString(true) ?? '');
+      }
+      printView.textContent = lines.join('\n');
+    };
+
     return () => {
       window.IntersectionObserver = RealIntersectionObserver;
       media.removeEventListener('change', handleThemeChange);
@@ -150,6 +184,7 @@ export function Terminal({ id }: TerminalProps) {
       unsubscribeData();
       unsubscribeExited();
       resizeObserver.disconnect();
+      delete (window as unknown as Record<string, unknown>)[TERMINAL_PREPARE_PRINT_GLOBAL];
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
@@ -165,6 +200,10 @@ export function Terminal({ id }: TerminalProps) {
           Process exited
         </div>
       )}
+      {/* Hidden on screen; only shown (and filled — see the `PREPARE_PRINT_GLOBAL`
+          effect above) for `printToPDF()`'s own `print` media pass. See
+          terminal.css's `@media print` rule for the swap. */}
+      <pre ref={printViewRef} className="terminal__print-view" />
     </div>
   );
 }

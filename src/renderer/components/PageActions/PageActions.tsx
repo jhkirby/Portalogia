@@ -12,8 +12,10 @@ import { ZoomControl } from '../ZoomControl';
 interface PageActionsProps {
   /** Whether the active tab's URL is already bookmarked. */
   readonly isBookmarked: boolean;
-  /** Whether there's an active tab to bookmark or export at all. */
+  /** Whether there's an active tab to bookmark — browser-only, unlike `canExportPdf`, since a terminal tab has no URL to bookmark. */
   readonly canActOnPage: boolean;
+  /** Whether there's an active tab to export to PDF — unlike `canActOnPage`, true for a terminal tab too (its `WebContentsView` prints its on-screen output same as a browser tab prints its page). */
+  readonly canExportPdf: boolean;
   /** Whether there's an active tab to zoom — unlike `canActOnPage`, true for a terminal tab too (zoom isn't browser-only). */
   readonly canZoom: boolean;
   /** The active tab's current zoom, 25–200. */
@@ -35,6 +37,7 @@ interface PageActionsProps {
 export function PageActions({
   isBookmarked,
   canActOnPage,
+  canExportPdf,
   canZoom,
   zoomPercent,
   focusMode,
@@ -66,7 +69,7 @@ export function PageActions({
         type="button"
         className="page-actions__button page-actions__button--pdf chrome-tooltip"
         onClick={onExportPdf}
-        disabled={!canActOnPage}
+        disabled={!canExportPdf}
         aria-label="Export page to PDF"
         data-tooltip="Export page to PDF"
       >

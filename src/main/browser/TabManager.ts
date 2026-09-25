@@ -17,6 +17,7 @@ import {
   SIDEBAR_COLLAPSED_WIDTH_PX,
   SIDEBAR_TOGGLE_DURATION_MS,
   SIDEBAR_WIDTH_PX,
+  TERMINAL_PREPARE_PRINT_GLOBAL,
   WORKSPACE_COLORS,
   ZOOM_PERCENT_DEFAULT,
   ZOOM_PERCENT_MAX,
@@ -410,15 +411,6 @@ export class TabManager {
     // same reasoning as the chrome window itself (see MainWindow.ts).
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    view.webContents.on('console-message', (_e, level, message, line, sourceId) => {
-      console.log('[terminal console]', level, message, sourceId, line);
-    });
-    view.webContents.on('render-process-gone', (_e, details) => {
-      console.log('[terminal render-process-gone]', details);
-    });
-    view.webContents.on('did-fail-load', (_e, code, desc, url) => {
-      console.log('[terminal did-fail-load]', code, desc, url);
-    });
     this.wireSharedInputHandling(id, view.webContents);
     view.webContents.once('did-finish-load', () => {
       // The tab could already have been closed again by the time this
@@ -997,7 +989,18 @@ export class TabManager {
 
   /**
    * Renders a tab's current page to a PDF, prompting the user for a save
-   * location via a native dialog parented to this window.
+   * location via a native dialog parented to this window. Works for a
+   * terminal tab too — `terminal.html` is a real page in its own
+   * `WebContentsView` (see `createTerminalTab`) — but not by directly
+   * `printToPDF`-ing the live xterm canvas the way a browser tab's own page
+   * is: that canvas only ever paints one viewport's worth of rows, so it'd
+   * capture whatever single page of scrollback happened to be scrolled to
+   * rather than the whole thing. `executeJavaScript` here instead fills
+   * `Terminal.tsx`'s hidden `.terminal__print-view` with every row currently
+   * in the buffer (see its own `PREPARE_PRINT_GLOBAL` effect) — terminal.css
+   * swaps that in for the canvas, and lets the page grow past one viewport's
+   * height, only under `printToPDF`'s own `print` media pass, so the result
+   * paginates across as many pages as the scrollback actually needs.
    * @param id The tab to export.
    * @returns The path it was saved to, or `null` if the tab is gone or the
    *   user canceled the save dialog.
@@ -1005,7 +1008,7 @@ export class TabManager {
   public async exportToPdf(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || state.kind !== 'browser') {
+    if (!view || !state) {
       return null;
     }
 
@@ -1016,6 +1019,10 @@ export class TabManager {
     });
     if (canceled || !filePath) {
       return null;
+    }
+
+    if (state.kind === 'terminal') {
+      await view.webContents.executeJavaScript(`window.${TERMINAL_PREPARE_PRINT_GLOBAL}?.();`);
     }
 
     const pdfData = await view.webContents.printToPDF({});

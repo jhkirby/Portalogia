@@ -234,6 +234,7 @@ export function App() {
             <PageActions
               isBookmarked={activeBookmark !== null}
               canActOnPage={browserTab !== null}
+              canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
               focusMode={focusMode}

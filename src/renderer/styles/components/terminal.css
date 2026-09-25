@@ -53,6 +53,54 @@ body {
   background: light-dark(#ffffff, #1e1e1e);
 }
 
+/* Never shown on screen — filled with the terminal's full scrollback (see
+   `Terminal.tsx`'s `PREPARE_PRINT_GLOBAL`) and swapped in for `.terminal__surface`
+   only while printing (below). Ordinary flowing text in normal document
+   flow, deliberately not positioned/sized like `.terminal__surface` — that
+   one is pinned to exactly one viewport's worth of xterm's own canvas
+   (which is *all* `printToPDF()` used to capture, cropped to whatever page
+   of scrollback happened to be scrolled to); this one is free to run to
+   whatever height its content needs, which is what lets Chromium's own
+   print pagination below split it across as many pages as it takes. */
+.terminal__print-view {
+  display: none;
+  margin: 0;
+  padding: 16px;
+
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  font-family: Menlo, Consolas, 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+/* `exportToPdf`'s `printToPDF()` renders this page under the `print` media
+   type, same as Chrome's own "Save as PDF". Swaps the live, single-viewport
+   xterm canvas out for `.terminal__print-view`'s full scrollback dump, and
+   lets the page grow past one viewport's height (`html`/`body`/`.terminal`
+   are all pinned to exactly `100%` for the live, on-screen layout — see
+   above) so that dump can actually paginate across multiple pages instead
+   of being clipped to the first one. */
+@media print {
+  html,
+  body,
+  #root,
+  .terminal {
+    height: auto;
+    overflow: visible;
+  }
+
+  .terminal__surface,
+  .terminal__exited-banner {
+    display: none;
+  }
+
+  .terminal__print-view {
+    display: block;
+  }
+}
+
 .terminal__exited-banner {
   position: absolute;
   top: 0;

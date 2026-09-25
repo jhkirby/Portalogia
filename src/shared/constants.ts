@@ -184,6 +184,17 @@ export const TOOLTIP_OVERLAY_GAP_PX = 6;
 export const COLOR_PICKER_PANEL_WIDTH_PX = 224;
 export const COLOR_PICKER_PANEL_HEIGHT_PX = 330;
 
+/**
+ * The `window` global `Terminal.tsx` hangs its print-preparation function
+ * off of, and the exact source string `TabManager.exportToPdf` calls via
+ * `executeJavaScript` to invoke it on a terminal tab's own
+ * `WebContentsView` right before `printToPDF()` — see both call sites'
+ * own doc comments. A shared constant rather than each side hard-coding
+ * the name is what keeps them from silently drifting apart if either one
+ * is ever renamed.
+ */
+export const TERMINAL_PREPARE_PRINT_GLOBAL = '__northstarPrepareTerminalPrint';
+
 /** Accent colors cycled through, in order, as new workspaces are created. */
 export const WORKSPACE_COLORS = [
   '#4285f4',
