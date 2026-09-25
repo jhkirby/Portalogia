@@ -124,6 +124,11 @@ void app.whenReady().then(() => {
   buildMenu(
     () => activeTabManager,
     () => activeTabManager?.getState().activeTabId ?? null,
+    // A new workspace (and its fresh home tab) rather than the restored
+    // session `launchWindow`'s default `onReady` gives the ordinary
+    // launch path — this window is meant to start empty, not replay
+    // whatever was already open elsewhere.
+    () => launchWindow((tabManager) => tabManager.createWorkspace()),
   );
 
   launchWindow();

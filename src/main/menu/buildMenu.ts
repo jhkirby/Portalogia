@@ -21,10 +21,15 @@ import type { TabManager } from '../browser/TabManager';
  *   menu's life.
  * @param getActiveTabId Resolves that window's currently active tab, also
  *   at click time.
+ * @param onNewWindow Opens a brand-new window, seeded with its own new
+ *   workspace (and that workspace's fresh home tab) rather than the
+ *   restored session `launchWindow`'s default `onReady` would otherwise
+ *   give it — see "New Window" below.
  */
 export function buildMenu(
   getTabManager: () => TabManager | null,
   getActiveTabId: () => string | null,
+  onNewWindow: () => void,
 ): void {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -34,6 +39,15 @@ export function buildMenu(
           label: 'New Tab',
           accelerator: 'CmdOrCtrl+N',
           click: () => getTabManager()?.createTabAndFocusAddressBar(),
+        },
+        {
+          // Its own window entirely, not just a workspace in the current
+          // one — a new workspace's fresh home tab (`createWorkspace`)
+          // seeded into a new window (`onNewWindow`), rather than the
+          // current window's shared workspace list.
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+Alt+N',
+          click: () => onNewWindow(),
         },
         {
           label: 'New Terminal',

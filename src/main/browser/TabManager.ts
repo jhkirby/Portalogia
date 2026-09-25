@@ -410,6 +410,15 @@ export class TabManager {
     // same reasoning as the chrome window itself (see MainWindow.ts).
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    view.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+      console.log('[terminal console]', level, message, sourceId, line);
+    });
+    view.webContents.on('render-process-gone', (_e, details) => {
+      console.log('[terminal render-process-gone]', details);
+    });
+    view.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      console.log('[terminal did-fail-load]', code, desc, url);
+    });
     this.wireSharedInputHandling(id, view.webContents);
     view.webContents.once('did-finish-load', () => {
       // The tab could already have been closed again by the time this
