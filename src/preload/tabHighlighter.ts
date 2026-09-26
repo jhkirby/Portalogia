@@ -40,6 +40,8 @@ const QUOTE_CONTEXT_CHARS = 32;
 
 const MARK_CLASS = 'northstar-highlight';
 const MARK_ID_ATTR = 'data-nsh-id';
+/** Applied to every mark sharing the currently-hovered highlight's id, lightening it — the visual cue that hovering it (and pressing D/Delete) would remove it. */
+const MARK_HOVER_CLASS = 'northstar-highlight--hovered';
 
 let active = false;
 let currentColor: RgbColor = { r: 26, g: 115, b: 232 };
@@ -72,13 +74,36 @@ function setActive(nextActive: boolean, color: RgbColor): void {
     if (!cursorStyleEl) {
       cursorStyleEl = document.createElement('style');
       cursorStyleEl.setAttribute('data-northstar', 'highlighter-cursor');
-      cursorStyleEl.textContent = `html, html * { cursor: ${highlighterCursorCss()} !important; }`;
+      cursorStyleEl.textContent =
+        `html, html * { cursor: ${highlighterCursorCss()} !important; } ` +
+        `.${MARK_HOVER_CLASS} { opacity: 0.5; }`;
     }
     if (!cursorStyleEl.isConnected) {
       (document.head ?? document.documentElement).appendChild(cursorStyleEl);
     }
   } else if (cursorStyleEl?.isConnected) {
     cursorStyleEl.remove();
+  }
+  if (!active) {
+    setHoveredHighlight(null);
+  }
+}
+
+/** Marks every `<mark>` sharing `id` as hovered (or clears it, for `null`), lightening it via `MARK_HOVER_CLASS` — a no-op if `id` is already the currently-hovered one. A highlight can be several marks (see `wrapRange`), so this always operates on all of them together. */
+function setHoveredHighlight(id: string | null): void {
+  if (id === hoveredHighlightId) {
+    return;
+  }
+  if (hoveredHighlightId) {
+    document
+      .querySelectorAll(`mark.${MARK_CLASS}[${MARK_ID_ATTR}="${CSS.escape(hoveredHighlightId)}"]`)
+      .forEach((el) => el.classList.remove(MARK_HOVER_CLASS));
+  }
+  hoveredHighlightId = id;
+  if (hoveredHighlightId) {
+    document
+      .querySelectorAll(`mark.${MARK_CLASS}[${MARK_ID_ATTR}="${CSS.escape(hoveredHighlightId)}"]`)
+      .forEach((el) => el.classList.add(MARK_HOVER_CLASS));
   }
 }
 
@@ -325,13 +350,59 @@ function isEditableTarget(el: Element | null): boolean {
 
 document.addEventListener('mouseup', () => highlightSelection());
 
+/** Elements a click/mousedown should never be allowed to activate while the highlighter tool is on — the whole point of the tool ("the pointer can only highlight text") is defeated if clicking a link or button still navigates or fires the page's own handler. */
+const INTERACTIVE_SELECTOR =
+  'a, button, input, select, textarea, summary, label, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="menuitem"], [role="tab"], [onclick]';
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
+}
+
+// Only suppressed on an actually-interactive element — `mousedown`'s
+// default action on ordinary text is exactly what starts a selection drag,
+// so preventing it unconditionally would break highlighting itself, the one
+// thing this tool is supposed to still do.
+document.addEventListener(
+  'mousedown',
+  (event) => {
+    if (!active || !isInteractiveTarget(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },
+  true,
+);
+
+// Unlike `mousedown`, a click's default action (link navigation, button
+// activation, checkbox/radio toggling, a page's own click handler) never has
+// anything to do with starting a text selection, so this blocks it
+// unconditionally, regardless of target. Capture phase + `stopImmediatePropagation`
+// wins against the page's own listeners no matter where or when they were
+// attached — `document`'s capture phase always runs before any descendant's,
+// and before any other listener registered on `document` itself after this
+// one (attached here at preload time, before the page has run any of its
+// own script). Known gap: a native, OS-drawn widget (a `<select>` dropdown,
+// a `<input type="color">` picker) can still open on `mousedown` itself,
+// beneath the DOM event layer entirely — not fixable from here.
+function suppressClick(event: MouseEvent): void {
+  if (!active) {
+    return;
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+document.addEventListener('click', suppressClick, true);
+document.addEventListener('dblclick', suppressClick, true);
+document.addEventListener('auxclick', suppressClick, true);
+
 document.addEventListener('mousemove', (event) => {
   if (!active) {
     return;
   }
   const target = event.target instanceof Element ? event.target : null;
   const mark = target?.closest(`.${MARK_CLASS}`);
-  hoveredHighlightId = mark?.getAttribute(MARK_ID_ATTR) ?? null;
+  setHoveredHighlight(mark?.getAttribute(MARK_ID_ATTR) ?? null);
 });
 
 document.addEventListener(

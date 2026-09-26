@@ -222,10 +222,35 @@ export function Terminal({ id }: TerminalProps) {
       }
     };
 
+    // Lightens every decoration element sharing `id` (or clears it, for
+    // `null`) — the visual cue that hovering it, then pressing D/Delete,
+    // would remove it. Same technique `tabHighlighter.ts` uses for a
+    // browser tab's `<mark>` elements; a highlight here can likewise be
+    // several decorations (one per row it spans — see `handleHighlighterMouseUp`).
+    const setHoveredHighlight = (id: string | null): void => {
+      if (id === hoveredHighlightId) {
+        return;
+      }
+      if (hoveredHighlightId) {
+        document
+          .querySelectorAll(`.terminal-highlight[data-nsh-id="${CSS.escape(hoveredHighlightId)}"]`)
+          .forEach((el) => el.classList.remove('terminal-highlight--hovered'));
+      }
+      hoveredHighlightId = id;
+      if (hoveredHighlightId) {
+        document
+          .querySelectorAll(`.terminal-highlight[data-nsh-id="${CSS.escape(hoveredHighlightId)}"]`)
+          .forEach((el) => el.classList.add('terminal-highlight--hovered'));
+      }
+    };
+
     const unsubscribeHighlighterState = window.northstarTerminal.onHighlighterState((active, color) => {
       highlighterActive = active;
       highlighterColor = color;
       container.classList.toggle('terminal__surface--highlighter-active', active);
+      if (!active) {
+        setHoveredHighlight(null);
+      }
     });
 
     const handleHighlighterMouseUp = (): void => {
@@ -282,7 +307,7 @@ export function Terminal({ id }: TerminalProps) {
       }
       const target = event.target instanceof Element ? event.target : null;
       const mark = target?.closest('.terminal-highlight');
-      hoveredHighlightId = (mark as HTMLElement | null)?.dataset['nshId'] ?? null;
+      setHoveredHighlight((mark as HTMLElement | null)?.dataset['nshId'] ?? null);
     };
     document.addEventListener('mousemove', handleHighlighterMouseMove);
 

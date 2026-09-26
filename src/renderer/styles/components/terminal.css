@@ -64,6 +64,13 @@ body {
     text;
 }
 
+/* Toggled by `Terminal.tsx`'s own hover tracking (`setHoveredHighlight`) —
+   the visual cue that hovering this decoration and pressing D/Delete would
+   remove it, same as a browser tab's `.northstar-highlight--hovered`. */
+.terminal-highlight--hovered {
+  opacity: 0.5;
+}
+
 /* Never shown on screen — filled with the terminal's full scrollback (see
    `Terminal.tsx`'s `PREPARE_PRINT_GLOBAL`) and swapped in for `.terminal__surface`
    only while printing (below). Ordinary flowing text in normal document
