@@ -73,4 +73,6 @@ export interface BrowserState {
   readonly zoomPercent: number;
   /** Whether the laser pointer overlay is currently on (Ctrl+I, or the toolbar button) — see `LaserPointerOverlay`. */
   readonly laserPointerActive: boolean;
+  /** Whether the highlighter tool is currently on (Ctrl+J, or the toolbar button) — see `HighlighterController`. */
+  readonly highlighterActive: boolean;
 }

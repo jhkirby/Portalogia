@@ -6,7 +6,7 @@
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { BookmarkStarIcon, LaserPointerIcon } from '../icons';
+import { BookmarkStarIcon, HighlighterIcon, LaserPointerIcon } from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
@@ -23,6 +23,8 @@ interface PageActionsProps {
   readonly focusMode: boolean;
   /** Whether the laser pointer overlay is currently on. */
   readonly laserPointerActive: boolean;
+  /** Whether the highlighter tool is currently on. */
+  readonly highlighterActive: boolean;
   readonly theme: Theme;
   readonly onToggleBookmark: () => void;
   readonly onExportPdf: () => void;
@@ -33,6 +35,7 @@ interface PageActionsProps {
   readonly onSetZoom: (percent: number) => void;
   readonly onToggleFocusMode: () => void;
   readonly onToggleLaserPointer: () => void;
+  readonly onToggleHighlighter: () => void;
   readonly onToggleTheme: () => void;
 }
 
@@ -45,6 +48,7 @@ export function PageActions({
   zoomPercent,
   focusMode,
   laserPointerActive,
+  highlighterActive,
   theme,
   onToggleBookmark,
   onExportPdf,
@@ -55,6 +59,7 @@ export function PageActions({
   onSetZoom,
   onToggleFocusMode,
   onToggleLaserPointer,
+  onToggleHighlighter,
   onToggleTheme,
 }: PageActionsProps) {
   return (
@@ -80,6 +85,17 @@ export function PageActions({
         data-tooltip={`${laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'} (${formatShortcut('I')})`}
       >
         <LaserPointerIcon />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onToggleHighlighter}
+        disabled={!canExportPdf}
+        aria-pressed={highlighterActive}
+        aria-label={highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'}
+        data-tooltip={`${highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'} (${formatShortcut('J')})`}
+      >
+        <HighlighterIcon />
       </button>
       <button
         type="button"

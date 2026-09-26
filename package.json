@@ -11,7 +11,7 @@
     "build": "electron-vite build",
     "dist": "electron-vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.preload.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "test": "playwright test",
     "test:unit": "playwright test tests/unit",

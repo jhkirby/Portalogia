@@ -97,6 +97,11 @@ export const laserPointerRequestSchema = z.object({
 });
 export type LaserPointerRequest = z.infer<typeof laserPointerRequestSchema>;
 
+export const highlighterRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+export type HighlighterRequest = z.infer<typeof highlighterRequestSchema>;
+
 // Deliberately not `.min(25).max(200)` here — `TabManager.setZoom` clamps
 // to that range itself, the same as `zoomIn`/`zoomOut` clamp their own
 // step, so an out-of-range value here isn't a malformed request, just one

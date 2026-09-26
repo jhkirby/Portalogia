@@ -9,6 +9,8 @@ import { NORTHSTAR_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
 import { tearOffTabRequestSchema } from '@shared/ipc-schemas';
 import { BookmarkStore } from './browser/BookmarkStore';
+import { HighlighterController } from './browser/HighlighterController';
+import { HighlightStore } from './browser/HighlightStore';
 import { SessionStore } from './browser/SessionStore';
 import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
@@ -68,6 +70,13 @@ const sessionStore = new SessionStore(join(app.getPath('userData'), 'session.jso
 // never showed up in another's sidebar, and a tab created in one window
 // was invisible — and unreachable — from any other.
 const sharedRegistry = new SharedTabRegistry();
+
+// Web-tab highlights aren't scoped to a window either — same reasoning as
+// `bookmarkStore`, and shared with every `TabManager` the same way
+// `sharedRegistry` is, since a tab (and its highlights) can move between
+// windows. See `HighlighterController`'s own class doc comment.
+const highlightStore = new HighlightStore(join(app.getPath('userData'), 'highlights.json'));
+const highlighterController = new HighlighterController(sharedRegistry, highlightStore);
 
 // Every open terminal tab's own pty process — one instance shared the same
 // way `sharedRegistry` is, since a terminal tab can now move between
@@ -216,6 +225,7 @@ function launchWindow(
     sessionStore,
     sharedRegistry,
     sharedTerminalManager,
+    highlighterController,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);

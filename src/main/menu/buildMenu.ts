@@ -223,6 +223,11 @@ export function buildMenu(
           click: () => getTabManager()?.toggleLaserPointer(),
         },
         {
+          label: 'Toggle Highlighter',
+          accelerator: 'CmdOrCtrl+J',
+          click: () => getTabManager()?.toggleHighlighter(),
+        },
+        {
           label: 'Toggle Theme',
           accelerator: 'CmdOrCtrl+D',
           click: () => getTabManager()?.requestToggleTheme(),

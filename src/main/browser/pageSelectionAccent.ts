@@ -40,6 +40,16 @@ export function setPageSelectionAccent(rgb: RGB): void {
 }
 
 /**
+ * The chrome's current accent, as last reported by `setAccentColor` — read
+ * by `HighlighterController` so a highlight created before a page-specific
+ * color has ever been requested still gets a sane, on-brand color, without
+ * duplicating the tracking `setPageSelectionAccent` already does.
+ */
+export function getCurrentAccent(): RGB {
+  return currentAccent;
+}
+
+/**
  * Starts keeping one browser tab's page content styled with the current
  * accent — re-applied on every fresh document (`dom-ready`, since a
  * navigation's new document has none of the previous one's injected CSS)

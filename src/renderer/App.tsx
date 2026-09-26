@@ -82,6 +82,8 @@ export function App() {
     setZoom,
     laserPointerActive,
     setLaserPointer,
+    highlighterActive,
+    setHighlighter,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
@@ -241,6 +243,7 @@ export function App() {
               zoomPercent={zoomPercent}
               focusMode={focusMode}
               laserPointerActive={laserPointerActive}
+              highlighterActive={highlighterActive}
               theme={theme}
               onToggleBookmark={handleToggleBookmark}
               onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
@@ -251,6 +254,7 @@ export function App() {
               onSetZoom={setZoom}
               onToggleFocusMode={() => setFocusMode(!focusMode)}
               onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}
+              onToggleHighlighter={() => setHighlighter(!highlighterActive)}
               onToggleTheme={toggleTheme}
             />
           </div>

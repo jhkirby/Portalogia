@@ -20,6 +20,7 @@ const EMPTY_STATE: BrowserState = {
   grabbedTabId: null,
   zoomPercent: ZOOM_PERCENT_DEFAULT,
   laserPointerActive: false,
+  highlighterActive: false,
 };
 
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
@@ -173,6 +174,10 @@ export function useTabs() {
     void window.northstar.setLaserPointer(enabled).then(logIfFailed);
   }, []);
 
+  const setHighlighter = useCallback((enabled: boolean) => {
+    void window.northstar.setHighlighter(enabled).then(logIfFailed);
+  }, []);
+
   const zoomIn = useCallback(() => {
     void window.northstar.zoomIn().then(logIfFailed);
   }, []);
@@ -235,5 +240,7 @@ export function useTabs() {
 
     laserPointerActive: state.laserPointerActive,
     setLaserPointer,
+    highlighterActive: state.highlighterActive,
+    setHighlighter,
   };
 }

@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { app, BrowserWindow, WebContentsView, dialog, type WebContents } from 'electron';
+import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents } from 'electron';
 import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
@@ -34,6 +34,7 @@ import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
+import type { HighlighterController } from './HighlighterController';
 import { LaserPointerOverlay } from './LaserPointerOverlay';
 import { trackPageSelectionAccent } from './pageSelectionAccent';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
@@ -107,6 +108,7 @@ export class TabManager {
   private focusMode = false;
   private sidebarVisible = true;
   private laserPointerActive = false;
+  private highlighterActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
   private grabbedTabId: string | null = null;
   /** Armed while a tab is grabbed; see `armSpaceHoldTimeout`. */
@@ -142,6 +144,11 @@ export class TabManager {
    *   than each owning its own, since a terminal tab (and the shell
    *   process behind it) can now move between windows the same as a
    *   browser tab can.
+   * @param highlighter Every browser tab's highlights, undo/redo stack, and
+   *   on-disk persistence — shared the same way `registry`/`terminals` are,
+   *   for the same reason (a tab's highlights move with it between
+   *   windows). This `TabManager` only owns the per-window on/off toggle;
+   *   see `HighlighterController`'s own class doc comment.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -150,6 +157,7 @@ export class TabManager {
     private readonly sessionStore: SessionStore,
     private readonly registry: SharedTabRegistry,
     terminals: TerminalManager,
+    private readonly highlighter: HighlighterController,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -423,6 +431,12 @@ export class TabManager {
       // already gone would leak the process.
       if (this.states.has(id)) {
         this.terminals.create(id);
+        // Same reasoning as `wireEvents`' `dom-ready` push for a browser
+        // tab: `activateTab` (below) fires before this view has loaded
+        // anything, so its own push lands before `terminal.html`'s preload
+        // has registered a listener and is silently dropped. This is the
+        // first point that page is guaranteed ready to receive it.
+        this.pushHighlighterStateTo(id);
       }
     });
 
@@ -667,6 +681,7 @@ export class TabManager {
     }
     this.registry.mountOwners.delete(id);
     this.registry.zoomPercentByTabId.delete(id);
+    this.highlighter.disposeTab(id);
 
     if (this.grabbedTabId === id) {
       this.grabbedTabId = null;
@@ -831,6 +846,7 @@ export class TabManager {
       this.registry.mountOwners.set(id, this);
     }
     this.activeTabId = id;
+    this.pushHighlighterState();
 
     const workspaceId = this.states.get(id)?.workspaceId;
     if (workspaceId) {
@@ -1178,6 +1194,7 @@ export class TabManager {
       this.views.delete(tabId);
       this.states.delete(tabId);
       this.registry.zoomPercentByTabId.delete(tabId);
+      this.highlighter.disposeTab(tabId);
       if (this.grabbedTabId === tabId) {
         this.grabbedTabId = null;
       }
@@ -1426,6 +1443,83 @@ export class TabManager {
       this.laserPointerActive && this.activeTabId !== null,
       this.computeMainBounds(left, top),
     );
+  }
+
+  // ── Highlighter ──────────────────────────────────────────────────────
+
+  /**
+   * Turns the highlighter tool on or off (Ctrl+J, or `PageActions`' toolbar
+   * button) for this window. Unlike the laser pointer, there's no separate
+   * overlay to (un)mount — the active tab's own preload
+   * (`src/preload/tabHighlighter.ts`) does the cursor/selection/mark work
+   * directly in the page, so this just pushes the new state down to it (see
+   * `HighlighterController.syncState`).
+   * @param enabled Whether the highlighter tool should be on.
+   * @returns The full browser state after the change.
+   */
+  public setHighlighter(enabled: boolean): BrowserState {
+    this.highlighterActive = enabled;
+    this.pushHighlighterState();
+    this.nudgeActiveTabCursor();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Toggles the highlighter tool to whichever state it isn't currently in. */
+  public toggleHighlighter(): BrowserState {
+    return this.setHighlighter(!this.highlighterActive);
+  }
+
+  /** Pushes this window's current highlighter on/off state to whichever tab is active — call whenever that could have changed: `setHighlighter` itself and `activateTab` (a different tab is now the one showing it). */
+  private pushHighlighterState(): void {
+    if (this.activeTabId) {
+      this.pushHighlighterStateTo(this.activeTabId);
+    }
+  }
+
+  /** Pushes this window's current highlighter on/off state to a specific tab, active or not — `wireEvents`' own `dom-ready` handler uses this directly (rather than `pushHighlighterState`) since a fresh document has a fresh preload that's never been told anything, whether or not that tab happens to be the active one right now. */
+  private pushHighlighterStateTo(tabId: string): void {
+    this.highlighter.syncState(tabId, this.highlighterActive);
+  }
+
+  /**
+   * Forces Chromium to immediately re-evaluate the active tab's cursor at
+   * its current position, rather than leaving the old pointer shape on
+   * screen until the next time the mouse actually moves. A CSS `cursor`
+   * change alone doesn't repaint on its own — Chromium only calls the OS's
+   * `SetCursor` while processing a real input event, never as a side effect
+   * of style recalculation — so toggling the highlighter tool while the
+   * mouse sits still left the pointer showing whatever it was already
+   * showing. Synthesizes a zero-distance `mouseMove` through
+   * `sendInputEvent` (a real input event injected into Chromium's own
+   * pipeline, unlike a DOM-dispatched `MouseEvent`, which never reaches the
+   * OS cursor at all) at the cursor's actual current screen position,
+   * translated into the active tab's own view-local coordinates. A no-op if
+   * there's no active tab or the cursor isn't currently over its content
+   * area (e.g. it's sitting over the toolbar when Ctrl+J is pressed) —
+   * nothing to nudge in either case.
+   */
+  private nudgeActiveTabCursor(): void {
+    if (!this.activeTabId) {
+      return;
+    }
+    const view = this.views.get(this.activeTabId);
+    if (!view) {
+      return;
+    }
+    const main = this.computeMainBounds(this.targetLeftInset(), this.targetTopInset());
+    // `activeTabId` is always the primary (left) pane during split view —
+    // see this class's own doc comment — so there's no case where it's
+    // showing in the secondary pane instead.
+    const bounds = this.splitView ? this.computeSplitBoundsFor(main).primary : main;
+    const cursor = screen.getCursorScreenPoint();
+    const contentBounds = this.window.getContentBounds();
+    const x = cursor.x - contentBounds.x - bounds.x;
+    const y = cursor.y - contentBounds.y - bounds.y;
+    if (x < 0 || y < 0 || x > bounds.width || y > bounds.height) {
+      return;
+    }
+    view.webContents.sendInputEvent({ type: 'mouseMove', x, y });
   }
 
   // ── Zoom ─────────────────────────────────────────────────────────────
@@ -1913,6 +2007,7 @@ export class TabManager {
         ? (this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT)
         : ZOOM_PERCENT_DEFAULT,
       laserPointerActive: this.laserPointerActive,
+      highlighterActive: this.highlighterActive,
     };
   }
 
@@ -2105,6 +2200,22 @@ export class TabManager {
 
     this.wireSharedInputHandling(id, wc);
     trackPageSelectionAccent(wc);
+
+    // A fresh document — the initial load or any later navigation/reload —
+    // has none of the previous one's highlights, undo/redo history, or
+    // preload-side highlighter state (a brand new preload instance that's
+    // never been told anything). `did-navigate`'s own listener below has
+    // already updated `this.states.get(id)?.url` to the new URL by the time
+    // `dom-ready` fires (navigation commit precedes DOM parsing), so it's
+    // safe to read here.
+    wc.on('dom-ready', () => {
+      this.highlighter.resetTab(id);
+      this.pushHighlighterStateTo(id);
+      const state = this.states.get(id);
+      if (state?.kind === 'browser') {
+        this.highlighter.restoreFor(id, state.url);
+      }
+    });
 
     wc.on('page-title-updated', (_event, title) => this.patchState(id, { title }));
     wc.on('page-favicon-updated', (_event, favicons) => {
@@ -2392,6 +2503,26 @@ export class TabManager {
         case 'b':
           event.preventDefault();
           owner.toggleBookmark(id);
+          return;
+        case 'z':
+          // Only intercepted while the highlighter tool is on — otherwise
+          // this falls through untouched, so a page's own undo (a text
+          // field, a rich editor) and Electron's native `role: 'undo'` menu
+          // item both keep working exactly as before. Never stolen on a
+          // terminal tab at all (see this method's own doc comment): this
+          // `case` only exists in the browser-tab branch of the switch, and
+          // Ctrl+Z suspends a Unix shell's foreground process — a binding
+          // this app must never shadow.
+          if (owner.highlighterActive) {
+            event.preventDefault();
+            owner.highlighter.undo(id);
+          }
+          return;
+        case 'y':
+          if (owner.highlighterActive) {
+            event.preventDefault();
+            owner.highlighter.redo(id);
+          }
           return;
         case 'h':
           event.preventDefault();

@@ -51,6 +51,7 @@ export const IpcChannel = {
   SplitExit: 'split:exit',
   FocusModeSet: 'focus-mode:set',
   LaserPointerSet: 'laser-pointer:set',
+  HighlighterSet: 'highlighter:set',
   ZoomIn: 'zoom:in',
   ZoomOut: 'zoom:out',
   ZoomReset: 'zoom:reset',
@@ -309,6 +310,18 @@ export interface NorthstarApi {
   setLaserPointer(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
   /**
+   * Turns the highlighter tool on or off (Ctrl+J, or the toolbar button
+   * between the laser pointer and PDF export) — see `HighlighterController`.
+   * While on, the active tab's cursor becomes a highlighter; releasing a
+   * text selection wraps it in a `<mark>` colored with the current accent,
+   * real DOM injected into the page itself (not a separate overlay, unlike
+   * the laser pointer) so it shows up in PDF export and survives a reload.
+   * Ctrl+Z/Ctrl+Y undo/redo the last highlight, and hovering one with 'D' or
+   * Delete removes it, all only while this is on.
+   */
+  setHighlighter(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
    * Zooms in/out/back-to-100% on the active tab's own content only — never
    * the chrome (sidebar, tab strip, toolbar), which always stays at native
    * size. Works for a terminal tab exactly like a browser one, since both
@@ -374,6 +387,17 @@ export interface NorthstarTerminalApi {
   onTerminalData(listener: (id: string, data: string) => void): () => void;
   /** Subscribes to this tab's shell process exiting on its own (e.g. the user typed `exit`) — distinct from the tab being closed. */
   onTerminalExited(listener: (id: string) => void): () => void;
+
+  /**
+   * Subscribes to the highlighter tool's on/off state and current accent
+   * color, pushed by `HighlighterController.syncState` whenever the
+   * window's toggle changes or this tab is (re)activated — see
+   * `Terminal.tsx`. Unlike a browser tab (`src/preload/tabHighlighter.ts`),
+   * there's no op/restore/undo-redo channel here: a terminal highlight is
+   * never persisted or undoable (see `Terminal.tsx`'s own doc comment for
+   * why), so on/off-plus-color is the only thing this tab ever needs told.
+   */
+  onHighlighterState(listener: (active: boolean, color: RGB) => void): () => void;
 }
 
 /**

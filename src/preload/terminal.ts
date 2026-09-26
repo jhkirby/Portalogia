@@ -5,6 +5,7 @@
 
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import type { NorthstarTerminalApi } from '@shared/ipc-contract';
+import type { RGB } from '@shared/color';
 
 // Deliberately NOT importing the `IpcChannel` runtime object from
 // `@shared/ipc-contract` here, even though `src/preload/index.ts` does —
@@ -23,6 +24,13 @@ const TerminalResize = 'terminal:resize';
 const TerminalData = 'terminal:data';
 const TerminalExited = 'terminal:exited';
 const ZoomApply = 'zoom:apply';
+// Same hardcoded string `HighlighterController` (main) and
+// `src/preload/tabHighlighter.ts` (a browser tab's own preload) both use for
+// this — not shared as a runtime import for the same chunking reason noted
+// above, and reused verbatim here rather than invented fresh so one push
+// from `HighlighterController.syncState` reaches either kind of tab's
+// preload identically.
+const HighlighterState = 'highlighter:state';
 
 // `webFrame.setZoomLevel`, not `contextBridge` — see
 // `src/preload/tabZoom.ts` (the same listener, for a browser tab's own
@@ -48,6 +56,14 @@ const api: NorthstarTerminalApi = {
     };
     ipcRenderer.on(TerminalExited, handler);
     return () => ipcRenderer.removeListener(TerminalExited, handler);
+  },
+
+  onHighlighterState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { active: boolean; color: RGB }): void => {
+      listener(payload.active, payload.color);
+    };
+    ipcRenderer.on(HighlighterState, handler);
+    return () => ipcRenderer.removeListener(HighlighterState, handler);
   },
 };
 
