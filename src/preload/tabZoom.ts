@@ -11,6 +11,7 @@ import { ipcRenderer, webFrame } from 'electron';
 // sandboxed CJS loader can't `require()` (see that file's own comment).
 import './tabHighlighter';
 import './tabComments';
+import './tabPen';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see
 // `src/preload/terminal.ts`'s own comment: a value shared between two

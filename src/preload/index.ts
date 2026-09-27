@@ -91,6 +91,7 @@ const api: NorthstarApi = {
   setLaserPointer: (enabled) => invoke(IpcChannel.LaserPointerSet, { enabled }),
   setHighlighter: (enabled) => invoke(IpcChannel.HighlighterSet, { enabled }),
   setCommentTool: (enabled) => invoke(IpcChannel.CommentToolSet, { enabled }),
+  setPen: (enabled) => invoke(IpcChannel.PenSet, { enabled }),
 
   zoomIn: () => invoke(IpcChannel.ZoomIn),
   zoomOut: () => invoke(IpcChannel.ZoomOut),

@@ -37,6 +37,7 @@ import type { CommentController } from './CommentController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
 import type { HighlighterController } from './HighlighterController';
 import { LaserPointerOverlay } from './LaserPointerOverlay';
+import type { PenController } from './PenController';
 import { trackPageSelectionAccent } from './pageSelectionAccent';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
@@ -111,6 +112,7 @@ export class TabManager {
   private laserPointerActive = false;
   private highlighterActive = false;
   private commentToolActive = false;
+  private penActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
   private grabbedTabId: string | null = null;
   /** Armed while a tab is grabbed; see `armSpaceHoldTimeout`. */
@@ -155,6 +157,11 @@ export class TabManager {
    *   on-disk persistence, shared the same way `highlighter` is and for the
    *   same reason. This `TabManager` only owns the per-window on/off toggle;
    *   see `CommentController`'s own class doc comment.
+   * @param penController Every browser tab's freehand pen strokes,
+   *   undo/redo stack, and on-disk persistence, shared the same way
+   *   `highlighter` is and for the same reason. This `TabManager` only owns
+   *   the per-window on/off toggle; see `PenController`'s own class doc
+   *   comment.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -165,6 +172,7 @@ export class TabManager {
     terminals: TerminalManager,
     private readonly highlighter: HighlighterController,
     private readonly commentController: CommentController,
+    private readonly penController: PenController,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -705,6 +713,7 @@ export class TabManager {
     this.registry.zoomPercentByTabId.delete(id);
     this.highlighter.disposeTab(id);
     this.commentController.disposeTab(id);
+    this.penController.disposeTab(id);
     this.unlinkTab(id);
 
     if (this.grabbedTabId === id) {
@@ -1372,6 +1381,7 @@ export class TabManager {
       this.registry.zoomPercentByTabId.delete(tabId);
       this.highlighter.disposeTab(tabId);
       this.commentController.disposeTab(tabId);
+      this.penController.disposeTab(tabId);
       this.unlinkTab(tabId);
       if (this.grabbedTabId === tabId) {
         this.grabbedTabId = null;
@@ -1594,15 +1604,18 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setLaserPointer(enabled: boolean): BrowserState {
-    // Mutually exclusive with the highlighter and the comment tool — all
-    // three are full-window "the pointer does something else now" modes,
-    // and having more than one on at once made no sense (each one's own
-    // cursor/click-suppression would think it alone owns the pointer).
+    // Mutually exclusive with the highlighter, the comment tool, and the pen
+    // — all four are full-window "the pointer does something else now"
+    // modes, and having more than one on at once made no sense (each one's
+    // own cursor/click-suppression would think it alone owns the pointer).
     if (enabled && this.highlighterActive) {
       this.setHighlighter(false);
     }
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (enabled && this.penActive) {
+      this.setPen(false);
     }
     this.laserPointerActive = enabled;
     this.syncLaserPointerOverlay();
@@ -1616,16 +1629,16 @@ export class TabManager {
   }
 
   /**
-   * Turns off the laser pointer, highlighter, and/or comment tool, whichever
-   * is on — Escape's own "back to the plain pointer" behavior
+   * Turns off the laser pointer, highlighter, comment tool, and/or pen,
+   * whichever is on — Escape's own "back to the plain pointer" behavior
    * (`wireSharedInputHandling`), alongside its existing Focus Mode exit.
-   * Turns off all three together rather than one press per tool, if more
+   * Turns off all four together rather than one press per tool, if more
    * than one somehow ended up on at once.
    * @returns Whether any tool was actually on (and is now off) — callers use
    *   this to decide whether Escape should be treated as handled.
    */
   private exitPointerTools(): boolean {
-    const wasOn = this.laserPointerActive || this.highlighterActive || this.commentToolActive;
+    const wasOn = this.laserPointerActive || this.highlighterActive || this.commentToolActive || this.penActive;
     if (this.laserPointerActive) {
       this.setLaserPointer(false);
     }
@@ -1634,6 +1647,9 @@ export class TabManager {
     }
     if (this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (this.penActive) {
+      this.setPen(false);
     }
     return wasOn;
   }
@@ -1669,13 +1685,16 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setHighlighter(enabled: boolean): BrowserState {
-    // Mutually exclusive with the laser pointer and the comment tool — see
-    // `setLaserPointer`'s own comment.
+    // Mutually exclusive with the laser pointer, the comment tool, and the
+    // pen — see `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
       this.setLaserPointer(false);
     }
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (enabled && this.penActive) {
+      this.setPen(false);
     }
     this.highlighterActive = enabled;
     this.pushHighlighterState();
@@ -1706,13 +1725,16 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setCommentTool(enabled: boolean): BrowserState {
-    // Mutually exclusive with the laser pointer and the highlighter — see
-    // `setLaserPointer`'s own comment.
+    // Mutually exclusive with the laser pointer, the highlighter, and the
+    // pen — see `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
       this.setLaserPointer(false);
     }
     if (enabled && this.highlighterActive) {
       this.setHighlighter(false);
+    }
+    if (enabled && this.penActive) {
+      this.setPen(false);
     }
     this.commentToolActive = enabled;
     this.pushCommentToolState();
@@ -1743,25 +1765,79 @@ export class TabManager {
     return this.commentToolActive;
   }
 
+  // ── Pen ──────────────────────────────────────────────────────────────
+
+  /**
+   * Turns the pen tool on or off (Ctrl+P, or `PageActions`' toolbar button)
+   * for this window. Like the highlighter/comment tool, there's no separate
+   * overlay to (un)mount; the active tab's own preload
+   * (`src/preload/tabPen.ts`) does the draw/hover/delete work directly in
+   * the page, so this just pushes the new state down to it.
+   * @param enabled Whether the pen tool should be on.
+   * @returns The full browser state after the change.
+   */
+  public setPen(enabled: boolean): BrowserState {
+    // Mutually exclusive with the laser pointer, the highlighter, and the
+    // comment tool — see `setLaserPointer`'s own comment.
+    if (enabled && this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
+    if (enabled && this.highlighterActive) {
+      this.setHighlighter(false);
+    }
+    if (enabled && this.commentToolActive) {
+      this.setCommentTool(false);
+    }
+    this.penActive = enabled;
+    this.pushPenState();
+    this.nudgeActiveTabCursor();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Toggles the pen tool to whichever state it isn't currently in. */
+  public togglePen(): BrowserState {
+    return this.setPen(!this.penActive);
+  }
+
+  /** Whether this window currently has the pen tool on — read by `main/index.ts`'s accent-color broadcast, same reasoning as `isHighlighterActive`. */
+  public isPenActive(): boolean {
+    return this.penActive;
+  }
+
+  /** Pushes this window's current pen on/off state to whichever tab is active — call whenever that could have changed: `setPen` itself and `activateTab`. */
+  private pushPenState(): void {
+    if (this.activeTabId) {
+      this.pushPenStateTo(this.activeTabId);
+    }
+  }
+
+  /** Pushes this window's current pen on/off state to a specific tab, active or not — `wireEvents`'s own `dom-ready` handler uses this directly, same reasoning as `pushHighlighterStateTo`. */
+  private pushPenStateTo(tabId: string): void {
+    this.penController.syncState(tabId, this.penActive);
+  }
+
   // ── Revert page ──────────────────────────────────────────────────────
 
   /**
-   * Reverts a tab's page back to how it looked before any highlighting or
-   * commenting on it — Ctrl+Shift+R, or `PageActions`' toolbar button.
-   * Unlike the laser pointer/highlighter/comment tool, this isn't a toggle:
-   * it's a single one-shot action with no on/off state of its own, so it
-   * doesn't touch `laserPointerActive`/`highlighterActive`/`commentToolActive`
-   * at all. A no-op for a tab that doesn't exist or isn't a browser tab —
-   * a terminal has neither highlights nor comments to revert.
+   * Reverts a tab's page back to how it looked before any highlighting,
+   * drawing, or commenting on it — Ctrl+Shift+R, or `PageActions`' toolbar
+   * button. Unlike the laser pointer/highlighter/comment tool/pen, this
+   * isn't a toggle: it's a single one-shot action with no on/off state of
+   * its own, so it doesn't touch
+   * `laserPointerActive`/`highlighterActive`/`commentToolActive`/`penActive`
+   * at all. A no-op for a tab that doesn't exist or isn't a browser tab — a
+   * terminal has none of the three to revert.
    * @param id The tab to revert.
    * @returns The full browser state (unchanged by this action beyond
-   *   whatever `HighlighterController`/`CommentController` push to the
-   *   tab's own preload).
+   *   whatever `HighlighterController`/`CommentController`/`PenController`
+   *   push to the tab's own preload).
    */
   public revertPage(id: string): BrowserState {
     if (this.states.get(id)?.kind === 'browser') {
       this.highlighter.clearTab(id);
       this.commentController.clearTab(id);
+      this.penController.clearTab(id);
     }
     return this.getState();
   }
@@ -2309,6 +2385,7 @@ export class TabManager {
       laserPointerActive: this.laserPointerActive,
       highlighterActive: this.highlighterActive,
       commentToolActive: this.commentToolActive,
+      penActive: this.penActive,
     };
   }
 
@@ -2514,10 +2591,13 @@ export class TabManager {
       this.pushHighlighterStateTo(id);
       this.commentController.resetTab(id);
       this.pushCommentToolStateTo(id);
+      this.penController.resetTab(id);
+      this.pushPenStateTo(id);
       const state = this.states.get(id);
       if (state?.kind === 'browser') {
         this.highlighter.restoreFor(id, state.url);
         this.commentController.restoreFor(id, state.url);
+        this.penController.restoreFor(id, state.url);
       }
     });
 
@@ -2849,23 +2929,31 @@ export class TabManager {
           owner.toggleBookmark(id);
           return;
         case 'z':
-          // Only intercepted while the highlighter tool is on — otherwise
-          // this falls through untouched, so a page's own undo (a text
-          // field, a rich editor) and Electron's native `role: 'undo'` menu
-          // item both keep working exactly as before. Never stolen on a
+          // Only intercepted while the highlighter or pen tool is on —
+          // otherwise this falls through untouched, so a page's own undo (a
+          // text field, a rich editor) and Electron's native `role: 'undo'`
+          // menu item both keep working exactly as before. Never stolen on a
           // terminal tab at all (see this method's own doc comment): this
           // `case` only exists in the browser-tab branch of the switch, and
           // Ctrl+Z suspends a Unix shell's foreground process — a binding
-          // this app must never shadow.
+          // this app must never shadow. The two tools are mutually
+          // exclusive (`setHighlighter`/`setPen`), so at most one branch
+          // below ever actually runs.
           if (owner.highlighterActive) {
             event.preventDefault();
             owner.highlighter.undo(id);
+          } else if (owner.penActive) {
+            event.preventDefault();
+            owner.penController.undo(id);
           }
           return;
         case 'y':
           if (owner.highlighterActive) {
             event.preventDefault();
             owner.highlighter.redo(id);
+          } else if (owner.penActive) {
+            event.preventDefault();
+            owner.penController.redo(id);
           }
           return;
         case 'm':

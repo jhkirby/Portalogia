@@ -13,6 +13,8 @@ import { CommentController } from './browser/CommentController';
 import { CommentStore } from './browser/CommentStore';
 import { HighlighterController } from './browser/HighlighterController';
 import { HighlightStore } from './browser/HighlightStore';
+import { PenController } from './browser/PenController';
+import { PenStore } from './browser/PenStore';
 import { SessionStore } from './browser/SessionStore';
 import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
@@ -85,6 +87,11 @@ const highlighterController = new HighlighterController(sharedRegistry, highligh
 const commentStore = new CommentStore(join(app.getPath('userData'), 'comments.json'));
 const commentController = new CommentController(sharedRegistry, commentStore);
 
+// Pen strokes aren't scoped to a window either — same reasoning as
+// `highlightStore`/`highlighterController` just above.
+const penStore = new PenStore(join(app.getPath('userData'), 'pen-strokes.json'));
+const penController = new PenController(sharedRegistry, penStore);
+
 // Every open terminal tab's own pty process — one instance shared the same
 // way `sharedRegistry` is, since a terminal tab can now move between
 // windows the same as a browser tab can (dragged into another window's tab
@@ -138,6 +145,7 @@ void app.whenReady().then(() => {
   registerAccentColorIpc(() => {
     highlighterController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isHighlighterActive() ?? false);
     commentController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isCommentToolActive() ?? false);
+    penController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isPenActive() ?? false);
   });
   registerTearOffIpc();
   registerOpenWorkspaceInNewWindowIpc();
@@ -239,6 +247,7 @@ function launchWindow(
     sharedTerminalManager,
     highlighterController,
     commentController,
+    penController,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);

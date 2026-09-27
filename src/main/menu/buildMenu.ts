@@ -243,6 +243,11 @@ export function buildMenu(
           click: () => getTabManager()?.toggleLaserPointer(),
         },
         {
+          label: 'Toggle Pen',
+          accelerator: 'CmdOrCtrl+P',
+          click: () => getTabManager()?.togglePen(),
+        },
+        {
           label: 'Toggle Highlighter',
           accelerator: 'CmdOrCtrl+J',
           click: () => getTabManager()?.toggleHighlighter(),

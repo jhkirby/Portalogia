@@ -55,6 +55,7 @@ export const IpcChannel = {
   LaserPointerSet: 'laser-pointer:set',
   HighlighterSet: 'highlighter:set',
   CommentToolSet: 'comment-tool:set',
+  PenSet: 'pen:set',
   ZoomIn: 'zoom:in',
   ZoomOut: 'zoom:out',
   ZoomReset: 'zoom:reset',
@@ -332,15 +333,31 @@ export interface NorthstarApi {
 
   /**
    * Turns the highlighter tool on or off (Ctrl+J, or the toolbar button
-   * between the laser pointer and PDF export) — see `HighlighterController`.
-   * While on, the active tab's cursor becomes a highlighter; releasing a
-   * text selection wraps it in a `<mark>` colored with the current accent,
-   * real DOM injected into the page itself (not a separate overlay, unlike
-   * the laser pointer) so it shows up in PDF export and survives a reload.
+   * between the pen and PDF export) — see `HighlighterController`. While on,
+   * the active tab's cursor becomes a highlighter; releasing a text
+   * selection wraps it in a `<mark>` colored with the current accent, real
+   * DOM injected into the page itself (not a separate overlay, unlike the
+   * laser pointer) so it shows up in PDF export and survives a reload.
    * Ctrl+Z/Ctrl+Y undo/redo the last highlight, and hovering one with 'D' or
    * Delete removes it, all only while this is on.
    */
   setHighlighter(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Turns the pen tool on or off (Ctrl+P, or the toolbar button between the
+   * laser pointer and the highlighter) — see `PenController`. While on, the
+   * active tab's cursor becomes a pen; holding the mouse down and dragging
+   * (same gesture as the laser pointer's own streak) draws a freehand stroke
+   * in the current accent color, real DOM (an SVG path) injected into the
+   * page itself, same as the highlighter, so it shows up in PDF export and
+   * survives a reload. Ctrl+Z/Ctrl+Y undo/redo the last stroke, and hovering
+   * one lightens it and either clicking it or pressing 'D'/Delete removes
+   * it, all only while this is on. Mutually exclusive with the laser
+   * pointer, the highlighter, and the comment tool. Browser-tab only, like
+   * the comment tool: a terminal's character grid has no document coordinate
+   * space for a freehand overlay to live in.
+   */
+  setPen(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
   /**
    * Turns the comment tool on or off (Ctrl+M, or the toolbar button next to
@@ -351,22 +368,23 @@ export interface NorthstarApi {
    * place. While off, a comment collapses to just its dot; clicking one
    * shows its text read-only until Escape, a click outside it, or opening a
    * different comment closes it back to a dot. Mutually exclusive with the
-   * laser pointer and the highlighter — turning any one of the three on
-   * turns the other two off. Browser-tab only, unlike the highlighter: a
-   * terminal tab's pty scrollback has nothing stable to re-anchor a comment
-   * to across a reload.
+   * laser pointer, the highlighter, and the pen — turning any one of the
+   * four on turns the other three off. Browser-tab only, unlike the
+   * highlighter: a terminal tab's pty scrollback has nothing stable to
+   * re-anchor a comment to across a reload.
    */
   setCommentTool(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
   /**
    * Reverts a browser tab's page back to how it looked before any
-   * highlighting or commenting on it — removes every highlight and every
-   * comment for that tab's current URL outright (Ctrl+Shift+R, or the
-   * toolbar button next to the comment tool). Unlike the other three tools,
-   * this is a one-shot action, not a toggle: there's no on/off state, and
-   * the wipe isn't itself undoable — it also clears the highlighter's own
-   * undo/redo stack, and mirrors the removal onto every other tab open to
-   * the same URL. A no-op for a terminal tab, which has neither.
+   * highlighting, drawing, or commenting on it — removes every highlight,
+   * pen stroke, and comment for that tab's current URL outright
+   * (Ctrl+Shift+R, or the toolbar button next to the comment tool). Unlike
+   * the other four tools, this is a one-shot action, not a toggle: there's
+   * no on/off state, and the wipe isn't itself undoable — it also clears the
+   * highlighter's and the pen's own undo/redo stacks, and mirrors the
+   * removal onto every other tab open to the same URL. A no-op for a
+   * terminal tab, which has none of the three.
    */
   revertPage(id: string): Promise<IpcResult<BrowserState>>;
 

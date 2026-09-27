@@ -88,6 +88,8 @@ export function App() {
     setHighlighter,
     commentToolActive,
     setCommentTool,
+    penActive,
+    setPen,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
@@ -111,7 +113,7 @@ export function App() {
   // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
   // WorkspaceBar's rename, TabSearch) when none of them are active.
   useEffect(() => {
-    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive) {
+    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !penActive) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -130,6 +132,9 @@ export function App() {
       if (commentToolActive) {
         setCommentTool(false);
       }
+      if (penActive) {
+        setPen(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -142,6 +147,8 @@ export function App() {
     setHighlighter,
     commentToolActive,
     setCommentTool,
+    penActive,
+    setPen,
   ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
@@ -270,6 +277,7 @@ export function App() {
               laserPointerActive={laserPointerActive}
               highlighterActive={highlighterActive}
               commentToolActive={commentToolActive}
+              penActive={penActive}
               theme={theme}
               onToggleBookmark={handleToggleBookmark}
               onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
@@ -283,6 +291,7 @@ export function App() {
               onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}
               onToggleHighlighter={() => setHighlighter(!highlighterActive)}
               onToggleCommentTool={() => setCommentTool(!commentToolActive)}
+              onTogglePen={() => setPen(!penActive)}
               onRevertPage={() => activeTabId && revertPage(activeTabId)}
               onToggleTheme={toggleTheme}
             />

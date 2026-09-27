@@ -77,4 +77,6 @@ export interface BrowserState {
   readonly highlighterActive: boolean;
   /** Whether the comment tool is currently on (Ctrl+M, or the toolbar button) — see `CommentController`. */
   readonly commentToolActive: boolean;
+  /** Whether the pen tool is currently on (Ctrl+P, or the toolbar button) — see `PenController`. */
+  readonly penActive: boolean;
 }

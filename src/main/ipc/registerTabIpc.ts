@@ -21,6 +21,7 @@ import {
   moveTabRequestSchema,
   moveTabToWorkspaceRequestSchema,
   navigateRequestSchema,
+  penRequestSchema,
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
   tabIdRequestSchema,
@@ -184,6 +185,8 @@ export function registerTabIpc(
   handle(IpcChannel.CommentToolSet, commentToolRequestSchema, (request, event) =>
     resolveTabManager(event).setCommentTool(request.enabled),
   );
+
+  handle(IpcChannel.PenSet, penRequestSchema, (request, event) => resolveTabManager(event).setPen(request.enabled));
 
   ipcMain.handle(IpcChannel.ZoomIn, (event): IpcResult<BrowserState> => {
     try {

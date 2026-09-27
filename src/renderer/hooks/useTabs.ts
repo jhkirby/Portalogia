@@ -22,6 +22,7 @@ const EMPTY_STATE: BrowserState = {
   laserPointerActive: false,
   highlighterActive: false,
   commentToolActive: false,
+  penActive: false,
 };
 
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
@@ -190,6 +191,10 @@ export function useTabs() {
     void window.northstar.setCommentTool(enabled).then(logIfFailed);
   }, []);
 
+  const setPen = useCallback((enabled: boolean) => {
+    void window.northstar.setPen(enabled).then(logIfFailed);
+  }, []);
+
   const zoomIn = useCallback(() => {
     void window.northstar.zoomIn().then(logIfFailed);
   }, []);
@@ -258,5 +263,7 @@ export function useTabs() {
     setHighlighter,
     commentToolActive: state.commentToolActive,
     setCommentTool,
+    penActive: state.penActive,
+    setPen,
   };
 }

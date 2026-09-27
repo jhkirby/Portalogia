@@ -6,7 +6,15 @@
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { BookmarkStarIcon, CommentIcon, HighlighterIcon, LaserPointerIcon, OpenInNewWindowIcon, RevertIcon } from '../icons';
+import {
+  BookmarkStarIcon,
+  CommentIcon,
+  HighlighterIcon,
+  LaserPointerIcon,
+  OpenInNewWindowIcon,
+  PenIcon,
+  RevertIcon,
+} from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
@@ -27,6 +35,8 @@ interface PageActionsProps {
   readonly highlighterActive: boolean;
   /** Whether the comment tool is currently on. */
   readonly commentToolActive: boolean;
+  /** Whether the pen tool is currently on. */
+  readonly penActive: boolean;
   readonly theme: Theme;
   readonly onToggleBookmark: () => void;
   readonly onExportPdf: () => void;
@@ -40,6 +50,7 @@ interface PageActionsProps {
   readonly onToggleLaserPointer: () => void;
   readonly onToggleHighlighter: () => void;
   readonly onToggleCommentTool: () => void;
+  readonly onTogglePen: () => void;
   /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
   readonly onRevertPage: () => void;
   readonly onToggleTheme: () => void;
@@ -56,6 +67,7 @@ export function PageActions({
   laserPointerActive,
   highlighterActive,
   commentToolActive,
+  penActive,
   theme,
   onToggleBookmark,
   onExportPdf,
@@ -69,6 +81,7 @@ export function PageActions({
   onToggleLaserPointer,
   onToggleHighlighter,
   onToggleCommentTool,
+  onTogglePen,
   onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
@@ -95,6 +108,17 @@ export function PageActions({
         data-tooltip={`${laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'} (${formatShortcut('I')})`}
       >
         <LaserPointerIcon />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onTogglePen}
+        disabled={!canActOnPage}
+        aria-pressed={penActive}
+        aria-label={penActive ? 'Turn off pen' : 'Turn on pen'}
+        data-tooltip={`${penActive ? 'Turn off pen' : 'Turn on pen'} (${formatShortcut('P')})`}
+      >
+        <PenIcon />
       </button>
       <button
         type="button"

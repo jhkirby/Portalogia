@@ -107,6 +107,11 @@ export const commentToolRequestSchema = z.object({
 });
 export type CommentToolRequest = z.infer<typeof commentToolRequestSchema>;
 
+export const penRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+export type PenRequest = z.infer<typeof penRequestSchema>;
+
 // Deliberately not `.min(25).max(200)` here — `TabManager.setZoom` clamps
 // to that range itself, the same as `zoomIn`/`zoomOut` clamp their own
 // step, so an out-of-range value here isn't a malformed request, just one
