@@ -43,10 +43,19 @@ const MARK_ID_ATTR = 'data-nsh-id';
 /** Applied to every mark sharing the currently-hovered highlight's id, lightening it — the visual cue that hovering it (and pressing D/Delete) would remove it. */
 const MARK_HOVER_CLASS = 'northstar-highlight--hovered';
 
+/** A finished highlight's own background alpha. */
+const MARK_ALPHA = 0.55;
+/** How much a highlight lightens on hover (`MARK_HOVER_CLASS`) — reused for the drag-selection preview below, since both are "a lighter version of what this highlight would look like." */
+const HOVER_OPACITY = 0.5;
+
+/** Name registered with `CSS.highlights` for the live drag preview — see `updateSelectionPreview`. */
+const PREVIEW_HIGHLIGHT_NAME = 'northstar-highlighter-preview';
+
 let active = false;
 let currentColor: RgbColor = { r: 26, g: 115, b: 232 };
 let hoveredHighlightId: string | null = null;
 let cursorStyleEl: HTMLStyleElement | null = null;
+let previewHighlight: Highlight | null = null;
 
 function rgba(color: RgbColor, alpha: number): string {
   return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
@@ -70,8 +79,37 @@ function highlighterCursorCss(): string {
 /** Re-paints every existing `<mark>` to `color` — a highlight's color is never frozen at creation time; it always tracks whatever the current accent is, the same way its cursor and hover states do. */
 function repaintAllHighlights(color: RgbColor): void {
   document.querySelectorAll(`mark.${MARK_CLASS}`).forEach((mark) => {
-    (mark as HTMLElement).style.backgroundColor = rgba(color, 0.55);
+    (mark as HTMLElement).style.backgroundColor = rgba(color, MARK_ALPHA);
   });
+}
+
+/**
+ * The cursor/hover/preview rules, rebuilt fresh against whichever color is
+ * current — called every time `setActive` runs (toggle, tab activation, or
+ * a live accent-color change), not just once, so the drag preview and hover
+ * lightening never go stale after a color change the way a finished
+ * highlight almost did (see `repaintAllHighlights`).
+ */
+function buildStyleRuleText(color: RgbColor): string {
+  const previewColor = rgba(color, MARK_ALPHA * HOVER_OPACITY);
+  return (
+    `html, html * { cursor: ${highlighterCursorCss()} !important; } ` +
+    `.${MARK_HOVER_CLASS} { opacity: ${HOVER_OPACITY}; } ` +
+    // Native selection stays fully invisible the whole time this tool is on
+    // (and overrides `pageSelectionAccent.ts`'s own `::selection` rule,
+    // which has no `!important` of its own) — the drag preview is painted
+    // separately via `::highlight()` below instead, specifically so a
+    // *real* native selection is never the thing a person sees as
+    // "highlighted." Leaving a real selection visibly active (or even just
+    // active at all past the drag that made it) is what let a later
+    // mousedown on that same text get misread by Chromium as "drag this
+    // selection to move it" rather than starting a fresh one — seen
+    // firsthand once a rejected multi-block selection was left selected
+    // instead of cleared. `updateSelectionPreview`/`highlightSelection` now
+    // both clear the real selection unconditionally instead.
+    '::selection { background-color: transparent !important; background: transparent !important; } ' +
+    `::highlight(${PREVIEW_HIGHLIGHT_NAME}) { background-color: ${previewColor}; }`
+  );
 }
 
 function setActive(nextActive: boolean, color: RgbColor): void {
@@ -81,30 +119,65 @@ function setActive(nextActive: boolean, color: RgbColor): void {
   if (colorChanged) {
     repaintAllHighlights(color);
   }
+  if (!cursorStyleEl) {
+    cursorStyleEl = document.createElement('style');
+    cursorStyleEl.setAttribute('data-northstar', 'highlighter-cursor');
+  }
+  cursorStyleEl.textContent = buildStyleRuleText(color);
   if (active) {
-    if (!cursorStyleEl) {
-      cursorStyleEl = document.createElement('style');
-      cursorStyleEl.setAttribute('data-northstar', 'highlighter-cursor');
-      cursorStyleEl.textContent =
-        `html, html * { cursor: ${highlighterCursorCss()} !important; } ` +
-        `.${MARK_HOVER_CLASS} { opacity: 0.5; } ` +
-        // Hides the browser's own native text-selection highlight (and
-        // overrides `pageSelectionAccent.ts`'s own `::selection` rule,
-        // which has no `!important` of its own) while this tool is on, so
-        // the highlighter's own colored `<mark>` is the only "highlight" a
-        // person ever sees — not a competing native one during the drag,
-        // replaced by ours only after release. Selection itself still
-        // works exactly the same underneath; only its paint is suppressed.
-        '::selection { background-color: transparent !important; background: transparent !important; }';
-    }
     if (!cursorStyleEl.isConnected) {
       (document.head ?? document.documentElement).appendChild(cursorStyleEl);
     }
-  } else if (cursorStyleEl?.isConnected) {
+  } else if (cursorStyleEl.isConnected) {
     cursorStyleEl.remove();
   }
   if (!active) {
     setHoveredHighlight(null);
+    clearSelectionPreview();
+  }
+}
+
+/** The registered `Highlight` object backing `::highlight(northstar-highlighter-preview)`, created on first use. */
+function ensurePreviewHighlight(): Highlight {
+  if (!previewHighlight) {
+    previewHighlight = new Highlight();
+    CSS.highlights.set(PREVIEW_HIGHLIGHT_NAME, previewHighlight);
+  }
+  return previewHighlight;
+}
+
+/** Clears the drag preview, if anything is currently shown. */
+function clearSelectionPreview(): void {
+  previewHighlight?.clear();
+}
+
+/**
+ * Re-paints the live drag preview from the browser's own current selection
+ * — called on every `selectionchange`, which fires continuously while a
+ * mouse drag is extending it. Uses the CSS Custom Highlight API
+ * (`::highlight()`) rather than `::selection` itself: a `Highlight` is a
+ * purely visual overlay, entirely decoupled from `window.getSelection()`,
+ * so painting it never risks the native selection being mistaken for
+ * something the browser should let a person drag around (see
+ * `buildStyleRuleText`'s own comment). Shows nothing at all for a selection
+ * that `highlightSelection` would reject anyway (crosses more than one
+ * block, or overlaps an existing highlight) — honest feedback about what
+ * will actually happen on release, not just "something is selected."
+ */
+function updateSelectionPreview(): void {
+  const highlight = ensurePreviewHighlight();
+  if (!active) {
+    highlight.clear();
+    return;
+  }
+  const selection = window.getSelection();
+  highlight.clear();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!range.collapsed && isHighlightable(range)) {
+    highlight.add(range);
   }
 }
 
@@ -126,17 +199,24 @@ function setHoveredHighlight(id: string | null): void {
   }
 }
 
-/** The nearest block-level ancestor of a node, or `null` for a node not attached to a rendered element at all. Used to reject a selection that crosses block boundaries — see this file's own module doc comment for why v1 scopes to single-block selections. */
-function closestBlock(node: Node): Element | null {
-  let el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
-  while (el) {
-    const display = window.getComputedStyle(el).display;
-    if (display !== 'inline' && display !== 'inline-block' && display !== 'inline-flex') {
-      return el;
-    }
-    el = el.parentElement;
-  }
-  return null;
+/**
+ * The narrowest node guaranteed to contain the entirety of `range` — root
+ * for both `wrapRange`'s own text-node walk (via
+ * `collectIntersectingTextRanges`) and the prefix/suffix quote context, so
+ * neither has to consider content outside the selection itself. A
+ * `TreeWalker` never visits its own root via `nextNode()`, only that root's
+ * descendants — and `commonAncestorContainer` is itself a leaf `Text` node
+ * (with no children at all) whenever a selection lands entirely inside one,
+ * the single most common case of all. Walking from its parent instead
+ * always includes it as a descendant; `intersectsNode` still correctly
+ * excludes any sibling content the range doesn't actually cover, no matter
+ * how far out this root ends up being — a selection spanning several
+ * paragraphs or list items is walked exactly the same way as one inside a
+ * single word, just from a higher root.
+ */
+function rangeContainer(range: Range): Node {
+  const commonAncestor = range.commonAncestorContainer;
+  return commonAncestor.nodeType === Node.TEXT_NODE ? (commonAncestor.parentNode ?? commonAncestor) : commonAncestor;
 }
 
 /** Text immediately before a point, up to `QUOTE_CONTEXT_CHARS`, scoped to `within` so this never has to stringify content far outside the highlighted block. */
@@ -171,16 +251,7 @@ function textAfter(within: Node, node: Node, offset: number): string {
  * selection "covers", so this is the one place that decides it.
  */
 function collectIntersectingTextRanges(range: Range): Array<{ node: Text; start: number; end: number }> {
-  // A `TreeWalker` never visits its own root via `nextNode()`, only that
-  // root's descendants — and `commonAncestorContainer` is itself a `Text`
-  // node (with no children at all) whenever a selection lands entirely
-  // inside one, the single most common case of all. Walking from its parent
-  // element instead always includes it as a descendant; `intersectsNode`
-  // below still correctly excludes any sibling text the range doesn't
-  // actually cover.
-  const commonAncestor = range.commonAncestorContainer;
-  const root = commonAncestor.nodeType === Node.TEXT_NODE ? (commonAncestor.parentNode ?? commonAncestor) : commonAncestor;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const walker = document.createTreeWalker(rangeContainer(range), NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => (range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
   });
 
@@ -233,7 +304,7 @@ function wrapRange(range: Range, id: string, color: RgbColor): boolean {
     // stylesheet rule — a strict `style-src` CSP blocks parsed style
     // content but not individual property assignment, so this is what
     // keeps a highlight visible (and therefore printable) on hardened sites.
-    mark.style.backgroundColor = rgba(color, 0.55);
+    mark.style.backgroundColor = rgba(color, MARK_ALPHA);
     mark.style.color = 'inherit';
     middle.parentNode.insertBefore(mark, middle);
     mark.appendChild(middle);
@@ -282,8 +353,30 @@ function rangeOverlapsExistingHighlight(range: Range): boolean {
   return collectIntersectingTextRanges(range).some(({ node }) => node.parentElement?.closest(`.${MARK_CLASS}`) != null);
 }
 
-/** Highlights the current selection, if any and if it's a plain single-block one — see `closestBlock`. Reports the new highlight to main on success. */
+/**
+ * Whether `range` can become a highlight — the only disqualifier is
+ * overlapping an existing one (see `rangeOverlapsExistingHighlight`); a
+ * selection is free to span several paragraphs, list items, or any other
+ * mix of block-level content; each intersected text node still gets its own
+ * `<mark>` sharing one id (see `wrapRange`), it's just more of them. Shared
+ * by `updateSelectionPreview` (should this even show a preview?) and
+ * `highlightSelection` (should this actually become one?) so the two always
+ * agree on exactly the same selections.
+ */
+function isHighlightable(range: Range): boolean {
+  return !rangeOverlapsExistingHighlight(range);
+}
+
+/**
+ * Highlights the current selection, if any and if it doesn't overlap an
+ * existing highlight — see `isHighlightable`. Reports the new highlight to
+ * main on success. The native selection itself is *always* cleared before
+ * returning, accepted or not — see `buildStyleRuleText`'s own comment for
+ * why leaving a rejected one visibly selected turned out to be a real
+ * problem, not just a cosmetic one.
+ */
 function highlightSelection(): void {
+  clearSelectionPreview();
   if (!active) {
     return;
   }
@@ -293,32 +386,26 @@ function highlightSelection(): void {
   }
   const range = selection.getRangeAt(0);
   if (range.collapsed) {
+    selection.removeAllRanges();
     return;
   }
-  const startBlock = closestBlock(range.startContainer);
-  const endBlock = closestBlock(range.endContainer);
-  if (!startBlock || startBlock !== endBlock) {
-    // Crosses more than one block — out of scope for v1 (see this file's
-    // module doc comment). Left unselected/unhighlighted rather than
-    // guessing at a partial wrap.
+  if (!isHighlightable(range)) {
+    selection.removeAllRanges();
     return;
   }
-  if (rangeOverlapsExistingHighlight(range)) {
-    // Left as an ordinary native selection rather than cleared — the
-    // rejection is silent, but the text stays visibly selected so it's
-    // clear something was chosen, just not turned into a second highlight.
-    return;
-  }
+  const container = rangeContainer(range);
 
   const exact = range.toString();
   if (!exact.trim()) {
+    selection.removeAllRanges();
     return;
   }
   const id = crypto.randomUUID();
-  const prefix = textBefore(startBlock, range.startContainer, range.startOffset);
-  const suffix = textAfter(startBlock, range.endContainer, range.endOffset);
+  const prefix = textBefore(container, range.startContainer, range.startOffset);
+  const suffix = textAfter(container, range.endContainer, range.endOffset);
 
   if (!wrapRange(range, id, currentColor)) {
+    selection.removeAllRanges();
     return;
   }
   selection.removeAllRanges();
@@ -410,6 +497,11 @@ function isEditableTarget(el: Element | null): boolean {
 }
 
 document.addEventListener('mouseup', () => highlightSelection());
+
+// Fires continuously while a mouse drag is extending the native selection
+// (and on any other way it changes) — this is what drives the live drag
+// preview, independent of `mouseup`.
+document.addEventListener('selectionchange', () => updateSelectionPreview());
 
 /** Elements a click/mousedown should never be allowed to activate while the highlighter tool is on — the whole point of the tool ("the pointer can only highlight text") is defeated if clicking a link or button still navigates or fires the page's own handler. */
 const INTERACTIVE_SELECTOR =

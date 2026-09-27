@@ -35,6 +35,11 @@ function channelHex(n: number): string {
     .padStart(2, '0');
 }
 
+/** A finished highlight decoration's own blend strength — see `blendOverBackground`. */
+const HIGHLIGHT_ALPHA = 0.45;
+/** How much a highlight lightens on hover (`.terminal-highlight--hovered` in terminal.css) — reused for the drag-selection preview below, since both are "a lighter version of what this highlight would look like." */
+const HOVER_OPACITY = 0.5;
+
 /**
  * Blends `color` over `backgroundHex` at `alpha` into a single opaque hex —
  * xterm's `registerDecoration` only accepts `#RRGGBB`, not `rgba()` (unlike
@@ -45,6 +50,19 @@ function channelHex(n: number): string {
 function blendOverBackground(color: RGB, backgroundHex: string, alpha: number): string {
   const bg = hexToRgb(backgroundHex);
   return `#${channelHex(color.r * alpha + bg.r * (1 - alpha))}${channelHex(color.g * alpha + bg.g * (1 - alpha))}${channelHex(color.b * alpha + bg.b * (1 - alpha))}`;
+}
+
+/**
+ * A light preview of `color`, shown as xterm's own native selection paint
+ * while dragging to select — the same lightened look a finished highlight
+ * gets on hover, live during the drag itself, instead of the theme's
+ * ordinary neutral selection color or nothing at all. Unlike a decoration's
+ * `backgroundColor`, `ITheme.selectionBackground` does accept `rgba()`
+ * (xterm's own dark theme already uses one — see `xtermThemes.ts`), so this
+ * doesn't need `blendOverBackground`'s opaque-hex workaround.
+ */
+function selectionPreviewColor(color: RGB): string {
+  return `rgba(${color.r}, ${color.g}, ${color.b}, ${HIGHLIGHT_ALPHA * HOVER_OPACITY})`;
 }
 
 /** The column range (0-based, end-exclusive) a highlight's buffer range covers on one specific absolute row, or `null` if that row isn't part of it. */
@@ -286,7 +304,7 @@ export function Terminal({ id }: TerminalProps) {
 
     const currentHighlightColorHex = (): string => {
       const backgroundHex = (term.options.theme?.background as string | undefined) ?? '#1e1e1e';
-      return blendOverBackground(highlighterColor, backgroundHex, 0.45);
+      return blendOverBackground(highlighterColor, backgroundHex, HIGHLIGHT_ALPHA);
     };
 
     /** Re-colors every existing highlight to the current accent — call whenever it changes, so a highlight's color is never frozen at the moment it was created, same as a browser tab's `<mark>` (`tabHighlighter.ts`'s `repaintAllHighlights`). */
@@ -407,7 +425,9 @@ export function Terminal({ id }: TerminalProps) {
     // than waiting for the theme or accent to also happen to change.
     const applyTheme = (): void => {
       const theme = currentXtermTheme();
-      term.options.theme = highlighterActive ? { ...theme, selectionBackground: 'transparent' } : theme;
+      term.options.theme = highlighterActive
+        ? { ...theme, selectionBackground: selectionPreviewColor(highlighterColor) }
+        : theme;
     };
 
     // Toggling the chrome's theme (toolbar button or Ctrl+D) changes
