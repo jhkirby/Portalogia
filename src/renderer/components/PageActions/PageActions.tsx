@@ -6,7 +6,7 @@
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { BookmarkStarIcon, HighlighterIcon, LaserPointerIcon } from '../icons';
+import { BookmarkStarIcon, CommentIcon, HighlighterIcon, LaserPointerIcon, OpenInNewWindowIcon, RevertIcon } from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
@@ -25,6 +25,8 @@ interface PageActionsProps {
   readonly laserPointerActive: boolean;
   /** Whether the highlighter tool is currently on. */
   readonly highlighterActive: boolean;
+  /** Whether the comment tool is currently on. */
+  readonly commentToolActive: boolean;
   readonly theme: Theme;
   readonly onToggleBookmark: () => void;
   readonly onExportPdf: () => void;
@@ -33,9 +35,13 @@ interface PageActionsProps {
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
   readonly onSetZoom: (percent: number) => void;
+  readonly onOpenWorkspaceInNewWindow: () => void;
   readonly onToggleFocusMode: () => void;
   readonly onToggleLaserPointer: () => void;
   readonly onToggleHighlighter: () => void;
+  readonly onToggleCommentTool: () => void;
+  /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
+  readonly onRevertPage: () => void;
   readonly onToggleTheme: () => void;
 }
 
@@ -49,6 +55,7 @@ export function PageActions({
   focusMode,
   laserPointerActive,
   highlighterActive,
+  commentToolActive,
   theme,
   onToggleBookmark,
   onExportPdf,
@@ -57,9 +64,12 @@ export function PageActions({
   onZoomOut,
   onZoomIn,
   onSetZoom,
+  onOpenWorkspaceInNewWindow,
   onToggleFocusMode,
   onToggleLaserPointer,
   onToggleHighlighter,
+  onToggleCommentTool,
+  onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
   return (
@@ -99,6 +109,27 @@ export function PageActions({
       </button>
       <button
         type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onToggleCommentTool}
+        disabled={!canActOnPage}
+        aria-pressed={commentToolActive}
+        aria-label={commentToolActive ? 'Turn off comments' : 'Turn on comments'}
+        data-tooltip={`${commentToolActive ? 'Turn off comments' : 'Turn on comments'} (${formatShortcut('M')})`}
+      >
+        <CommentIcon />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onRevertPage}
+        disabled={!canActOnPage}
+        aria-label="Revert page (remove all highlights and comments)"
+        data-tooltip={`Revert page (${formatShortcut('Shift+R')})`}
+      >
+        <RevertIcon />
+      </button>
+      <button
+        type="button"
         className="page-actions__button page-actions__button--pdf chrome-tooltip"
         onClick={onExportPdf}
         disabled={!canExportPdf}
@@ -126,6 +157,15 @@ export function PageActions({
         ⌕
       </button>
       <ZoomControl percent={zoomPercent} canZoom={canZoom} onZoomOut={onZoomOut} onZoomIn={onZoomIn} onSetZoom={onSetZoom} />
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onOpenWorkspaceInNewWindow}
+        aria-label="Open tab in new window"
+        data-tooltip={`Open tab in new window (${formatShortcut('Shift+O')})`}
+      >
+        <OpenInNewWindowIcon />
+      </button>
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

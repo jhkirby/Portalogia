@@ -48,12 +48,14 @@ const api: NorthstarApi = {
   exportToPdf: (id) => invoke(IpcChannel.TabsExportPdf, { id }),
 
   createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
+  revertPage: (id) => invoke(IpcChannel.TabsRevertPage, { id }),
 
   createWorkspace: (name) => invoke(IpcChannel.WorkspacesCreate, { name }),
   createWorkspaceWithTab: (tabId) => invoke(IpcChannel.WorkspacesCreateWithTab, { tabId }),
   switchWorkspace: (id) => invoke(IpcChannel.WorkspacesSwitch, { id }),
   renameWorkspace: (id, name) => invoke(IpcChannel.WorkspacesRename, { id, name }),
   removeWorkspace: (id) => invoke(IpcChannel.WorkspacesRemove, { id }),
+  openWorkspaceInNewWindow: () => ipcRenderer.send(IpcChannel.WorkspaceOpenInNewWindow),
 
   addBookmark: (title, url) => invoke(IpcChannel.BookmarksAdd, { title, url }),
   removeBookmark: (id) => invoke(IpcChannel.BookmarksRemove, { id }),
@@ -88,6 +90,7 @@ const api: NorthstarApi = {
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
   setLaserPointer: (enabled) => invoke(IpcChannel.LaserPointerSet, { enabled }),
   setHighlighter: (enabled) => invoke(IpcChannel.HighlighterSet, { enabled }),
+  setCommentTool: (enabled) => invoke(IpcChannel.CommentToolSet, { enabled }),
 
   zoomIn: () => invoke(IpcChannel.ZoomIn),
   zoomOut: () => invoke(IpcChannel.ZoomOut),

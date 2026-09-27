@@ -11,6 +11,7 @@ import {
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
   colorPickerSyncRequestSchema,
+  commentToolRequestSchema,
   createTabRequestSchema,
   createWorkspaceRequestSchema,
   createWorkspaceWithTabRequestSchema,
@@ -180,6 +181,10 @@ export function registerTabIpc(
     resolveTabManager(event).setHighlighter(request.enabled),
   );
 
+  handle(IpcChannel.CommentToolSet, commentToolRequestSchema, (request, event) =>
+    resolveTabManager(event).setCommentTool(request.enabled),
+  );
+
   ipcMain.handle(IpcChannel.ZoomIn, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).zoomIn() };
@@ -236,6 +241,10 @@ export function registerTabIpc(
       return toErrorResult(error);
     }
   });
+
+  handle(IpcChannel.TabsRevertPage, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).revertPage(request.id),
+  );
 
   // `terminal:input`/`terminal:resize` are fire-and-forget (`ipcRenderer.send`,
   // not `invoke`) — keystroke latency matters more than a reply round-trip,

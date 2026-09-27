@@ -64,10 +64,12 @@ export function App() {
     stop,
     exportToPdf,
     createTerminalTab,
+    revertPage,
     createWorkspace,
     switchWorkspace,
     renameWorkspace,
     removeWorkspace,
+    openWorkspaceInNewWindow,
     addBookmark,
     removeBookmark,
     beginTabPreview,
@@ -84,6 +86,8 @@ export function App() {
     setLaserPointer,
     highlighterActive,
     setHighlighter,
+    commentToolActive,
+    setCommentTool,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
@@ -107,7 +111,7 @@ export function App() {
   // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
   // WorkspaceBar's rename, TabSearch) when none of them are active.
   useEffect(() => {
-    if (!focusMode && !laserPointerActive && !highlighterActive) {
+    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -123,10 +127,22 @@ export function App() {
       if (highlighterActive) {
         setHighlighter(false);
       }
+      if (commentToolActive) {
+        setCommentTool(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusMode, setFocusMode, laserPointerActive, setLaserPointer, highlighterActive, setHighlighter]);
+  }, [
+    focusMode,
+    setFocusMode,
+    laserPointerActive,
+    setLaserPointer,
+    highlighterActive,
+    setHighlighter,
+    commentToolActive,
+    setCommentTool,
+  ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
   const isHome = browserTab?.url === HOME_URL;
@@ -253,6 +269,7 @@ export function App() {
               focusMode={focusMode}
               laserPointerActive={laserPointerActive}
               highlighterActive={highlighterActive}
+              commentToolActive={commentToolActive}
               theme={theme}
               onToggleBookmark={handleToggleBookmark}
               onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
@@ -261,9 +278,12 @@ export function App() {
               onZoomOut={zoomOut}
               onZoomIn={zoomIn}
               onSetZoom={setZoom}
+              onOpenWorkspaceInNewWindow={openWorkspaceInNewWindow}
               onToggleFocusMode={() => setFocusMode(!focusMode)}
               onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}
               onToggleHighlighter={() => setHighlighter(!highlighterActive)}
+              onToggleCommentTool={() => setCommentTool(!commentToolActive)}
+              onRevertPage={() => activeTabId && revertPage(activeTabId)}
               onToggleTheme={toggleTheme}
             />
           </div>

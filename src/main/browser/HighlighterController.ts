@@ -19,6 +19,7 @@ const HighlighterState = 'highlighter:state';
 const HighlighterOp = 'highlighter:op';
 const HighlighterApplyOp = 'highlighter:apply-op';
 const HighlighterRestore = 'highlighter:restore';
+const HighlighterClear = 'highlighter:clear';
 
 const rgbSchema = z.object({ r: z.number(), g: z.number(), b: z.number() });
 const quoteSchema = z.object({ exact: z.string().min(1), prefix: z.string(), suffix: z.string() });
@@ -183,6 +184,47 @@ export class HighlighterController {
    */
   public disposeTab(tabId: string): void {
     this.tabs.delete(tabId);
+  }
+
+  /**
+   * Wipes every highlight on a tab's current page for good — the
+   * "revert page" toolbar action's highlight half (see `TabManager.revertPage`
+   * and `CommentController.clearTab`, its comment counterpart). Unlike
+   * `undo`, this isn't itself undoable: it clears the undo/redo stack along
+   * with everything else, deletes every persisted highlight for the tab's
+   * URL, and mirrors the wipe onto every other tab open to that same URL —
+   * same sibling-sync reasoning as `syncSiblingTabs`, just for "remove all"
+   * instead of one op at a time. A no-op for a tab with nothing highlighted.
+   */
+  public clearTab(tabId: string): void {
+    this.wipeTabState(tabId);
+    const url = this.urlFor(tabId);
+    if (!url) {
+      return;
+    }
+    for (const stored of this.store.listFor(url)) {
+      this.store.remove(stored.id);
+    }
+    for (const [siblingId, state] of this.registry.states) {
+      if (siblingId === tabId || state.kind !== 'browser' || state.url !== url) {
+        continue;
+      }
+      this.wipeTabState(siblingId);
+    }
+  }
+
+  /** Clears one tab's in-memory highlight state and tells its preload to remove every mark from the DOM — the shared half of `clearTab`'s own tab and every sibling it mirrors onto. */
+  private wipeTabState(tabId: string): void {
+    const tabState = this.tabs.get(tabId);
+    if (tabState) {
+      tabState.current.clear();
+      tabState.undo.length = 0;
+      tabState.redo.length = 0;
+    }
+    const view = this.registry.views.get(tabId);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.send(HighlighterClear);
+    }
   }
 
   /**

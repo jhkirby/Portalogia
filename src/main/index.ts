@@ -9,6 +9,8 @@ import { NORTHSTAR_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
 import { tearOffTabRequestSchema } from '@shared/ipc-schemas';
 import { BookmarkStore } from './browser/BookmarkStore';
+import { CommentController } from './browser/CommentController';
+import { CommentStore } from './browser/CommentStore';
 import { HighlighterController } from './browser/HighlighterController';
 import { HighlightStore } from './browser/HighlightStore';
 import { SessionStore } from './browser/SessionStore';
@@ -78,6 +80,11 @@ const sharedRegistry = new SharedTabRegistry();
 const highlightStore = new HighlightStore(join(app.getPath('userData'), 'highlights.json'));
 const highlighterController = new HighlighterController(sharedRegistry, highlightStore);
 
+// Dropped comments aren't scoped to a window either — same reasoning as
+// `highlightStore`/`highlighterController` just above.
+const commentStore = new CommentStore(join(app.getPath('userData'), 'comments.json'));
+const commentController = new CommentController(sharedRegistry, commentStore);
+
 // Every open terminal tab's own pty process — one instance shared the same
 // way `sharedRegistry` is, since a terminal tab can now move between
 // windows the same as a browser tab can (dragged into another window's tab
@@ -130,8 +137,10 @@ void app.whenReady().then(() => {
   registerThemeIpc();
   registerAccentColorIpc(() => {
     highlighterController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isHighlighterActive() ?? false);
+    commentController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isCommentToolActive() ?? false);
   });
   registerTearOffIpc();
+  registerOpenWorkspaceInNewWindowIpc();
   buildMenu(
     () => activeTabManager,
     () => activeTabManager?.getState().activeTabId ?? null,
@@ -140,6 +149,7 @@ void app.whenReady().then(() => {
     // launch path — this window is meant to start empty, not replay
     // whatever was already open elsewhere.
     () => launchWindow((tabManager) => tabManager.createWorkspace()),
+    () => openWorkspaceInNewWindow(activeTabManager),
   );
 
   launchWindow();
@@ -228,6 +238,7 @@ function launchWindow(
     sharedRegistry,
     sharedTerminalManager,
     highlighterController,
+    commentController,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);
@@ -313,5 +324,49 @@ function registerTearOffIpc(): void {
       (tabManager) => tabManager.activateTab(id),
       { x: screenX - 150, y: screenY - 20 },
     );
+  });
+}
+
+/**
+ * Opens a brand-new window onto a window's active tab — the actual work
+ * behind `NorthstarApi.openWorkspaceInNewWindow` (via
+ * `registerOpenWorkspaceInNewWindowIpc`, below) and the "Open Workspace in
+ * New Window" menu accelerator (`buildMenu`'s own callback), which need the
+ * same thing done from two different starting points: a specific window
+ * (resolved from the IPC sender) versus whichever window is currently
+ * frontmost (`activeTabManager`, the same resolution `getActiveTabId`
+ * already uses for other menu actions). See
+ * `TabManager.createLinkedTwin`'s own doc comment for what actually gets
+ * created (an independent, navigation-linked twin of the active tab, in the
+ * same shared workspace) and why — `sourceManager`'s own active tab,
+ * workspace, and every other tab are left completely untouched either way.
+ * A no-op if `sourceManager` is `null`, has no active tab, or that tab isn't
+ * a browser tab (a terminal has no URL for a twin to share).
+ * @param sourceManager The window whose active tab to open a linked twin of.
+ */
+function openWorkspaceInNewWindow(sourceManager: TabManager | null): void {
+  const activeTabId = sourceManager?.getState().activeTabId;
+  if (!sourceManager || !activeTabId) {
+    return;
+  }
+  const twinId = sourceManager.createLinkedTwin(activeTabId);
+  if (!twinId) {
+    return;
+  }
+  launchWindow((tabManager) => tabManager.activateTab(twinId));
+}
+
+/**
+ * Registers the renderer-facing half of `openWorkspaceInNewWindow` — see its
+ * own doc comment. Fire-and-forget, like `registerTearOffIpc`'s channel: the
+ * only meaningful result is a brand new window appearing — unlike
+ * `tearOffTab`, the sending window's own state never changes, so there's no
+ * `onStateChanged` push to wait for on this side either.
+ */
+function registerOpenWorkspaceInNewWindowIpc(): void {
+  ipcMain.on(IpcChannel.WorkspaceOpenInNewWindow, (event) => {
+    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+    const sourceManager = sourceWindow ? tabManagersByWindowId.get(sourceWindow.id) : undefined;
+    openWorkspaceInNewWindow(sourceManager ?? null);
   });
 }

@@ -33,6 +33,7 @@ import {
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
+import type { CommentController } from './CommentController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
 import type { HighlighterController } from './HighlighterController';
 import { LaserPointerOverlay } from './LaserPointerOverlay';
@@ -109,6 +110,7 @@ export class TabManager {
   private sidebarVisible = true;
   private laserPointerActive = false;
   private highlighterActive = false;
+  private commentToolActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
   private grabbedTabId: string | null = null;
   /** Armed while a tab is grabbed; see `armSpaceHoldTimeout`. */
@@ -149,6 +151,10 @@ export class TabManager {
    *   for the same reason (a tab's highlights move with it between
    *   windows). This `TabManager` only owns the per-window on/off toggle;
    *   see `HighlighterController`'s own class doc comment.
+   * @param commentController Every browser tab's dropped comments and
+   *   on-disk persistence, shared the same way `highlighter` is and for the
+   *   same reason. This `TabManager` only owns the per-window on/off toggle;
+   *   see `CommentController`'s own class doc comment.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -158,6 +164,7 @@ export class TabManager {
     private readonly registry: SharedTabRegistry,
     terminals: TerminalManager,
     private readonly highlighter: HighlighterController,
+    private readonly commentController: CommentController,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -312,15 +319,16 @@ export class TabManager {
   // ── Tabs ─────────────────────────────────────────────────────────────
 
   /**
-   * Creates a new tab, loads it, and makes it the active tab.
+   * Creates a browser tab's view/state/wiring and starts it loading, without
+   * activating (mounting) it anywhere — the shared half of `createTab`
+   * (which activates it in this window right after) and `createLinkedTwin`
+   * (which deliberately doesn't, so a twin meant for a *different* window
+   * never disrupts this one's currently active tab, even for a moment).
    * @param url Address to load; defaults to `DEFAULT_TAB_URL` when omitted.
-   * @param workspaceId Workspace to create it in; defaults to the active
-   *   workspace. Callers that pass this explicitly always do so with the
-   *   value already equal to `activeWorkspaceId` (see `switchWorkspace`),
-   *   so the newly created tab is always the one about to become visible.
-   * @returns The full browser state after the tab is created.
+   * @param workspaceId Workspace the new tab belongs to.
+   * @returns The new tab's id.
    */
-  public createTab(url?: string, workspaceId?: string): BrowserState {
+  private createBrowserTabState(url: string | undefined, workspaceId: string): string {
     const id = randomUUID();
     const view = new WebContentsView({
       webPreferences: {
@@ -349,11 +357,10 @@ export class TabManager {
       canGoBack: false,
       canGoForward: false,
       favicon: null,
-      workspaceId: workspaceId ?? this.activeWorkspaceId,
+      workspaceId,
     });
 
     this.wireEvents(id, view);
-    this.activateTab(id);
 
     const target = normalizeUrlOrSearch(url ?? DEFAULT_TAB_URL);
     void view.webContents.loadURL(target).catch(() => {
@@ -361,6 +368,21 @@ export class TabManager {
       // wired in wireEvents; the rejection itself carries nothing new.
     });
 
+    return id;
+  }
+
+  /**
+   * Creates a new tab, loads it, and makes it the active tab.
+   * @param url Address to load; defaults to `DEFAULT_TAB_URL` when omitted.
+   * @param workspaceId Workspace to create it in; defaults to the active
+   *   workspace. Callers that pass this explicitly always do so with the
+   *   value already equal to `activeWorkspaceId` (see `switchWorkspace`),
+   *   so the newly created tab is always the one about to become visible.
+   * @returns The full browser state after the tab is created.
+   */
+  public createTab(url?: string, workspaceId?: string): BrowserState {
+    const id = this.createBrowserTabState(url, workspaceId ?? this.activeWorkspaceId);
+    this.activateTab(id);
     return this.getState();
   }
 
@@ -682,6 +704,8 @@ export class TabManager {
     this.registry.mountOwners.delete(id);
     this.registry.zoomPercentByTabId.delete(id);
     this.highlighter.disposeTab(id);
+    this.commentController.disposeTab(id);
+    this.unlinkTab(id);
 
     if (this.grabbedTabId === id) {
       this.grabbedTabId = null;
@@ -765,13 +789,17 @@ export class TabManager {
    * history and split-view handling. Closing the last of them trips
    * `closeTab`'s own last-tab reset, so this always ends with exactly one
    * fresh home tab in the workspace — the same place you'd land pressing
-   * plain Ctrl+W repeatedly.
+   * plain Ctrl+W repeatedly. Only closes tabs this window's own tab bar
+   * actually lists (see `shouldListTabForThisWindow`) — a linked twin (see
+   * `createLinkedTwin`) that this window doesn't own is a different
+   * window's tab as far as "close all *my* tabs" is concerned, even though
+   * it shares this workspace.
    * @returns The full browser state after the reset.
    */
   public closeAllTabs(): BrowserState {
     const workspaceId = this.activeWorkspaceId;
     const idsToClose = Array.from(this.states.entries())
-      .filter(([, state]) => state.workspaceId === workspaceId)
+      .filter(([tabId, state]) => state.workspaceId === workspaceId && this.shouldListTabForThisWindow(tabId))
       .map(([tabId]) => tabId);
 
     for (const id of idsToClose) {
@@ -847,6 +875,7 @@ export class TabManager {
     }
     this.activeTabId = id;
     this.pushHighlighterState();
+    this.pushCommentToolState();
 
     const workspaceId = this.states.get(id)?.workspaceId;
     if (workspaceId) {
@@ -1189,6 +1218,117 @@ export class TabManager {
   }
 
   /**
+   * Creates an independent "linked twin" of a browser tab — a brand-new
+   * `WebContentsView` loaded to the same URL, in the same (shared, not
+   * duplicated) workspace, but with its own separate scroll position, DOM
+   * state, and navigation history from this point forward. This is what
+   * "Open Workspace in New Window" (Ctrl+Shift+O) actually creates for
+   * whichever tab is active: rather than relocating that tab's own view
+   * (impossible for *every* tab in a workspace at once without leaving this
+   * window's workspace empty — a `WebContentsView` can only ever be mounted
+   * in one window at a time) or duplicating the whole workspace into a
+   * separate one, this lets the very same page be viewed from two windows
+   * simultaneously, each independently scrollable/interactive.
+   *
+   * The two stay *linked* on one axis only: navigating either one (typing a
+   * new address, following a link) also navigates the other to match — see
+   * `propagateLinkedNavigation`, wired into `wireEvents`'s own
+   * `did-navigate`/`did-navigate-in-page` handlers — so they always agree on
+   * *which page* even though each can be scrolled to a different part of
+   * it. Highlights and comments need no extra wiring at all for this: both
+   * already synchronize between any two tabs open to the same URL regardless
+   * of any link (`HighlighterController`/`CommentController` key their sync
+   * by URL string, not tab id).
+   *
+   * Deliberately does not activate the new tab in this window — it's meant
+   * to be picked up by a *different* one via the ordinary cross-window
+   * `activateTab` steal, so leaving it unmounted here means this window's
+   * own currently active tab is never disrupted, not even for a moment.
+   * @param tabId The browser tab to create a linked twin of.
+   * @returns The new tab's id, or `null` if `tabId` isn't a live browser tab.
+   */
+  public createLinkedTwin(tabId: string): string | null {
+    const state = this.states.get(tabId);
+    if (!state || state.kind !== 'browser') {
+      return null;
+    }
+    const twinId = this.createBrowserTabState(state.url, state.workspaceId);
+    this.registry.linkedTabPartner.set(tabId, twinId);
+    this.registry.linkedTabPartner.set(twinId, tabId);
+    this.registry.linkedTwinIds.add(twinId);
+    this.emitState();
+    return twinId;
+  }
+
+  /**
+   * Navigates a tab's linked twin (see `createLinkedTwin`) to match, if it
+   * has one and isn't already there — called from every place a browser
+   * tab's own URL actually changes (`wireEvents`'s `did-navigate`/
+   * `did-navigate-in-page`). The "isn't already there" check is what stops
+   * this from ping-ponging forever: navigating the twin triggers its own
+   * `did-navigate`, which calls back in here for the *original* tab, but by
+   * then the original's own state was already patched to the same URL
+   * (synchronously, before this runs), so that second call is a no-op.
+   * `navigate()` itself needs no window-ownership resolution to call
+   * here — it only touches the shared `views`/`states` maps, so it works
+   * identically regardless of which window currently has the twin mounted,
+   * same as calling it on `this` always would for any tab id.
+   * @param tabId The tab whose URL just changed.
+   * @param url Its new URL.
+   */
+  private propagateLinkedNavigation(tabId: string, url: string): void {
+    const partnerId = this.registry.linkedTabPartner.get(tabId);
+    if (!partnerId) {
+      return;
+    }
+    const partnerState = this.states.get(partnerId);
+    if (!partnerState || partnerState.kind !== 'browser' || partnerState.url === url) {
+      return;
+    }
+    this.navigate(partnerId, url);
+  }
+
+  /** Removes a tab's link to its twin (see `createLinkedTwin`), if it has one — call when either tab closes, so the survivor goes back to being an ordinary, unlinked tab rather than pointing at a partner that no longer exists. */
+  private unlinkTab(tabId: string): void {
+    const partnerId = this.registry.linkedTabPartner.get(tabId);
+    if (!partnerId) {
+      return;
+    }
+    this.registry.linkedTabPartner.delete(tabId);
+    this.registry.linkedTabPartner.delete(partnerId);
+    this.registry.linkedTwinIds.delete(tabId);
+    this.registry.linkedTwinIds.delete(partnerId);
+  }
+
+  /**
+   * Whether a tab belongs in *this* window's own tab bar — `getState`'s own
+   * per-window filter. An ordinary (unlinked) tab always does; a linked pair
+   * (see `createLinkedTwin`) is meant to read as a single tab, so only one
+   * half of it is ever listed for a given window: whichever half this
+   * window actually owns (`registry.mountOwners`), so each window's tab bar
+   * reflects its own live view rather than always showing the original.
+   * Neither half owned by this window at all (both currently backgrounded
+   * elsewhere) falls back to always listing the original — the one
+   * `createLinkedTwin` was called *on*, not the one it created — so the pair
+   * never both vanish from a window's tab bar and never show two rows for
+   * what only ever reads as one tab. This only ever hides at most one entry
+   * per window; every other window still lists whichever half it owns.
+   */
+  private shouldListTabForThisWindow(tabId: string): boolean {
+    const partnerId = this.registry.linkedTabPartner.get(tabId);
+    if (!partnerId) {
+      return true;
+    }
+    if (this.registry.mountOwners.get(tabId) === this) {
+      return true;
+    }
+    if (this.registry.mountOwners.get(partnerId) === this) {
+      return false;
+    }
+    return !this.registry.linkedTwinIds.has(tabId);
+  }
+
+  /**
    * Renames a workspace. A no-op if it doesn't exist or the name is blank.
    * @param id The workspace to rename.
    * @param name The new display name.
@@ -1231,6 +1371,8 @@ export class TabManager {
       this.states.delete(tabId);
       this.registry.zoomPercentByTabId.delete(tabId);
       this.highlighter.disposeTab(tabId);
+      this.commentController.disposeTab(tabId);
+      this.unlinkTab(tabId);
       if (this.grabbedTabId === tabId) {
         this.grabbedTabId = null;
       }
@@ -1452,12 +1594,15 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setLaserPointer(enabled: boolean): BrowserState {
-    // Mutually exclusive with the highlighter — both are full-window "the
-    // pointer does something else now" modes, and having both on at once
-    // made no sense (the highlighter's own cursor/click-suppression and the
-    // laser pointer's overlay would each think they alone own the pointer).
+    // Mutually exclusive with the highlighter and the comment tool — all
+    // three are full-window "the pointer does something else now" modes,
+    // and having more than one on at once made no sense (each one's own
+    // cursor/click-suppression would think it alone owns the pointer).
     if (enabled && this.highlighterActive) {
       this.setHighlighter(false);
+    }
+    if (enabled && this.commentToolActive) {
+      this.setCommentTool(false);
     }
     this.laserPointerActive = enabled;
     this.syncLaserPointerOverlay();
@@ -1471,20 +1616,24 @@ export class TabManager {
   }
 
   /**
-   * Turns off the laser pointer and/or highlighter, whichever is on — Escape's
-   * own "back to the plain pointer" behavior (`wireSharedInputHandling`),
-   * alongside its existing Focus Mode exit. Turns off both together rather
-   * than one press per tool, if both somehow ended up on at once.
-   * @returns Whether either tool was actually on (and is now off) — callers
-   *   use this to decide whether Escape should be treated as handled.
+   * Turns off the laser pointer, highlighter, and/or comment tool, whichever
+   * is on — Escape's own "back to the plain pointer" behavior
+   * (`wireSharedInputHandling`), alongside its existing Focus Mode exit.
+   * Turns off all three together rather than one press per tool, if more
+   * than one somehow ended up on at once.
+   * @returns Whether any tool was actually on (and is now off) — callers use
+   *   this to decide whether Escape should be treated as handled.
    */
   private exitPointerTools(): boolean {
-    const wasOn = this.laserPointerActive || this.highlighterActive;
+    const wasOn = this.laserPointerActive || this.highlighterActive || this.commentToolActive;
     if (this.laserPointerActive) {
       this.setLaserPointer(false);
     }
     if (this.highlighterActive) {
       this.setHighlighter(false);
+    }
+    if (this.commentToolActive) {
+      this.setCommentTool(false);
     }
     return wasOn;
   }
@@ -1520,9 +1669,13 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setHighlighter(enabled: boolean): BrowserState {
-    // Mutually exclusive with the laser pointer — see its own `setLaserPointer`.
+    // Mutually exclusive with the laser pointer and the comment tool — see
+    // `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
       this.setLaserPointer(false);
+    }
+    if (enabled && this.commentToolActive) {
+      this.setCommentTool(false);
     }
     this.highlighterActive = enabled;
     this.pushHighlighterState();
@@ -1539,6 +1692,78 @@ export class TabManager {
   /** Whether this window currently has the highlighter tool on — read by `main/index.ts`'s accent-color broadcast to tell a tab's preload the right cursor/selection state alongside its repainted highlight color, for whichever window currently has that specific tab mounted. */
   public isHighlighterActive(): boolean {
     return this.highlighterActive;
+  }
+
+  // ── Comment tool ─────────────────────────────────────────────────────
+
+  /**
+   * Turns the comment tool on or off (Ctrl+M, or `PageActions`' toolbar
+   * button) for this window — see `CommentController`. Like the highlighter,
+   * there's no separate overlay to (un)mount; the active tab's own preload
+   * (`src/preload/tabComments.ts`) does the drop/edit/pin work directly in
+   * the page, so this just pushes the new state down to it.
+   * @param enabled Whether the comment tool should be on.
+   * @returns The full browser state after the change.
+   */
+  public setCommentTool(enabled: boolean): BrowserState {
+    // Mutually exclusive with the laser pointer and the highlighter — see
+    // `setLaserPointer`'s own comment.
+    if (enabled && this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
+    if (enabled && this.highlighterActive) {
+      this.setHighlighter(false);
+    }
+    this.commentToolActive = enabled;
+    this.pushCommentToolState();
+    this.nudgeActiveTabCursor();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Toggles the comment tool to whichever state it isn't currently in. */
+  public toggleCommentTool(): BrowserState {
+    return this.setCommentTool(!this.commentToolActive);
+  }
+
+  /** Pushes this window's current comment-tool on/off state to whichever tab is active — call whenever that could have changed: `setCommentTool` itself and `activateTab`. */
+  private pushCommentToolState(): void {
+    if (this.activeTabId) {
+      this.commentController.syncState(this.activeTabId, this.commentToolActive);
+    }
+  }
+
+  /** Pushes this window's current comment-tool on/off state to a specific tab, active or not — `wireEvents`'s own `dom-ready` handler uses this directly, same reasoning as `pushHighlighterStateTo`. */
+  private pushCommentToolStateTo(tabId: string): void {
+    this.commentController.syncState(tabId, this.commentToolActive);
+  }
+
+  /** Whether this window currently has the comment tool on — read by `main/index.ts`'s accent-color broadcast, same reasoning as `isHighlighterActive`. */
+  public isCommentToolActive(): boolean {
+    return this.commentToolActive;
+  }
+
+  // ── Revert page ──────────────────────────────────────────────────────
+
+  /**
+   * Reverts a tab's page back to how it looked before any highlighting or
+   * commenting on it — Ctrl+Shift+R, or `PageActions`' toolbar button.
+   * Unlike the laser pointer/highlighter/comment tool, this isn't a toggle:
+   * it's a single one-shot action with no on/off state of its own, so it
+   * doesn't touch `laserPointerActive`/`highlighterActive`/`commentToolActive`
+   * at all. A no-op for a tab that doesn't exist or isn't a browser tab —
+   * a terminal has neither highlights nor comments to revert.
+   * @param id The tab to revert.
+   * @returns The full browser state (unchanged by this action beyond
+   *   whatever `HighlighterController`/`CommentController` push to the
+   *   tab's own preload).
+   */
+  public revertPage(id: string): BrowserState {
+    if (this.states.get(id)?.kind === 'browser') {
+      this.highlighter.clearTab(id);
+      this.commentController.clearTab(id);
+    }
+    return this.getState();
   }
 
   /** Pushes this window's current highlighter on/off state to whichever tab is active — call whenever that could have changed: `setHighlighter` itself and `activateTab` (a different tab is now the one showing it). */
@@ -1765,13 +1990,17 @@ export class TabManager {
 
   /**
    * Cycles the active tab within the active workspace, wrapping around at
-   * either end. A no-op with zero or one tab in the workspace.
+   * either end. A no-op with zero or one tab in the workspace. Only cycles
+   * through tabs this window's own tab bar actually lists (see
+   * `shouldListTabForThisWindow`) — otherwise Ctrl+Right/Left could land on
+   * a linked twin (see `createLinkedTwin`) this window doesn't even show a
+   * row for, stealing it away from wherever it's actually mounted.
    * @param direction `1` for the next tab, `-1` for the previous one.
    * @returns The full browser state after the change.
    */
   public cycleTab(direction: 1 | -1): BrowserState {
     const workspaceTabIds = Array.from(this.states.entries())
-      .filter(([, state]) => state.workspaceId === this.activeWorkspaceId)
+      .filter(([tabId, state]) => state.workspaceId === this.activeWorkspaceId && this.shouldListTabForThisWindow(tabId))
       .map(([tabId]) => tabId);
     const currentIndex = this.activeTabId ? workspaceTabIds.indexOf(this.activeTabId) : -1;
     if (workspaceTabIds.length <= 1 || currentIndex === -1) {
@@ -2065,7 +2294,7 @@ export class TabManager {
   /** @returns The current tabs, workspaces, bookmarks, and view mode. */
   public getState(): BrowserState {
     return {
-      tabs: Array.from(this.states.values()),
+      tabs: Array.from(this.states.values()).filter((state) => this.shouldListTabForThisWindow(state.id)),
       activeTabId: this.activeTabId,
       workspaces: Array.from(this.workspaces.values()),
       activeWorkspaceId: this.activeWorkspaceId,
@@ -2079,6 +2308,7 @@ export class TabManager {
         : ZOOM_PERCENT_DEFAULT,
       laserPointerActive: this.laserPointerActive,
       highlighterActive: this.highlighterActive,
+      commentToolActive: this.commentToolActive,
     };
   }
 
@@ -2282,9 +2512,12 @@ export class TabManager {
     wc.on('dom-ready', () => {
       this.highlighter.resetTab(id);
       this.pushHighlighterStateTo(id);
+      this.commentController.resetTab(id);
+      this.pushCommentToolStateTo(id);
       const state = this.states.get(id);
       if (state?.kind === 'browser') {
         this.highlighter.restoreFor(id, state.url);
+        this.commentController.restoreFor(id, state.url);
       }
     });
 
@@ -2294,8 +2527,14 @@ export class TabManager {
     });
     wc.on('did-start-loading', () => this.patchState(id, { isLoading: true }));
     wc.on('did-stop-loading', () => this.patchState(id, { isLoading: false, ...historyFlags() }));
-    wc.on('did-navigate', (_event, url) => this.patchState(id, { url, ...historyFlags() }));
-    wc.on('did-navigate-in-page', (_event, url) => this.patchState(id, { url }));
+    wc.on('did-navigate', (_event, url) => {
+      this.patchState(id, { url, ...historyFlags() });
+      this.propagateLinkedNavigation(id, url);
+    });
+    wc.on('did-navigate-in-page', (_event, url) => {
+      this.patchState(id, { url });
+      this.propagateLinkedNavigation(id, url);
+    });
     // A fresh navigation is a fresh document, which resets `webFrame`'s own
     // frame-local zoom back to 0 — reapply whatever this tab's own zoom
     // actually is (a no-op if it was never zoomed) so it survives clicking
@@ -2569,6 +2808,10 @@ export class TabManager {
             event.preventDefault();
             owner.duplicateTab(id);
             return;
+          case 'r':
+            event.preventDefault();
+            owner.revertPage(id);
+            return;
           case '>':
             // Shift is what actually produces '>' (it's Shift+Period on a
             // US layout) — this is Ctrl+> from a key-event's perspective,
@@ -2624,6 +2867,14 @@ export class TabManager {
             event.preventDefault();
             owner.highlighter.redo(id);
           }
+          return;
+        case 'm':
+          // Never intercepted on a terminal tab at all (see this method's
+          // own doc comment): this `case` only exists in the browser-tab
+          // branch of the switch, and Ctrl+M is literally carriage return
+          // (Enter) in a terminal — a binding this app must never shadow.
+          event.preventDefault();
+          owner.toggleCommentTool();
           return;
         case 'h':
           event.preventDefault();

@@ -27,6 +27,7 @@ export const IpcChannel = {
   TabsStateChanged: 'tabs:state-changed',
   TabsExportPdf: 'tabs:export-pdf',
   TabsCreateTerminal: 'tabs:create-terminal',
+  TabsRevertPage: 'tabs:revert-page',
   TerminalInput: 'terminal:input',
   TerminalResize: 'terminal:resize',
   TerminalData: 'terminal:data',
@@ -36,6 +37,7 @@ export const IpcChannel = {
   WorkspacesSwitch: 'workspaces:switch',
   WorkspacesRename: 'workspaces:rename',
   WorkspacesRemove: 'workspaces:remove',
+  WorkspaceOpenInNewWindow: 'workspaces:open-in-new-window',
   BookmarksAdd: 'bookmarks:add',
   BookmarksRemove: 'bookmarks:remove',
   TabsBeginTabPreview: 'tabs:begin-tab-preview',
@@ -52,6 +54,7 @@ export const IpcChannel = {
   FocusModeSet: 'focus-mode:set',
   LaserPointerSet: 'laser-pointer:set',
   HighlighterSet: 'highlighter:set',
+  CommentToolSet: 'comment-tool:set',
   ZoomIn: 'zoom:in',
   ZoomOut: 'zoom:out',
   ZoomReset: 'zoom:reset',
@@ -233,6 +236,24 @@ export interface NorthstarApi {
   renameWorkspace(id: string, name: string): Promise<IpcResult<BrowserState>>;
   removeWorkspace(id: string): Promise<IpcResult<BrowserState>>;
 
+  /**
+   * Opens the active tab in a brand-new window (Ctrl+Shift+O, or the
+   * toolbar button next to Focus Mode) — creates an independent "linked
+   * twin" of it (same URL, same shared workspace, but its own scroll
+   * position and DOM state) and shows that in the new window, so the same
+   * page can be read from two windows at once, each scrolled to a different
+   * part of it. The twin stays linked on navigation only: typing a new
+   * address or following a link in either window navigates the other to
+   * match, so they always agree on *which page* even while independently
+   * scrolled. Highlights and comments need no special handling for this —
+   * they already synchronize between any two tabs open to the same URL.
+   * This window's own active tab, workspace, and every other tab are left
+   * completely untouched. Fire-and-forget: there's no meaningful reply, and
+   * this window's own state never changes, so there's nothing to wait for
+   * even locally.
+   */
+  openWorkspaceInNewWindow(): void;
+
   addBookmark(title: string, url: string): Promise<IpcResult<BrowserState>>;
   removeBookmark(id: string): Promise<IpcResult<BrowserState>>;
 
@@ -320,6 +341,34 @@ export interface NorthstarApi {
    * Delete removes it, all only while this is on.
    */
   setHighlighter(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Turns the comment tool on or off (Ctrl+M, or the toolbar button next to
+   * the highlighter) — see `CommentController`. While on, clicking anywhere
+   * on the active tab's page drops a small pin with an editable text box
+   * (Enter posts it, Shift+Enter inserts a newline), Up/Down jumps between
+   * existing comments, and every comment shows its box open, editable in
+   * place. While off, a comment collapses to just its dot; clicking one
+   * shows its text read-only until Escape, a click outside it, or opening a
+   * different comment closes it back to a dot. Mutually exclusive with the
+   * laser pointer and the highlighter — turning any one of the three on
+   * turns the other two off. Browser-tab only, unlike the highlighter: a
+   * terminal tab's pty scrollback has nothing stable to re-anchor a comment
+   * to across a reload.
+   */
+  setCommentTool(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
+   * Reverts a browser tab's page back to how it looked before any
+   * highlighting or commenting on it — removes every highlight and every
+   * comment for that tab's current URL outright (Ctrl+Shift+R, or the
+   * toolbar button next to the comment tool). Unlike the other three tools,
+   * this is a one-shot action, not a toggle: there's no on/off state, and
+   * the wipe isn't itself undoable — it also clears the highlighter's own
+   * undo/redo stack, and mirrors the removal onto every other tab open to
+   * the same URL. A no-op for a terminal tab, which has neither.
+   */
+  revertPage(id: string): Promise<IpcResult<BrowserState>>;
 
   /**
    * Zooms in/out/back-to-100% on the active tab's own content only — never

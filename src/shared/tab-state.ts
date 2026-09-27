@@ -75,4 +75,6 @@ export interface BrowserState {
   readonly laserPointerActive: boolean;
   /** Whether the highlighter tool is currently on (Ctrl+J, or the toolbar button) — see `HighlighterController`. */
   readonly highlighterActive: boolean;
+  /** Whether the comment tool is currently on (Ctrl+M, or the toolbar button) — see `CommentController`. */
+  readonly commentToolActive: boolean;
 }

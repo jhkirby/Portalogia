@@ -21,6 +21,7 @@ const EMPTY_STATE: BrowserState = {
   zoomPercent: ZOOM_PERCENT_DEFAULT,
   laserPointerActive: false,
   highlighterActive: false,
+  commentToolActive: false,
 };
 
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
@@ -123,6 +124,10 @@ export function useTabs() {
     void window.northstar.createTerminalTab().then(logIfFailed);
   }, []);
 
+  const revertPage = useCallback((id: string) => {
+    void window.northstar.revertPage(id).then(logIfFailed);
+  }, []);
+
   const createWorkspace = useCallback((name?: string) => {
     void window.northstar.createWorkspace(name).then(logIfFailed);
   }, []);
@@ -137,6 +142,9 @@ export function useTabs() {
   }, []);
   const removeWorkspace = useCallback((id: string) => {
     void window.northstar.removeWorkspace(id).then(logIfFailed);
+  }, []);
+  const openWorkspaceInNewWindow = useCallback(() => {
+    window.northstar.openWorkspaceInNewWindow();
   }, []);
 
   const addBookmark = useCallback((title: string, url: string) => {
@@ -178,6 +186,10 @@ export function useTabs() {
     void window.northstar.setHighlighter(enabled).then(logIfFailed);
   }, []);
 
+  const setCommentTool = useCallback((enabled: boolean) => {
+    void window.northstar.setCommentTool(enabled).then(logIfFailed);
+  }, []);
+
   const zoomIn = useCallback(() => {
     void window.northstar.zoomIn().then(logIfFailed);
   }, []);
@@ -215,12 +227,14 @@ export function useTabs() {
     stop,
     exportToPdf,
     createTerminalTab,
+    revertPage,
 
     createWorkspace,
     createWorkspaceWithTab,
     switchWorkspace,
     renameWorkspace,
     removeWorkspace,
+    openWorkspaceInNewWindow,
 
     addBookmark,
     removeBookmark,
@@ -242,5 +256,7 @@ export function useTabs() {
     setLaserPointer,
     highlighterActive: state.highlighterActive,
     setHighlighter,
+    commentToolActive: state.commentToolActive,
+    setCommentTool,
   };
 }

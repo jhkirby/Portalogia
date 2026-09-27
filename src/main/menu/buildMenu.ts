@@ -25,11 +25,16 @@ import type { TabManager } from '../browser/TabManager';
  *   workspace (and that workspace's fresh home tab) rather than the
  *   restored session `launchWindow`'s default `onReady` would otherwise
  *   give it — see "New Window" below.
+ * @param onOpenWorkspaceInNewWindow Opens an independent, navigation-linked
+ *   twin of the frontmost window's active tab in a brand-new window, leaving
+ *   that tab (and everything else about the frontmost window) untouched —
+ *   see "Open Tab in New Window" below.
  */
 export function buildMenu(
   getTabManager: () => TabManager | null,
   getActiveTabId: () => string | null,
   onNewWindow: () => void,
+  onOpenWorkspaceInNewWindow: () => void,
 ): void {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -48,6 +53,11 @@ export function buildMenu(
           label: 'New Window',
           accelerator: 'CmdOrCtrl+Alt+N',
           click: () => onNewWindow(),
+        },
+        {
+          label: 'Open Tab in New Window',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => onOpenWorkspaceInNewWindow(),
         },
         {
           label: 'New Terminal',
@@ -236,6 +246,21 @@ export function buildMenu(
           label: 'Toggle Highlighter',
           accelerator: 'CmdOrCtrl+J',
           click: () => getTabManager()?.toggleHighlighter(),
+        },
+        {
+          label: 'Toggle Comments',
+          accelerator: 'CmdOrCtrl+M',
+          click: () => getTabManager()?.toggleCommentTool(),
+        },
+        {
+          label: 'Revert Page',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            const id = getActiveTabId();
+            if (id) {
+              getTabManager()?.revertPage(id);
+            }
+          },
         },
         {
           label: 'Toggle Theme',

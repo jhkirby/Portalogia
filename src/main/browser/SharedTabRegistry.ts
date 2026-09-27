@@ -55,6 +55,28 @@ export class SharedTabRegistry {
    * way the per-origin `contents.zoomLevel` used to.
    */
   public readonly zoomPercentByTabId = new Map<string, number>();
+  /**
+   * Pairs a browser tab up with an independent "linked twin" of itself — a
+   * separate `WebContentsView` loaded to the same URL but with its own
+   * scroll position and DOM state, created so the same page can be viewed
+   * from two windows at once (`TabManager.createLinkedTwin`, "Open
+   * Workspace in New Window"). Entries are added in both directions (`a→b`
+   * and `b→a`) and removed the same way when either tab closes — a plain
+   * property of the tab pair itself, not of whichever window happens to be
+   * showing either one, so it lives here rather than per-`TabManager`, same
+   * reasoning as `zoomPercentByTabId`.
+   */
+  public readonly linkedTabPartner = new Map<string, string>();
+  /**
+   * Which half of each linked pair is the "twin" (the one `createLinkedTwin`
+   * actually created new) rather than the original tab it was created from
+   * — used only to pick a consistent fallback when *neither* half of a pair
+   * is currently owned by the window asking (`TabManager.getState`'s own
+   * per-window tab-list filter): the original always wins that tiebreak, so
+   * a linked pair never both vanishes from a window's tab bar and never
+   * shows two rows for what's meant to read as one tab.
+   */
+  public readonly linkedTwinIds = new Set<string>();
 
   private readonly windows = new Set<BrowserWindow>();
   private readonly listeners = new Set<() => void>();

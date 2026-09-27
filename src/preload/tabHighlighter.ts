@@ -16,6 +16,7 @@ const HighlighterState = 'highlighter:state';
 const HighlighterOp = 'highlighter:op';
 const HighlighterApplyOp = 'highlighter:apply-op';
 const HighlighterRestore = 'highlighter:restore';
+const HighlighterClear = 'highlighter:clear';
 
 interface RgbColor {
   readonly r: number;
@@ -219,8 +220,15 @@ function rangeContainer(range: Range): Node {
   return commonAncestor.nodeType === Node.TEXT_NODE ? (commonAncestor.parentNode ?? commonAncestor) : commonAncestor;
 }
 
-/** Text immediately before a point, up to `QUOTE_CONTEXT_CHARS`, scoped to `within` so this never has to stringify content far outside the highlighted block. */
-function textBefore(within: Node, node: Node, offset: number): string {
+/**
+ * Text immediately before a point, up to `QUOTE_CONTEXT_CHARS`, scoped to
+ * `within` so this never has to stringify content far outside the
+ * highlighted block. Exported for `src/preload/tabComments.ts` to reuse for
+ * its own point-anchor quotes — both modules only ever get bundled into this
+ * same `tabZoom.cjs` preload entry (see that file's own comment), so sharing
+ * this across them costs nothing extra.
+ */
+export function textBefore(within: Node, node: Node, offset: number): string {
   try {
     const range = document.createRange();
     range.setStart(within, 0);
@@ -231,8 +239,8 @@ function textBefore(within: Node, node: Node, offset: number): string {
   }
 }
 
-/** Text immediately after a point, up to `QUOTE_CONTEXT_CHARS` — see `textBefore`. */
-function textAfter(within: Node, node: Node, offset: number): string {
+/** Text immediately after a point, up to `QUOTE_CONTEXT_CHARS` — see `textBefore`. Exported for the same reason. */
+export function textAfter(within: Node, node: Node, offset: number): string {
   try {
     const range = document.createRange();
     range.setStart(node, offset);
@@ -332,6 +340,23 @@ function removeFromDom(id: string): void {
   }
 }
 
+/** Removes every highlight on the page outright — the "revert page" action's highlight half (`HighlighterClear`, pushed by `HighlighterController.clearTab`). Main already handles the undo/redo/store side of the wipe; this only needs to clear the live DOM and any in-flight hover/preview state. */
+function removeAllFromDom(): void {
+  document.querySelectorAll(`mark.${MARK_CLASS}`).forEach((mark) => {
+    const parent = mark.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (mark.firstChild) {
+      parent.insertBefore(mark.firstChild, mark);
+    }
+    parent.removeChild(mark);
+  });
+  document.body?.normalize();
+  hoveredHighlightId = null;
+  clearSelectionPreview();
+}
+
 /** User-initiated removal (hover + D/Delete) — unlike `removeFromDom` alone, this also reports the op to main so it lands in the undo/redo stack and the on-disk store. */
 function removeAndReport(id: string): void {
   removeFromDom(id);
@@ -412,8 +437,8 @@ function highlightSelection(): void {
   ipcRenderer.send(HighlighterOp, { kind: 'add', id, quote: { exact, prefix, suffix }, color: currentColor });
 }
 
-/** Concatenates every text node under `document.body` into one string, alongside a lookup back from a character offset to its owning node/local offset — built fresh per restore call, which only ever runs a handful of times per page load. */
-function buildBodyTextIndex(): { fullText: string; map: Array<{ node: Text; start: number }> } {
+/** Concatenates every text node under `document.body` into one string, alongside a lookup back from a character offset to its owning node/local offset — built fresh per restore call, which only ever runs a handful of times per page load. Exported for `tabComments.ts`'s own quote-based restore — see `textBefore`'s own comment for why sharing this is safe. */
+export function buildBodyTextIndex(): { fullText: string; map: Array<{ node: Text; start: number }> } {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       const parent = (node as Text).parentElement;
@@ -434,8 +459,8 @@ function buildBodyTextIndex(): { fullText: string; map: Array<{ node: Text; star
   return { fullText, map };
 }
 
-/** Maps an absolute character offset into `document.body`'s concatenated text back to a `(node, localOffset)` pair. */
-function resolveOffset(
+/** Maps an absolute character offset into `document.body`'s concatenated text back to a `(node, localOffset)` pair. Exported for `tabComments.ts`. */
+export function resolveOffset(
   map: Array<{ node: Text; start: number }>,
   offset: number,
 ): { node: Text; offset: number } | null {
@@ -488,7 +513,8 @@ function applyStoredHighlight(highlight: HighlightRecord): void {
   }
 }
 
-function isEditableTarget(el: Element | null): boolean {
+/** Exported for `tabComments.ts`'s own arrow-key-jump gating — see that file for why it needs the same "is this an ordinary editable field" check. */
+export function isEditableTarget(el: Element | null): boolean {
   if (!el) {
     return false;
   }
@@ -503,11 +529,11 @@ document.addEventListener('mouseup', () => highlightSelection());
 // preview, independent of `mouseup`.
 document.addEventListener('selectionchange', () => updateSelectionPreview());
 
-/** Elements a click/mousedown should never be allowed to activate while the highlighter tool is on — the whole point of the tool ("the pointer can only highlight text") is defeated if clicking a link or button still navigates or fires the page's own handler. */
-const INTERACTIVE_SELECTOR =
+/** Elements a click/mousedown should never be allowed to activate while the highlighter tool is on — the whole point of the tool ("the pointer can only highlight text") is defeated if clicking a link or button still navigates or fires the page's own handler. Exported for `tabComments.ts`'s identical need while the comment tool is on. */
+export const INTERACTIVE_SELECTOR =
   'a, button, input, select, textarea, summary, label, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="menuitem"], [role="tab"], [onclick]';
 
-function isInteractiveTarget(target: EventTarget | null): boolean {
+export function isInteractiveTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(INTERACTIVE_SELECTOR) !== null;
 }
 
@@ -604,6 +630,8 @@ ipcRenderer.on(HighlighterRestore, (_event, payload: { highlights: HighlightReco
     applyStoredHighlight(highlight);
   }
 });
+
+ipcRenderer.on(HighlighterClear, () => removeAllFromDom());
 
 ipcRenderer.on(
   HighlighterApplyOp,
