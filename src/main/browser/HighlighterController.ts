@@ -113,6 +113,34 @@ export class HighlighterController {
   }
 
   /**
+   * Pushes a fresh accent color to *every* open tab, browser or terminal —
+   * call whenever `setAccentColor` changes it (`main/index.ts`), not just
+   * the current window's active one. A highlight's color is never frozen at
+   * the moment it was created: every already-visible `<mark>`/decoration
+   * repaints itself to match (`tabHighlighter.ts`'s `repaintAllHighlights`,
+   * `Terminal.tsx`'s own equivalent) the instant this arrives, the same way
+   * `pageSelectionAccent.ts` repaints every tab's native `::selection` on an
+   * accent change instead of only a newly-loaded document's.
+   * @param isActiveForTab Whether the *window currently showing* a given
+   *   tab has the highlighter tool toggled on — resolved by the caller
+   *   (`main/index.ts`), which is the only place that knows which
+   *   `TabManager` currently owns a given tab (`SharedTabRegistry.mountOwners`)
+   *   and that window's own `highlighterActive`; this class only owns what a
+   *   highlight *is*, never a window's on/off toggle. A background tab
+   *   nobody's currently showing gets `false` here regardless — harmless,
+   *   since nothing renders its cursor either way — while it's not visible.
+   */
+  public broadcastColor(isActiveForTab: (tabId: string) => boolean): void {
+    const color = getCurrentAccent();
+    for (const [tabId, view] of this.registry.views) {
+      if (view.webContents.isDestroyed()) {
+        continue;
+      }
+      view.webContents.send(HighlighterState, { active: isActiveForTab(tabId), color });
+    }
+  }
+
+  /**
    * Starts tracking a fresh document's highlights — call on every
    * `dom-ready` for a browser tab, before `restoreFor`. A fresh document has
    * none of the previous one's undo/redo history or live highlights,
@@ -198,11 +226,15 @@ export class HighlighterController {
       this.sendApplyOp(tabId, { action: 'remove', id: op.highlight.id });
       this.store.remove(op.highlight.id);
     }
+    if (url) {
+      this.syncSiblingTabs(tabId, url, op);
+    }
   }
 
   /** Applies an op's inverse: undoing an `add` removes it, undoing a `remove` re-adds it. What `undo` does. */
   private invert(tabId: string, tabState: TabHighlightState, op: HighlightOp): void {
     const url = this.urlFor(tabId);
+    const inverse: HighlightOp = { kind: op.kind === 'add' ? 'remove' : 'add', highlight: op.highlight };
     if (op.kind === 'add') {
       tabState.current.delete(op.highlight.id);
       this.sendApplyOp(tabId, { action: 'remove', id: op.highlight.id });
@@ -213,6 +245,9 @@ export class HighlighterController {
       if (url) {
         this.store.add(toStored(op.highlight, url));
       }
+    }
+    if (url) {
+      this.syncSiblingTabs(tabId, url, inverse);
     }
   }
 
@@ -258,6 +293,35 @@ export class HighlighterController {
     } else {
       tabState.current.delete(op.highlight.id);
       this.store.remove(op.highlight.id);
+    }
+    if (url) {
+      this.syncSiblingTabs(tabId, url, op);
+    }
+  }
+
+  /**
+   * Applies the same change to every *other* open tab currently showing
+   * `url` — a browser tab's highlights are keyed by URL, not by tab, so two
+   * tabs (in the same window or different ones) open to the same page are
+   * showing the same logical set of highlights and must stay in step
+   * immediately, not just the next time either one happens to reload and
+   * re-run `restoreFor`. Deliberately doesn't touch the sibling's own
+   * undo/redo stack — the action's origin (and the only place Ctrl+Z for it
+   * makes sense) is `tabId`; every sibling just mirrors the resulting state.
+   */
+  private syncSiblingTabs(tabId: string, url: string, op: HighlightOp): void {
+    for (const [siblingId, state] of this.registry.states) {
+      if (siblingId === tabId || state.kind !== 'browser' || state.url !== url) {
+        continue;
+      }
+      const siblingState = this.tabs.get(siblingId);
+      if (op.kind === 'add') {
+        siblingState?.current.set(op.highlight.id, op.highlight);
+        this.sendApplyOp(siblingId, { action: 'add', highlight: op.highlight });
+      } else {
+        siblingState?.current.delete(op.highlight.id);
+        this.sendApplyOp(siblingId, { action: 'remove', id: op.highlight.id });
+      }
     }
   }
 

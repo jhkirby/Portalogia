@@ -64,6 +64,12 @@ function highlightColumnsForLine(
   };
 }
 
+/** Whether two buffer ranges share any row/column position at all — checked before creating a new highlight so highlights can never nest or overlap, same rule `tabHighlighter.ts` enforces for a browser tab's `<mark>` elements. Compares `(y, x)` pairs as a single ordered position, since a buffer position is naturally ordered by row first, then column within it. */
+function bufferRangesOverlap(a: IBufferRange, b: IBufferRange): boolean {
+  const toKey = (pos: { readonly x: number; readonly y: number }): number => pos.y * 1_000_000 + pos.x;
+  return toKey(a.start) <= toKey(b.end) && toKey(b.start) <= toKey(a.end);
+}
+
 /** Appends one print-view line's worth of content to `container`, wrapping whichever column ranges are highlighted in `<mark>` — built from DOM nodes rather than an HTML string, so the terminal's own (arbitrary) text content never needs escaping. */
 function appendPrintLine(
   container: Node,
@@ -244,28 +250,17 @@ export function Terminal({ id }: TerminalProps) {
       }
     };
 
-    const unsubscribeHighlighterState = window.northstarTerminal.onHighlighterState((active, color) => {
-      highlighterActive = active;
-      highlighterColor = color;
-      container.classList.toggle('terminal__surface--highlighter-active', active);
-      if (!active) {
-        setHoveredHighlight(null);
-      }
-    });
-
-    const handleHighlighterMouseUp = (): void => {
-      if (!highlighterActive || !term.hasSelection()) {
-        return;
-      }
-      const range = term.getSelectionPosition();
-      const text = term.getSelection();
-      if (!range || !text.trim()) {
-        return;
-      }
+    // One `IDecoration` per row `range` spans (xterm's own API has no
+    // multi-row decoration — see `TerminalHighlight`'s own doc comment),
+    // each colored `colorHex`. Shared by `handleHighlighterMouseUp` (a fresh
+    // highlight) and `repaintHighlights` (re-coloring an existing one) —
+    // `IDecoration` has no way to change its own `backgroundColor` after
+    // creation (`options` only exposes `overviewRulerOptions` as mutable),
+    // so re-coloring means disposing the old decorations and creating new
+    // ones at the same buffer positions instead.
+    const createDecorationsForRange = (range: IBufferRange, colorHex: string): IDecoration[] => {
       const buffer = term.buffer.active;
       const cursorAbsoluteY = buffer.baseY + buffer.cursorY;
-      const backgroundHex = (term.options.theme?.background as string | undefined) ?? '#1e1e1e';
-      const colorHex = blendOverBackground(highlighterColor, backgroundHex, 0.45);
       const decorations: IDecoration[] = [];
       for (let y = range.start.y; y <= range.end.y; y++) {
         const rowIndex0 = y - 1;
@@ -286,6 +281,61 @@ export function Terminal({ id }: TerminalProps) {
           marker.dispose();
         }
       }
+      return decorations;
+    };
+
+    const currentHighlightColorHex = (): string => {
+      const backgroundHex = (term.options.theme?.background as string | undefined) ?? '#1e1e1e';
+      return blendOverBackground(highlighterColor, backgroundHex, 0.45);
+    };
+
+    /** Re-colors every existing highlight to the current accent — call whenever it changes, so a highlight's color is never frozen at the moment it was created, same as a browser tab's `<mark>` (`tabHighlighter.ts`'s `repaintAllHighlights`). */
+    const repaintHighlights = (): void => {
+      const colorHex = currentHighlightColorHex();
+      for (const [id, highlight] of highlights) {
+        if (highlight.colorHex === colorHex) {
+          continue;
+        }
+        highlight.decorations.forEach((decoration) => decoration.dispose());
+        const decorations = createDecorationsForRange(highlight.range, colorHex);
+        decorations.forEach((decoration) => {
+          decoration.onRender((el) => {
+            el.classList.add('terminal-highlight');
+            el.dataset['nshId'] = id;
+            el.classList.toggle('terminal-highlight--hovered', id === hoveredHighlightId);
+          });
+        });
+        highlights.set(id, { decorations, range: highlight.range, colorHex });
+      }
+    };
+
+    const unsubscribeHighlighterState = window.northstarTerminal.onHighlighterState((active, color) => {
+      highlighterActive = active;
+      highlighterColor = color;
+      container.classList.toggle('terminal__surface--highlighter-active', active);
+      applyTheme();
+      if (!active) {
+        setHoveredHighlight(null);
+      }
+      repaintHighlights();
+    });
+
+    const handleHighlighterMouseUp = (): void => {
+      if (!highlighterActive || !term.hasSelection()) {
+        return;
+      }
+      const range = term.getSelectionPosition();
+      const text = term.getSelection();
+      if (!range || !text.trim()) {
+        return;
+      }
+      if (Array.from(highlights.values()).some((highlight) => bufferRangesOverlap(highlight.range, range))) {
+        // Left as an ordinary native selection rather than cleared — same
+        // silent rejection `tabHighlighter.ts` uses for a browser tab.
+        return;
+      }
+      const colorHex = currentHighlightColorHex();
+      const decorations = createDecorationsForRange(range, colorHex);
       if (decorations.length === 0) {
         return;
       }
@@ -300,6 +350,26 @@ export function Terminal({ id }: TerminalProps) {
       term.clearSelection();
     };
     container.addEventListener('mouseup', handleHighlighterMouseUp);
+
+    // Clicking directly on an existing highlight removes it — the same
+    // action as hovering it and pressing D/Delete, reachable without
+    // leaving the mouse. Same idea as `tabHighlighter.ts`'s own click
+    // handler; unlike that one, nothing else about a terminal's own click
+    // behavior needs suppressing, so this only ever acts when the click
+    // actually landed on a highlight.
+    const handleHighlighterClick = (event: MouseEvent): void => {
+      if (!highlighterActive) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      const id = (target?.closest('.terminal-highlight') as HTMLElement | null)?.dataset['nshId'];
+      if (id) {
+        event.preventDefault();
+        event.stopPropagation();
+        removeHighlight(id);
+      }
+    };
+    container.addEventListener('click', handleHighlighterClick);
 
     const handleHighlighterMouseMove = (event: MouseEvent): void => {
       if (!highlighterActive) {
@@ -327,15 +397,26 @@ export function Terminal({ id }: TerminalProps) {
     };
     document.addEventListener('keydown', handleHighlighterKeyDown, true);
 
+    // Applies the current light/dark + accent theme, except while the
+    // highlighter tool is on — same reasoning as `tabHighlighter.ts`'s own
+    // `::selection` override: xterm's native selection paint would
+    // otherwise compete with the highlighter's own decoration, showing a
+    // highlight during the drag that then gets replaced by a different-
+    // looking one on release. `onHighlighterState` below re-calls this on
+    // every toggle so the override is applied/lifted immediately rather
+    // than waiting for the theme or accent to also happen to change.
+    const applyTheme = (): void => {
+      const theme = currentXtermTheme();
+      term.options.theme = highlighterActive ? { ...theme, selectionBackground: 'transparent' } : theme;
+    };
+
     // Toggling the chrome's theme (toolbar button or Ctrl+D) changes
     // `nativeTheme.themeSource`, which flips `prefers-color-scheme` here
     // too (see `currentXtermTheme`'s doc comment) — this keeps an
     // already-open terminal in step with that instead of only picking up
     // the theme it happened to be created under.
     const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleThemeChange = (): void => {
-      term.options.theme = currentXtermTheme();
-    };
+    const handleThemeChange = (): void => applyTheme();
     media.addEventListener('change', handleThemeChange);
 
     // Same idea, for `ColorPicker`'s own accent instead of light/dark —
@@ -347,7 +428,7 @@ export function Terminal({ id }: TerminalProps) {
     // gives every other page.
     const handleAccentChange = (event: StorageEvent): void => {
       if (event.key === ACCENT_STORAGE_KEY) {
-        term.options.theme = currentXtermTheme();
+        applyTheme();
       }
     };
     window.addEventListener('storage', handleAccentChange);
@@ -425,6 +506,7 @@ export function Terminal({ id }: TerminalProps) {
       unsubscribeExited();
       unsubscribeHighlighterState();
       container.removeEventListener('mouseup', handleHighlighterMouseUp);
+      container.removeEventListener('click', handleHighlighterClick);
       document.removeEventListener('mousemove', handleHighlighterMouseMove);
       document.removeEventListener('keydown', handleHighlighterKeyDown, true);
       highlights.forEach((highlight) => highlight.decorations.forEach((decoration) => decoration.dispose()));

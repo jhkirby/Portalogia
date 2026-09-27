@@ -201,7 +201,7 @@ export class TabManager {
       (payload) => this.window.webContents.send(IpcChannel.ColorPickerColorChanged, payload),
       () => this.window.webContents.send(IpcChannel.ColorPickerCloseRequested),
     );
-    this.laserPointerOverlay = new LaserPointerOverlay(this.window);
+    this.laserPointerOverlay = new LaserPointerOverlay(this.window, () => this.exitPointerTools());
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
     // focus is on the chrome itself rather than a tab's own webContents
@@ -1009,6 +1009,42 @@ export class TabManager {
   }
 
   /**
+   * Duplicates a tab (Ctrl+Shift+D) and places the copy immediately to its
+   * right within the same workspace, activating it — matching the
+   * conventional browser "Duplicate Tab" behavior. A browser tab's copy
+   * loads the same URL (not its navigation history — same limitation
+   * `restoreLastClosedTab`/`SessionSnapshot` already accept for recreating a
+   * tab); a terminal tab's "copy" is a fresh shell session, since a live pty
+   * can't itself be duplicated. A no-op if `id` doesn't exist.
+   * @param id The tab to duplicate.
+   * @returns The full browser state after the duplicate is created.
+   */
+  public duplicateTab(id: string): BrowserState {
+    const state = this.states.get(id);
+    if (!state) {
+      return this.getState();
+    }
+
+    // Captured before creating the new tab, so "the tab right after this
+    // one" reflects the workspace's order as it was, not as it becomes once
+    // the new tab is appended at the end of it.
+    const workspaceTabIds = Array.from(this.states.entries())
+      .filter(([, tabState]) => tabState.workspaceId === state.workspaceId)
+      .map(([tabId]) => tabId);
+    const beforeId = workspaceTabIds[workspaceTabIds.indexOf(id) + 1] ?? null;
+
+    const newState =
+      state.kind === 'terminal' ? this.createTerminalTab(state.workspaceId) : this.createTab(state.url, state.workspaceId);
+    if (newState.activeTabId) {
+      // `createTab`/`createTerminalTab` both append at the end of the
+      // workspace's own tabs and activate it; this repositions it next to
+      // the original without touching which tab is active.
+      this.moveTab(newState.activeTabId, beforeId);
+    }
+    return this.getState();
+  }
+
+  /**
    * Renders a tab's current page to a PDF, prompting the user for a save
    * location via a native dialog parented to this window. Works for a
    * terminal tab too — `terminal.html` is a real page in its own
@@ -1428,6 +1464,25 @@ export class TabManager {
   }
 
   /**
+   * Turns off the laser pointer and/or highlighter, whichever is on — Escape's
+   * own "back to the plain pointer" behavior (`wireSharedInputHandling`),
+   * alongside its existing Focus Mode exit. Turns off both together rather
+   * than one press per tool, if both somehow ended up on at once.
+   * @returns Whether either tool was actually on (and is now off) — callers
+   *   use this to decide whether Escape should be treated as handled.
+   */
+  private exitPointerTools(): boolean {
+    const wasOn = this.laserPointerActive || this.highlighterActive;
+    if (this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
+    if (this.highlighterActive) {
+      this.setHighlighter(false);
+    }
+    return wasOn;
+  }
+
+  /**
    * Applies the laser pointer's current on/off state to its overlay,
    * sized to whatever the active tab's own view currently occupies. Called
    * whenever that could have changed: `setLaserPointer` itself, and every
@@ -1468,6 +1523,11 @@ export class TabManager {
   /** Toggles the highlighter tool to whichever state it isn't currently in. */
   public toggleHighlighter(): BrowserState {
     return this.setHighlighter(!this.highlighterActive);
+  }
+
+  /** Whether this window currently has the highlighter tool on — read by `main/index.ts`'s accent-color broadcast to tell a tab's preload the right cursor/selection state alongside its repainted highlight color, for whichever window currently has that specific tab mounted. */
+  public isHighlighterActive(): boolean {
+    return this.highlighterActive;
   }
 
   /** Pushes this window's current highlighter on/off state to whichever tab is active — call whenever that could have changed: `setHighlighter` itself and `activateTab` (a different tab is now the one showing it). */
@@ -2327,6 +2387,24 @@ export class TabManager {
         if (input.type !== 'keyDown' || input.isAutoRepeat) {
           return;
         }
+        // Checked before the `cmdOrCtrl` gate below, since Escape carries no
+        // modifier — unlike every other shortcut in this branch, only acted
+        // on here when the laser pointer/highlighter is actually on (a
+        // deliberate, uncommon, user-initiated state), so plain Escape still
+        // reaches the shell untouched the rest of the time — a vi-mode
+        // readline binds it to leave insert mode, a real use this app must
+        // not shadow by default.
+        if (
+          input.key.toLowerCase() === 'escape' &&
+          !input.control &&
+          !input.meta &&
+          !input.alt &&
+          !input.shift &&
+          owner.exitPointerTools()
+        ) {
+          event.preventDefault();
+          return;
+        }
         const cmdOrCtrl = input.control || input.meta;
         if (!cmdOrCtrl || input.alt) {
           return;
@@ -2381,13 +2459,21 @@ export class TabManager {
         return;
       }
 
-      // No modifier, so it falls outside the `cmdOrCtrl`-gated switch
-      // below — Escape only ever does one thing here anyway, exit Focus
-      // Mode, and only while it's actually on.
-      if (key === 'escape' && owner.focusMode) {
-        event.preventDefault();
-        owner.setFocusMode(false);
-        return;
+      // No modifier, so it falls outside the `cmdOrCtrl`-gated switch below
+      // — Escape exits Focus Mode if it's on, and/or turns off the laser
+      // pointer/highlighter if either is on; a no-op (falls through
+      // untouched to the page) if none of the three are active.
+      if (key === 'escape') {
+        if (owner.focusMode) {
+          event.preventDefault();
+          owner.setFocusMode(false);
+          owner.exitPointerTools();
+          return;
+        }
+        if (owner.exitPointerTools()) {
+          event.preventDefault();
+          return;
+        }
       }
 
       const cmdOrCtrl = input.control || input.meta;
@@ -2467,6 +2553,10 @@ export class TabManager {
           case 'f':
             event.preventDefault();
             owner.toggleFocusMode();
+            return;
+          case 'd':
+            event.preventDefault();
+            owner.duplicateTab(id);
             return;
           case '>':
             // Shift is what actually produces '>' (it's Shift+Period on a

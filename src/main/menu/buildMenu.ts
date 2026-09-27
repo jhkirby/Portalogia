@@ -55,6 +55,16 @@ export function buildMenu(
           click: () => getTabManager()?.createTerminalTab(),
         },
         {
+          label: 'Duplicate Tab',
+          accelerator: 'CmdOrCtrl+Shift+D',
+          click: () => {
+            const id = getActiveTabId();
+            if (id) {
+              getTabManager()?.duplicateTab(id);
+            }
+          },
+        },
+        {
           label: 'Reopen Closed Tab',
           accelerator: 'CmdOrCtrl+T',
           click: () => getTabManager()?.restoreLastClosedTab(),

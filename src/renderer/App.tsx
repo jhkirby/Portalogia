@@ -100,24 +100,33 @@ export function App() {
   // Belt-and-suspenders for the chrome-focused case, same reasoning as
   // Ctrl+Shift+F's menu accelerator: reliable when chrome itself has OS
   // focus, which is the case this covers (TabManager's own
-  // `before-input-event` handler covers the tab-focused case, the far
-  // more likely one while Focus Mode is fullscreen — see there). Gated on
-  // `focusMode` so it can never interfere with Escape's other, unrelated
-  // uses elsewhere in the chrome (AddressBar, WorkspaceBar's rename,
-  // TabSearch) — none of which are even reachable while this is on, since
-  // Focus Mode hides all of them.
+  // `before-input-event` handler covers the tab-focused case, the far more
+  // likely one while Focus Mode is fullscreen or the laser pointer/
+  // highlighter is on, both of which are meant to be used over a tab's own
+  // content — see there). Gated on all three so it can never interfere with
+  // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
+  // WorkspaceBar's rename, TabSearch) when none of them are active.
   useEffect(() => {
-    if (!focusMode) {
+    if (!focusMode && !laserPointerActive && !highlighterActive) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (focusMode) {
         setFocusMode(false);
+      }
+      if (laserPointerActive) {
+        setLaserPointer(false);
+      }
+      if (highlighterActive) {
+        setHighlighter(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusMode, setFocusMode]);
+  }, [focusMode, setFocusMode, laserPointerActive, setLaserPointer, highlighterActive, setHighlighter]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
   const isHome = browserTab?.url === HOME_URL;

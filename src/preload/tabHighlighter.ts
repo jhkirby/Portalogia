@@ -67,16 +67,35 @@ function highlighterCursorCss(): string {
   return `url('data:image/svg+xml,${svg}') 2 22, text`;
 }
 
+/** Re-paints every existing `<mark>` to `color` — a highlight's color is never frozen at creation time; it always tracks whatever the current accent is, the same way its cursor and hover states do. */
+function repaintAllHighlights(color: RgbColor): void {
+  document.querySelectorAll(`mark.${MARK_CLASS}`).forEach((mark) => {
+    (mark as HTMLElement).style.backgroundColor = rgba(color, 0.55);
+  });
+}
+
 function setActive(nextActive: boolean, color: RgbColor): void {
+  const colorChanged = color.r !== currentColor.r || color.g !== currentColor.g || color.b !== currentColor.b;
   active = nextActive;
   currentColor = color;
+  if (colorChanged) {
+    repaintAllHighlights(color);
+  }
   if (active) {
     if (!cursorStyleEl) {
       cursorStyleEl = document.createElement('style');
       cursorStyleEl.setAttribute('data-northstar', 'highlighter-cursor');
       cursorStyleEl.textContent =
         `html, html * { cursor: ${highlighterCursorCss()} !important; } ` +
-        `.${MARK_HOVER_CLASS} { opacity: 0.5; }`;
+        `.${MARK_HOVER_CLASS} { opacity: 0.5; } ` +
+        // Hides the browser's own native text-selection highlight (and
+        // overrides `pageSelectionAccent.ts`'s own `::selection` rule,
+        // which has no `!important` of its own) while this tool is on, so
+        // the highlighter's own colored `<mark>` is the only "highlight" a
+        // person ever sees — not a competing native one during the drag,
+        // replaced by ours only after release. Selection itself still
+        // works exactly the same underneath; only its paint is suppressed.
+        '::selection { background-color: transparent !important; background: transparent !important; }';
     }
     if (!cursorStyleEl.isConnected) {
       (document.head ?? document.documentElement).appendChild(cursorStyleEl);
@@ -145,16 +164,13 @@ function textAfter(within: Node, node: Node, offset: number): string {
 }
 
 /**
- * Wraps every text node a range intersects in its own `<mark>`, splitting
- * boundary text nodes as needed, all sharing one `data-nsh-id` — a highlight
- * that crosses several inline elements (bold, links, spans) inside the same
- * block ends up as several marks, removed/restored together by that shared
- * id. Collected before mutating anything, since splitting a text node while
- * a `TreeWalker` is still iterating the live tree it belongs to would risk
- * skipping or duplicating nodes.
- * @returns Whether at least one mark was created.
+ * Every text node a range intersects, in document order, each paired with
+ * the slice of it (start/end offsets) actually inside the range. Used by
+ * both `wrapRange` (what to wrap) and `rangeOverlapsExistingHighlight` (what
+ * to check the ancestry of) — the two need to agree exactly on what a
+ * selection "covers", so this is the one place that decides it.
  */
-function wrapRange(range: Range, id: string, color: RgbColor): boolean {
+function collectIntersectingTextRanges(range: Range): Array<{ node: Text; start: number; end: number }> {
   // A `TreeWalker` never visits its own root via `nextNode()`, only that
   // root's descendants — and `commonAncestorContainer` is itself a `Text`
   // node (with no children at all) whenever a selection lands entirely
@@ -179,7 +195,21 @@ function wrapRange(range: Range, id: string, color: RgbColor): boolean {
     }
     current = walker.nextNode();
   }
+  return targets;
+}
 
+/**
+ * Wraps every text node a range intersects in its own `<mark>`, splitting
+ * boundary text nodes as needed, all sharing one `data-nsh-id` — a highlight
+ * that crosses several inline elements (bold, links, spans) inside the same
+ * block ends up as several marks, removed/restored together by that shared
+ * id. Collected before mutating anything, since splitting a text node while
+ * a `TreeWalker` is still iterating the live tree it belongs to would risk
+ * skipping or duplicating nodes.
+ * @returns Whether at least one mark was created.
+ */
+function wrapRange(range: Range, id: string, color: RgbColor): boolean {
+  const targets = collectIntersectingTextRanges(range);
   let wrapped = false;
   for (const { node, start, end } of targets) {
     // Node identity is stable across iterations even though each split
@@ -237,6 +267,21 @@ function removeAndReport(id: string): void {
   ipcRenderer.send(HighlighterOp, { kind: 'remove', id });
 }
 
+/**
+ * Whether any part of `range` falls inside an existing highlight — checked
+ * before creating a new one so highlights can never nest or overlap; a
+ * sub-selection of an already-highlighted region (or one that only partly
+ * overlaps it) is rejected outright rather than layering a second `<mark>`
+ * over the first. Answered via ancestry on the exact text nodes `wrapRange`
+ * would itself wrap (`collectIntersectingTextRanges`) — the same set both
+ * functions agree on — rather than `range.intersectsNode(mark)` against
+ * every mark on the page, which checks the mark's own tree *position*
+ * rather than whether the selection's actual text sits inside one.
+ */
+function rangeOverlapsExistingHighlight(range: Range): boolean {
+  return collectIntersectingTextRanges(range).some(({ node }) => node.parentElement?.closest(`.${MARK_CLASS}`) != null);
+}
+
 /** Highlights the current selection, if any and if it's a plain single-block one — see `closestBlock`. Reports the new highlight to main on success. */
 function highlightSelection(): void {
   if (!active) {
@@ -256,6 +301,12 @@ function highlightSelection(): void {
     // Crosses more than one block — out of scope for v1 (see this file's
     // module doc comment). Left unselected/unhighlighted rather than
     // guessing at a partial wrap.
+    return;
+  }
+  if (rangeOverlapsExistingHighlight(range)) {
+    // Left as an ordinary native selection rather than cleared — the
+    // rejection is silent, but the text stays visibly selected so it's
+    // clear something was chosen, just not turned into a second highlight.
     return;
   }
 
@@ -310,7 +361,17 @@ function resolveOffset(
   return null;
 }
 
-/** Best-effort re-anchor: finds `quote.exact` in the current document (preferring an occurrence whose surrounding text matches `quote.prefix`/`quote.suffix`) and wraps it exactly like a fresh selection would be. A silent no-op if it can't be found — expected on a page that's changed since the highlight was made. */
+/**
+ * Best-effort re-anchor: finds `quote.exact` in the current document
+ * (preferring an occurrence whose surrounding text matches
+ * `quote.prefix`/`quote.suffix`) and wraps it exactly like a fresh selection
+ * would be. Always painted with the *live* `currentColor`, not
+ * `highlight.color` — a highlight's color is never frozen at the moment it
+ * was created (or last undone/redone); it always tracks whatever the accent
+ * currently is, same as `repaintAllHighlights`. A silent no-op if the text
+ * can't be found — expected on a page that's changed since the highlight
+ * was made.
+ */
 function applyStoredHighlight(highlight: HighlightRecord): void {
   if (!document.body || !highlight.quote.exact) {
     return;
@@ -332,7 +393,7 @@ function applyStoredHighlight(highlight: HighlightRecord): void {
     const range = document.createRange();
     range.setStart(start.node, start.offset);
     range.setEnd(end.node, end.offset);
-    wrapRange(range, highlight.id, highlight.color);
+    wrapRange(range, highlight.id, currentColor);
   } catch {
     // The computed offsets can land outside a node's current length if the
     // document changed between building the index and here (unlikely for a
@@ -392,9 +453,31 @@ function suppressClick(event: MouseEvent): void {
   event.preventDefault();
   event.stopImmediatePropagation();
 }
-document.addEventListener('click', suppressClick, true);
 document.addEventListener('dblclick', suppressClick, true);
 document.addEventListener('auxclick', suppressClick, true);
+
+// A plain (primary-button) click gets the same suppression as any other,
+// plus one extra behavior: clicking directly on an existing highlight
+// removes it — the same action as hovering it and pressing D/Delete, just
+// reachable without leaving the mouse. A `click` on a highlight only ever
+// happens here as a plain press-release-in-place (no drag), since a real
+// drag-selection never fires a collapsed `mouseup` in `highlightSelection`
+// in the first place — so there's no ambiguity with creating a highlight.
+document.addEventListener(
+  'click',
+  (event) => {
+    suppressClick(event);
+    if (!active) {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const id = target?.closest(`.${MARK_CLASS}`)?.getAttribute(MARK_ID_ATTR);
+    if (id) {
+      removeAndReport(id);
+    }
+  },
+  true,
+);
 
 document.addEventListener('mousemove', (event) => {
   if (!active) {

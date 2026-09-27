@@ -38,8 +38,21 @@ export class LaserPointerOverlay {
   private readonly view: WebContentsView;
   private isMounted = false;
 
-  /** @param window The chrome window this overlay's view mounts into/out of. */
-  public constructor(private readonly window: BrowserWindow) {
+  /**
+   * @param window The chrome window this overlay's view mounts into/out of.
+   * @param onEscape Called when Escape is pressed while this overlay's own
+   *   view has OS keyboard focus — which it does the moment a person clicks
+   *   anywhere on it, exactly what it's designed to swallow every one of
+   *   (see this class's own doc comment). Without this, that click hands
+   *   native keyboard focus to a view with no input handling of its own at
+   *   all, so Escape (or any other key) would otherwise reach neither the
+   *   underlying tab's `wireSharedInputHandling` nor the chrome's own
+   *   belt-and-suspenders listener — it would just go nowhere.
+   */
+  public constructor(
+    private readonly window: BrowserWindow,
+    onEscape: () => void,
+  ) {
     this.view = new WebContentsView({
       webPreferences: {
         contextIsolation: true,
@@ -52,6 +65,21 @@ export class LaserPointerOverlay {
     // own view.
     this.view.webContents.on('will-navigate', (event) => event.preventDefault());
     this.view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    this.view.webContents.on('before-input-event', (event, input) => {
+      if (
+        input.type === 'keyDown' &&
+        !input.isAutoRepeat &&
+        !input.control &&
+        !input.meta &&
+        !input.alt &&
+        !input.shift &&
+        input.key === 'Escape'
+      ) {
+        event.preventDefault();
+        onEscape();
+      }
+    });
 
     // Lets the active tab's own content keep showing through everywhere
     // this overlay's page doesn't itself paint — see this class's own doc

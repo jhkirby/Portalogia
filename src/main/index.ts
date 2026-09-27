@@ -128,7 +128,9 @@ void app.whenReady().then(() => {
   registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
   registerThemeIpc();
-  registerAccentColorIpc();
+  registerAccentColorIpc(() => {
+    highlighterController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isHighlighterActive() ?? false);
+  });
   registerTearOffIpc();
   buildMenu(
     () => activeTabManager,
