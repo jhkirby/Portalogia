@@ -1452,6 +1452,13 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setLaserPointer(enabled: boolean): BrowserState {
+    // Mutually exclusive with the highlighter — both are full-window "the
+    // pointer does something else now" modes, and having both on at once
+    // made no sense (the highlighter's own cursor/click-suppression and the
+    // laser pointer's overlay would each think they alone own the pointer).
+    if (enabled && this.highlighterActive) {
+      this.setHighlighter(false);
+    }
     this.laserPointerActive = enabled;
     this.syncLaserPointerOverlay();
     this.emitState();
@@ -1513,6 +1520,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setHighlighter(enabled: boolean): BrowserState {
+    // Mutually exclusive with the laser pointer — see its own `setLaserPointer`.
+    if (enabled && this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
     this.highlighterActive = enabled;
     this.pushHighlighterState();
     this.nudgeActiveTabCursor();
