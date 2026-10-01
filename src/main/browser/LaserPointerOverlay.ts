@@ -6,6 +6,23 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
 
+/** One wheel tick over the overlay, in the overlay's own (= the tab's) coordinates. */
+export interface LaserPointerWheel {
+  readonly x: number;
+  readonly y: number;
+  readonly deltaX: number;
+  readonly deltaY: number;
+}
+
+/** Validates an IPC payload at the boundary — the sender is our own preload, but never trust the shape. */
+function isWheel(value: unknown): value is LaserPointerWheel {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return ['x', 'y', 'deltaX', 'deltaY'].every((k) => typeof v[k] === 'number' && Number.isFinite(v[k]));
+}
+
 /**
  * Owns the laser pointer's own `WebContentsView` — a transparent overlay
  * covering the active tab's entire content area while the tool is on
@@ -52,9 +69,11 @@ export class LaserPointerOverlay {
   public constructor(
     private readonly window: BrowserWindow,
     onEscape: () => void,
+    onWheel: (wheel: LaserPointerWheel) => void,
   ) {
     this.view = new WebContentsView({
       webPreferences: {
+        preload: join(__dirname, '../preload/laserPointer.cjs'),
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
@@ -63,6 +82,15 @@ export class LaserPointerOverlay {
 
     // Trusted, app-owned content — same reasoning as `SuggestionsOverlay`'s
     // own view.
+    // Scrolling stays available while the pointer is on: the overlay's
+    // preload relays each wheel tick and the owner replays it on the tab.
+    this.view.webContents.ipc.on('laser-pointer:wheel', (event, payload: unknown) => {
+      if (event.senderFrame !== this.view.webContents.mainFrame || !isWheel(payload)) {
+        return;
+      }
+      onWheel(payload);
+    });
+
     this.view.webContents.on('will-navigate', (event) => event.preventDefault());
     this.view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 

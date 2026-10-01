@@ -216,7 +216,24 @@ export class TabManager {
       (payload) => this.window.webContents.send(IpcChannel.ColorPickerColorChanged, payload),
       () => this.window.webContents.send(IpcChannel.ColorPickerCloseRequested),
     );
-    this.laserPointerOverlay = new LaserPointerOverlay(this.window, () => this.exitPointerTools());
+    this.laserPointerOverlay = new LaserPointerOverlay(
+      this.window,
+      () => this.exitPointerTools(),
+      (wheel) => {
+        if (this.activeTabId === null) {
+          return;
+        }
+        // `sendInputEvent`'s wheel deltas use the opposite sign to the DOM's
+        // `deltaY` (positive = content moves down, i.e. scroll up).
+        this.views.get(this.activeTabId)?.webContents.sendInputEvent({
+          type: 'mouseWheel',
+          x: Math.round(wheel.x),
+          y: Math.round(wheel.y),
+          deltaX: -wheel.deltaX,
+          deltaY: -wheel.deltaY,
+        });
+      },
+    );
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
     // focus is on the chrome itself rather than a tab's own webContents

@@ -44,6 +44,7 @@ export default defineConfig({
           tooltip: resolve(__dirname, 'src/preload/tooltip.ts'),
           colorPicker: resolve(__dirname, 'src/preload/colorPicker.ts'),
           tabZoom: resolve(__dirname, 'src/preload/tabZoom.ts'),
+          laserPointer: resolve(__dirname, 'src/preload/laserPointer.ts'),
         },
         // Sandboxed preload scripts are loaded through a synchronous
         // CommonJS loader and can't use `import` — with the package set to
