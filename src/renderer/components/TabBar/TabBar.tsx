@@ -4,7 +4,9 @@
 // Last Modified: 2026-09-18
 
 import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
-import type { TabState } from '@shared/tab-state';
+import type { BookmarkState, TabState } from '@shared/tab-state';
+import { pageLabel } from '../../lib/pageLabel';
+import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import { formatShortcut } from '../../lib/shortcuts';
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
@@ -25,6 +27,8 @@ const TEAR_OFF_DWELL_MS = 200;
 interface TabBarProps {
   /** Tabs to render, left to right, in the order they were opened. */
   readonly tabs: readonly TabState[];
+  /** Every saved bookmark — a bookmarked page's tab shows its saved name, like the address bar's bubble. */
+  readonly bookmarks: readonly BookmarkState[];
   /** Id of the tab drawn as selected; `null` while no window has one yet. */
   readonly activeTabId: string | null;
   /** Called when the user picks a different tab. */
@@ -65,6 +69,7 @@ interface DropTarget {
 /** The row of open tabs at the top of the window, plus a "new tab" button. */
 export function TabBar({
   tabs,
+  bookmarks,
   activeTabId,
   onActivate,
   onClose,
@@ -176,6 +181,7 @@ export function TabBar({
         <Tab
           key={tab.id}
           tab={tab}
+          label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
           isGhost={tab === ghostTab}
           isActive={tab.id === activeTabId}
           onActivate={onActivate}
@@ -247,15 +253,18 @@ export function TabBar({
           }}
         />
       ))}
-      <button
-        type="button"
-        className="tab-bar__new chrome-tooltip"
-        aria-label="New tab"
-        onClick={onNewTab}
-        data-tooltip={`New tab (${formatShortcut('N')})`}
-      >
-        +
-      </button>
+      {/* At the per-workspace limit the "+" goes away entirely (main enforces it too) and returns once a tab closes. */}
+      {tabs.length < MAX_TABS_PER_WORKSPACE && (
+        <button
+          type="button"
+          className="tab-bar__new chrome-tooltip"
+          aria-label="New tab"
+          onClick={onNewTab}
+          data-tooltip={`New tab (${formatShortcut('N')})`}
+        >
+          +
+        </button>
+      )}
       {/* One floating line shared by every tab — see `indicatorX`'s own doc comment for why this isn't drawn per-tab. */}
       {indicatorX !== null && (
         <div className="tab-bar__drop-indicator" style={{ left: indicatorX }} aria-hidden="true" />
@@ -266,6 +275,8 @@ export function TabBar({
 
 interface TabProps {
   readonly tab: TabState;
+  /** What the tab shows instead of its page title (saved name or domain), or `null` to show the title. */
+  readonly label: string | null;
   readonly isActive: boolean;
   readonly onActivate: (id: string) => void;
   readonly onClose: (id: string) => void;
@@ -287,6 +298,7 @@ interface TabProps {
 /** One tab. A `div[role=tab]` rather than a `<button>` because it hosts its own close `<button>`. */
 function Tab({
   tab,
+  label,
   isActive,
   onActivate,
   onClose,
@@ -378,7 +390,9 @@ function Tab({
       ) : (
         <span className="tab-bar__favicon-placeholder" aria-hidden="true" />
       )}
-      <span className="tab-bar__title">{tab.title || 'New Tab'}</span>
+      <span className="tab-bar__title" title={tab.title || undefined}>
+        {label ?? (tab.title || 'New Tab')}
+      </span>
       <button
         type="button"
         className="tab-bar__close chrome-tooltip"

@@ -56,12 +56,11 @@
   -webkit-app-region: no-drag;
 }
 
-/* `:not(--active)` so the active tab keeps its own (lighter) background on
-   hover instead of the pseudo-class outranking the `--active` modifier
-   class on specificity and flattening it to the same grey as every other
-   hovered tab — which also washed out the close button's hover circle
-   against it. */
-.tab-bar__tab:hover:not(.tab-bar__tab--active) {
+/* Every tab, the active one included, takes the same hover highlight (the
+   close button's own hover circle uses a distinct color, so it stays visible
+   against it). `--active` is declared after, so its resting look is the
+   non-hover one. */
+.tab-bar__tab:hover {
   background: var(--color-tab-hover-bg);
 }
 
@@ -70,11 +69,18 @@
   color: var(--color-tab-text-active);
 }
 
+/* Same highlight as any hovered tab; the extra class beats `--active` above
+   on specificity without needing a `:not()`. */
+.tab-bar__tab--active:hover {
+  background: var(--color-tab-hover-bg);
+}
+
 /* The tab currently being grabbed. No drag-image snapshot follows the
    cursor (see TabBar.tsx's `TRANSPARENT_DRAG_IMAGE`), so this in-place
    highlight is the only feedback that it's being dragged — placed after
    `--active` so it wins over that background too. */
-.tab-bar__tab--dragging {
+.tab-bar__tab--dragging,
+.tab-bar__tab--dragging:hover {
   background: var(--color-tab-dragging-bg);
 }
 

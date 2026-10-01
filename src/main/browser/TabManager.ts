@@ -10,6 +10,7 @@ import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents }
 import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
+  MAX_TABS_PER_WORKSPACE,
   TAB_STRIP_HEIGHT_PX,
   DEFAULT_TAB_URL,
   DEFAULT_WORKSPACE_ID,
@@ -359,6 +360,26 @@ export class TabManager {
   // ── Tabs ─────────────────────────────────────────────────────────────
 
   /**
+   * Whether a workspace already holds `MAX_TABS_PER_WORKSPACE` tabs. A tab
+   * shown from several windows (a link group) counts once.
+   * @param workspaceId The workspace to check.
+   * @param excludingTabId A tab (and its link group) to leave out of the
+   *   count — for a tab that's about to move *into* this workspace, so it
+   *   (or a sibling already moved) doesn't count against itself.
+   */
+  private isWorkspaceFull(workspaceId: string, excludingTabId?: string): boolean {
+    const keyOf = (tabId: string): string => this.registry.getLinkGroup(tabId)?.[0] ?? tabId;
+    const excludedKey = excludingTabId === undefined ? null : keyOf(excludingTabId);
+    const keys = new Set<string>();
+    for (const [tabId, state] of this.states) {
+      if (state.workspaceId === workspaceId && keyOf(tabId) !== excludedKey) {
+        keys.add(keyOf(tabId));
+      }
+    }
+    return keys.size >= MAX_TABS_PER_WORKSPACE;
+  }
+
+  /**
    * Creates a browser tab's view/state/wiring and starts it loading, without
    * activating (mounting) it anywhere — the shared half of `createTab`
    * (which activates it in this window right after) and `createLinkedTwin`
@@ -421,6 +442,9 @@ export class TabManager {
    * @returns The full browser state after the tab is created.
    */
   public createTab(url?: string, workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
     const id = this.createBrowserTabState(url, workspaceId ?? this.activeWorkspaceId);
     this.activateTab(id);
     return this.getState();
@@ -439,6 +463,9 @@ export class TabManager {
    * @returns The full browser state after the tab is created.
    */
   public createTabAndFocusAddressBar(url?: string, workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
     const state = this.createTab(url, workspaceId);
     this.focusAddressBarPastTabLoad(state.activeTabId);
     return state;
@@ -467,6 +494,9 @@ export class TabManager {
    * @returns The full browser state after the tab is created.
    */
   public createTerminalTab(workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
     const id = randomUUID();
     const view = new WebContentsView({
       webPreferences: {
@@ -637,6 +667,10 @@ export class TabManager {
   public moveTabToWorkspace(id: string, workspaceId: string, discardEmptyWorkspace = true): BrowserState {
     const state = this.states.get(id);
     if (!state || !this.workspaces.has(workspaceId) || state.workspaceId === workspaceId) {
+      return this.getState();
+    }
+    // A full workspace takes no more tabs: the dragged tab stays where it is.
+    if (this.isWorkspaceFull(workspaceId, id)) {
       return this.getState();
     }
 
@@ -1239,13 +1273,18 @@ export class TabManager {
    * @returns The full browser state after the tab is reopened.
    */
   public restoreLastClosedTab(): BrowserState {
-    const closed = this.closedTabs.pop();
+    const closed = this.closedTabs[this.closedTabs.length - 1];
     if (!closed) {
       return this.getState();
     }
     const workspaceId = this.workspaces.has(closed.workspaceId)
       ? closed.workspaceId
       : this.activeWorkspaceId;
+    // Checked before popping, so a full workspace doesn't swallow the entry.
+    if (this.isWorkspaceFull(workspaceId)) {
+      return this.getState();
+    }
+    this.closedTabs.pop();
     return this.createTab(closed.url, workspaceId);
   }
 
@@ -1262,7 +1301,7 @@ export class TabManager {
    */
   public duplicateTab(id: string): BrowserState {
     const state = this.states.get(id);
-    if (!state) {
+    if (!state || this.isWorkspaceFull(state.workspaceId)) {
       return this.getState();
     }
 
@@ -1701,6 +1740,10 @@ export class TabManager {
 
   /** Saves a bookmark (a no-op if the URL is already saved). */
   public addBookmark(title: string, url: string): BrowserState {
+    // The blank default page has no address worth saving.
+    if (url === HOME_URL) {
+      return this.getState();
+    }
     this.bookmarkStore.add(title, url);
     this.emitState();
     return this.getState();
@@ -1716,13 +1759,14 @@ export class TabManager {
   /**
    * Bookmarks the given tab's current page, or un-bookmarks it if it's
    * already saved. A no-op if the tab doesn't exist (e.g. a stale
-   * accelerator firing after the tab closed).
+   * accelerator firing after the tab closed), or if it's showing the blank
+   * default page (`HOME_URL`), which can't be bookmarked.
    * @param id The tab whose page to bookmark or un-bookmark.
    * @returns The full browser state after the change.
    */
   public toggleBookmark(id: string): BrowserState {
     const state = this.states.get(id);
-    if (!state || state.kind !== 'browser') {
+    if (!state || state.kind !== 'browser' || state.url === HOME_URL) {
       return this.getState();
     }
     this.bookmarkStore.toggle(state.title, state.url);

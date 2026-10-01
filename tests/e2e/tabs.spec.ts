@@ -82,7 +82,8 @@ test.describe('tabs', () => {
     await addressBar.press('Enter');
 
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
-    await expect(tabs.first()).toContainText('Widgets Catalog');
+    // The tab shows the site's domain (like the address bar's bubble), not the page title.
+    await expect(tabs.first()).toContainText('localhost');
     await expect(addressBar).toHaveValue(server.url('/widgets'));
     await expect(window.getByRole('button', { name: 'Back' })).toBeEnabled();
 

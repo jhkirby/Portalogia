@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-15
 
 import { test, expect } from '@playwright/test';
-import { isNavigableUrl, looksLikeUrl, normalizeUrlOrSearch } from '../../src/shared/url';
+import { domainOfUrl, isNavigableUrl, looksLikeUrl, normalizeUrlOrSearch } from '../../src/shared/url';
 
 test.describe('looksLikeUrl', () => {
   test('accepts a dot-domain host, with or without a scheme', () => {
@@ -71,5 +71,25 @@ test.describe('isNavigableUrl', () => {
 
   test('refuses unparseable input instead of throwing', () => {
     expect(isNavigableUrl('not a url')).toBe(false);
+  });
+});
+
+test.describe('domainOfUrl', () => {
+  test('returns the hostname, without a leading www.', () => {
+    expect(domainOfUrl('https://slack.com/')).toBe('slack.com');
+    expect(domainOfUrl('https://www.google.com/search?q=google')).toBe('google.com');
+    expect(domainOfUrl('http://docs.example.co.uk:8080/a/b')).toBe('docs.example.co.uk');
+  });
+
+  test('keeps non-www subdomains', () => {
+    expect(domainOfUrl('https://claude.ai/chat/1')).toBe('claude.ai');
+    expect(domainOfUrl('https://wwwx.example.com')).toBe('wwwx.example.com');
+  });
+
+  test('is null for non-web pages, blank input, and garbage', () => {
+    expect(domainOfUrl('northstar://home/')).toBeNull();
+    expect(domainOfUrl('file:///C:/a.html')).toBeNull();
+    expect(domainOfUrl('')).toBeNull();
+    expect(domainOfUrl('not a url')).toBeNull();
   });
 });

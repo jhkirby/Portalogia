@@ -80,3 +80,22 @@ export function isNavigableUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * The site name to show for a page in the address bar's idle bubble: its
+ * hostname without a leading `www.` (`https://www.slack.com/x` → `slack.com`).
+ * Only web pages (`http`/`https`) have one — the app's own pages, blank input,
+ * and anything unparseable return `null`.
+ * @param url The page's full URL.
+ */
+export function domainOfUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.hostname.replace(/^www\./, '') || null;
+  } catch {
+    return null;
+  }
+}

@@ -189,7 +189,8 @@ export function App() {
   // confirm) — the popup is only for the "not yet bookmarked" case, where
   // there's a real name/URL choice to make before committing.
   const handleToggleBookmark = (): void => {
-    if (!browserTab || !activeTabId) {
+    // The blank default page has no address to save.
+    if (!browserTab || !activeTabId || isHome) {
       return;
     }
     if (activeBookmark) {
@@ -246,6 +247,7 @@ export function App() {
           <div className="titlebar">
             <TabBar
               tabs={workspaceTabs}
+              bookmarks={bookmarks}
               activeTabId={activeTabId}
               onActivate={activateTab}
               onClose={closeTab}
@@ -283,12 +285,15 @@ export function App() {
                   isLoading={browserTab?.isLoading ?? false}
                   onNavigate={(input) => activeTabId && navigate(activeTabId, input)}
                   bookmarks={bookmarks}
+                  isBookmarked={activeBookmark !== null}
+                  canBookmark={browserTab !== null && !isHome}
+                  bookmarkName={activeBookmark?.title ?? null}
+                  onToggleBookmark={handleToggleBookmark}
                 />
               </>
             )}
             {secondaryTab && <SplitIndicator secondaryTab={secondaryTab} onExit={exitSplitView} />}
             <PageActions
-              isBookmarked={activeBookmark !== null}
               canActOnPage={browserTab !== null}
               canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
@@ -299,7 +304,6 @@ export function App() {
               commentToolActive={commentToolActive}
               penActive={penActive}
               theme={theme}
-              onToggleBookmark={handleToggleBookmark}
               onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
               onNewTerminal={createTerminalTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}

@@ -114,16 +114,6 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
       >
         −
       </button>
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onZoomIn}
-        disabled={!canZoom}
-        aria-label="Zoom in"
-        data-tooltip={`Zoom in (${formatShortcut('=')})`}
-      >
-        +
-      </button>
       <div
         className="zoom-control__bubble chrome-tooltip"
         data-tooltip={`Zoom percent (${formatShortcut('Shift+0')}) — ${ZOOM_PERCENT_MIN}–${ZOOM_PERCENT_MAX}%`}
@@ -146,6 +136,16 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
           %
         </span>
       </div>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onZoomIn}
+        disabled={!canZoom}
+        aria-label="Zoom in"
+        data-tooltip={`Zoom in (${formatShortcut('=')})`}
+      >
+        +
+      </button>
     </div>
   );
 }

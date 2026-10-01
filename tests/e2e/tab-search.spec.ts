@@ -22,7 +22,7 @@ test.describe('tab search', () => {
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
     await expect(
-      window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab').filter({ hasText: 'Widgets Catalog' }),
+      window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab').filter({ hasText: 'localhost' }),
     ).toHaveCount(1);
 
     await window.getByRole('button', { name: 'Search tabs' }).click();
@@ -47,7 +47,7 @@ test.describe('tab search', () => {
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
-    await expect(tabs.filter({ hasText: 'Widgets Catalog' })).toHaveCount(1);
+    await expect(tabs.filter({ hasText: 'localhost' })).toHaveCount(1);
 
     // Make the home tab active again so it's the split's primary pane.
     await tabs.first().click();

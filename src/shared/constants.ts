@@ -212,3 +212,12 @@ export const WORKSPACE_COLORS = [
  * equal `--size-tab-bar-height` in `sizes.css`.
  */
 export const TAB_STRIP_HEIGHT_PX = 40;
+
+/**
+ * The most tabs one workspace can hold. Enforced in the main process
+ * (`TabManager.isWorkspaceFull`) for every way a tab can arrive — new tab,
+ * terminal, duplicate, reopen, link-opened, dragged in from another
+ * workspace — and mirrored in the tab bar, which hides its "+" button at the
+ * limit. A tab shown from several windows counts once.
+ */
+export const MAX_TABS_PER_WORKSPACE = 8;

@@ -7,7 +7,6 @@ import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
 import {
-  BookmarkStarIcon,
   CommentIcon,
   HighlighterIcon,
   LaserPointerIcon,
@@ -18,8 +17,6 @@ import {
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
-  /** Whether the active tab's URL is already bookmarked. */
-  readonly isBookmarked: boolean;
   /** Whether there's an active tab to bookmark — browser-only, unlike `canExportPdf`, since a terminal tab has no URL to bookmark. */
   readonly canActOnPage: boolean;
   /** Whether there's an active tab to export to PDF — unlike `canActOnPage`, true for a terminal tab too (its `WebContentsView` prints its on-screen output same as a browser tab prints its page). */
@@ -38,7 +35,6 @@ interface PageActionsProps {
   /** Whether the pen tool is currently on. */
   readonly penActive: boolean;
   readonly theme: Theme;
-  readonly onToggleBookmark: () => void;
   readonly onExportPdf: () => void;
   readonly onNewTerminal: () => void;
   readonly onOpenTabSearch: () => void;
@@ -56,9 +52,13 @@ interface PageActionsProps {
   readonly onToggleTheme: () => void;
 }
 
-/** Actions on the current page (bookmark, export, new terminal, search tabs, zoom) plus the window-level Focus Mode and theme toggles. */
+/**
+ * The toolbar's right-hand button strip, in five groups split by dividers —
+ * nearest the address bar first: page-editing tools (laser pointer, pen,
+ * highlighter, comments, revert); page/app tools (PDF, terminal, tab search);
+ * zoom; window actions (new window, Focus Mode); appearance (accent color, theme).
+ */
 export function PageActions({
-  isBookmarked,
   canActOnPage,
   canExportPdf,
   canZoom,
@@ -69,7 +69,6 @@ export function PageActions({
   commentToolActive,
   penActive,
   theme,
-  onToggleBookmark,
   onExportPdf,
   onNewTerminal,
   onOpenTabSearch,
@@ -87,17 +86,6 @@ export function PageActions({
 }: PageActionsProps) {
   return (
     <div className="page-actions">
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onToggleBookmark}
-        disabled={!canActOnPage}
-        aria-pressed={isBookmarked}
-        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
-        data-tooltip={`${isBookmarked ? 'Remove bookmark' : 'Bookmark this page'} (${formatShortcut('B')})`}
-      >
-        <BookmarkStarIcon filled={isBookmarked} />
-      </button>
       <button
         type="button"
         className="page-actions__button chrome-tooltip"
@@ -152,6 +140,7 @@ export function PageActions({
       >
         <RevertIcon />
       </button>
+      <span className="page-actions__divider" role="separator" aria-hidden="true" />
       <button
         type="button"
         className="page-actions__button page-actions__button--pdf chrome-tooltip"
@@ -180,7 +169,9 @@ export function PageActions({
       >
         ⌕
       </button>
+      <span className="page-actions__divider" role="separator" aria-hidden="true" />
       <ZoomControl percent={zoomPercent} canZoom={canZoom} onZoomOut={onZoomOut} onZoomIn={onZoomIn} onSetZoom={onSetZoom} />
+      <span className="page-actions__divider" role="separator" aria-hidden="true" />
       <button
         type="button"
         className="page-actions__button chrome-tooltip"
@@ -200,6 +191,7 @@ export function PageActions({
       >
         ⛶
       </button>
+      <span className="page-actions__divider" role="separator" aria-hidden="true" />
       <ColorPicker />
       <button
         type="button"

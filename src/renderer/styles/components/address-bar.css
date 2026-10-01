@@ -23,16 +23,37 @@
   border-color: var(--color-address-border-focus);
 }
 
-.address-bar__icon {
+/* The bookmark star sits where the search glyph used to: a button, but drawn
+   as plain icon so the pill still reads as one field. Filled + accent-colored
+   once the page is bookmarked (aria-pressed), same cue the toolbar button had. */
+.address-bar__bookmark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
+  padding: 0;
 
-  font-size: 13px;
-  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
   color: var(--color-address-placeholder);
+  cursor: pointer;
+}
+
+.address-bar__bookmark:hover:not(:disabled) {
+  background: var(--color-button-hover-bg);
+}
+
+.address-bar__bookmark[aria-pressed='true'] {
+  color: var(--color-accent-text);
+}
+
+.address-bar__bookmark:disabled {
+  color: var(--color-button-disabled-text);
+  cursor: default;
 }
 
 .address-bar__spinner {
@@ -45,6 +66,14 @@
   border-radius: 50%;
 
   animation: address-bar-spin 0.7s linear infinite;
+}
+
+.address-bar__field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .address-bar__input {
@@ -63,6 +92,42 @@
 
 .address-bar__input:focus {
   outline: none;
+}
+
+/* While the bookmark bubble covers the field, the URL stays in the input
+   (so one click still focuses it) but is invisible. */
+.address-bar__input--hidden {
+  color: transparent;
+  caret-color: transparent;
+}
+
+/* The bookmark's saved name, in place of its URL while the field is idle. A
+   bubble in the accent tint — the same one the selected tab/pill uses — so it
+   reads as "this is a saved page", with the field's own text color (white in
+   dark mode, black in light) rather than the accent. Ignores the mouse so
+   clicks reach the input. */
+.address-bar__bubble {
+  position: absolute;
+  left: 0;
+  max-width: 100%;
+  padding: 1px var(--size-spacing-md);
+  overflow: hidden;
+
+  background: var(--color-selection-bg);
+  border-radius: var(--size-radius-pill);
+
+  font-size: var(--size-font-md);
+  line-height: 1.5;
+  color: var(--color-address-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A page that isn't bookmarked gets its domain in a neutral bubble, so the
+   accent tint stays the cue for "this is a saved page". */
+.address-bar__bubble--domain {
+  background: var(--color-button-hover-bg);
 }
 
 @keyframes address-bar-spin {

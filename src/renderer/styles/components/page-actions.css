@@ -12,6 +12,16 @@
   gap: 2px;
 }
 
+.page-actions__divider {
+  align-self: center;
+  flex-shrink: 0;
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--size-spacing-xs);
+
+  background: var(--color-chrome-border);
+}
+
 .page-actions__button {
   display: flex;
   align-items: center;

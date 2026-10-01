@@ -6,6 +6,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { BookmarkState } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
+import { pageLabel } from '../../lib/pageLabel';
+import { formatShortcut } from '../../lib/shortcuts';
+import { BookmarkStarIcon } from '../icons';
 
 interface AddressBarProps {
   /** The active tab's current URL; used to keep the field in sync with navigation. */
@@ -15,6 +18,14 @@ interface AddressBarProps {
   readonly onNavigate: (input: string) => void;
   /** Every saved bookmark, filtered locally against the draft to power the suggestions dropdown. */
   readonly bookmarks: readonly BookmarkState[];
+  /** Whether the active tab's URL is already bookmarked — drives the star's filled/outline state. */
+  readonly isBookmarked: boolean;
+  /** Whether there's a page to bookmark (a terminal tab has no URL). */
+  readonly canBookmark: boolean;
+  /** The saved name of the active page's bookmark, or `null` if it isn't bookmarked — shown as a bubble in place of the URL while the field isn't focused (a page that isn't bookmarked gets its domain instead). */
+  readonly bookmarkName: string | null;
+  /** Called when the star is clicked: bookmarks the page, or removes its bookmark. */
+  readonly onToggleBookmark: () => void;
 }
 
 /** How many bookmark suggestions to show at once. */
@@ -47,7 +58,16 @@ const DROPDOWN_GAP_PX = 6;
  * should sit, and push both down via `syncAddressSuggestions` — the only
  * channel that connects the two.
  */
-export function AddressBar({ url, isLoading, onNavigate, bookmarks }: AddressBarProps) {
+export function AddressBar({
+  url,
+  isLoading,
+  onNavigate,
+  bookmarks,
+  isBookmarked,
+  canBookmark,
+  bookmarkName,
+  onToggleBookmark,
+}: AddressBarProps) {
   const [draft, setDraft] = useState(url);
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -186,41 +206,66 @@ export function AddressBar({ url, isLoading, onNavigate, bookmarks }: AddressBar
   };
 
   const isUrl = draft.trim().length > 0 && looksLikeUrl(draft);
+  // The idle bubble: a bookmarked page's saved name, else the site's domain.
+  const bubbleText = pageLabel(url, bookmarks);
+  const savedName = bookmarkName?.trim() ? bookmarkName : null;
+  const showBubble = !isFocused && bubbleText !== null;
 
   return (
     <form ref={containerRef} className="address-bar" onSubmit={handleSubmit} role="search">
-      {isLoading ? (
-        <span className="address-bar__spinner" aria-hidden="true" />
-      ) : (
-        <span className="address-bar__icon" aria-hidden="true">
-          {draft.trim() ? (isUrl ? '⊙' : '⌕') : '⌕'}
-        </span>
-      )}
-      <input
-        ref={inputRef}
-        className="address-bar__input"
-        type="text"
-        inputMode="url"
-        value={draft}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          setSelectedIndex(0);
-        }}
-        onFocus={(event) => {
-          event.currentTarget.select();
-          setIsFocused(true);
-        }}
-        onBlur={() => setIsFocused(false)}
-        onKeyDown={handleKeyDown}
-        aria-label="Search the internet..."
-        role="combobox"
-        aria-expanded={isDropdownOpen}
-        aria-autocomplete="list"
-        placeholder="Search the internet..."
-        spellCheck={false}
-        autoCapitalize="off"
-        autoCorrect="off"
-      />
+      <button
+        type="button"
+        className="address-bar__bookmark chrome-tooltip"
+        onClick={onToggleBookmark}
+        disabled={!canBookmark}
+        aria-pressed={isBookmarked}
+        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
+        data-tooltip={`${isBookmarked ? 'Remove bookmark' : 'Bookmark this page'} (${formatShortcut('B')})`}
+      >
+        <BookmarkStarIcon filled={isBookmarked} size={14} />
+      </button>
+      {isLoading && <span className="address-bar__spinner" aria-hidden="true" />}
+      <span className="address-bar__field">
+        <input
+          ref={inputRef}
+          className={`address-bar__input${showBubble ? ' address-bar__input--hidden' : ''}`}
+          type="text"
+          inputMode="url"
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setSelectedIndex(0);
+          }}
+          // Deliberately no select-all on focus: the URL stays unhighlighted
+          // when the bar is clicked into (it's only ever selected by the user).
+          onFocus={() => setIsFocused(true)}
+          onBlur={(event) => {
+            // Clicking elsewhere clears any selection the user made, or its
+            // highlight lingers (visibly, behind the bookmark bubble).
+            event.currentTarget.setSelectionRange(0, 0);
+            setIsFocused(false);
+          }}
+          onKeyDown={handleKeyDown}
+          aria-label="Search the internet..."
+          role="combobox"
+          aria-expanded={isDropdownOpen}
+          aria-autocomplete="list"
+          placeholder="Search the internet..."
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+        />
+        {/* The URL itself is hidden (transparent text) while the bubble shows, not removed:
+            the bubble ignores the mouse, so a click lands on the input, focuses it, and the real URL comes back. */}
+        {showBubble && (
+          <span
+            className={`address-bar__bubble${savedName ? '' : ' address-bar__bubble--domain'}`}
+            aria-hidden="true"
+          >
+            {bubbleText}
+          </span>
+        )}
+      </span>
     </form>
   );
 }
