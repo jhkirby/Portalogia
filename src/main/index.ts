@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
 import { NORTHSTAR_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
-import { tearOffTabRequestSchema } from '@shared/ipc-schemas';
+import { dropRegionsRequestSchema, tearOffTabEndRequestSchema, tearOffTabRequestSchema } from '@shared/ipc-schemas';
 import { BookmarkStore } from './browser/BookmarkStore';
 import { CommentController } from './browser/CommentController';
 import { CommentStore } from './browser/CommentStore';
@@ -161,6 +161,8 @@ void app.whenReady().then(() => {
   );
 
   launchWindow();
+  // A little after startup, so it doesn't compete with the first window's load.
+  setTimeout(prepareSpareWindow, 3000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -233,14 +235,19 @@ function resolveTabManagerForTab(tabId: string): TabManager | undefined {
 function launchWindow(
   onReady: (tabManager: TabManager) => void = (tabManager) => tabManager.restoreSession(),
   position?: { x: number; y: number },
+  options: { hidden?: boolean } = {},
 ): BrowserWindow {
-  const window = createMainWindow();
+  const window = createMainWindow({ showWhenReady: !options.hidden });
   if (position) {
     window.setPosition(Math.round(position.x), Math.round(position.y));
   }
   const tabManager = new TabManager(
     window,
-    (state) => window.webContents.send(IpcChannel.TabsStateChanged, state),
+    (state) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IpcChannel.TabsStateChanged, state);
+      }
+    },
     bookmarkStore,
     sessionStore,
     sharedRegistry,
@@ -265,6 +272,7 @@ function launchWindow(
     // it immediately here rather than let a just-scheduled write get cut
     // off by the process exiting before its timer fires.
     sessionStore.flush();
+    closeSpareWindowIfAlone();
   });
   window.webContents.once('did-finish-load', () => onReady(tabManager));
 
@@ -279,32 +287,222 @@ function launchWindow(
 const TEAR_OFF_GRAB_OFFSET = { x: 150, y: 20 };
 /** Safety cap so a lost end-of-drag message can't leave a window chasing the cursor forever. */
 const TEAR_OFF_FOLLOW_MAX_MS = 60_000;
-/** Stops whichever live tear-off is currently following the cursor, if any. */
-let stopFollowingCursor: (() => void) | null = null;
+/** Where a source window is parked, out of every other window's way, while it hovers a drop target. */
+const PARKED_WINDOW_POSITION = -30_000;
+
+/** How long after a drag ends to wait before checking whether the tab really moved — the target window's drop handler reports over its own IPC channel, which can land just after this one. */
+const TEAR_OFF_SETTLE_MS = 150;
 
 /**
- * Keeps `window` under the cursor (a live tear-off) until stopped. The OS
- * drag that's in progress owns the mouse, so the window can't be dragged
- * natively — it's repositioned by polling the cursor instead.
+ * A live tear-off in progress, for the length of one drag. The torn-off
+ * window chases the cursor, but only while the cursor is somewhere a tab
+ * *can't* be dropped: over another window's tab strip or sidebar it's
+ * hidden (so the drag reaches that window's own drop handlers) and shown
+ * again when the cursor leaves. It is only destroyed once the drag ends
+ * with the tab dropped somewhere — never mid-drag.
  */
-function followCursor(window: BrowserWindow): void {
-  stopFollowingCursor?.();
+interface LiveTearOff {
+  window: BrowserWindow | null;
+  readonly tabId: string;
+  /** The standalone workspace the tab was given for the move; removed once the tab is dropped elsewhere. */
+  readonly workspaceId: string;
+  readonly manager: TabManager;
+  /**
+   * True when the tab's own (source) window is the one being dragged —
+   * the tab was its window's only tab, so there's nothing to leave behind
+   * and no new window to spawn. It's parked off-screen rather than hidden
+   * while over a drop target, since hiding the window an OS drag started
+   * from risks cancelling that drag.
+   */
+  readonly movesSourceWindow: boolean;
+  readonly stop: () => void;
+}
+let liveTearOff: LiveTearOff | null = null;
+
+/**
+ * A fully loaded, hidden chrome window kept ready so a torn-off tab gets a
+ * window the instant it's dragged out. Creating one from scratch means
+ * loading the whole chrome page (hundreds of ms), which is far too slow
+ * for a window that has to appear under the cursor mid-drag.
+ */
+interface SpareWindow {
+  readonly window: BrowserWindow;
+  readonly manager: TabManager;
+  loaded: boolean;
+}
+let spareWindow: SpareWindow | null = null;
+
+/** Creates the hidden spare window, if there isn't one. */
+function prepareSpareWindow(): void {
+  if (spareWindow && !spareWindow.window.isDestroyed()) {
+    return;
+  }
+  // Nothing left to tear a tab out of (app is quitting).
+  if (BrowserWindow.getAllWindows().length === 0) {
+    return;
+  }
+  const window = launchWindow(
+    () => {
+      if (spareWindow?.window === window) {
+        spareWindow.loaded = true;
+      }
+    },
+    undefined,
+    { hidden: true },
+  );
+  const manager = tabManagersByWindowId.get(window.id);
+  if (!manager) {
+    return;
+  }
+  spareWindow = { window, manager, loaded: false };
+  window.once('closed', () => {
+    if (spareWindow?.window === window) {
+      spareWindow = null;
+    }
+  });
+}
+
+/**
+ * Destroys the hidden spare once it's the only window left — otherwise it
+ * alone would keep the app running after the last real window closes.
+ */
+function closeSpareWindowIfAlone(): void {
+  const spare = spareWindow;
+  if (!spare || spare.window.isDestroyed()) {
+    return;
+  }
+  const others = BrowserWindow.getAllWindows().filter((window) => window !== spare.window && !window.isDestroyed());
+  if (others.length === 0) {
+    spareWindow = null;
+    spare.window.destroy();
+  }
+}
+
+/**
+ * Opens a window onto an existing tab at `position` — the spare if it's
+ * ready (instant), otherwise a freshly created one.
+ */
+function openWindowOnTab(tabId: string, position: { x: number; y: number }): BrowserWindow {
+  const spare = spareWindow;
+  if (spare?.loaded && !spare.window.isDestroyed()) {
+    spareWindow = null;
+    spare.window.setPosition(Math.round(position.x), Math.round(position.y));
+    spare.manager.activateTab(tabId);
+    spare.window.show();
+    setTimeout(prepareSpareWindow, 500);
+    return spare.window;
+  }
+  const window = launchWindow((tabManager) => tabManager.activateTab(tabId), position);
+  setTimeout(prepareSpareWindow, 1500);
+  return window;
+}
+
+/** Opens the torn-off window onto the tab at (just under) the cursor, if it isn't already. */
+function spawnTearOffWindow(current: LiveTearOff, cursor: { x: number; y: number }): void {
+  if (current.window && !current.window.isDestroyed()) {
+    return;
+  }
+  const tabId = current.tabId;
+  current.window = openWindowOnTab(tabId, {
+    x: cursor.x - TEAR_OFF_GRAB_OFFSET.x,
+    y: cursor.y - TEAR_OFF_GRAB_OFFSET.y,
+  });
+}
+
+/**
+ * Starts a live tear-off for a tab that was just given its scratch
+ * workspace and window. The OS drag in progress owns the mouse, so the
+ * window can't be dragged natively — it's repositioned by polling the
+ * cursor instead.
+ */
+function followCursor(
+  window: BrowserWindow,
+  tabId: string,
+  workspaceId: string,
+  manager: TabManager,
+  movesSourceWindow = false,
+): void {
+  liveTearOff?.stop();
   const started = Date.now();
   const timer = setInterval(() => {
-    if (window.isDestroyed() || Date.now() - started > TEAR_OFF_FOLLOW_MAX_MS) {
-      stop();
+    if (Date.now() - started > TEAR_OFF_FOLLOW_MAX_MS) {
+      finishLiveTearOff(tabId);
       return;
     }
     const cursor = screen.getCursorScreenPoint();
-    window.setPosition(cursor.x - TEAR_OFF_GRAB_OFFSET.x, cursor.y - TEAR_OFF_GRAB_OFFSET.y);
+    const tornWindow = current.window && !current.window.isDestroyed() ? current.window : null;
+    const overDropTarget = Array.from(tabManagersByWindowId.entries()).some(
+      ([windowId, other]) => windowId !== tornWindow?.id && other.isOverTabDropRegion(cursor.x, cursor.y),
+    );
+    if (!tornWindow) {
+      spawnTearOffWindow(current, cursor);
+    } else if (overDropTarget) {
+      if (movesSourceWindow) {
+        tornWindow.setPosition(PARKED_WINDOW_POSITION, PARKED_WINDOW_POSITION);
+      } else if (tornWindow.isVisible()) {
+        tornWindow.hide();
+      }
+    } else {
+      tornWindow.setPosition(cursor.x - TEAR_OFF_GRAB_OFFSET.x, cursor.y - TEAR_OFF_GRAB_OFFSET.y);
+      if (!tornWindow.isVisible()) {
+        tornWindow.showInactive();
+      }
+    }
   }, 8);
   const stop = (): void => {
     clearInterval(timer);
-    if (stopFollowingCursor === stop) {
-      stopFollowingCursor = null;
+    if (liveTearOff === current) {
+      liveTearOff = null;
     }
   };
-  stopFollowingCursor = stop;
+  const current: LiveTearOff = { window, tabId, workspaceId, manager, movesSourceWindow, stop };
+  liveTearOff = current;
+}
+
+/**
+ * Finishes a live tear-off when the drag is released (reported by the
+ * dragged tab's own `dragend`, or by whichever window received the drop —
+ * whichever arrives first wins). Judged by where the tab actually ended up:
+ * if it left its scratch workspace it was dropped somewhere, so the
+ * torn-off window (if one is up) is discarded along with the scratch
+ * workspace; if not, the tab stays in a window — recreated at the cursor if
+ * the release happened while it was closed. Checked a few times because
+ * the target window reports its drop on its own IPC channel, which can
+ * land just after this call.
+ */
+function finishLiveTearOff(tabId: string): void {
+  const current = liveTearOff;
+  if (!current || current.tabId !== tabId) {
+    return;
+  }
+  current.stop();
+  const settle = (attemptsLeft: number): void => {
+    if (current.manager.getTabWorkspaceId(tabId) !== current.workspaceId) {
+      // The tab went elsewhere, so the (hidden) torn-off window is empty.
+      // Its workspace is usually already gone (`discardWorkspaceIfEmpty`);
+      // this covers the case where it isn't.
+      current.manager.removeWorkspace(current.workspaceId);
+      if (current.window && !current.window.isDestroyed()) {
+        current.window.close();
+      }
+      return;
+    }
+    if (attemptsLeft > 0) {
+      setTimeout(() => settle(attemptsLeft - 1), TEAR_OFF_SETTLE_MS * 2);
+      return;
+    }
+    // Nothing took the tab: it stays in its own window, wherever the drag ended.
+    if (current.movesSourceWindow) {
+      current.manager.setSuppressWorkspaceFallback(false);
+      const cursor = screen.getCursorScreenPoint();
+      current.window?.setPosition(cursor.x - TEAR_OFF_GRAB_OFFSET.x, cursor.y - TEAR_OFF_GRAB_OFFSET.y);
+    } else if (current.window && !current.window.isDestroyed()) {
+      current.window.show();
+    } else {
+      spawnTearOffWindow(current, screen.getCursorScreenPoint());
+    }
+  };
+  setTimeout(() => settle(2), TEAR_OFF_SETTLE_MS);
 }
 
 /**
@@ -346,6 +544,17 @@ function registerTearOffIpc(): void {
       return;
     }
 
+    // A window's only tab dragged out moves the window itself (as in Chrome)
+    // instead of leaving an empty window behind and spawning another.
+    if (live && sourceManager.isOnlyTabInItsWorkspace(id)) {
+      const ownWorkspaceId = sourceManager.getTabWorkspaceId(id);
+      if (ownWorkspaceId) {
+        sourceManager.setSuppressWorkspaceFallback(true);
+        followCursor(sourceWindow, id, ownWorkspaceId, sourceManager, true);
+        return;
+      }
+    }
+
     // Gives the tab its own brand-new, standalone workspace rather than
     // dumping it into a new "Home" — tabs/workspaces are shared across
     // every window now (`sharedRegistry`), so the new window's own
@@ -358,20 +567,29 @@ function registerTearOffIpc(): void {
       return;
     }
 
-    const newWindow = launchWindow(
-      // Mounts the tab's own already-existing view into the new window —
-      // its live page, navigation history, everything, survives the
-      // move intact, unlike the URL-only recreate this used to need
-      // before tabs were shared across windows.
-      (tabManager) => tabManager.activateTab(id),
-      { x: screenX - TEAR_OFF_GRAB_OFFSET.x, y: screenY - TEAR_OFF_GRAB_OFFSET.y },
-    );
+    // Mounts the tab's own already-existing view into the new window — its
+    // live page, navigation history, everything, survives the move intact.
+    const newWindow = openWindowOnTab(id, {
+      x: screenX - TEAR_OFF_GRAB_OFFSET.x,
+      y: screenY - TEAR_OFF_GRAB_OFFSET.y,
+    });
     if (live) {
-      followCursor(newWindow);
+      followCursor(newWindow, id, newWorkspaceId, sourceManager);
     }
   });
-  // The drag was released: the new window stays wherever it ended up.
-  ipcMain.on(IpcChannel.TabsTearOffEnd, () => stopFollowingCursor?.());
+  ipcMain.on(IpcChannel.TabsDropRegions, (event, rawRequest: unknown) => {
+    const parsed = dropRegionsRequestSchema.safeParse(rawRequest);
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    if (parsed.success && sender) {
+      tabManagersByWindowId.get(sender.id)?.setDropRegions(parsed.data.rects);
+    }
+  });
+  ipcMain.on(IpcChannel.TabsTearOffEnd, (_event, rawRequest: unknown) => {
+    const parsed = tearOffTabEndRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      finishLiveTearOff(parsed.data.id);
+    }
+  });
 }
 
 /**

@@ -45,6 +45,17 @@ export const tearOffTabRequestSchema = z.object({
   // window then follows the cursor until `TabsTearOffEnd`), rather than on release.
   live: z.boolean().optional(),
 });
+export const tearOffTabEndRequestSchema = z.object({
+  id: z.string().min(1),
+  accepted: z.boolean(),
+});
+
+export const dropRegionsRequestSchema = z.object({
+  rects: z
+    .array(z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }))
+    .max(200),
+});
+
 export type TearOffTabRequest = z.infer<typeof tearOffTabRequestSchema>;
 
 export const navigateRequestSchema = z.object({

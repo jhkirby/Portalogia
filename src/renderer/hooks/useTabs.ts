@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
-import type { IpcResult } from '@shared/ipc-contract';
+import type { DropRegionRect, IpcResult } from '@shared/ipc-contract';
 import type { BrowserState } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
@@ -101,8 +101,11 @@ export function useTabs() {
   const tearOffTab = useCallback((id: string, screenX: number, screenY: number, live?: boolean) => {
     window.northstar.tearOffTab(id, screenX, screenY, live);
   }, []);
-  const tearOffTabEnd = useCallback(() => {
-    window.northstar.tearOffTabEnd();
+  const reportDropRegions = useCallback((rects: readonly DropRegionRect[]) => {
+    window.northstar.reportDropRegions(rects);
+  }, []);
+  const tearOffTabEnd = useCallback((id: string, accepted: boolean) => {
+    window.northstar.tearOffTabEnd(id, accepted);
   }, []);
   const navigate = useCallback((id: string, url: string) => {
     void window.northstar.navigate(id, url).then(logIfFailed);
@@ -229,6 +232,7 @@ export function useTabs() {
     moveTabToWorkspace,
     tearOffTab,
     tearOffTabEnd,
+    reportDropRegions,
     navigate,
     goBack,
     goForward,

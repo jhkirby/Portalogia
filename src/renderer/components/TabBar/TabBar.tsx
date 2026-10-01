@@ -19,6 +19,8 @@ TRANSPARENT_DRAG_IMAGE.src =
 
 /** How far below the tab strip the cursor must travel before the tab tears off into its own window. */
 const TEAR_OFF_MARGIN_PX = 16;
+/** How long the cursor must stay out of the tab strip before it tears off — see `onDragMove`. */
+const TEAR_OFF_DWELL_MS = 200;
 
 interface TabBarProps {
   /** Tabs to render, left to right, in the order they were opened. */
@@ -47,7 +49,9 @@ interface TabBarProps {
   /** Called once, mid-drag, the moment the cursor leaves this window — main opens the new window right then and keeps it under the cursor, like Chrome. */
   readonly onDragOutOfWindow: (id: string, screenX: number, screenY: number) => void;
   /** Called when a drag that already tore off (`onDragOutOfWindow`) is released, so main stops moving the new window. */
-  readonly onTearOffEnd: () => void;
+  readonly onTearOffEnd: (id: string, accepted: boolean) => void;
+  /** Called when a tab drag starts, with the window's other drop targets (workspace pills, "+ New workspace") — see `NorthstarApi.reportDropRegions`. */
+  readonly onReportDropRegions: (rects: readonly { x: number; y: number; width: number; height: number }[]) => void;
 }
 
 /** Which half of a tab the dragged tab is currently hovering over — drives which side of it `beforeId` resolves to on drop. */
@@ -70,11 +74,14 @@ export function TabBar({
   onDragEndOutside,
   onDragOutOfWindow,
   onTearOffEnd,
+  onReportDropRegions,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   // Set once the drag has already torn off into its own window, so the
   // release doesn't tear it off a second time (`onDragEndOutside`).
   const tornOffRef = useRef(false);
+  // When the cursor last left the tab strip's tear-off zone, or null while it's inside.
+  const outsideSinceRef = useRef<number | null>(null);
   // Last known copy of the dragged tab: once it tears off, it leaves
   // `tabs`, and unmounting its element would silently kill the in-flight
   // native drag (no `dragend`). It's kept rendered, invisibly, until release.
@@ -96,6 +103,7 @@ export function TabBar({
 
   const endDrag = (): void => {
     tornOffRef.current = false;
+    outsideSinceRef.current = null;
     draggedTabRef.current = null;
     setDraggedId(null);
     setDropTarget(null);
@@ -173,14 +181,22 @@ export function TabBar({
           onActivate={onActivate}
           onClose={onClose}
           isDragging={tab.id === draggedId || tab.id === grabbedTabId}
-          onDragStart={() => setDraggedId(tab.id)}
+          onDragStart={() => {
+            setDraggedId(tab.id);
+            onReportDropRegions(
+              Array.from(document.querySelectorAll('.workspace-bar__pill, .workspace-bar__new')).map((element) => {
+                const { x, y, width, height } = element.getBoundingClientRect();
+                return { x, y, width, height };
+              }),
+            );
+          }}
           onDragOver={(position, edgeClientX) => {
             setDropTarget({ id: tab.id, position });
             setIndicatorAtClientX(edgeClientX);
           }}
-          onDragEnd={() => {
+          onDragEnd={(accepted) => {
             if (tornOffRef.current) {
-              onTearOffEnd();
+              onTearOffEnd(tab.id, accepted);
             }
             endDrag();
           }}
@@ -195,18 +211,37 @@ export function TabBar({
             if (tornOffRef.current || (screenX === 0 && screenY === 0)) {
               return;
             }
-            // Torn off as soon as the cursor leaves the tab strip (a small
-            // margin keeps a sloppy reorder from triggering it), except over
-            // the sidebar, whose workspace pills are real drop targets.
+            // Torn off when the cursor leaves the tab strip and stays out
+            // (a small margin plus a short dwell keep a sloppy reorder, or a
+            // drag *through* the toolbar on the way to a workspace pill,
+            // from opening a window that would only flash and close). The
+            // workspace pills (and "+ New workspace") never count: they're
+            // real drop targets. Everything else does — including the
+            // sidebar's empty space and the toolbar band above it — so a tab
+            // sitting over the sidebar's column can still be pulled straight
+            // down and out.
             const barRect = tabBarRef.current?.getBoundingClientRect();
-            const overSidebar = document.elementFromPoint(clientX, clientY)?.closest('.sidebar') != null;
-            const outside =
-              clientX < 0 ||
-              clientX > window.innerWidth ||
-              clientY < 0 ||
-              (barRect !== undefined && clientY > barRect.bottom + TEAR_OFF_MARGIN_PX && !overSidebar);
-            if (outside) {
+            const sidebarRect = document.querySelector('.sidebar')?.getBoundingClientRect();
+            const overSidebar =
+              document.elementFromPoint(clientX, clientY)?.closest('.workspace-bar__pill, .workspace-bar__new') != null;
+            const leftWindow = clientX < 0 || clientX > window.innerWidth || clientY < 0;
+            const belowStrip =
+              barRect !== undefined &&
+              clientY > barRect.bottom + TEAR_OFF_MARGIN_PX &&
+              !overSidebar;
+            if (!leftWindow && !belowStrip) {
+              outsideSinceRef.current = null;
+              return;
+            }
+            const now = Date.now();
+            outsideSinceRef.current ??= now;
+            // The dwell only matters over the sidebar's own column, where a
+            // drag may be passing through the toolbar on its way to a workspace
+            // pill; anywhere else there's nothing to drop on, so tear off now.
+            const inSidebarColumn = sidebarRect !== undefined && clientX < sidebarRect.right;
+            if (leftWindow || !inSidebarColumn || now - outsideSinceRef.current >= TEAR_OFF_DWELL_MS) {
               tornOffRef.current = true;
+              outsideSinceRef.current = null;
               onDragOutOfWindow(tab.id, screenX, screenY);
             }
           }}
@@ -239,7 +274,8 @@ interface TabProps {
   readonly onDragStart: () => void;
   /** Reports which half of this tab is being hovered and that half's edge, in client (viewport) coordinates — `TabBar` turns the latter into `indicatorX`, its one shared floating drop-indicator line's position. */
   readonly onDragOver: (position: DropPosition, edgeClientX: number) => void;
-  readonly onDragEnd: () => void;
+  /** `accepted`: the drag ended on a drop target (any `dropEffect` but `'none'`). */
+  readonly onDragEnd: (accepted: boolean) => void;
   /** See `TabBarProps.onDragEndOutside` — forwarded straight through, this tab already has its own `id` in scope. */
   readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
   /** Fires continuously during this tab's drag with the cursor's screen and client coordinates. */
@@ -309,10 +345,11 @@ function Tab({
   // main gets the final say on whether that point was actually outside
   // the window (see `tearOffTab`'s own doc comment).
   const handleDragEnd = (event: DragEvent<HTMLDivElement>): void => {
-    if (event.dataTransfer.dropEffect === 'none') {
+    const accepted = event.dataTransfer.dropEffect !== 'none';
+    if (!accepted) {
       onDragEndOutside(tab.id, event.screenX, event.screenY);
     }
-    onDragEnd();
+    onDragEnd(accepted);
   };
 
   return (

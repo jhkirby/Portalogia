@@ -25,7 +25,7 @@ function buildChromeCsp(isDev: boolean): string {
  * `contentView` by `TabManager` — never in this window's own `webContents`.
  * @returns The created window.
  */
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(options: { showWhenReady?: boolean } = {}): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -77,7 +77,11 @@ export function createMainWindow(): BrowserWindow {
     void window.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
-  window.once('ready-to-show', () => window.show());
+  // A spare window (see `main/index.ts`'s `prepareSpareWindow`) loads hidden and
+  // is shown later, when a tab needs a window instantly.
+  if (options.showWhenReady ?? true) {
+    window.once('ready-to-show', () => window.show());
+  }
 
   return window;
 }

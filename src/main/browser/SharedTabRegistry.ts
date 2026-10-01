@@ -101,6 +101,7 @@ export class SharedTabRegistry {
 
   private readonly windows = new Set<BrowserWindow>();
   private readonly listeners = new Set<() => void>();
+  private readonly workspaceRemovedListeners = new Set<(workspaceId: string) => void>();
 
   /**
    * Registers a window as one this registry's shared data is visible to.
@@ -110,16 +111,30 @@ export class SharedTabRegistry {
    *   from *any* window — including this one's own — so every window can
    *   push its own fresh `BrowserState` (shared data plus its own
    *   window-local fields) to its own renderer.
+   * @param onWorkspaceRemoved Called when any window deletes a workspace.
    * @returns A function that unregisters `window`/`onSharedChange` — call
    *   it when the window closes.
    */
-  public registerWindow(window: BrowserWindow, onSharedChange: () => void): () => void {
+  public registerWindow(
+    window: BrowserWindow,
+    onSharedChange: () => void,
+    onWorkspaceRemoved: (workspaceId: string) => void,
+  ): () => void {
     this.windows.add(window);
     this.listeners.add(onSharedChange);
+    this.workspaceRemovedListeners.add(onWorkspaceRemoved);
     return () => {
       this.windows.delete(window);
       this.listeners.delete(onSharedChange);
+      this.workspaceRemovedListeners.delete(onWorkspaceRemoved);
     };
+  }
+
+  /** Tells every window a workspace was deleted, so any showing it can fall back to another. */
+  public notifyWorkspaceRemoved(workspaceId: string): void {
+    for (const listener of Array.from(this.workspaceRemovedListeners)) {
+      listener(workspaceId);
+    }
   }
 
   /**

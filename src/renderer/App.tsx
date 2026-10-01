@@ -57,6 +57,7 @@ export function App() {
     moveTabToWorkspace,
     tearOffTab,
     tearOffTabEnd,
+    reportDropRegions,
     createWorkspaceWithTab,
     navigate,
     goBack,
@@ -103,6 +104,21 @@ export function App() {
   // this push instead of a renderer-level keydown listener, which a
   // focused tab would simply swallow.
   useEffect(() => window.northstar.onOpenTabSearch(() => setTabSearchOpen(true)), []);
+
+  // Tells main a dragged tab was dropped on this window, as a backup to the
+  // dragged tab's own `dragend` (which can go missing if the tab's element
+  // is moved while the drag is in flight) — main uses either to finish a
+  // live tear-off. A drop that isn't a tab drag carries no tab id and is ignored.
+  useEffect(() => {
+    const handleDrop = (event: DragEvent): void => {
+      const tabId = event.dataTransfer?.getData('text/plain');
+      if (tabId) {
+        tearOffTabEnd(tabId, true);
+      }
+    };
+    document.addEventListener('drop', handleDrop, true);
+    return () => document.removeEventListener('drop', handleDrop, true);
+  }, [tearOffTabEnd]);
 
   // Belt-and-suspenders for the chrome-focused case, same reasoning as
   // Ctrl+Shift+F's menu accelerator: reliable when chrome itself has OS
@@ -239,6 +255,7 @@ export function App() {
               onDragEndOutside={tearOffTab}
               onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
               onTearOffEnd={tearOffTabEnd}
+              onReportDropRegions={reportDropRegions}
             />
             <WindowControls />
           </div>

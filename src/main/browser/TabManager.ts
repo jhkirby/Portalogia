@@ -10,6 +10,7 @@ import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents }
 import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
+  TAB_STRIP_HEIGHT_PX,
   DEFAULT_TAB_URL,
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
@@ -113,6 +114,9 @@ export class TabManager {
   private focusMode = false;
   private sidebarVisible = true;
   private laserPointerActive = false;
+  /** While true, `handleWorkspaceRemoved` doesn't mount a fallback tab — set on a window that's being dragged around as a whole and may be closed on release. */
+  private suppressWorkspaceFallback = false;
+  private dropRegions: readonly { x: number; y: number; width: number; height: number }[] = [];
   private highlighterActive = false;
   private commentToolActive = false;
   private penActive = false;
@@ -201,9 +205,17 @@ export class TabManager {
     this.activeWorkspaceId = DEFAULT_WORKSPACE_ID;
 
     this.unregisterFromRegistry = registry.registerWindow(window, () => {
+      // A window mid-close is still registered until its `closed` event.
+      if (window.isDestroyed()) {
+        return;
+      }
       this.onStateChange(this.getState());
-      this.sessionStore.scheduleSave(this.buildSessionSnapshot());
-    });
+      // A hidden window (the spare, or a torn-off one mid-drag) has no active
+      // tab of its own worth recording — its snapshot would clobber the real one.
+      if (window.isVisible()) {
+        this.sessionStore.scheduleSave(this.buildSessionSnapshot());
+      }
+    }, (workspaceId) => this.handleWorkspaceRemoved(workspaceId));
 
     this.suggestionsOverlay = new SuggestionsOverlay(
       this.window,
@@ -622,7 +634,7 @@ export class TabManager {
    * @param workspaceId The workspace to move it into.
    * @returns The full browser state after the move.
    */
-  public moveTabToWorkspace(id: string, workspaceId: string): BrowserState {
+  public moveTabToWorkspace(id: string, workspaceId: string, discardEmptyWorkspace = true): BrowserState {
     const state = this.states.get(id);
     if (!state || !this.workspaces.has(workspaceId) || state.workspaceId === workspaceId) {
       return this.getState();
@@ -635,7 +647,7 @@ export class TabManager {
       relocatingLinkGroup = true;
       try {
         for (const memberId of group.filter((memberId) => memberId !== id)) {
-          this.moveTabToWorkspace(memberId, workspaceId);
+          this.moveTabToWorkspace(memberId, workspaceId, discardEmptyWorkspace);
         }
       } finally {
         relocatingLinkGroup = false;
@@ -644,7 +656,7 @@ export class TabManager {
 
     const owner = this.registry.mountOwners.get(id);
     if (owner && owner !== this) {
-      return owner.moveTabToWorkspace(id, workspaceId);
+      return owner.moveTabToWorkspace(id, workspaceId, discardEmptyWorkspace);
     }
 
     const oldWorkspaceId = state.workspaceId;
@@ -699,6 +711,9 @@ export class TabManager {
     relocate();
 
     if (!wasActive) {
+      if (discardEmptyWorkspace) {
+        this.discardWorkspaceIfEmpty(oldWorkspaceId);
+      }
       this.emitState();
       return this.getState();
     }
@@ -714,11 +729,55 @@ export class TabManager {
     const next = remainingInOldWorkspace[remainingInOldWorkspace.length - 1];
     if (next) {
       this.activateTab(next);
-    } else {
+    } else if (!(discardEmptyWorkspace && this.discardWorkspaceIfEmpty(oldWorkspaceId))) {
       this.createTab(undefined, oldWorkspaceId);
     }
+    // Every window's tab list and workspace list may have changed (the moved
+    // tab, a deleted workspace) — not just the one that owned the tab.
+    this.emitState();
 
     return this.getState();
+  }
+
+  /**
+   * Deletes a workspace whose last tab was just *moved out* (not closed —
+   * closing a workspace's last tab leaves the workspace with a fresh home
+   * tab). Every window showing it falls back to another workspace. Never
+   * deletes the only remaining workspace.
+   * @returns Whether the workspace was deleted.
+   */
+  private discardWorkspaceIfEmpty(workspaceId: string): boolean {
+    if (this.workspaces.size <= 1 || !this.workspaces.has(workspaceId)) {
+      return false;
+    }
+    if (Array.from(this.states.values()).some((state) => state.workspaceId === workspaceId)) {
+      return false;
+    }
+    this.workspaces.delete(workspaceId);
+    this.registry.notifyWorkspaceRemoved(workspaceId);
+    return true;
+  }
+
+  /** A workspace was deleted by some window: forget it, and if this window was showing it, switch to the first remaining one. */
+  private handleWorkspaceRemoved(workspaceId: string): void {
+    this.lastActiveTabIdByWorkspace.delete(workspaceId);
+    if (this.window.isDestroyed()) {
+      return;
+    }
+    if (this.activeWorkspaceId !== workspaceId) {
+      return;
+    }
+    const fallbackId = this.workspaces.keys().next().value as string | undefined;
+    if (!fallbackId) {
+      return;
+    }
+    this.activeWorkspaceId = fallbackId;
+    this.activeTabId = null;
+    // A hidden window is a torn-off one about to be discarded (see
+    // `followCursor`) — don't mount anything in it just to throw it away.
+    if (this.window.isVisible() && !this.suppressWorkspaceFallback) {
+      this.focusWorkspaceDefaultTab(fallbackId);
+    }
   }
 
   /**
@@ -735,6 +794,74 @@ export class TabManager {
    * @returns The full browser state after the tab is closed.
    */
   public closeTab(id: string, options: { recordClosed?: boolean } = {}): BrowserState {
+    if (!this.states.has(id)) {
+      return this.getState();
+    }
+    // A tab shown from several windows is one tab (see `SharedTabRegistry`'s
+    // link groups): closing it closes every window's view of it. Left alone,
+    // the surviving views would simply be listed in its place and the tab
+    // would reappear the moment it was closed. The other windows pick a
+    // fallback only after this close is done, so none lands back on `id`.
+    const affected = this.discardOtherLinkedMembers(id);
+    const result = this.closeSingleTab(id, options);
+    for (const { manager, workspaceId } of affected) {
+      manager.recoverActiveTab(workspaceId);
+    }
+    return affected.length > 0 ? this.getState() : result;
+  }
+
+  /**
+   * Silently removes every other member of `id`'s link group — state, view,
+   * ownership, and per-tab controllers — without activating a fallback.
+   * @returns The windows that were showing one of them, to be given a
+   *   fallback tab (`recoverActiveTab`) once the caller's own close is done.
+   */
+  private discardOtherLinkedMembers(id: string): { manager: TabManager; workspaceId: string }[] {
+    const affected: { manager: TabManager; workspaceId: string }[] = [];
+    for (const memberId of [...(this.registry.getLinkGroup(id) ?? [])]) {
+      if (memberId === id) {
+        continue;
+      }
+      const memberState = this.states.get(memberId);
+      const showingWindow = this.registry.mountOwners.get(memberId);
+      const view = this.views.get(memberId);
+      if (view) {
+        (showingWindow ?? this).window.contentView.removeChildView(view);
+        this.views.delete(memberId);
+      }
+      this.states.delete(memberId);
+      this.registry.mountOwners.delete(memberId);
+      this.registry.zoomPercentByTabId.delete(memberId);
+      this.highlighter.disposeTab(memberId);
+      this.commentController.disposeTab(memberId);
+      this.penController.disposeTab(memberId);
+      this.registry.removeFromLinkGroup(memberId);
+      if (showingWindow && memberState && showingWindow !== this && showingWindow.activeTabId === memberId) {
+        showingWindow.activeTabId = null;
+        affected.push({ manager: showingWindow, workspaceId: memberState.workspaceId });
+      }
+    }
+    return affected;
+  }
+
+  /** Gives a window that lost its active tab (see `discardOtherLinkedMembers`) a neighbor in its workspace, or a fresh home tab. */
+  private recoverActiveTab(workspaceId: string): void {
+    if (this.activeTabId !== null) {
+      return;
+    }
+    const remaining = Array.from(this.states.entries())
+      .filter(([, state]) => state.workspaceId === workspaceId)
+      .map(([tabId]) => tabId);
+    const next = remaining[remaining.length - 1];
+    if (next) {
+      this.activateTab(next);
+    } else {
+      this.createTab(undefined, workspaceId);
+    }
+  }
+
+  /** `closeTab` for exactly one tab id — the original single-tab close, without the link-group handling above. */
+  private closeSingleTab(id: string, options: { recordClosed?: boolean } = {}): BrowserState {
     const closedState = this.states.get(id);
     if (!closedState) {
       return this.getState();
@@ -1201,6 +1328,68 @@ export class TabManager {
     return filePath;
   }
 
+  /**
+   * Whether a screen point is over this window's tab strip or workspace
+   * sidebar — the two places a dragged-out tab can be dropped back in. Used
+   * by the torn-off window (`main/index.ts`'s `followCursor`) to get out of
+   * the way, so the OS drag reaches this window's own drop handlers.
+   */
+  public isOverTabDropRegion(screenX: number, screenY: number): boolean {
+    if (this.window.isDestroyed() || !this.window.isVisible() || this.window.isMinimized()) {
+      return false;
+    }
+    const content = this.window.getContentBounds();
+    const x = screenX - content.x;
+    const y = screenY - content.y;
+    if (x < 0 || y < 0 || x >= content.width || y >= content.height) {
+      return false;
+    }
+    return (
+      y < TAB_STRIP_HEIGHT_PX ||
+      this.dropRegions.some((r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+    );
+  }
+
+  /**
+   * Takes a tab's view off this window without activating anything in its
+   * place (unlike `releaseTab`, which falls back to a neighbor or a fresh
+   * home tab). For a window that's about to be closed while its tab lives
+   * on elsewhere — see `main/index.ts`'s `closeTearOffWindow`.
+   */
+  public unmountTabWithoutFallback(tabId: string): void {
+    const view = this.views.get(tabId);
+    if (view) {
+      this.window.contentView.removeChildView(view);
+    }
+    if (this.registry.mountOwners.get(tabId) === this) {
+      this.registry.mountOwners.delete(tabId);
+    }
+    if (this.activeTabId === tabId) {
+      this.activeTabId = null;
+    }
+  }
+
+  /** Marks this window as one being dragged around whole (see `suppressWorkspaceFallback`). */
+  public setSuppressWorkspaceFallback(suppress: boolean): void {
+    this.suppressWorkspaceFallback = suppress;
+  }
+
+  /** Whether `tabId` is the only tab this window lists in its workspace — dragging it out then moves the whole window instead of spawning another. */
+  public isOnlyTabInItsWorkspace(tabId: string): boolean {
+    const workspaceId = this.states.get(tabId)?.workspaceId;
+    return workspaceId !== undefined && this.listedTabIds(workspaceId).length === 1 && this.listedTabIds(workspaceId)[0] === tabId;
+  }
+
+  /** Records where this window's tab drop targets are (client coordinates) — see `isOverTabDropRegion`. */
+  public setDropRegions(rects: readonly { x: number; y: number; width: number; height: number }[]): void {
+    this.dropRegions = rects;
+  }
+
+  /** @returns The workspace a tab currently belongs to, or `undefined` if it no longer exists. */
+  public getTabWorkspaceId(tabId: string): string | undefined {
+    return this.states.get(tabId)?.workspaceId;
+  }
+
   // ── Workspaces ───────────────────────────────────────────────────────
 
   /**
@@ -1285,7 +1474,9 @@ export class TabManager {
       name: `Workspace ${this.workspaces.size + 1}`,
       color,
     });
-    this.moveTabToWorkspace(tabId, id);
+    // The source workspace keeps a fresh home tab if this was its last, rather
+    // than being deleted: the tab is still mid-drag and has no window yet.
+    this.moveTabToWorkspace(tabId, id, false);
     return id;
   }
 

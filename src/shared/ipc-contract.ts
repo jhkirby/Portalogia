@@ -19,6 +19,7 @@ export const IpcChannel = {
   TabsMoveToWorkspace: 'tabs:move-to-workspace',
   TabsTearOff: 'tabs:tear-off',
   TabsTearOffEnd: 'tabs:tear-off-end',
+  TabsDropRegions: 'tabs:drop-regions',
   TabsNavigate: 'tabs:navigate',
   TabsGoBack: 'tabs:go-back',
   TabsGoForward: 'tabs:go-forward',
@@ -92,6 +93,14 @@ export type IpcResult<T> =
   | { readonly ok: false; readonly code: string; readonly message: string };
 
 /** Result of a PDF export: the path it was saved to, or `null` if the user canceled the save dialog. */
+/** A rectangle in window-client coordinates. */
+export interface DropRegionRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface ExportPdfResult {
   readonly savedPath: string | null;
 }
@@ -209,8 +218,20 @@ export interface NorthstarApi {
    * the tab is gone, same as any other tab removal.
    */
   tearOffTab(id: string, screenX: number, screenY: number, live?: boolean): void;
-  /** Ends a `live` tear-off's cursor-following (the drag was released); the new window stays where it is. */
-  tearOffTabEnd(): void;
+  /**
+   * Ends a `live` tear-off (the drag was released). `accepted` is whether
+   * the release landed on a drop target (another tab strip or a workspace
+   * pill) — main then discards the now-empty torn-off window if the tab
+   * really did move out of it; otherwise the window stays where it is.
+   */
+  tearOffTabEnd(id: string, accepted: boolean): void;
+  /**
+   * Reports where this window's tab drop targets are (workspace pills and
+   * the "+ New workspace" button), in window-client coordinates — sent when
+   * a tab drag starts, so main can tell when a torn-off window is hovering
+   * over one of them.
+   */
+  reportDropRegions(rects: readonly DropRegionRect[]): void;
   navigate(id: string, url: string): Promise<IpcResult<BrowserState>>;
   goBack(id: string): Promise<IpcResult<BrowserState>>;
   goForward(id: string): Promise<IpcResult<BrowserState>>;
