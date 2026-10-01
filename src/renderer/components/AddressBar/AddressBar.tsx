@@ -6,6 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { BookmarkState } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
+import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import { pageLabel } from '../../lib/pageLabel';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
@@ -209,6 +210,8 @@ export function AddressBar({
   // The idle bubble: a bookmarked page's saved name, else the site's domain.
   const bubbleText = pageLabel(url, bookmarks);
   const savedName = bookmarkName?.trim() ? bookmarkName : null;
+  // Types itself in once, then its trailing dots loop; the accessible name stays static.
+  const placeholder = useAnimatedPlaceholder(draft === '');
   const showBubble = !isFocused && bubbleText !== null;
 
   return (
@@ -250,7 +253,7 @@ export function AddressBar({
           role="combobox"
           aria-expanded={isDropdownOpen}
           aria-autocomplete="list"
-          placeholder="Search the internet..."
+          placeholder={placeholder}
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
