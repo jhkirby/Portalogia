@@ -118,6 +118,10 @@ export class TabManager {
   private laserPointerActive = false;
   /** While true, `handleWorkspaceRemoved` doesn't mount a fallback tab — set on a window that's being dragged around as a whole and may be closed on release. */
   private suppressWorkspaceFallback = false;
+  /** Tabs multi-selected (Ctrl/Shift+click), active tab included. Read through `currentTabSelection`, which prunes stale entries. */
+  private selectedTabIds = new Set<string>();
+  /** Workspaces multi-selected (Ctrl/Shift+click), active one included. Read through `currentWorkspaceSelection`. */
+  private selectedWorkspaceIds = new Set<string>();
   private dropRegions: readonly { x: number; y: number; width: number; height: number }[] = [];
   private highlighterActive = false;
   private commentToolActive = false;
@@ -217,7 +221,7 @@ export class TabManager {
       if (window.isVisible()) {
         this.sessionStore.scheduleSave(this.buildSessionSnapshot());
       }
-    }, (workspaceId) => this.handleWorkspaceRemoved(workspaceId));
+    }, (workspaceId) => this.handleWorkspaceRemoved(workspaceId), () => this.currentTabSelection());
 
     this.suggestionsOverlay = new SuggestionsOverlay(
       this.window,
@@ -1121,6 +1125,9 @@ export class TabManager {
       this.registry.mountOwners.set(id, this);
     }
     this.activeTabId = id;
+    // Showing a different tab (a plain click, a shortcut, a fallback after a
+    // close) ends a multi-selection; Ctrl/Shift+click never reach here.
+    this.selectedTabIds.clear();
     this.pushHighlighterState();
     this.pushCommentToolState();
 
@@ -1417,7 +1424,12 @@ export class TabManager {
   /** Whether `tabId` is the only tab this window lists in its workspace — dragging it out then moves the whole window instead of spawning another. */
   public isOnlyTabInItsWorkspace(tabId: string): boolean {
     const workspaceId = this.states.get(tabId)?.workspaceId;
-    return workspaceId !== undefined && this.listedTabIds(workspaceId).length === 1 && this.listedTabIds(workspaceId)[0] === tabId;
+    if (workspaceId === undefined) {
+      return false;
+    }
+    const dragged = this.registry.selectionContainingTab(tabId) ?? [tabId];
+    const listed = this.listedTabIds(workspaceId);
+    return listed.length === dragged.length && listed.every((listedId) => dragged.includes(listedId));
   }
 
   /** Records where this window's tab drop targets are (client coordinates) — see `isOverTabDropRegion`. */
@@ -1428,6 +1440,208 @@ export class TabManager {
   /** @returns The workspace a tab currently belongs to, or `undefined` if it no longer exists. */
   public getTabWorkspaceId(tabId: string): string | undefined {
     return this.states.get(tabId)?.workspaceId;
+  }
+
+  // ── Multi-selection ──────────────────────────────────────────────────
+
+  /**
+   * The multi-selected tabs, in tab-strip order, active tab included — empty
+   * unless two or more of this window's currently listed tabs are selected
+   * (entries for tabs that were closed, moved to another workspace, or are
+   * no longer listed here are dropped, so the selection can never go stale).
+   */
+  private currentTabSelection(): string[] {
+    if (this.selectedTabIds.size === 0) {
+      return [];
+    }
+    const selected = this.listedTabIds(this.activeWorkspaceId).filter((tabId) => this.selectedTabIds.has(tabId));
+    return selected.length >= 2 ? selected : [];
+  }
+
+  /** The multi-selected workspaces, in sidebar order, active one included — empty unless two or more still exist. */
+  private currentWorkspaceSelection(): string[] {
+    if (this.selectedWorkspaceIds.size === 0) {
+      return [];
+    }
+    const selected = Array.from(this.workspaces.keys()).filter((id) => this.selectedWorkspaceIds.has(id));
+    return selected.length >= 2 ? selected : [];
+  }
+
+  /**
+   * Ctrl+click on a tab: adds it to (or removes it from) the selection,
+   * together with the active tab, and does *not* switch to it. Ctrl+clicking
+   * the active tab itself does nothing — it stays selected as long as any
+   * selection exists.
+   */
+  public toggleTabSelection(id: string): BrowserState {
+    const listed = this.listedTabIds(this.activeWorkspaceId);
+    const active = this.activeTabId;
+    if (!active || id === active || !listed.includes(id) || !listed.includes(active)) {
+      return this.getState();
+    }
+    const selection = new Set(this.currentTabSelection());
+    if (selection.size === 0) {
+      selection.add(active);
+      selection.add(id);
+    } else if (selection.has(id)) {
+      selection.delete(id);
+    } else {
+      selection.add(id);
+    }
+    this.selectedTabIds = selection.size >= 2 ? selection : new Set();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Shift+click on a tab: selects every tab from the active one to this one, inclusive. */
+  public selectTabRange(id: string): BrowserState {
+    const listed = this.listedTabIds(this.activeWorkspaceId);
+    const from = this.activeTabId ? listed.indexOf(this.activeTabId) : -1;
+    const to = listed.indexOf(id);
+    if (from === -1 || to === -1) {
+      return this.getState();
+    }
+    const range = listed.slice(Math.min(from, to), Math.max(from, to) + 1);
+    this.selectedTabIds = range.length >= 2 ? new Set(range) : new Set();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Ctrl+click on a workspace: adds it to (or removes it from) the selection, with the active one, without switching to it. */
+  public toggleWorkspaceSelection(id: string): BrowserState {
+    if (!this.workspaces.has(id) || id === this.activeWorkspaceId) {
+      return this.getState();
+    }
+    const selection = new Set(this.currentWorkspaceSelection());
+    if (selection.size === 0) {
+      selection.add(this.activeWorkspaceId);
+      selection.add(id);
+    } else if (selection.has(id)) {
+      selection.delete(id);
+    } else {
+      selection.add(id);
+    }
+    this.selectedWorkspaceIds = selection.size >= 2 ? selection : new Set();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Shift+click on a workspace: selects every workspace from the active one to this one, inclusive. */
+  public selectWorkspaceRange(id: string): BrowserState {
+    const order = Array.from(this.workspaces.keys());
+    const from = order.indexOf(this.activeWorkspaceId);
+    const to = order.indexOf(id);
+    if (from === -1 || to === -1) {
+      return this.getState();
+    }
+    const range = order.slice(Math.min(from, to), Math.max(from, to) + 1);
+    this.selectedWorkspaceIds = range.length >= 2 ? new Set(range) : new Set();
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
+   * Ctrl+W: closes every selected tab if `id` is one of a multi-selection,
+   * otherwise just `id`. The active tab goes last, so the fallback it
+   * triggers can't land on a tab that's about to close anyway.
+   */
+  public closeSelectionOrTab(id: string): BrowserState {
+    const selection = this.currentTabSelection();
+    if (selection.length < 2 || !selection.includes(id)) {
+      return this.closeTab(id);
+    }
+    const active = this.activeTabId;
+    const ordered = [...selection.filter((tabId) => tabId !== active), ...selection.filter((tabId) => tabId === active)];
+    for (const tabId of ordered) {
+      this.closeTab(tabId);
+    }
+    this.selectedTabIds.clear();
+    return this.getState();
+  }
+
+  /**
+   * Ctrl+Alt+W: removes every selected workspace if there's a multi-selection,
+   * otherwise just the active one. The active workspace is removed last (one
+   * fallback switch, not several), and `removeWorkspace` itself refuses to
+   * remove the last workspace left, so this can never remove them all.
+   */
+  public removeSelectionOrActiveWorkspace(): BrowserState {
+    const selection = this.currentWorkspaceSelection();
+    if (selection.length < 2) {
+      return this.removeWorkspace(this.activeWorkspaceId);
+    }
+    for (const id of selection.filter((workspaceId) => workspaceId !== this.activeWorkspaceId)) {
+      this.removeWorkspace(id);
+    }
+    this.removeWorkspace(this.activeWorkspaceId);
+    this.selectedWorkspaceIds.clear();
+    return this.getState();
+  }
+
+  /** Whether moving `tabIds` into `workspaceId` would push it past `MAX_TABS_PER_WORKSPACE` (link groups count once). */
+  private wouldExceedTabLimit(workspaceId: string, tabIds: readonly string[]): boolean {
+    const keyOf = (tabId: string): string => this.registry.getLinkGroup(tabId)?.[0] ?? tabId;
+    const keys = new Set<string>();
+    for (const [tabId, state] of this.states) {
+      if (state.workspaceId === workspaceId) {
+        keys.add(keyOf(tabId));
+      }
+    }
+    for (const tabId of tabIds) {
+      keys.add(keyOf(tabId));
+    }
+    return keys.size > MAX_TABS_PER_WORKSPACE;
+  }
+
+  /**
+   * Drops a tab (and its whole multi-selection, if it's part of one — in
+   * whichever window it was selected) onto a workspace. All of them move or
+   * none do: a workspace without room for the lot takes nothing.
+   */
+  public moveTabsToWorkspace(id: string, workspaceId: string): BrowserState {
+    const selection = this.registry.selectionContainingTab(id);
+    if (!selection) {
+      return this.moveTabToWorkspace(id, workspaceId);
+    }
+    const toMove = selection.filter((tabId) => this.states.get(tabId)?.workspaceId !== workspaceId);
+    if (toMove.length === 0 || this.wouldExceedTabLimit(workspaceId, toMove)) {
+      return this.getState();
+    }
+    for (const tabId of toMove) {
+      this.moveTabToWorkspace(tabId, workspaceId);
+    }
+    return this.getState();
+  }
+
+  /**
+   * Drops a tab (and its whole multi-selection) into this window's active
+   * workspace, just before `beforeId` (`null` = the end), keeping the tabs'
+   * relative order — the tab strip's drag-and-drop, also across windows.
+   */
+  public moveTabsBefore(id: string, beforeId: string | null): BrowserState {
+    const destinationWorkspaceId = this.activeWorkspaceId;
+    const dragged = this.registry.selectionContainingTab(id) ?? [id];
+    const foreign = dragged.filter((tabId) => {
+      const workspaceId = this.states.get(tabId)?.workspaceId;
+      return workspaceId !== undefined && workspaceId !== destinationWorkspaceId;
+    });
+    if (foreign.length > 0 && this.wouldExceedTabLimit(destinationWorkspaceId, foreign)) {
+      return this.getState();
+    }
+    for (const tabId of foreign) {
+      this.moveTabToWorkspace(tabId, destinationWorkspaceId);
+    }
+
+    // Dropping onto one of the dragged tabs themselves: land before the next tab that isn't.
+    let anchor = beforeId;
+    if (anchor !== null && dragged.includes(anchor)) {
+      const order = this.listedTabIds(destinationWorkspaceId);
+      anchor = order.slice(order.indexOf(anchor) + 1).find((tabId) => !dragged.includes(tabId)) ?? null;
+    }
+    for (const tabId of dragged) {
+      this.moveTab(tabId, anchor);
+    }
+    return this.getState();
   }
 
   // ── Workspaces ───────────────────────────────────────────────────────
@@ -1490,7 +1704,9 @@ export class TabManager {
       name: `Workspace ${this.workspaces.size + 1}`,
       color,
     });
-    this.moveTabToWorkspace(tabId, id);
+    for (const memberId of this.registry.selectionContainingTab(tabId) ?? [tabId]) {
+      this.moveTabToWorkspace(memberId, id);
+    }
     return this.switchWorkspace(id);
   }
 
@@ -1514,9 +1730,13 @@ export class TabManager {
     if (!this.states.has(tabId) || this.workspaces.size >= MAX_WORKSPACES) {
       return null;
     }
-    // Detaches just this window's view from its linked group first: the torn-off
-    // tab becomes its own independent tab, and the others stay where they are.
-    this.unlinkTab(tabId);
+    // A multi-selection is torn off together. Each one's view is detached
+    // from its linked group first: the torn-off tabs become independent, and
+    // the other windows' views of them stay where they are.
+    const tornIds = this.registry.selectionContainingTab(tabId) ?? [tabId];
+    for (const memberId of tornIds) {
+      this.unlinkTab(memberId);
+    }
     const id = randomUUID();
     const color = WORKSPACE_COLORS[this.workspaces.size % WORKSPACE_COLORS.length]!;
     this.workspaces.set(id, {
@@ -1527,6 +1747,9 @@ export class TabManager {
     // The source workspace keeps a fresh home tab if this was its last, rather
     // than being deleted: the tab is still mid-drag and has no window yet.
     this.moveTabToWorkspace(tabId, id, false);
+    for (const memberId of tornIds.filter((memberId) => memberId !== tabId)) {
+      this.moveTabToWorkspace(memberId, id, false);
+    }
     return id;
   }
 
@@ -1542,6 +1765,7 @@ export class TabManager {
       return this.getState();
     }
     this.activeWorkspaceId = id;
+    this.selectedWorkspaceIds.clear();
     this.focusWorkspaceDefaultTab(id);
     return this.getState();
   }
@@ -2708,6 +2932,8 @@ export class TabManager {
       focusMode: this.focusMode,
       sidebarVisible: this.sidebarVisible,
       grabbedTabId: this.grabbedTabId,
+      selectedTabIds: this.currentTabSelection(),
+      selectedWorkspaceIds: this.currentWorkspaceSelection(),
       zoomPercent: this.activeTabId
         ? (this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT)
         : ZOOM_PERCENT_DEFAULT,
@@ -3164,7 +3390,7 @@ export class TabManager {
           // workspace — plain Ctrl+W (below) only ever closes a tab.
           // `removeWorkspace` itself refuses to act when this is the last
           // remaining workspace, so this can never close the window.
-          owner.removeWorkspace(owner.activeWorkspaceId);
+          owner.removeSelectionOrActiveWorkspace();
         }
         return;
       }
@@ -3241,7 +3467,7 @@ export class TabManager {
       switch (key) {
         case 'w':
           event.preventDefault();
-          owner.closeTab(id);
+          owner.closeSelectionOrTab(id);
           return;
         case 'n':
           event.preventDefault();

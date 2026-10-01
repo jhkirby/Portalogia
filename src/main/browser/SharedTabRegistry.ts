@@ -102,6 +102,7 @@ export class SharedTabRegistry {
   private readonly windows = new Set<BrowserWindow>();
   private readonly listeners = new Set<() => void>();
   private readonly workspaceRemovedListeners = new Set<(workspaceId: string) => void>();
+  private readonly selectionProviders = new Set<() => readonly string[]>();
 
   /**
    * Registers a window as one this registry's shared data is visible to.
@@ -119,15 +120,35 @@ export class SharedTabRegistry {
     window: BrowserWindow,
     onSharedChange: () => void,
     onWorkspaceRemoved: (workspaceId: string) => void,
+    getSelectedTabIds: () => readonly string[],
   ): () => void {
     this.windows.add(window);
     this.listeners.add(onSharedChange);
     this.workspaceRemovedListeners.add(onWorkspaceRemoved);
+    this.selectionProviders.add(getSelectedTabIds);
     return () => {
       this.windows.delete(window);
       this.listeners.delete(onSharedChange);
       this.workspaceRemovedListeners.delete(onWorkspaceRemoved);
+      this.selectionProviders.delete(getSelectedTabIds);
     };
+  }
+
+  /**
+   * The multi-selection of tabs (two or more) that includes `tabId`, in any
+   * window — a drag that started in one window is dropped in another, whose
+   * own handlers only learn the dragged tab's id, so the whole selection has
+   * to be looked up here rather than carried through the drop.
+   * @returns The selected ids (active tab included), or `null` if `tabId` isn't part of a multi-selection.
+   */
+  public selectionContainingTab(tabId: string): readonly string[] | null {
+    for (const provider of this.selectionProviders) {
+      const selection = provider();
+      if (selection.length > 1 && selection.includes(tabId)) {
+        return selection;
+      }
+    }
+    return null;
   }
 
   /** Tells every window a workspace was deleted, so any showing it can fall back to another. */

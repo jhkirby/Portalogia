@@ -19,6 +19,12 @@
   border-radius: var(--size-radius-pill);
 }
 
+.address-bar:hover {
+  border-color: var(--color-address-border-hover);
+}
+
+/* After the hover rule on purpose: a focused bar keeps its accent border even
+   while the pointer is over it. */
 .address-bar:focus-within {
   border-color: var(--color-address-border-focus);
 }

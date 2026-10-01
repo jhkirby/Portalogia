@@ -15,6 +15,8 @@ export const IpcChannel = {
   TabsCreate: 'tabs:create',
   TabsClose: 'tabs:close',
   TabsActivate: 'tabs:activate',
+  TabsToggleSelect: 'tabs:toggle-select',
+  TabsSelectRange: 'tabs:select-range',
   TabsMove: 'tabs:move',
   TabsMoveToWorkspace: 'tabs:move-to-workspace',
   TabsTearOff: 'tabs:tear-off',
@@ -37,6 +39,8 @@ export const IpcChannel = {
   WorkspacesCreate: 'workspaces:create',
   WorkspacesCreateWithTab: 'workspaces:create-with-tab',
   WorkspacesSwitch: 'workspaces:switch',
+  WorkspacesToggleSelect: 'workspaces:toggle-select',
+  WorkspacesSelectRange: 'workspaces:select-range',
   WorkspacesRename: 'workspaces:rename',
   WorkspacesRemove: 'workspaces:remove',
   WorkspaceOpenInNewWindow: 'workspaces:open-in-new-window',
@@ -204,6 +208,10 @@ export interface NorthstarApi {
   createTab(url?: string): Promise<IpcResult<BrowserState>>;
   closeTab(id: string): Promise<IpcResult<BrowserState>>;
   activateTab(id: string): Promise<IpcResult<BrowserState>>;
+  /** Ctrl+click: adds the tab to (or removes it from) the multi-selection, along with the active tab, without switching to it. */
+  toggleTabSelection(id: string): Promise<IpcResult<BrowserState>>;
+  /** Shift+click: selects every tab between the active tab and this one. */
+  selectTabRange(id: string): Promise<IpcResult<BrowserState>>;
   /** Reorders a tab (drag-and-drop in the tab bar) to just before `beforeId`, or to the end of its workspace's tabs if `beforeId` is `null`. */
   moveTab(id: string, beforeId: string | null): Promise<IpcResult<BrowserState>>;
   /** Moves a tab into a different workspace — dragging it onto one of `WorkspaceBar`'s pills. A no-op if it's already there. */
@@ -260,6 +268,10 @@ export interface NorthstarApi {
    */
   createWorkspaceWithTab(tabId: string): Promise<IpcResult<BrowserState>>;
   switchWorkspace(id: string): Promise<IpcResult<BrowserState>>;
+  /** Ctrl+click: adds the workspace to (or removes it from) the multi-selection, along with the active one, without switching to it. */
+  toggleWorkspaceSelection(id: string): Promise<IpcResult<BrowserState>>;
+  /** Shift+click: selects every workspace between the active one and this one. */
+  selectWorkspaceRange(id: string): Promise<IpcResult<BrowserState>>;
   renameWorkspace(id: string, name: string): Promise<IpcResult<BrowserState>>;
   removeWorkspace(id: string): Promise<IpcResult<BrowserState>>;
 

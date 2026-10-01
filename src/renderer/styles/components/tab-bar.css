@@ -77,6 +77,14 @@
   background: var(--color-tab-hover-bg);
 }
 
+/* Multi-selected (Ctrl/Shift+click) tabs take the active tab's own background
+   and text color, so the whole group reads as selected. Deliberately neutral —
+   not the accent color, which can be any hue the user picked (red included). */
+.tab-bar__tab--selected {
+  background: var(--color-tab-bg-active);
+  color: var(--color-tab-text-active);
+}
+
 /* The tab currently being grabbed. No drag-image snapshot follows the
    cursor (see TabBar.tsx's `TRANSPARENT_DRAG_IMAGE`), so this in-place
    highlight is the only feedback that it's being dragged — placed after

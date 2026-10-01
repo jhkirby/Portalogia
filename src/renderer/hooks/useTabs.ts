@@ -18,6 +18,8 @@ const EMPTY_STATE: BrowserState = {
   focusMode: false,
   sidebarVisible: true,
   grabbedTabId: null,
+  selectedTabIds: [],
+  selectedWorkspaceIds: [],
   zoomPercent: ZOOM_PERCENT_DEFAULT,
   laserPointerActive: false,
   highlighterActive: false,
@@ -88,6 +90,18 @@ export function useTabs() {
   }, []);
   const closeTab = useCallback((id: string) => {
     void window.northstar.closeTab(id).then(logIfFailed);
+  }, []);
+  const toggleTabSelection = useCallback((id: string) => {
+    void window.northstar.toggleTabSelection(id).then(logIfFailed);
+  }, []);
+  const selectTabRange = useCallback((id: string) => {
+    void window.northstar.selectTabRange(id).then(logIfFailed);
+  }, []);
+  const toggleWorkspaceSelection = useCallback((id: string) => {
+    void window.northstar.toggleWorkspaceSelection(id).then(logIfFailed);
+  }, []);
+  const selectWorkspaceRange = useCallback((id: string) => {
+    void window.northstar.selectWorkspaceRange(id).then(logIfFailed);
   }, []);
   const activateTab = useCallback((id: string) => {
     void window.northstar.activateTab(id).then(logIfFailed);
@@ -224,10 +238,16 @@ export function useTabs() {
     focusMode: state.focusMode,
     sidebarVisible: state.sidebarVisible,
     grabbedTabId: state.grabbedTabId,
+    selectedTabIds: state.selectedTabIds,
+    selectedWorkspaceIds: state.selectedWorkspaceIds,
 
     createTab,
     closeTab,
     activateTab,
+    toggleTabSelection,
+    selectTabRange,
+    toggleWorkspaceSelection,
+    selectWorkspaceRange,
     moveTab,
     moveTabToWorkspace,
     tearOffTab,

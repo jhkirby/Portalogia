@@ -31,6 +31,12 @@ interface TabBarProps {
   readonly bookmarks: readonly BookmarkState[];
   /** Id of the tab drawn as selected; `null` while no window has one yet. */
   readonly activeTabId: string | null;
+  /** The tabs multi-selected with Ctrl/Shift+click (active tab included), or empty — they're drawn selected. */
+  readonly selectedTabIds: readonly string[];
+  /** Ctrl+click: add/remove a tab from the selection without switching to it. */
+  readonly onToggleSelect: (id: string) => void;
+  /** Shift+click: select every tab from the active one to this one. */
+  readonly onSelectRange: (id: string) => void;
   /** Called when the user picks a different tab. */
   readonly onActivate: (id: string) => void;
   /** Called when the user closes a tab. */
@@ -71,6 +77,9 @@ export function TabBar({
   tabs,
   bookmarks,
   activeTabId,
+  selectedTabIds,
+  onToggleSelect,
+  onSelectRange,
   onActivate,
   onClose,
   onReorder,
@@ -184,9 +193,17 @@ export function TabBar({
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
           isGhost={tab === ghostTab}
           isActive={tab.id === activeTabId}
+          isSelected={selectedTabIds.includes(tab.id)}
+          onToggleSelect={onToggleSelect}
+          onSelectRange={onSelectRange}
           onActivate={onActivate}
           onClose={onClose}
-          isDragging={tab.id === draggedId || tab.id === grabbedTabId}
+          isDragging={
+            tab.id === draggedId ||
+            tab.id === grabbedTabId ||
+            // Dragging one selected tab drags them all, so they all show as grabbed.
+            (draggedId !== null && selectedTabIds.includes(draggedId) && selectedTabIds.includes(tab.id))
+          }
           onDragStart={() => {
             setDraggedId(tab.id);
             onReportDropRegions(
@@ -278,6 +295,10 @@ interface TabProps {
   /** What the tab shows instead of its page title (saved name or domain), or `null` to show the title. */
   readonly label: string | null;
   readonly isActive: boolean;
+  /** Part of the Ctrl/Shift+click multi-selection (the active tab is too, when one exists). */
+  readonly isSelected: boolean;
+  readonly onToggleSelect: (id: string) => void;
+  readonly onSelectRange: (id: string) => void;
   readonly onActivate: (id: string) => void;
   readonly onClose: (id: string) => void;
   /** Whether this is the tab currently being dragged (mouse) or grabbed (Ctrl+Space) — either way, drives its in-place `--dragging` highlight. */
@@ -300,6 +321,9 @@ function Tab({
   tab,
   label,
   isActive,
+  isSelected,
+  onToggleSelect,
+  onSelectRange,
   onActivate,
   onClose,
   isDragging,
@@ -368,10 +392,20 @@ function Tab({
     <div
       role="tab"
       tabIndex={0}
-      aria-selected={isActive}
+      aria-selected={isActive || isSelected}
       draggable
-      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}`}
-      onClick={activate}
+      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isSelected ? ' tab-bar__tab--selected' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}`}
+      onClick={(event) => {
+        // Ctrl+click adds to the selection and Shift+click selects a range —
+        // neither switches the viewed tab; a plain click does (and ends any selection).
+        if (event.ctrlKey || event.metaKey) {
+          onToggleSelect(tab.id);
+        } else if (event.shiftKey) {
+          onSelectRange(tab.id);
+        } else {
+          activate();
+        }
+      }}
       onKeyDown={handleKeyDown}
       style={isGhost ? { position: 'absolute', opacity: 0, pointerEvents: 'none' } : undefined}
       onDragStart={handleDragStart}

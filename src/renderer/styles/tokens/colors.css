@@ -48,6 +48,7 @@
 
   --color-address-bg: #ffffff;
   --color-address-border: #d7d9db;
+  --color-address-border-hover: #80868b; /* darker grey on hover (light theme) */
   --color-address-border-focus: rgb(var(--color-accent-rgb));
   --color-address-text: #1a1a1a;
   --color-address-placeholder: #8a8d91;
@@ -88,6 +89,7 @@
 
   --color-address-bg: #303134;
   --color-address-border: #5f6368;
+  --color-address-border-hover: #80868b; /* lighter grey on hover (dark theme) */
   --color-address-border-focus: rgb(var(--color-accent-rgb));
   --color-address-text: #e8eaed;
   --color-address-placeholder: #9aa0a6;

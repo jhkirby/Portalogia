@@ -54,6 +54,12 @@ export function App() {
     createTab,
     closeTab,
     activateTab,
+    selectedTabIds,
+    selectedWorkspaceIds,
+    toggleTabSelection,
+    selectTabRange,
+    toggleWorkspaceSelection,
+    selectWorkspaceRange,
     moveTab,
     moveTabToWorkspace,
     tearOffTab,
@@ -251,6 +257,9 @@ export function App() {
               tabs={workspaceTabs}
               bookmarks={bookmarks}
               activeTabId={activeTabId}
+              selectedTabIds={selectedTabIds}
+              onToggleSelect={toggleTabSelection}
+              onSelectRange={selectTabRange}
               onActivate={activateTab}
               onClose={closeTab}
               onReorder={moveTab}
@@ -349,6 +358,9 @@ export function App() {
           activeWorkspaceId={activeWorkspaceId}
           sidebarVisible={sidebarVisible && !focusMode}
           focusMode={focusMode}
+          selectedWorkspaceIds={selectedWorkspaceIds}
+          onToggleSelect={toggleWorkspaceSelection}
+          onSelectRange={selectWorkspaceRange}
           onSwitch={switchWorkspace}
           onCreate={() => createWorkspace()}
           onRename={renameWorkspace}

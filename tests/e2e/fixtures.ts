@@ -25,6 +25,53 @@ const PAGES: Record<string, string> = {
   '/gadgets': '<!doctype html><title>Gadgets Catalog</title><h1>Gadgets</h1>',
 };
 
+/**
+ * The chrome window's page (`index.html`). `electronApp.firstWindow()` can't be
+ * used for this: Playwright counts every `WebContents` as a "window", including
+ * the overlay views (tooltip, color picker, suggestions, laser pointer) a
+ * window creates alongside its chrome page, so which one is "first" is a race —
+ * and a test that got an overlay page waited 30s for a tab bar it doesn't have.
+ */
+export async function findChromeWindow(app: ElectronApplication): Promise<Page> {
+  const isChromePage = (page: Page): boolean => /\/index\.html(?:[?#].*)?$/.test(page.url());
+  const deadline = Date.now() + 25_000;
+  while (Date.now() < deadline) {
+    const found = app.windows().find(isChromePage);
+    if (found) {
+      return found;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('The chrome window (index.html) never opened');
+}
+
+/**
+ * Runs an application-menu item by its label, as if its accelerator had been
+ * pressed. Playwright's keyboard drives the page, not the OS menu, so it can't
+ * trigger accelerators like Ctrl+W or Ctrl+Alt+W itself.
+ */
+export async function clickMenuItem(app: ElectronApplication, label: string): Promise<void> {
+  await app.evaluate(({ Menu }, wanted) => {
+    const search = (items: Electron.MenuItem[]): Electron.MenuItem | undefined => {
+      for (const item of items) {
+        if (item.label === wanted) {
+          return item;
+        }
+        const nested = item.submenu ? search(item.submenu.items) : undefined;
+        if (nested) {
+          return nested;
+        }
+      }
+      return undefined;
+    };
+    const item = search(Menu.getApplicationMenu()?.items ?? []);
+    if (!item) {
+      throw new Error(`No menu item labelled "${wanted}"`);
+    }
+    item.click();
+  }, label);
+}
+
 interface TestFixtures {
   /** A local HTTP server hosting `PAGES`, torn down after the test. */
   server: { url: (path: string) => string };
@@ -75,7 +122,7 @@ export const test = base.extend<TestFixtures>({
   },
 
   window: async ({ electronApp }, use) => {
-    const window = await electronApp.firstWindow();
+    const window = await findChromeWindow(electronApp);
     await window.waitForLoadState('domcontentloaded');
     // The main process creates the first tab asynchronously after
     // `did-finish-load`; wait for it so every test starts from one settled

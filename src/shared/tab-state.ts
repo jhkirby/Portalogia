@@ -69,6 +69,14 @@ export interface BrowserState {
   readonly sidebarVisible: boolean;
   /** The tab currently grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it) — `null` when nothing is grabbed. */
   readonly grabbedTabId: string | null;
+  /**
+   * The tabs multi-selected with Ctrl/Shift+click, active tab included — empty
+   * unless two or more are selected. Joint operations (drag out, drag into a
+   * workspace, Ctrl+W) act on all of them. Window-local, like `activeTabId`.
+   */
+  readonly selectedTabIds: readonly string[];
+  /** The workspaces multi-selected with Ctrl/Shift+click, active one included — empty unless two or more are selected. Ctrl+Alt+W removes them all. */
+  readonly selectedWorkspaceIds: readonly string[];
   /** The active tab's own zoom, as a whole percent (25–200, 100 = native size) — never the chrome's, which is never zoomed. */
   readonly zoomPercent: number;
   /** Whether the laser pointer overlay is currently on (Ctrl+I, or the toolbar button) — see `LaserPointerOverlay`. */

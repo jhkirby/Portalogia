@@ -23,6 +23,12 @@ interface WorkspaceBarProps {
    * `.sidebar--hidden`/`.sidebar--focus-mode`.
    */
   readonly focusMode: boolean;
+  /** The workspaces multi-selected with Ctrl/Shift+click (active one included), or empty — they're drawn selected. */
+  readonly selectedWorkspaceIds: readonly string[];
+  /** Ctrl+click: add/remove a workspace from the selection without switching to it. */
+  readonly onToggleSelect: (id: string) => void;
+  /** Shift+click: select every workspace from the active one to this one. */
+  readonly onSelectRange: (id: string) => void;
   readonly onSwitch: (id: string) => void;
   readonly onCreate: () => void;
   readonly onRename: (id: string, name: string) => void;
@@ -46,6 +52,9 @@ export function WorkspaceBar({
   activeWorkspaceId,
   sidebarVisible,
   focusMode,
+  selectedWorkspaceIds,
+  onToggleSelect,
+  onSelectRange,
   onSwitch,
   onCreate,
   onRename,
@@ -136,9 +145,22 @@ export function WorkspaceBar({
                 key={workspace.id}
                 role="tab"
                 tabIndex={0}
-                aria-selected={isActive}
-                className={`workspace-bar__pill${isActive ? ' workspace-bar__pill--active' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}`}
-                onClick={() => !isEditing && onSwitch(workspace.id)}
+                aria-selected={isActive || selectedWorkspaceIds.includes(workspace.id)}
+                className={`workspace-bar__pill${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}`}
+                onClick={(event) => {
+                  if (isEditing) {
+                    return;
+                  }
+                  // Ctrl+click adds to the selection and Shift+click selects a
+                  // range, neither switching workspaces; a plain click switches.
+                  if (event.ctrlKey || event.metaKey) {
+                    onToggleSelect(workspace.id);
+                  } else if (event.shiftKey) {
+                    onSelectRange(workspace.id);
+                  } else {
+                    onSwitch(workspace.id);
+                  }
+                }}
                 onDoubleClick={() => startEditing(workspace)}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -224,9 +246,12 @@ export function WorkspaceBar({
         <button
           type="button"
           className="sidebar__toggle chrome-tooltip"
-          onClick={() => {
+          onClick={(event) => {
             sidebarToggleTooltip.hide();
             onToggleSidebar();
+            // Let go of focus: a focused button can keep itself looking "active"
+            // after the click, and this one should only ever show while hovered.
+            event.currentTarget.blur();
           }}
           aria-label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           data-tooltip={`${sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} (${formatShortcut('L')})`}

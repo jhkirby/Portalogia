@@ -262,7 +262,13 @@ function launchWindow(
   window.on('focus', () => {
     activeTabManager = tabManager;
   });
-  activeTabManager = tabManager;
+  // A hidden spare window must not become "the" active window: the menu
+  // accelerators (Ctrl+W, Ctrl+Alt+W, ...) act on `activeTabManager`, and the
+  // user's own window — already focused, so it fires no new `focus` event —
+  // would never take it back, leaving every shortcut aimed at an empty window.
+  if (!options.hidden) {
+    activeTabManager = tabManager;
+  }
 
   window.on('resize', () => tabManager.updateBounds());
   window.on('closed', () => {
@@ -388,6 +394,7 @@ function openWindowOnTab(tabId: string, position: { x: number; y: number }): Bro
     spareWindow = null;
     spare.window.setPosition(Math.round(position.x), Math.round(position.y));
     spare.manager.activateTab(tabId);
+    activeTabManager = spare.manager;
     spare.window.show();
     setTimeout(prepareSpareWindow, 500);
     return spare.window;

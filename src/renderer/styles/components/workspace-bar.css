@@ -69,6 +69,9 @@
   flex: 1;
   min-height: 0;
   padding: var(--size-spacing-sm);
+  /* Right side clears the toggle strip (plus a hair of air), so the pills'
+     highlight stops short of it instead of running underneath. */
+  padding-right: calc(var(--size-sidebar-toggle-width) + 2px);
   box-sizing: border-box;
   overflow: hidden;
 
@@ -79,7 +82,8 @@
 
 .sidebar--hidden .sidebar__inner {
   padding-left: 0;
-  padding-right: 0;
+  /* Still clears the toggle strip when collapsed. */
+  padding-right: calc(var(--size-sidebar-toggle-width) + 2px);
   /* Collapsed, this still occupies `--size-sidebar-collapsed-width` — not
      0 (see `.sidebar--hidden` above) — specifically so its squeezed
      contents stay usable: a workspace pill's colored dot is still
@@ -94,43 +98,46 @@
      clicks this sidebar still needs to support collapsed. */
 }
 
-/* The Ctrl+L handle — a short, rounded, vertically-centered grip (1/8 of
-   the sidebar's own height — tall and thin, not a small circle, but not
-   spanning the full height either, which used to visually cut across the
-   workspace pills near the top whenever it was hovered). Flush against
-   the sidebar's own right border; since `right: 0` tracks it directly,
-   that's what makes it follow that border for free as `.sidebar`'s
-   `width` animates, no separate transition of its own needed. Narrow
-   enough (well inside `--size-sidebar-collapsed-width`) to fit inside the
-   sidebar at its most collapsed without the tab's native content — which
-   starts exactly at that same border — ever painting over it. */
+/* The Ctrl+L handle — a narrow strip spanning the sidebar's whole height,
+   flush against its right border. Since `right: 0` tracks that border
+   directly, it follows it for free as `.sidebar`'s `width` animates, no
+   separate transition of its own needed. Narrow enough (well inside
+   `--size-sidebar-collapsed-width`) to fit inside the sidebar at its most
+   collapsed without the tab's native content — which starts exactly at that
+   same border — ever painting over it. */
 .sidebar__toggle {
   position: absolute;
-  top: 50%;
+  top: 0;
   right: 0;
+  bottom: 0;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 10px;
-  height: 12.5%;
-  min-height: 32px;
+  width: var(--size-sidebar-toggle-width);
   padding: 0;
 
-  background: var(--color-button-hover-bg);
+  /* A full-height strip along the sidebar's edge that's invisible — the strip
+     and its arrow both — until the pointer is over it, then a grey that goes lighter while the button is held down
+     (darker in the light theme, matching the window grip's own press shade). */
+  background: transparent;
   border: none;
-  border-radius: 5px;
-  transform: translateY(-50%);
+  border-radius: 0;
 
   font-size: 11px;
   line-height: 1;
-  color: var(--color-tab-text);
+  color: transparent;
 
   cursor: pointer;
 }
 
 .sidebar__toggle:hover {
-  background: var(--color-close-hover-bg);
+  background: var(--color-button-hover-bg);
+  color: var(--color-tab-text);
+}
+
+.sidebar__toggle:active {
+  background: var(--color-grip-active-bg);
 }
 
 /* Anchored right and capped narrow, same reasoning (and the same
@@ -223,6 +230,12 @@
    `box-shadow` instead of competing with `--active`'s background. */
 .workspace-bar__pill--drop-target {
   box-shadow: inset 0 0 0 2px var(--color-accent-text);
+}
+
+/* Multi-selected (Ctrl/Shift+click) workspaces: the active pill's own neutral look, like the tabs. */
+.workspace-bar__pill--selected {
+  background: var(--color-tab-bg-active);
+  color: var(--color-tab-text-active);
 }
 
 .workspace-bar__dot {

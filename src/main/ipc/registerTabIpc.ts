@@ -67,6 +67,12 @@ export function registerTabIpc(
   handle(IpcChannel.TabsCreate, createTabRequestSchema, (request, event) =>
     resolveTabManager(event).createTabAndFocusAddressBar(request.url),
   );
+  handle(IpcChannel.TabsToggleSelect, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).toggleTabSelection(request.id),
+  );
+  handle(IpcChannel.TabsSelectRange, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).selectTabRange(request.id),
+  );
   handle(IpcChannel.TabsClose, tabIdRequestSchema, (request, event) =>
     resolveTabManager(event).closeTab(request.id),
   );
@@ -82,17 +88,11 @@ export function registerTabIpc(
   // reassigning that workspace first, exactly like dragging onto a
   // `WorkspaceBar` pill would, before positioning it at the exact
   // boundary the drop landed on.
-  handle(IpcChannel.TabsMove, moveTabRequestSchema, (request, event) => {
-    const manager = resolveTabManager(event);
-    const draggedTab = manager.getState().tabs.find((tab) => tab.id === request.id);
-    const destinationWorkspaceId = manager.getState().activeWorkspaceId;
-    if (draggedTab && draggedTab.workspaceId !== destinationWorkspaceId) {
-      manager.moveTabToWorkspace(request.id, destinationWorkspaceId);
-    }
-    return manager.moveTab(request.id, request.beforeId);
-  });
+  handle(IpcChannel.TabsMove, moveTabRequestSchema, (request, event) =>
+    resolveTabManager(event).moveTabsBefore(request.id, request.beforeId),
+  );
   handle(IpcChannel.TabsMoveToWorkspace, moveTabToWorkspaceRequestSchema, (request, event) =>
-    resolveTabManager(event).moveTabToWorkspace(request.id, request.workspaceId),
+    resolveTabManager(event).moveTabsToWorkspace(request.id, request.workspaceId),
   );
   handle(IpcChannel.TabsNavigate, navigateRequestSchema, (request, event) =>
     resolveTabManager(event).navigate(request.id, request.url),
@@ -115,6 +115,12 @@ export function registerTabIpc(
   );
   handle(IpcChannel.WorkspacesCreateWithTab, createWorkspaceWithTabRequestSchema, (request, event) =>
     resolveTabManager(event).createWorkspaceWithTab(request.tabId),
+  );
+  handle(IpcChannel.WorkspacesToggleSelect, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).toggleWorkspaceSelection(request.id),
+  );
+  handle(IpcChannel.WorkspacesSelectRange, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).selectWorkspaceRange(request.id),
   );
   handle(IpcChannel.WorkspacesSwitch, workspaceIdRequestSchema, (request, event) =>
     resolveTabManager(event).switchWorkspace(request.id),

@@ -110,7 +110,7 @@ export function buildMenu(
           click: () => {
             const id = getActiveTabId();
             if (id) {
-              getTabManager()?.closeTab(id);
+              getTabManager()?.closeSelectionOrTab(id);
             }
           },
         },
@@ -128,7 +128,7 @@ export function buildMenu(
           accelerator: 'CmdOrCtrl+Alt+W',
           click: () => {
             const tabManager = getTabManager();
-            tabManager?.removeWorkspace(tabManager.getState().activeWorkspaceId);
+            tabManager?.removeSelectionOrActiveWorkspace();
           },
         },
         {
