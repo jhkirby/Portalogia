@@ -56,27 +56,48 @@ export class SharedTabRegistry {
    */
   public readonly zoomPercentByTabId = new Map<string, number>();
   /**
-   * Pairs a browser tab up with an independent "linked twin" of itself — a
-   * separate `WebContentsView` loaded to the same URL but with its own
-   * scroll position and DOM state, created so the same page can be viewed
-   * from two windows at once (`TabManager.createLinkedTwin`, "Open
-   * Workspace in New Window"). Entries are added in both directions (`a→b`
-   * and `b→a`) and removed the same way when either tab closes — a plain
-   * property of the tab pair itself, not of whichever window happens to be
-   * showing either one, so it lives here rather than per-`TabManager`, same
-   * reasoning as `zoomPercentByTabId`.
+   * Link groups: every browser tab that is "the same tab" shown from more
+   * than one window at once. A `WebContentsView` can only be attached to
+   * one window, so each window showing the tab gets its own independent
+   * view (own scroll position and DOM state) loaded to the same URL — the
+   * members of a group. Navigating any member navigates the rest
+   * (`TabManager.propagateLinkedNavigation`), and the tab bar lists a group
+   * as one tab per window (`TabManager.shouldListTabForThisWindow`).
+   * `members[0]` is the canonical (original) tab: it keeps the group's
+   * position in the tab strip, and is what a window not showing the group
+   * lists. Every member id maps to the *same* array, so it's a plain
+   * property of the tab itself, not of any window — same reasoning as
+   * `zoomPercentByTabId`.
    */
-  public readonly linkedTabPartner = new Map<string, string>();
-  /**
-   * Which half of each linked pair is the "twin" (the one `createLinkedTwin`
-   * actually created new) rather than the original tab it was created from
-   * — used only to pick a consistent fallback when *neither* half of a pair
-   * is currently owned by the window asking (`TabManager.getState`'s own
-   * per-window tab-list filter): the original always wins that tiebreak, so
-   * a linked pair never both vanishes from a window's tab bar and never
-   * shows two rows for what's meant to read as one tab.
-   */
-  public readonly linkedTwinIds = new Set<string>();
+  private readonly linkGroups = new Map<string, string[]>();
+
+  /** The group `tabId` belongs to (canonical first), or `undefined` if it's an ordinary, unlinked tab. */
+  public getLinkGroup(tabId: string): readonly string[] | undefined {
+    return this.linkGroups.get(tabId);
+  }
+
+  /** Adds `newId` to `existingId`'s group, creating the group (with `existingId` canonical) if it has none yet. */
+  public addToLinkGroup(existingId: string, newId: string): void {
+    const group = this.linkGroups.get(existingId) ?? [existingId];
+    group.push(newId);
+    this.linkGroups.set(existingId, group);
+    this.linkGroups.set(newId, group);
+  }
+
+  /** Removes `tabId` from its group; a group left with a single member dissolves, so that survivor is an ordinary tab again. */
+  public removeFromLinkGroup(tabId: string): void {
+    const group = this.linkGroups.get(tabId);
+    if (!group) {
+      return;
+    }
+    this.linkGroups.delete(tabId);
+    group.splice(group.indexOf(tabId), 1);
+    if (group.length <= 1) {
+      for (const survivor of group) {
+        this.linkGroups.delete(survivor);
+      }
+    }
+  }
 
   private readonly windows = new Set<BrowserWindow>();
   private readonly listeners = new Set<() => void>();

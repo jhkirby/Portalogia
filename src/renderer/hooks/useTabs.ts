@@ -98,8 +98,11 @@ export function useTabs() {
   const moveTabToWorkspace = useCallback((id: string, workspaceId: string) => {
     void window.northstar.moveTabToWorkspace(id, workspaceId).then(logIfFailed);
   }, []);
-  const tearOffTab = useCallback((id: string, screenX: number, screenY: number) => {
-    window.northstar.tearOffTab(id, screenX, screenY);
+  const tearOffTab = useCallback((id: string, screenX: number, screenY: number, live?: boolean) => {
+    window.northstar.tearOffTab(id, screenX, screenY, live);
+  }, []);
+  const tearOffTabEnd = useCallback(() => {
+    window.northstar.tearOffTabEnd();
   }, []);
   const navigate = useCallback((id: string, url: string) => {
     void window.northstar.navigate(id, url).then(logIfFailed);
@@ -225,6 +228,7 @@ export function useTabs() {
     moveTab,
     moveTabToWorkspace,
     tearOffTab,
+    tearOffTabEnd,
     navigate,
     goBack,
     goForward,

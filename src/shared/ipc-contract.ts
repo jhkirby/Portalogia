@@ -18,6 +18,7 @@ export const IpcChannel = {
   TabsMove: 'tabs:move',
   TabsMoveToWorkspace: 'tabs:move-to-workspace',
   TabsTearOff: 'tabs:tear-off',
+  TabsTearOffEnd: 'tabs:tear-off-end',
   TabsNavigate: 'tabs:navigate',
   TabsGoBack: 'tabs:go-back',
   TabsGoForward: 'tabs:go-forward',
@@ -207,7 +208,9 @@ export interface NorthstarApi {
    * eventual result is just this window's own `onStateChanged` push once
    * the tab is gone, same as any other tab removal.
    */
-  tearOffTab(id: string, screenX: number, screenY: number): void;
+  tearOffTab(id: string, screenX: number, screenY: number, live?: boolean): void;
+  /** Ends a `live` tear-off's cursor-following (the drag was released); the new window stays where it is. */
+  tearOffTabEnd(): void;
   navigate(id: string, url: string): Promise<IpcResult<BrowserState>>;
   goBack(id: string): Promise<IpcResult<BrowserState>>;
   goForward(id: string): Promise<IpcResult<BrowserState>>;

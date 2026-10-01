@@ -17,6 +17,9 @@ const TRANSPARENT_DRAG_IMAGE = new Image();
 TRANSPARENT_DRAG_IMAGE.src =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7';
 
+/** How far below the tab strip the cursor must travel before the tab tears off into its own window. */
+const TEAR_OFF_MARGIN_PX = 16;
+
 interface TabBarProps {
   /** Tabs to render, left to right, in the order they were opened. */
   readonly tabs: readonly TabState[];
@@ -41,6 +44,10 @@ interface TabBarProps {
    * window."
    */
   readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
+  /** Called once, mid-drag, the moment the cursor leaves this window — main opens the new window right then and keeps it under the cursor, like Chrome. */
+  readonly onDragOutOfWindow: (id: string, screenX: number, screenY: number) => void;
+  /** Called when a drag that already tore off (`onDragOutOfWindow`) is released, so main stops moving the new window. */
+  readonly onTearOffEnd: () => void;
 }
 
 /** Which half of a tab the dragged tab is currently hovering over — drives which side of it `beforeId` resolves to on drop. */
@@ -61,8 +68,22 @@ export function TabBar({
   grabbedTabId,
   onNewTab,
   onDragEndOutside,
+  onDragOutOfWindow,
+  onTearOffEnd,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  // Set once the drag has already torn off into its own window, so the
+  // release doesn't tear it off a second time (`onDragEndOutside`).
+  const tornOffRef = useRef(false);
+  // Last known copy of the dragged tab: once it tears off, it leaves
+  // `tabs`, and unmounting its element would silently kill the in-flight
+  // native drag (no `dragend`). It's kept rendered, invisibly, until release.
+  const draggedTabRef = useRef<TabState | null>(null);
+  const draggedTab = draggedId !== null ? tabs.find((tab) => tab.id === draggedId) : undefined;
+  if (draggedTab) {
+    draggedTabRef.current = draggedTab;
+  }
+  const ghostTab = draggedId !== null && !draggedTab ? draggedTabRef.current : null;
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   // The floating drop-indicator line's x position, in pixels relative to
   // `.tab-bar`'s own left edge (`tabBarRef`) — a single line shared by
@@ -74,6 +95,8 @@ export function TabBar({
   const tabBarRef = useRef<HTMLDivElement>(null);
 
   const endDrag = (): void => {
+    tornOffRef.current = false;
+    draggedTabRef.current = null;
     setDraggedId(null);
     setDropTarget(null);
     setIndicatorX(null);
@@ -141,10 +164,11 @@ export function TabBar({
       onDragOver={handleContainerDragOver}
       onDrop={handleContainerDrop}
     >
-      {tabs.map((tab) => (
+      {(ghostTab ? [...tabs, ghostTab] : tabs).map((tab) => (
         <Tab
           key={tab.id}
           tab={tab}
+          isGhost={tab === ghostTab}
           isActive={tab.id === activeTabId}
           onActivate={onActivate}
           onClose={onClose}
@@ -154,8 +178,38 @@ export function TabBar({
             setDropTarget({ id: tab.id, position });
             setIndicatorAtClientX(edgeClientX);
           }}
-          onDragEnd={endDrag}
-          onDragEndOutside={onDragEndOutside}
+          onDragEnd={() => {
+            if (tornOffRef.current) {
+              onTearOffEnd();
+            }
+            endDrag();
+          }}
+          onDragEndOutside={(id, x, y) => {
+            // A drag that already tore off has its window; nothing more to open.
+            if (!tornOffRef.current) {
+              onDragEndOutside(id, x, y);
+            }
+          }}
+          onDragMove={(screenX, screenY, clientX, clientY) => {
+            // Some platforms report (0,0) for the final `drag` event.
+            if (tornOffRef.current || (screenX === 0 && screenY === 0)) {
+              return;
+            }
+            // Torn off as soon as the cursor leaves the tab strip (a small
+            // margin keeps a sloppy reorder from triggering it), except over
+            // the sidebar, whose workspace pills are real drop targets.
+            const barRect = tabBarRef.current?.getBoundingClientRect();
+            const overSidebar = document.elementFromPoint(clientX, clientY)?.closest('.sidebar') != null;
+            const outside =
+              clientX < 0 ||
+              clientX > window.innerWidth ||
+              clientY < 0 ||
+              (barRect !== undefined && clientY > barRect.bottom + TEAR_OFF_MARGIN_PX && !overSidebar);
+            if (outside) {
+              tornOffRef.current = true;
+              onDragOutOfWindow(tab.id, screenX, screenY);
+            }
+          }}
         />
       ))}
       <button
@@ -188,6 +242,10 @@ interface TabProps {
   readonly onDragEnd: () => void;
   /** See `TabBarProps.onDragEndOutside` — forwarded straight through, this tab already has its own `id` in scope. */
   readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
+  /** Fires continuously during this tab's drag with the cursor's screen and client coordinates. */
+  readonly onDragMove: (screenX: number, screenY: number, clientX: number, clientY: number) => void;
+  /** True for the invisible stand-in kept mounted after the tab tore off — see `TabBar`'s `ghostTab`. */
+  readonly isGhost: boolean;
 }
 
 /** One tab. A `div[role=tab]` rather than a `<button>` because it hosts its own close `<button>`. */
@@ -201,6 +259,8 @@ function Tab({
   onDragOver,
   onDragEnd,
   onDragEndOutside,
+  onDragMove,
+  isGhost,
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
 
@@ -264,7 +324,9 @@ function Tab({
       className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}`}
       onClick={activate}
       onKeyDown={handleKeyDown}
+      style={isGhost ? { position: 'absolute', opacity: 0, pointerEvents: 'none' } : undefined}
       onDragStart={handleDragStart}
+      onDrag={(event) => onDragMove(event.screenX, event.screenY, event.clientX, event.clientY)}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >

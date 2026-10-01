@@ -81,6 +81,9 @@ const GRAB_MAX_DURATION_MS = 15_000;
 /** How many percentage points `zoomIn`/`zoomOut` (buttons, Ctrl+=/-, menu) move per press — `ZOOM_PERCENT_MIN`/`MAX`/`DEFAULT` themselves live in `@shared/constants`, shared with the renderer's `ZoomPercentInput`. */
 const ZOOM_PERCENT_STEP = 10;
 
+/** True while `moveTabToWorkspace` is relocating the rest of a linked group, so those nested calls don't expand the group again. */
+let relocatingLinkGroup = false;
+
 /**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
  * groups tabs into workspaces, and positions the on-screen view(s) beneath
@@ -566,7 +569,12 @@ export class TabManager {
    * @param beforeId The tab it should land before, or `null` to move it to the end of its workspace's tabs.
    * @returns The full browser state after the reorder.
    */
-  public moveTab(id: string, beforeId: string | null): BrowserState {
+  public moveTab(requestedId: string, requestedBeforeId: string | null): BrowserState {
+    // A linked group sits at its canonical member's position (`listedTabIds`),
+    // so reordering any member reorders that one.
+    const id = this.registry.getLinkGroup(requestedId)?.[0] ?? requestedId;
+    const beforeId =
+      requestedBeforeId === null ? null : (this.registry.getLinkGroup(requestedBeforeId)?.[0] ?? requestedBeforeId);
     const moving = this.states.get(id);
     if (!moving || id === beforeId) {
       return this.getState();
@@ -618,6 +626,20 @@ export class TabManager {
     const state = this.states.get(id);
     if (!state || !this.workspaces.has(workspaceId) || state.workspaceId === workspaceId) {
       return this.getState();
+    }
+
+    // Every window's view of a linked tab belongs to the same workspace, so
+    // relocate the whole group (the guard stops the recursion re-expanding it).
+    const group = this.registry.getLinkGroup(id);
+    if (group && !relocatingLinkGroup) {
+      relocatingLinkGroup = true;
+      try {
+        for (const memberId of group.filter((memberId) => memberId !== id)) {
+          this.moveTabToWorkspace(memberId, workspaceId);
+        }
+      } finally {
+        relocatingLinkGroup = false;
+      }
     }
 
     const owner = this.registry.mountOwners.get(id);
@@ -824,15 +846,51 @@ export class TabManager {
    */
   public closeAllTabs(): BrowserState {
     const workspaceId = this.activeWorkspaceId;
-    const idsToClose = Array.from(this.states.entries())
-      .filter(([tabId, state]) => state.workspaceId === workspaceId && this.shouldListTabForThisWindow(tabId))
-      .map(([tabId]) => tabId);
+    const idsToClose = this.listedTabIds(workspaceId);
 
     for (const id of idsToClose) {
       this.closeTab(id);
     }
 
     return this.getState();
+  }
+
+  /**
+   * Picks which actual view this window should show for a requested tab.
+   * A `WebContentsView` can only be attached to one window, so when a tab
+   * is already live in another window this window gets its own *twin*: a
+   * separate view loaded to the same URL (see `SharedTabRegistry`'s link
+   * groups) — any number of windows can show the same tab at once, each
+   * with its own scroll position, and navigation is kept in sync. Order of
+   * preference: a member this window already shows, then one nobody is
+   * showing (reusing a twin left behind when a window switched away), then
+   * a brand-new twin. A tab nobody else shows, and a terminal (whose
+   * process can't be duplicated), is used directly — the latter is
+   * relocated here, as before.
+   * @param id The tab the user asked for.
+   * @returns The tab id whose view to mount in this window.
+   */
+  private resolveViewForThisWindow(id: string): string {
+    const owners = this.registry.mountOwners;
+    const group = this.registry.getLinkGroup(id);
+    if (group) {
+      if (owners.get(id) === this) {
+        return id;
+      }
+      const mine = group.find((memberId) => owners.get(memberId) === this);
+      if (mine) {
+        return mine;
+      }
+      if (!owners.has(id)) {
+        return id;
+      }
+      return group.find((memberId) => !owners.has(memberId)) ?? this.createLinkedTwin(id) ?? id;
+    }
+    const owner = owners.get(id);
+    if (owner && owner !== this && this.states.get(id)?.kind === 'browser') {
+      return this.createLinkedTwin(id) ?? id;
+    }
+    return id;
   }
 
   /**
@@ -854,10 +912,11 @@ export class TabManager {
    * @param id The tab to bring to the front.
    * @returns The full browser state after the switch.
    */
-  public activateTab(id: string): BrowserState {
-    if (!this.states.has(id)) {
+  public activateTab(requestedId: string): BrowserState {
+    if (!this.states.has(requestedId)) {
       return this.getState();
     }
+    const id = this.resolveViewForThisWindow(requestedId);
 
     const owner = this.registry.mountOwners.get(id);
     if (owner && owner !== this) {
@@ -1216,6 +1275,9 @@ export class TabManager {
     if (!this.states.has(tabId)) {
       return null;
     }
+    // Detaches just this window's view from its linked group first: the torn-off
+    // tab becomes its own independent tab, and the others stay where they are.
+    this.unlinkTab(tabId);
     const id = randomUUID();
     const color = WORKSPACE_COLORS[this.workspaces.size % WORKSPACE_COLORS.length]!;
     this.workspaces.set(id, {
@@ -1279,9 +1341,7 @@ export class TabManager {
       return null;
     }
     const twinId = this.createBrowserTabState(state.url, state.workspaceId);
-    this.registry.linkedTabPartner.set(tabId, twinId);
-    this.registry.linkedTabPartner.set(twinId, tabId);
-    this.registry.linkedTwinIds.add(twinId);
+    this.registry.addToLinkGroup(tabId, twinId);
     this.emitState();
     return twinId;
   }
@@ -1303,27 +1363,18 @@ export class TabManager {
    * @param url Its new URL.
    */
   private propagateLinkedNavigation(tabId: string, url: string): void {
-    const partnerId = this.registry.linkedTabPartner.get(tabId);
-    if (!partnerId) {
-      return;
+    for (const memberId of this.registry.getLinkGroup(tabId) ?? []) {
+      const memberState = this.states.get(memberId);
+      if (memberId === tabId || !memberState || memberState.kind !== 'browser' || memberState.url === url) {
+        continue;
+      }
+      this.navigate(memberId, url);
     }
-    const partnerState = this.states.get(partnerId);
-    if (!partnerState || partnerState.kind !== 'browser' || partnerState.url === url) {
-      return;
-    }
-    this.navigate(partnerId, url);
   }
 
   /** Removes a tab's link to its twin (see `createLinkedTwin`), if it has one — call when either tab closes, so the survivor goes back to being an ordinary, unlinked tab rather than pointing at a partner that no longer exists. */
   private unlinkTab(tabId: string): void {
-    const partnerId = this.registry.linkedTabPartner.get(tabId);
-    if (!partnerId) {
-      return;
-    }
-    this.registry.linkedTabPartner.delete(tabId);
-    this.registry.linkedTabPartner.delete(partnerId);
-    this.registry.linkedTwinIds.delete(tabId);
-    this.registry.linkedTwinIds.delete(partnerId);
+    this.registry.removeFromLinkGroup(tabId);
   }
 
   /**
@@ -1341,17 +1392,34 @@ export class TabManager {
    * per window; every other window still lists whichever half it owns.
    */
   private shouldListTabForThisWindow(tabId: string): boolean {
-    const partnerId = this.registry.linkedTabPartner.get(tabId);
-    if (!partnerId) {
+    const group = this.registry.getLinkGroup(tabId);
+    if (!group) {
       return true;
     }
     if (this.registry.mountOwners.get(tabId) === this) {
       return true;
     }
-    if (this.registry.mountOwners.get(partnerId) === this) {
+    if (group.some((memberId) => memberId !== tabId && this.registry.mountOwners.get(memberId) === this)) {
       return false;
     }
-    return !this.registry.linkedTwinIds.has(tabId);
+    return group[0] === tabId;
+  }
+
+  /**
+   * Ids of the tabs this window's tab bar lists, in tab-strip order. A
+   * linked group sits where its canonical (original) member is, no matter
+   * which member this window actually shows, so switching between windows
+   * never makes a tab jump to the end of the strip.
+   * @param workspaceId Restrict to one workspace, or omit for every workspace.
+   */
+  private listedTabIds(workspaceId?: string): string[] {
+    const order = new Map<string, number>();
+    Array.from(this.states.keys()).forEach((tabId, index) => order.set(tabId, index));
+    const position = (tabId: string): number => order.get(this.registry.getLinkGroup(tabId)?.[0] ?? tabId) ?? 0;
+    return Array.from(this.states.entries())
+      .filter(([tabId, state]) => (workspaceId === undefined || state.workspaceId === workspaceId) && this.shouldListTabForThisWindow(tabId))
+      .map(([tabId]) => tabId)
+      .sort((a, b) => position(a) - position(b));
   }
 
   /**
@@ -2092,9 +2160,7 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public cycleTab(direction: 1 | -1): BrowserState {
-    const workspaceTabIds = Array.from(this.states.entries())
-      .filter(([tabId, state]) => state.workspaceId === this.activeWorkspaceId && this.shouldListTabForThisWindow(tabId))
-      .map(([tabId]) => tabId);
+    const workspaceTabIds = this.listedTabIds(this.activeWorkspaceId);
     const currentIndex = this.activeTabId ? workspaceTabIds.indexOf(this.activeTabId) : -1;
     if (workspaceTabIds.length <= 1 || currentIndex === -1) {
       return this.getState();
@@ -2387,7 +2453,7 @@ export class TabManager {
   /** @returns The current tabs, workspaces, bookmarks, and view mode. */
   public getState(): BrowserState {
     return {
-      tabs: Array.from(this.states.values()).filter((state) => this.shouldListTabForThisWindow(state.id)),
+      tabs: this.listedTabIds().map((tabId) => this.states.get(tabId)!),
       activeTabId: this.activeTabId,
       workspaces: Array.from(this.workspaces.values()),
       activeWorkspaceId: this.activeWorkspaceId,
@@ -2570,12 +2636,16 @@ export class TabManager {
   private buildSessionSnapshot(): SessionSnapshot {
     return {
       workspaces: Array.from(this.workspaces.values()),
-      tabs: Array.from(this.states.values()).map((state) => ({
-        kind: state.kind,
-        url: state.kind === 'browser' ? state.url : '',
-        workspaceId: state.workspaceId,
-        active: state.id === this.activeTabId,
-      })),
+      // Twins are per-window views of a tab that's already saved via its
+      // canonical member; persisting them too would restore duplicates.
+      tabs: Array.from(this.states.values())
+        .filter((state) => (this.registry.getLinkGroup(state.id)?.[0] ?? state.id) === state.id)
+        .map((state) => ({
+          kind: state.kind,
+          url: state.kind === 'browser' ? state.url : '',
+          workspaceId: state.workspaceId,
+          active: (this.registry.getLinkGroup(state.id) ?? [state.id]).includes(this.activeTabId ?? ''),
+        })),
       activeWorkspaceId: this.activeWorkspaceId,
     };
   }

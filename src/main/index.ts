@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-24
 
 import { join } from 'node:path';
-import { app, BrowserWindow, ipcMain, protocol, session } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
 import { NORTHSTAR_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
 import { tearOffTabRequestSchema } from '@shared/ipc-schemas';
@@ -233,7 +233,7 @@ function resolveTabManagerForTab(tabId: string): TabManager | undefined {
 function launchWindow(
   onReady: (tabManager: TabManager) => void = (tabManager) => tabManager.restoreSession(),
   position?: { x: number; y: number },
-): void {
+): BrowserWindow {
   const window = createMainWindow();
   if (position) {
     window.setPosition(Math.round(position.x), Math.round(position.y));
@@ -272,6 +272,39 @@ function launchWindow(
   // no native titlebar to show that state itself (see MainWindow.ts).
   window.on('maximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: true }));
   window.on('unmaximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: false }));
+  return window;
+}
+
+/** Offset that keeps the cursor on a torn-off window's tab strip, as in Chrome. */
+const TEAR_OFF_GRAB_OFFSET = { x: 150, y: 20 };
+/** Safety cap so a lost end-of-drag message can't leave a window chasing the cursor forever. */
+const TEAR_OFF_FOLLOW_MAX_MS = 60_000;
+/** Stops whichever live tear-off is currently following the cursor, if any. */
+let stopFollowingCursor: (() => void) | null = null;
+
+/**
+ * Keeps `window` under the cursor (a live tear-off) until stopped. The OS
+ * drag that's in progress owns the mouse, so the window can't be dragged
+ * natively — it's repositioned by polling the cursor instead.
+ */
+function followCursor(window: BrowserWindow): void {
+  stopFollowingCursor?.();
+  const started = Date.now();
+  const timer = setInterval(() => {
+    if (window.isDestroyed() || Date.now() - started > TEAR_OFF_FOLLOW_MAX_MS) {
+      stop();
+      return;
+    }
+    const cursor = screen.getCursorScreenPoint();
+    window.setPosition(cursor.x - TEAR_OFF_GRAB_OFFSET.x, cursor.y - TEAR_OFF_GRAB_OFFSET.y);
+  }, 8);
+  const stop = (): void => {
+    clearInterval(timer);
+    if (stopFollowingCursor === stop) {
+      stopFollowingCursor = null;
+    }
+  };
+  stopFollowingCursor = stop;
 }
 
 /**
@@ -297,7 +330,7 @@ function registerTearOffIpc(): void {
       return;
     }
 
-    const { id, screenX, screenY } = parsed.data;
+    const { id, screenX, screenY, live } = parsed.data;
     const bounds = sourceWindow.getBounds();
     const droppedOutsideWindow =
       screenX < bounds.x ||
@@ -309,7 +342,7 @@ function registerTearOffIpc(): void {
     // (e.g. released over the page's own native view), which should just
     // leave the tab where it was, same as `TabBar`'s existing "dropped in
     // the dead space past the last tab" handling.
-    if (!droppedOutsideWindow) {
+    if (!droppedOutsideWindow && !live) {
       return;
     }
 
@@ -325,15 +358,20 @@ function registerTearOffIpc(): void {
       return;
     }
 
-    launchWindow(
+    const newWindow = launchWindow(
       // Mounts the tab's own already-existing view into the new window —
       // its live page, navigation history, everything, survives the
       // move intact, unlike the URL-only recreate this used to need
       // before tabs were shared across windows.
       (tabManager) => tabManager.activateTab(id),
-      { x: screenX - 150, y: screenY - 20 },
+      { x: screenX - TEAR_OFF_GRAB_OFFSET.x, y: screenY - TEAR_OFF_GRAB_OFFSET.y },
     );
+    if (live) {
+      followCursor(newWindow);
+    }
   });
+  // The drag was released: the new window stays wherever it ended up.
+  ipcMain.on(IpcChannel.TabsTearOffEnd, () => stopFollowingCursor?.());
 }
 
 /**

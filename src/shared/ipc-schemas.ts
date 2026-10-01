@@ -41,6 +41,9 @@ export const tearOffTabRequestSchema = z.object({
   id: z.string().min(1),
   screenX: z.number(),
   screenY: z.number(),
+  // True when sent mid-drag, the moment the cursor leaves the window (the new
+  // window then follows the cursor until `TabsTearOffEnd`), rather than on release.
+  live: z.boolean().optional(),
 });
 export type TearOffTabRequest = z.infer<typeof tearOffTabRequestSchema>;
 

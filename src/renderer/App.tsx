@@ -56,6 +56,7 @@ export function App() {
     moveTab,
     moveTabToWorkspace,
     tearOffTab,
+    tearOffTabEnd,
     createWorkspaceWithTab,
     navigate,
     goBack,
@@ -236,6 +237,8 @@ export function App() {
               grabbedTabId={grabbedTabId}
               onNewTab={() => createTab()}
               onDragEndOutside={tearOffTab}
+              onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
+              onTearOffEnd={tearOffTabEnd}
             />
             <WindowControls />
           </div>
