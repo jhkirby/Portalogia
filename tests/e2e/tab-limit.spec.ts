@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-30
 
-import { MAX_TABS_PER_WORKSPACE } from '../../src/shared/constants';
+import { MAX_TABS_PER_WORKSPACE, MAX_WORKSPACES } from '../../src/shared/constants';
 import { test, expect } from './fixtures';
 
 test.describe('tabs per workspace limit', () => {
@@ -58,5 +58,26 @@ test.describe('tabs per workspace limit', () => {
     await expect(tabs).toHaveCount(1);
     await workspaces.first().click();
     await expect(tabs).toHaveCount(MAX_TABS_PER_WORKSPACE);
+  });
+
+  test('the "New workspace" button disappears at 20 workspaces and returns when one is removed', async ({ window }) => {
+    const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
+    const newWorkspace = window.getByRole('button', { name: 'New workspace' });
+
+    // Created over IPC: it's the same main-process path as the button, minus 19 slow clicks.
+    for (let i = 1; i < MAX_WORKSPACES; i += 1) {
+      await window.evaluate(() => window.northstar.createWorkspace());
+    }
+    await expect(workspaces).toHaveCount(MAX_WORKSPACES);
+    await expect(newWorkspace).toHaveCount(0);
+
+    // The main process refuses a 21st even with the button bypassed.
+    await window.evaluate(() => window.northstar.createWorkspace());
+    await window.waitForTimeout(400);
+    await expect(workspaces).toHaveCount(MAX_WORKSPACES);
+
+    await workspaces.last().getByRole('button', { name: /^Remove/ }).click();
+    await expect(workspaces).toHaveCount(MAX_WORKSPACES - 1);
+    await expect(newWorkspace).toBeVisible();
   });
 });

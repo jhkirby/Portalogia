@@ -4,6 +4,7 @@
 // Last Modified: 2026-09-12
 
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
+import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
 import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -179,37 +180,40 @@ export function WorkspaceBar({
             );
           })}
         </div>
-        <button
-          type="button"
-          className={`workspace-bar__new chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
-          aria-label="New workspace"
-          onClick={() => {
-            newWorkspaceTooltip.hide();
-            onCreate();
-          }}
-          data-tooltip={`New workspace (${formatShortcut('Shift+N')})`}
-          onMouseEnter={sidebarVisible ? undefined : newWorkspaceTooltip.onMouseEnter}
-          onMouseLeave={sidebarVisible ? undefined : newWorkspaceTooltip.onMouseLeave}
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
-            setNewWorkspaceDropTarget(true);
-          }}
-          onDragLeave={() => setNewWorkspaceDropTarget(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            const tabId = event.dataTransfer.getData('text/plain');
-            if (tabId) {
-              onDropTabToNewWorkspace(tabId);
-            }
-            setNewWorkspaceDropTarget(false);
-          }}
-        >
-          <span className="workspace-bar__new-icon" aria-hidden="true">
-            +
-          </span>
-          <span className="workspace-bar__new-label">New workspace</span>
-        </button>
+        {/* Gone entirely at the workspace limit (main refuses too), back once one is removed. */}
+        {workspaces.length < MAX_WORKSPACES && (
+          <button
+            type="button"
+            className={`workspace-bar__new chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
+            aria-label="New workspace"
+            onClick={() => {
+              newWorkspaceTooltip.hide();
+              onCreate();
+            }}
+            data-tooltip={`New workspace (${formatShortcut('Shift+N')})`}
+            onMouseEnter={sidebarVisible ? undefined : newWorkspaceTooltip.onMouseEnter}
+            onMouseLeave={sidebarVisible ? undefined : newWorkspaceTooltip.onMouseLeave}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setNewWorkspaceDropTarget(true);
+            }}
+            onDragLeave={() => setNewWorkspaceDropTarget(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              const tabId = event.dataTransfer.getData('text/plain');
+              if (tabId) {
+                onDropTabToNewWorkspace(tabId);
+              }
+              setNewWorkspaceDropTarget(false);
+            }}
+          >
+            <span className="workspace-bar__new-icon" aria-hidden="true">
+              +
+            </span>
+            <span className="workspace-bar__new-label">New workspace</span>
+          </button>
+        )}
       </div>
       {/* Outside `.sidebar__inner` on purpose — see the wrapper's own
           comment above. Omitted entirely in Focus Mode rather than just

@@ -221,3 +221,12 @@ export const TAB_STRIP_HEIGHT_PX = 40;
  * limit. A tab shown from several windows counts once.
  */
 export const MAX_TABS_PER_WORKSPACE = 8;
+
+/**
+ * The most workspaces that can exist at once. Enforced in the main process
+ * (`TabManager.createWorkspace`, `createWorkspaceWithTab`,
+ * `createStandaloneWorkspaceFor`) and mirrored in the sidebar, which hides
+ * its "New workspace" button at the limit and brings it back once one is
+ * removed.
+ */
+export const MAX_WORKSPACES = 20;

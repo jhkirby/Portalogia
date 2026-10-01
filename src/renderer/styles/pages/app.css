@@ -55,6 +55,18 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+
+  /* The chrome is UI, not content: tab titles, workspace names, and toolbar
+     labels shouldn't be selectable (a drag over them just painted a stray
+     highlight). Text fields below opt back in. */
+  user-select: none;
+}
+
+/* Anything the user actually types into stays selectable — the address bar's
+   URL, the zoom percent, a workspace rename, the bookmark popup's fields. */
+.app-shell input,
+.app-shell textarea {
+  user-select: text;
 }
 
 /* Row of [sidebar, tab content] filling the rest of `.app-shell`'s height

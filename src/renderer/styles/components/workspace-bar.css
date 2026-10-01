@@ -160,7 +160,10 @@
 .workspace-bar {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  /* Sized to its pills, not stretched to fill the sidebar, so "New workspace"
+     sits right under the last one; once the list outgrows the sidebar it
+     shrinks (min-height: 0) and scrolls, leaving that button in view below. */
+  flex: 0 1 auto;
   min-height: 0;
   gap: var(--size-spacing-xs);
   overflow-y: auto;

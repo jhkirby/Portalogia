@@ -11,6 +11,7 @@ import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
   MAX_TABS_PER_WORKSPACE,
+  MAX_WORKSPACES,
   TAB_STRIP_HEIGHT_PX,
   DEFAULT_TAB_URL,
   DEFAULT_WORKSPACE_ID,
@@ -1443,6 +1444,16 @@ export class TabManager {
    * @returns The full browser state after the workspace is created.
    */
   public createWorkspace(name?: string): BrowserState {
+    if (this.workspaces.size >= MAX_WORKSPACES) {
+      // A brand-new, tabless window (File > New Window) has nothing else to
+      // show, so it lands on the first existing workspace instead.
+      if (this.activeTabId === null) {
+        const firstId = this.workspaces.keys().next().value as string;
+        this.activeWorkspaceId = firstId;
+        this.focusWorkspaceDefaultTab(firstId);
+      }
+      return this.getState();
+    }
     const id = randomUUID();
     const color = WORKSPACE_COLORS[this.workspaces.size % WORKSPACE_COLORS.length]!;
     this.workspaces.set(id, {
@@ -1469,7 +1480,7 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public createWorkspaceWithTab(tabId: string): BrowserState {
-    if (!this.states.has(tabId)) {
+    if (!this.states.has(tabId) || this.workspaces.size >= MAX_WORKSPACES) {
       return this.getState();
     }
     const id = randomUUID();
@@ -1500,7 +1511,7 @@ export class TabManager {
    * @returns The new workspace's id, or `null` if `tabId` doesn't exist.
    */
   public createStandaloneWorkspaceFor(tabId: string): string | null {
-    if (!this.states.has(tabId)) {
+    if (!this.states.has(tabId) || this.workspaces.size >= MAX_WORKSPACES) {
       return null;
     }
     // Detaches just this window's view from its linked group first: the torn-off
