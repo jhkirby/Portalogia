@@ -5,6 +5,7 @@
 
 import { BrowserWindow, ipcMain } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
+import { WindowDragController } from '../windows/WindowDragController';
 
 /**
  * Registers the frameless window's own minimize/maximize/close controls
@@ -17,6 +18,24 @@ import { IpcChannel } from '@shared/ipc-contract';
  * Call this exactly once for the app's lifetime, same as `registerTabIpc`.
  */
 export function registerWindowIpc(): void {
+  // Moving the window by its drag strip (with edge snapping) lives in
+  // `WindowDragController` — see there for why it isn't an OS drag region.
+  const dragController = new WindowDragController();
+
+  ipcMain.on(IpcChannel.WindowDragStart, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window) {
+      dragController.begin(window);
+    }
+  });
+
+  ipcMain.on(IpcChannel.WindowDragEnd, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window) {
+      dragController.end(window);
+    }
+  });
+
   ipcMain.on(IpcChannel.WindowMinimize, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

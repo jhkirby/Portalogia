@@ -39,7 +39,9 @@
   flex: 1 1 0;
   min-width: 0;
   max-width: var(--size-tab-max-width);
-  height: calc(var(--size-tab-bar-height) - 6px);
+  /* 14px = the original 6px gap above the tabs + 8px of extra drag strip
+     (see --size-tab-bar-height), so the tabs themselves keep their size. */
+  height: calc(var(--size-tab-bar-height) - 14px);
   padding: 0 var(--size-spacing-sm);
   gap: var(--size-spacing-xs);
 
@@ -171,6 +173,18 @@
   color: inherit;
 
   cursor: pointer;
+
+  /* Only shown while its own tab is hovered (or keyboard-focused). Faded out
+     rather than removed, so its space stays reserved and a tab's title
+     doesn't shift width as the pointer moves across the strip. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tab-bar__tab:hover .tab-bar__close,
+.tab-bar__tab:focus-within .tab-bar__close {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .tab-bar__close:hover {

@@ -177,6 +177,15 @@
      `.workspace-bar__name`'s ellipsis already handles a name too long to
      fit. */
   overflow-x: hidden;
+
+  /* No visible scrollbar: the list still scrolls with the mouse wheel (or
+     touchpad), which is all it needs. `scrollbar-width` is the standard
+     property; the pseudo-element covers Chromium builds that still key off it. */
+  scrollbar-width: none;
+}
+
+.workspace-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .workspace-bar__pill {
@@ -266,6 +275,20 @@
   color: inherit;
 
   cursor: pointer;
+
+  /* Only shown while its own workspace is hovered (or keyboard-focused), and
+     not while a tab is being dragged over that workspace — then the pill is a
+     drop target, and an "x" would only invite a misdrop onto it. Faded out
+     rather than removed, so the name's width doesn't shift as the pointer
+     moves down the list. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__remove,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__remove {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .workspace-bar__remove:hover {

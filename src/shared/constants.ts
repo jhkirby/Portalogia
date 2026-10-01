@@ -16,7 +16,7 @@
  * ResizeObserver + IPC) to keep the first version simple — revisit if the
  * chrome ever needs a variable height beyond the two fixed states below.
  */
-export const CHROME_HEIGHT_PX = 84;
+export const CHROME_HEIGHT_PX = 92;
 
 /**
  * Chrome height while Focus Mode is on: 0 — the titlebar row and toolbar
@@ -211,7 +211,7 @@ export const WORKSPACE_COLORS = [
  * another window's tab strip (see `TabManager.isOverTabDropRegion`). Must
  * equal `--size-tab-bar-height` in `sizes.css`.
  */
-export const TAB_STRIP_HEIGHT_PX = 40;
+export const TAB_STRIP_HEIGHT_PX = 48;
 
 /**
  * The most tabs one workspace can hold. Enforced in the main process

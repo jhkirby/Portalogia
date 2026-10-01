@@ -6,12 +6,14 @@
 :root {
   /* Also the titlebar's own height now that the tab strip and
      WindowControls share one row (see `.titlebar` in app.css). */
-  --size-tab-bar-height: 40px;
+  /* 8px taller than the tabs need: the strip above them is the window's drag
+     handle (tabs and buttons opt out of dragging), and needs room to grab. */
+  --size-tab-bar-height: 48px;
   --size-toolbar-height: 44px;
   /* Must equal CHROME_HEIGHT_PX in src/shared/constants.ts — the main
      process uses that constant to position tab content below this much
      chrome, so the two can't drift independently. */
-  --size-chrome-height: 84px;
+  --size-chrome-height: 92px;
   /* Must equal CHROME_HEIGHT_FOCUSED_PX in src/shared/constants.ts — 0,
      since Focus Mode slides the entire titlebar row and toolbar out of
      view (see `.app--focus-mode` in app.css) rather than just the tabs. */

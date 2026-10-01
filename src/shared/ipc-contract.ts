@@ -76,6 +76,8 @@ export const IpcChannel = {
   ThemeSet: 'theme:set',
   WindowMinimize: 'window:minimize',
   WindowToggleMaximize: 'window:toggle-maximize',
+  WindowDragStart: 'window:drag-start',
+  WindowDragEnd: 'window:drag-end',
   WindowClose: 'window:close',
   WindowStateChanged: 'window:state-changed',
 } as const;
@@ -454,6 +456,10 @@ export interface NorthstarApi {
   minimizeWindow(): void;
   /** Toggles the frameless window between maximized and restored. Fire-and-forget, same as `sendTerminalInput`. */
   toggleMaximizeWindow(): void;
+  /** Starts moving this window with the cursor (the titlebar's drag strip was pressed); main follows the cursor until `endWindowDrag`. */
+  beginWindowDrag(): void;
+  /** Ends the move started by `beginWindowDrag`. */
+  endWindowDrag(): void;
   /** Closes the frameless window (and quits the app, once every window is closed). Fire-and-forget, same as `sendTerminalInput`. */
   closeWindow(): void;
   /** Subscribes to the window's maximized state changing; returns an unsubscribe function. */

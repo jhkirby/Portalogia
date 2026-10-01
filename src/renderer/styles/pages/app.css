@@ -141,6 +141,7 @@ body {
    Windows' native double-click-to-maximize for a drag region, with no JS
    needed. */
 .titlebar {
+  position: relative;
   display: flex;
   align-items: stretch;
   justify-content: flex-end;
@@ -155,6 +156,35 @@ body {
   border-bottom: 1px solid var(--color-chrome-border);
 
   -webkit-app-region: drag;
+}
+
+/* The drag strip along the window's top edge (`TitlebarGrip`) — the height of
+   the extra space `--size-tab-bar-height` adds above the tabs. `no-drag` so it
+   receives mouse events (an OS drag region wouldn't), letting it show hover and
+   pressed colors and a grab cursor; main moves the window itself. */
+.titlebar__grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  /* Above `.tab-bar`, which spans the whole titlebar height (this strip's rows
+     included) and is positioned, so it would otherwise cover the strip and
+     eat its mouse events. `.window-controls` sits one level higher still. */
+  z-index: 1;
+
+  cursor: grab;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__grip:hover {
+  background: var(--color-grip-hover-bg);
+}
+
+.titlebar__grip--dragging,
+.titlebar__grip--dragging:hover {
+  background: var(--color-grip-active-bg);
+  cursor: grabbing;
 }
 
 /* ── TOOLBAR ──────────────────────────────────────────────────────────── */

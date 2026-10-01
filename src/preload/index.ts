@@ -127,6 +127,8 @@ const api: NorthstarApi = {
 
   minimizeWindow: () => ipcRenderer.send(IpcChannel.WindowMinimize),
   toggleMaximizeWindow: () => ipcRenderer.send(IpcChannel.WindowToggleMaximize),
+  beginWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragStart),
+  endWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragEnd),
   closeWindow: () => ipcRenderer.send(IpcChannel.WindowClose),
   onWindowStateChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: WindowState): void => {

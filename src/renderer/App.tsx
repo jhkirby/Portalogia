@@ -11,6 +11,7 @@ import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
+import { TitlebarGrip } from './components/TitlebarGrip';
 import { TabSearch } from './components/TabSearch';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
@@ -245,6 +246,7 @@ export function App() {
               out of dragging (see tab-bar.css) so clicking and reordering
               them still works. */}
           <div className="titlebar">
+            <TitlebarGrip />
             <TabBar
               tabs={workspaceTabs}
               bookmarks={bookmarks}

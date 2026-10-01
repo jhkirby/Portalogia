@@ -33,6 +33,9 @@
 
 :root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
+  /* The window drag strip above the tabs: darker grey on hover, darker still while dragging. */
+  --color-grip-hover-bg: #d9dcdf;
+  --color-grip-active-bg: #c2c6ca;
   --color-chrome-border: #d7d9db;
 
   --color-tab-bg: transparent;
@@ -70,6 +73,9 @@
 
 :root[data-theme='dark'] {
   --color-chrome-bg: #202124;
+  /* The window drag strip above the tabs: lighter grey on hover, lighter still while dragging. */
+  --color-grip-hover-bg: #34363a;
+  --color-grip-active-bg: #4a4d52;
   --color-chrome-border: #3c4043;
 
   --color-tab-bg: transparent;
