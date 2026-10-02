@@ -40,7 +40,8 @@ interface PageActionsProps {
   /** Whether the pen tool is currently on. */
   readonly penActive: boolean;
   readonly theme: Theme;
-  readonly onExportPdf: () => void;
+  /** Opens a new PDF viewer tab. */
+  readonly onOpenPdfViewer: () => void;
   readonly onNewTerminal: () => void;
   readonly onOpenTabSearch: () => void;
   readonly onZoomOut: () => void;
@@ -74,7 +75,7 @@ export function PageActions({
   commentToolActive,
   penActive,
   theme,
-  onExportPdf,
+  onOpenPdfViewer,
   canExportMenu,
   canExportDocuments,
   onNewTerminal,
@@ -151,10 +152,9 @@ export function PageActions({
       <button
         type="button"
         className="page-actions__button page-actions__button--pdf chrome-tooltip"
-        onClick={onExportPdf}
-        disabled={!canExportPdf}
-        aria-label="Export page to PDF"
-        data-tooltip="Export page to PDF"
+        onClick={onOpenPdfViewer}
+        aria-label="Open PDF viewer"
+        data-tooltip="Open PDF viewer"
       >
         PDF
       </button>

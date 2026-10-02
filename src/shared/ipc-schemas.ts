@@ -208,6 +208,10 @@ export const colorPickerColorChangeRequestSchema = z.object({
   commit: z.boolean(),
 });
 
+export const zoomWheelRequestSchema = z.object({
+  direction: z.union([z.literal(1), z.literal(-1)]),
+});
+
 export const exportMenuSyncRequestSchema = z.object({
   open: z.boolean(),
   rect: z.object({ top: z.number(), left: z.number() }).nullable(),

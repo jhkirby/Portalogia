@@ -5,7 +5,7 @@
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
-import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-contract';
+import { IpcChannel, type ExportPdfResult, type IpcResult, type PdfOpenResult } from '@shared/ipc-contract';
 import {
   addBookmarkRequestSchema,
   addressSuggestionsSyncRequestSchema,
@@ -26,6 +26,7 @@ import {
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
   tabIdRequestSchema,
+  zoomWheelRequestSchema,
   terminalInputRequestSchema,
   terminalResizeRequestSchema,
   tooltipSyncRequestSchema,
@@ -243,6 +244,41 @@ export function registerTabIpc(
       }
     },
   );
+
+  ipcMain.handle(IpcChannel.TabsCreatePdf, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).createPdfTab() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
+  // From a PDF tab's own child view (not the chrome's), so resolved by tab
+  // id like the terminal channels below.
+  ipcMain.handle(
+    IpcChannel.PdfOpenFile,
+    async (_event, rawRequest: unknown): Promise<IpcResult<PdfOpenResult | null>> => {
+      const parsed = tabIdRequestSchema.safeParse(rawRequest);
+      if (!parsed.success) {
+        return { ok: false, code: 'invalid-request', message: parsed.error.message };
+      }
+      try {
+        const result = (await resolveTabManagerForTab(parsed.data.id)?.openPdfFile(parsed.data.id)) ?? null;
+        return { ok: true, data: result };
+      } catch (error) {
+        return toErrorResult(error);
+      }
+    },
+  );
+
+  // Sent by a tab's own preload on Ctrl+wheel. Tab views are shared by every
+  // window's manager, so any one can resolve the sender to its tab.
+  ipcMain.on(IpcChannel.ZoomWheel, (event: IpcMainEvent, rawRequest: unknown) => {
+    const parsed = zoomWheelRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      resolveTabManager(event).wheelZoom(event.sender, parsed.data.direction);
+    }
+  });
 
   ipcMain.handle(IpcChannel.TabsCreateTerminal, (event): IpcResult<BrowserState> => {
     try {

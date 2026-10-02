@@ -417,6 +417,10 @@ function Tab({
         <span className="tab-bar__terminal-icon" aria-hidden="true">
           {'>_'}
         </span>
+      ) : tab.kind === 'pdf' ? (
+        <span className="tab-bar__terminal-icon" aria-hidden="true">
+          PDF
+        </span>
       ) : tab.isLoading ? (
         <span className="tab-bar__spinner" aria-hidden="true" />
       ) : tab.favicon ? (

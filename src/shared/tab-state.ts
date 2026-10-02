@@ -33,8 +33,21 @@ export interface TerminalTabState {
   readonly workspaceId: string;
 }
 
-/** Everything the chrome UI needs to render one tab, browser or terminal. */
-export type TabState = BrowserTabState | TerminalTabState;
+/**
+ * A PDF viewer/editor, rendered with pdf.js in its own `WebContentsView`
+ * (`pdf.html`) — see `TabManager.createPdfTab`. No URL, favicon, or
+ * navigation state applies; `title` is the open file's name, or "PDF"
+ * before one is opened.
+ */
+export interface PdfTabState {
+  readonly kind: 'pdf';
+  readonly id: string;
+  readonly title: string;
+  readonly workspaceId: string;
+}
+
+/** Everything the chrome UI needs to render one tab, browser, terminal or PDF. */
+export type TabState = BrowserTabState | TerminalTabState | PdfTabState;
 
 /** A named, colored group that a tab belongs to (see `WorkspaceBar`). */
 export interface WorkspaceState {

@@ -40,6 +40,23 @@ ipcRenderer.on(ZoomApply, (_event, level: number) => {
   webFrame.setZoomLevel(level);
 });
 
+// Ctrl+mouse wheel zooms the tab by `ZOOM_PERCENT_WHEEL_STEP` per tick,
+// decided in main (`TabManager.wheelZoom`). `preventDefault` also blocks
+// Chromium's own pinch/ctrl-wheel visual zoom. Capture phase so a page's
+// own handlers can't swallow it first. Literal channel name, not imported —
+// see the comment on `ZoomApply` for why.
+window.addEventListener(
+  'wheel',
+  (event) => {
+    if (!event.ctrlKey || event.deltaY === 0) {
+      return;
+    }
+    event.preventDefault();
+    ipcRenderer.send('zoom:wheel', { direction: event.deltaY < 0 ? 1 : -1 });
+  },
+  { passive: false, capture: true },
+);
+
 const api: NorthstarTerminalApi = {
   sendTerminalInput: (id, data) => ipcRenderer.send(TerminalInput, { id, data }),
   resizeTerminal: (id, cols, rows) => ipcRenderer.send(TerminalResize, { id, cols, rows }),

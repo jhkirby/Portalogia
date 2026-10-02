@@ -141,6 +141,10 @@ export function useTabs() {
     void window.northstar.exportToPdf(id).then(logIfFailed);
   }, []);
 
+  const createPdfTab = useCallback(() => {
+    void window.northstar.createPdfTab().then(logIfFailed);
+  }, []);
+
   const createTerminalTab = useCallback(() => {
     void window.northstar.createTerminalTab().then(logIfFailed);
   }, []);
@@ -260,6 +264,7 @@ export function useTabs() {
     stop,
     exportToPdf,
     createTerminalTab,
+    createPdfTab,
     revertPage,
 
     createWorkspace,

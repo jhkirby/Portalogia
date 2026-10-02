@@ -71,7 +71,7 @@ export function App() {
     goForward,
     reload,
     stop,
-    exportToPdf,
+    createPdfTab,
     createTerminalTab,
     revertPage,
     createWorkspace,
@@ -273,7 +273,7 @@ export function App() {
             <WindowControls />
           </div>
           <div className="toolbar">
-            {activeTab?.kind === 'terminal' ? (
+            {activeTab?.kind === 'terminal' || activeTab?.kind === 'pdf' ? (
               // Empty on purpose — occupies the same flex space
               // NavControls + AddressBar would, so PageActions stays
               // right-aligned, without showing the tab's title text.
@@ -315,8 +315,8 @@ export function App() {
               commentToolActive={commentToolActive}
               penActive={penActive}
               theme={theme}
-              onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
-              canExportMenu={activeTabId !== null && !isHome}
+              onOpenPdfViewer={createPdfTab}
+              canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf'}
               canExportDocuments={browserTab !== null && !isHome}
               onNewTerminal={createTerminalTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}

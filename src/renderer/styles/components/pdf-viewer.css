@@ -1,0 +1,189 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-01 */
+
+/* ── PDF VIEWER ───────────────────────────────────────────────────────── */
+/* `pdf.html`'s whole page — a PDF tab's own `WebContentsView` (see
+   `TabManager.createPdfTab`), so none of the chrome's stylesheets reach it. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background: var(--color-chrome-bg);
+  color: var(--color-tab-text-active);
+}
+
+#root {
+  height: 100%;
+}
+
+.pdf-viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Toolbar ── */
+
+.pdf-viewer__toolbar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--size-spacing-sm);
+  height: 40px;
+  padding: 0 var(--size-spacing-md);
+
+  background: var(--color-chrome-bg);
+  border-bottom: 1px solid var(--color-chrome-border);
+}
+
+.pdf-viewer__file-name {
+  overflow: hidden;
+  flex: 1;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-viewer__button {
+  height: 28px;
+  padding: 0 var(--size-spacing-md);
+
+  background: transparent;
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+
+  cursor: pointer;
+}
+
+.pdf-viewer__button:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.pdf-viewer__button--large {
+  height: 36px;
+  padding: 0 var(--size-spacing-md);
+}
+
+/* View / Edit segmented toggle */
+
+.pdf-viewer__modes {
+  display: flex;
+  overflow: hidden;
+
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+}
+
+.pdf-viewer__mode {
+  height: 26px;
+  padding: 0 var(--size-spacing-md);
+
+  background: transparent;
+  border: none;
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.pdf-viewer__mode:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.pdf-viewer__mode[aria-pressed='true'] {
+  background: var(--color-selection-bg);
+  color: var(--color-accent-text);
+}
+
+/* ── Document area ── */
+
+.pdf-viewer__scroll {
+  flex: 1;
+  overflow: auto;
+
+  /* Dragging pans the document (Okular's Browse tool), never selects. */
+  user-select: none;
+}
+
+.pdf-viewer__scroll--pannable {
+  cursor: grab;
+}
+
+.pdf-viewer__scroll--panning {
+  cursor: grabbing;
+}
+
+/* `min-width: 100%` + `width: max-content` keeps a document narrower than
+   the view centered, while a wider-than-view one overflows to the right
+   and stays fully scrollable (plain `align-items: center` would clip its
+   left edge). */
+.pdf-viewer__pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  gap: var(--size-spacing-md);
+  width: max-content;
+  min-width: 100%;
+  padding: var(--size-spacing-md);
+}
+
+.pdf-viewer__page {
+  flex-shrink: 0;
+
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.pdf-viewer__canvas {
+  display: block;
+}
+
+/* ── Empty / error ── */
+
+.pdf-viewer__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--size-spacing-md);
+  height: 100%;
+}
+
+.pdf-viewer__error {
+  margin: 0;
+
+  font-size: var(--size-font-sm);
+  color: #d93025;
+}
+
+.pdf-viewer__error--floating {
+  position: absolute;
+  right: var(--size-spacing-md);
+  bottom: var(--size-spacing-md);
+  padding: var(--size-spacing-sm) var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+}

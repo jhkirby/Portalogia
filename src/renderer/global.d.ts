@@ -8,6 +8,7 @@ import type {
   NorthstarApi,
   NorthstarColorPickerApi,
   NorthstarExportMenuApi,
+  NorthstarPdfApi,
   NorthstarTerminalApi,
   NorthstarTooltipApi,
 } from '@shared/ipc-contract';
@@ -26,6 +27,8 @@ declare global {
     readonly northstarColorPicker: NorthstarColorPickerApi;
     /** The bridge exposed by the export menu overlay's own preload script (`src/preload/exportMenu.ts`). Only present in `export-menu.html`'s page. */
     readonly northstarExportMenu: NorthstarExportMenuApi;
+    /** The bridge exposed by a PDF tab's own preload script (`src/preload/pdf.ts`). Only present in `pdf.html`'s page. */
+    readonly northstarPdf: NorthstarPdfApi;
   }
 }
 

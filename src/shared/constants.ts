@@ -124,6 +124,8 @@ export const ADDRESS_SUGGESTIONS_PADDING_PX = 4;
 export const ZOOM_PERCENT_MIN = 25;
 export const ZOOM_PERCENT_MAX = 200;
 export const ZOOM_PERCENT_DEFAULT = 100;
+/** How far one Ctrl+mouse-wheel tick moves a tab's zoom, in percentage points — applies to browser, terminal and PDF tabs alike. */
+export const ZOOM_PERCENT_WHEEL_STEP = 5;
 
 /**
  * Font size, in CSS pixels, `TooltipOverlay`'s own page renders its text

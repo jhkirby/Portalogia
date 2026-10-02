@@ -31,6 +31,9 @@ export const IpcChannel = {
   TabsStateChanged: 'tabs:state-changed',
   TabsExportPdf: 'tabs:export-pdf',
   TabsCreateTerminal: 'tabs:create-terminal',
+  TabsCreatePdf: 'tabs:create-pdf',
+  PdfOpenFile: 'pdf:open-file',
+  ZoomWheel: 'zoom:wheel',
   TabsRevertPage: 'tabs:revert-page',
   TerminalInput: 'terminal:input',
   TerminalResize: 'terminal:resize',
@@ -274,6 +277,9 @@ export interface NorthstarApi {
   exportToPdf(id: string): Promise<IpcResult<ExportPdfResult>>;
   /** Opens a new terminal tab (Ctrl+>, the toolbar terminal button, or File > New Terminal). */
   createTerminalTab(): Promise<IpcResult<BrowserState>>;
+
+  /** Opens a new PDF viewer tab (the toolbar's PDF button). */
+  createPdfTab(): Promise<IpcResult<BrowserState>>;
 
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;
   /**
@@ -595,4 +601,27 @@ export interface NorthstarExportMenuApi {
   select(action: ExportMenuAction): void;
   /** Reports an Escape keypress back to the chrome, which owns closing the menu. Fire-and-forget. */
   requestClose(): void;
+}
+
+/** A PDF the user picked from disk: its file name and raw bytes. */
+export interface PdfOpenResult {
+  readonly name: string;
+  readonly data: Uint8Array;
+}
+
+/**
+ * The narrower API surface exposed to a PDF tab's own `WebContentsView`
+ * (`src/preload/pdf.ts`, `pdf.html`). See `TabManager.createPdfTab`.
+ */
+export interface NorthstarPdfApi {
+  /** Shows the native open dialog and reads the chosen PDF; `null` if the user canceled. Also renames this tab to the file's name. */
+  openFile(id: string): Promise<PdfOpenResult | null>;
+  /**
+   * Subscribes to this tab's zoom, as a whole percent (100 = actual size).
+   * Called immediately with the latest value if one has already arrived —
+   * the page's own subscription can land after main's first push. Unlike
+   * browser/terminal tabs (frame zoom), the PDF page applies the zoom to
+   * its own rendering so pages re-rasterize crisply instead of stretching.
+   */
+  onZoom(listener: (percent: number) => void): () => void;
 }

@@ -53,6 +53,7 @@ const api: NorthstarApi = {
   exportToPdf: (id) => invoke(IpcChannel.TabsExportPdf, { id }),
 
   createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
+  createPdfTab: () => invoke(IpcChannel.TabsCreatePdf),
   revertPage: (id) => invoke(IpcChannel.TabsRevertPage, { id }),
 
   createWorkspace: (name) => invoke(IpcChannel.WorkspacesCreate, { name }),

@@ -4,8 +4,8 @@
 // Last Modified: 2026-09-12
 
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents } from 'electron';
 import {
   CHROME_HEIGHT_FOCUSED_PX,
@@ -25,6 +25,7 @@ import {
   ZOOM_PERCENT_DEFAULT,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
+  ZOOM_PERCENT_WHEEL_STEP,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
 import {
@@ -33,6 +34,7 @@ import {
   type ColorPickerSyncPayload,
   type ExportMenuAction,
   type ExportMenuSyncPayload,
+  type PdfOpenResult,
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
@@ -87,6 +89,9 @@ const GRAB_MAX_DURATION_MS = 15_000;
 
 /** How many percentage points `zoomIn`/`zoomOut` (buttons, Ctrl+=/-, menu) move per press — `ZOOM_PERCENT_MIN`/`MAX`/`DEFAULT` themselves live in `@shared/constants`, shared with the renderer's `ZoomPercentInput`. */
 const ZOOM_PERCENT_STEP = 10;
+
+/** Largest PDF `openPdfFile` will read into memory and push over IPC. */
+const MAX_PDF_BYTES = 512 * 1024 * 1024;
 
 /** True while `moveTabToWorkspace` is relocating the rest of a linked group, so those nested calls don't expand the group again. */
 let relocatingLinkGroup = false;
@@ -357,7 +362,9 @@ export class TabManager {
       const state =
         tab.kind === 'terminal'
           ? this.createTerminalTab(workspaceId)
-          : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
+          : tab.kind === 'pdf'
+            ? this.createPdfTab(workspaceId)
+            : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
       if (tab.active) {
         activeId = state.activeTabId;
       }
@@ -565,6 +572,95 @@ export class TabManager {
     }
 
     return this.getState();
+  }
+
+  /**
+   * Opens a new PDF viewer tab (the toolbar's PDF button) and makes it
+   * active. Structured like `createTerminalTab`: its own `WebContentsView`
+   * loading `pdf.html?id=` through its own narrow preload. No file is open
+   * at first — the page offers an "Open PDF" button, which comes back
+   * through `openPdfFile`. Input handling is the default (browser-tab)
+   * shortcut flow: nothing in a PDF page needs raw keys the way a shell does.
+   * @param workspaceId Workspace to create it in; defaults to the active workspace.
+   * @returns The full browser state after the tab is created.
+   */
+  public createPdfTab(workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: join(__dirname, '../preload/pdf.cjs'),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+      },
+    });
+
+    // Trusted, app-owned content — same reasoning as `createTerminalTab`.
+    view.webContents.on('will-navigate', (event) => event.preventDefault());
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.wireSharedInputHandling(id, view.webContents);
+    // A fresh document starts at 100%; re-send whatever zoom this tab holds
+    // (a restored/torn-off tab may already have one).
+    view.webContents.on('did-finish-load', () => this.applyZoom(id));
+
+    this.views.set(id, view);
+    this.states.set(id, {
+      kind: 'pdf',
+      id,
+      title: 'PDF',
+      workspaceId: workspaceId ?? this.activeWorkspaceId,
+    });
+    this.activateTab(id);
+
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+    if (!app.isPackaged && devServerUrl) {
+      void view.webContents.loadURL(`${devServerUrl}/pdf.html?id=${id}`);
+    } else {
+      void view.webContents.loadFile(join(__dirname, '../renderer/pdf.html'), { query: { id } });
+    }
+
+    return this.getState();
+  }
+
+  /**
+   * Lets the user pick a PDF from disk for a PDF tab and returns its
+   * bytes, renaming the tab to the file's name.
+   * @param id The PDF tab asking.
+   * @returns The file, or `null` if the tab is gone, isn't a PDF tab, or
+   *   the user canceled.
+   */
+  public async openPdfFile(id: string): Promise<PdfOpenResult | null> {
+    const state = this.states.get(id);
+    if (!state || state.kind !== 'pdf') {
+      return null;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: 'Open PDF',
+      properties: ['openFile'],
+      filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
+    });
+    const [filePath] = filePaths;
+    if (canceled || !filePath) {
+      return null;
+    }
+    if ((await stat(filePath)).size > MAX_PDF_BYTES) {
+      throw new Error('That PDF is too large to open (limit 512 MB).');
+    }
+    const data = await readFile(filePath);
+
+    const current = this.states.get(id);
+    if (current?.kind === 'pdf') {
+      this.states.set(id, { ...current, title: basename(filePath) });
+      this.emitState();
+    }
+    return { name: basename(filePath), data };
   }
 
   /** Forwards a terminal tab's keystroke/paste bytes to its pty. A no-op if `id` isn't a live terminal tab. */
@@ -955,7 +1051,7 @@ export class TabManager {
 
     if (closedState.kind === 'terminal') {
       this.terminals.dispose(id);
-    } else if (options.recordClosed ?? true) {
+    } else if (closedState.kind === 'browser' && (options.recordClosed ?? true)) {
       this.closedTabs.push({ url: closedState.url, workspaceId: closedState.workspaceId });
       if (this.closedTabs.length > CLOSED_TAB_HISTORY_LIMIT) {
         this.closedTabs.shift();
@@ -1350,7 +1446,11 @@ export class TabManager {
     const beforeId = workspaceTabIds[workspaceTabIds.indexOf(id) + 1] ?? null;
 
     const newState =
-      state.kind === 'terminal' ? this.createTerminalTab(state.workspaceId) : this.createTab(state.url, state.workspaceId);
+      state.kind === 'terminal'
+        ? this.createTerminalTab(state.workspaceId)
+        : state.kind === 'pdf'
+          ? this.createPdfTab(state.workspaceId)
+          : this.createTab(state.url, state.workspaceId);
     if (newState.activeTabId) {
       // `createTab`/`createTerminalTab` both append at the end of the
       // workspace's own tabs and activate it; this repositions it next to
@@ -1412,7 +1512,7 @@ export class TabManager {
   public async exportDocuments(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || state.kind === 'terminal') {
+    if (!view || !state || state.kind !== 'browser') {
       return null;
     }
 
@@ -2548,6 +2648,25 @@ export class TabManager {
       this.setZoomPercent(this.activeTabId, clampZoomPercent(percent));
     }
     return this.getState();
+  }
+
+  /**
+   * One Ctrl+mouse-wheel tick on a tab's own view: steps that tab's zoom by
+   * `ZOOM_PERCENT_WHEEL_STEP`. Resolved from the sender's `webContents`
+   * (a tab's preload doesn't know its own id), and acts on that tab rather
+   * than `activeTabId` — wheel events only reach a visible view, but in
+   * split view the one under the pointer needn't be the active one.
+   * @param sender The `webContents` the wheel event came from.
+   * @param direction `1` to zoom in, `-1` to zoom out.
+   */
+  public wheelZoom(sender: WebContents, direction: 1 | -1): void {
+    for (const [id, view] of this.views) {
+      if (view.webContents === sender) {
+        const current = this.registry.zoomPercentByTabId.get(id) ?? ZOOM_PERCENT_DEFAULT;
+        this.setZoomPercent(id, clampZoomPercent(current + direction * ZOOM_PERCENT_WHEEL_STEP));
+        return;
+      }
+    }
   }
 
   /**
