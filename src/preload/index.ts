@@ -76,6 +76,12 @@ const api: NorthstarApi = {
   },
   syncTooltip: (payload) => ipcRenderer.send(IpcChannel.TooltipSync, payload),
 
+  syncExportMenu: (payload) => ipcRenderer.send(IpcChannel.ExportMenuSync, payload),
+  onExportMenuCloseRequested: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.ExportMenuCloseRequested, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.ExportMenuCloseRequested, handler);
+  },
   syncColorPicker: (payload) => ipcRenderer.send(IpcChannel.ColorPickerSync, payload),
   onColorPickerColorChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: ColorPickerColorChangedPayload): void =>

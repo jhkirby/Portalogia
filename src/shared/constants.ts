@@ -182,6 +182,14 @@ export const TOOLTIP_OVERLAY_GAP_PX = 6;
  * arithmetic explicit.
  */
 export const COLOR_PICKER_PANEL_WIDTH_PX = 224;
+
+/**
+ * Size of `ExportMenu`'s dropdown. Fixed (two rows, never more), so main
+ * sizes `ExportMenuOverlay`'s view from these. Height = 2 x 32px rows +
+ * 2 x 4px padding + 2 x 1px border; must match export-menu.css.
+ */
+export const EXPORT_MENU_WIDTH_PX = 112;
+export const EXPORT_MENU_HEIGHT_PX = 74;
 export const COLOR_PICKER_PANEL_HEIGHT_PX = 330;
 
 /**

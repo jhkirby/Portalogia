@@ -1,6 +1,7 @@
 export { BookmarkStarIcon } from './BookmarkStarIcon';
 export { ColorDropletIcon } from './ColorDropletIcon';
 export { CommentIcon } from './CommentIcon';
+export { ExportIcon } from './ExportIcon';
 export { HighlighterIcon } from './HighlighterIcon';
 export { LaserPointerIcon } from './LaserPointerIcon';
 export { OpenInNewWindowIcon } from './OpenInNewWindowIcon';

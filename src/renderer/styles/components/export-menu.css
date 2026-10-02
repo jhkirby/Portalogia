@@ -1,0 +1,72 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-01 */
+
+/* ── EXPORT MENU ──────────────────────────────────────────────────────── */
+/* `ExportMenu`'s dropdown page (`export-menu.html`) — a dedicated
+   `WebContentsView` sized to `EXPORT_MENU_WIDTH_PX`×`EXPORT_MENU_HEIGHT_PX`
+   (see `ExportMenuOverlay`). Same constraints as `color-picker.css`: no
+   box-shadow (clipped at the view's edge). Corners are CSS-rounded over a
+   transparent view so the border stays connected around them. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+.export-menu {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--size-spacing-xs);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+
+  cursor: default;
+}
+
+.export-menu__item {
+  flex: 0 0 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--size-spacing-sm);
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.export-menu__item:hover:not(:disabled),
+.export-menu__item:focus-visible {
+  background: var(--color-button-hover-bg);
+  outline: none;
+}
+
+.export-menu__item:disabled {
+  color: var(--color-button-disabled-text);
+  cursor: default;
+}

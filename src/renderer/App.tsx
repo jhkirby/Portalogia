@@ -316,6 +316,8 @@ export function App() {
               penActive={penActive}
               theme={theme}
               onExportPdf={() => activeTabId && exportToPdf(activeTabId)}
+              canExportMenu={activeTabId !== null && !isHome}
+              canExportDocuments={browserTab !== null && !isHome}
               onNewTerminal={createTerminalTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}
               onZoomOut={zoomOut}

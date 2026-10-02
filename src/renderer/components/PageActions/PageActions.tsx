@@ -6,6 +6,7 @@
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
+import { ExportMenu } from '../ExportMenu';
 import {
   CommentIcon,
   HighlighterIcon,
@@ -22,6 +23,10 @@ interface PageActionsProps {
   /** Whether there's an active tab to export to PDF — unlike `canActOnPage`, true for a terminal tab too (its `WebContentsView` prints its on-screen output same as a browser tab prints its page). */
   readonly canExportPdf: boolean;
   /** Whether there's an active tab to zoom — unlike `canActOnPage`, true for a terminal tab too (zoom isn't browser-only). */
+  /** Whether the export dropdown is usable — unlike `canExportPdf`, false on the built-in home page, which has no real content to export. */
+  readonly canExportMenu: boolean;
+  /** Whether the active tab has HTML/CSS/JS to save — browser tabs only, unlike `canExportPdf`. */
+  readonly canExportDocuments: boolean;
   readonly canZoom: boolean;
   /** The active tab's current zoom, 25–200. */
   readonly zoomPercent: number;
@@ -70,6 +75,8 @@ export function PageActions({
   penActive,
   theme,
   onExportPdf,
+  canExportMenu,
+  canExportDocuments,
   onNewTerminal,
   onOpenTabSearch,
   onZoomOut,
@@ -151,6 +158,7 @@ export function PageActions({
       >
         PDF
       </button>
+      <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} />
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

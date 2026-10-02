@@ -54,6 +54,9 @@ export const IpcChannel = {
   ColorPickerSync: 'color-picker:sync',
   ColorPickerColorChanged: 'color-picker:color-changed',
   ColorPickerCloseRequested: 'color-picker:close-requested',
+  ExportMenuSync: 'export-menu:sync',
+  ExportMenuSelect: 'export-menu:select',
+  ExportMenuCloseRequested: 'export-menu:close-requested',
   AccentColorSet: 'accent-color:set',
   SplitEnter: 'split:enter',
   SplitExit: 'split:exit',
@@ -174,6 +177,22 @@ export interface ColorPickerSyncPayload {
   readonly recentColors: readonly RGB[];
 }
 
+/** What a row in the export dropdown does: save the page as a PDF, or save its HTML/CSS/JS files. */
+export type ExportMenuAction = 'pdf' | 'documents';
+
+/**
+ * What `ExportMenu` pushes to its dedicated overlay `WebContentsView` on
+ * every open/close — see `syncExportMenu` and `ExportMenuOverlay`. `rect`
+ * is `null` whenever `open` is `false`. No size: the menu's is fixed
+ * (`EXPORT_MENU_WIDTH_PX`/`EXPORT_MENU_HEIGHT_PX`).
+ */
+export interface ExportMenuSyncPayload {
+  readonly open: boolean;
+  readonly rect: { readonly top: number; readonly left: number } | null;
+  /** False for a terminal tab, whose page is our own UI rather than content worth saving — the documents row is disabled. */
+  readonly canExportDocuments: boolean;
+}
+
 /**
  * Reported back from the color picker's own overlay page on every drag
  * pixel, keystroke, or swatch click — see `ColorPickerOverlay`'s own doc
@@ -253,7 +272,6 @@ export interface NorthstarApi {
 
   /** Renders the active tab's current page to a PDF the user chooses where to save; `null` path means they canceled. */
   exportToPdf(id: string): Promise<IpcResult<ExportPdfResult>>;
-
   /** Opens a new terminal tab (Ctrl+>, the toolbar terminal button, or File > New Terminal). */
   createTerminalTab(): Promise<IpcResult<BrowserState>>;
 
@@ -350,6 +368,11 @@ export interface NorthstarApi {
   onColorPickerColorChanged(listener: (payload: ColorPickerColorChangedPayload) => void): () => void;
   /** Subscribes to the overlay's own Escape-key handler asking to close — needed because a chrome-side `keydown` listener never sees a keystroke typed while focus is inside the overlay's own, separate `WebContentsView`. */
   onColorPickerCloseRequested(listener: () => void): () => void;
+
+  /** Pushes `ExportMenu`'s open/closed state and position to its overlay `WebContentsView` (see `ExportMenuOverlay`). Fire-and-forget, same as `syncColorPicker`. */
+  syncExportMenu(payload: ExportMenuSyncPayload): void;
+  /** Subscribes to the overlay asking to close — an Escape typed inside it, a click on the live page, or a row being chosen. */
+  onExportMenuCloseRequested(listener: () => void): () => void;
 
   enterSplitView(secondaryId: string): Promise<IpcResult<BrowserState>>;
   exitSplitView(): Promise<IpcResult<BrowserState>>;
@@ -556,5 +579,20 @@ export interface NorthstarColorPickerApi {
   /** Reports a new color back to the chrome's `ColorPicker` — see `ColorPickerColorChangedPayload`. Fire-and-forget, same as `select` on `NorthstarAddressSuggestionsApi`. */
   changeColor(rgb: RGB, commit: boolean): void;
   /** Reports the overlay's own Escape keypress back to the chrome, which owns actually closing the dropdown. Fire-and-forget, same as `changeColor`. */
+  requestClose(): void;
+}
+
+/**
+ * The narrower API surface exposed to `ExportMenu`'s own overlay
+ * `WebContentsView` (`src/preload/exportMenu.ts`, `export-menu.html`).
+ * Choosing a row is handled entirely in main, which runs the export and
+ * tells the chrome to close the menu.
+ */
+export interface NorthstarExportMenuApi {
+  /** Subscribes to the chrome's latest `syncExportMenu` push. */
+  onSync(listener: (payload: ExportMenuSyncPayload) => void): () => void;
+  /** Reports the chosen row. Fire-and-forget. */
+  select(action: ExportMenuAction): void;
+  /** Reports an Escape keypress back to the chrome, which owns closing the menu. Fire-and-forget. */
   requestClose(): void;
 }

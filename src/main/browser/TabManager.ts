@@ -31,6 +31,8 @@ import {
   IpcChannel,
   type AddressSuggestionsSyncPayload,
   type ColorPickerSyncPayload,
+  type ExportMenuAction,
+  type ExportMenuSyncPayload,
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
@@ -38,8 +40,10 @@ import type { BrowserState, BrowserTabState, SplitViewState, TabState, Workspace
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
+import { ExportMenuOverlay } from './ExportMenuOverlay';
 import type { HighlighterController } from './HighlighterController';
 import { LaserPointerOverlay } from './LaserPointerOverlay';
+import { PageDocumentExporter } from './PageDocumentExporter';
 import type { PenController } from './PenController';
 import { trackPageSelectionAccent } from './pageSelectionAccent';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
@@ -140,6 +144,7 @@ export class TabManager {
   private readonly suggestionsOverlay: SuggestionsOverlay;
   private readonly tooltipOverlay: TooltipOverlay;
   private readonly colorPickerOverlay: ColorPickerOverlay;
+  private readonly exportMenuOverlay: ExportMenuOverlay;
   private readonly laserPointerOverlay: LaserPointerOverlay;
   /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
   private readonly unregisterFromRegistry: () => void;
@@ -236,6 +241,11 @@ export class TabManager {
       this.window,
       (payload) => this.window.webContents.send(IpcChannel.ColorPickerColorChanged, payload),
       () => this.window.webContents.send(IpcChannel.ColorPickerCloseRequested),
+    );
+    this.exportMenuOverlay = new ExportMenuOverlay(
+      this.window,
+      (action) => this.runExportAction(action),
+      () => this.window.webContents.send(IpcChannel.ExportMenuCloseRequested),
     );
     this.laserPointerOverlay = new LaserPointerOverlay(
       this.window,
@@ -583,6 +593,23 @@ export class TabManager {
     this.colorPickerOverlay.sync(payload, activeTabView);
   }
 
+  /** Applies `ExportMenu`'s latest sync — see `ExportMenuOverlay.sync`. */
+  public syncExportMenu(payload: ExportMenuSyncPayload): void {
+    const activeTabView = this.activeTabId ? (this.views.get(this.activeTabId) ?? null) : null;
+    this.exportMenuOverlay.sync(payload, activeTabView);
+  }
+
+  /** Runs a row chosen in the export dropdown against the active tab, then has the chrome close the menu. Failures are logged — the menu is already gone, so there's no UI left to report to. */
+  private runExportAction(action: ExportMenuAction): void {
+    this.window.webContents.send(IpcChannel.ExportMenuCloseRequested);
+    const id = this.activeTabId;
+    if (!id) {
+      return;
+    }
+    const run = action === 'pdf' ? this.exportToPdf(id) : this.exportDocuments(id);
+    run.catch((error: unknown) => console.error(`[export] ${action} failed:`, error));
+  }
+
   /**
    * Releases this window's own resources — call this when the window
    * itself closes. Deliberately does *not* touch shared tabs/workspaces or
@@ -598,6 +625,7 @@ export class TabManager {
     this.suggestionsOverlay.dispose();
     this.tooltipOverlay.dispose();
     this.colorPickerOverlay.dispose();
+    this.exportMenuOverlay.dispose();
     this.laserPointerOverlay.dispose();
     this.unregisterFromRegistry();
   }
@@ -1373,6 +1401,33 @@ export class TabManager {
     const pdfData = await view.webContents.printToPDF({});
     await writeFile(filePath, pdfData);
     return filePath;
+  }
+
+  /**
+   * Saves a browser tab's HTML plus its external CSS and JS into a new
+   * folder (named after the page title) inside one the user picks.
+   * @returns The folder written, or `null` if the tab is gone, is a
+   *   terminal, or the user canceled.
+   */
+  public async exportDocuments(id: string): Promise<string | null> {
+    const view = this.views.get(id);
+    const state = this.states.get(id);
+    if (!view || !state || state.kind === 'terminal') {
+      return null;
+    }
+
+    const { canceled, filePaths } = await dialog.showOpenDialog(this.window, {
+      title: 'Choose where to save the web documents',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    const [parentDirectory] = filePaths;
+    if (canceled || !parentDirectory) {
+      return null;
+    }
+
+    const target = join(parentDirectory, sanitizeFileName(state.title));
+    await new PageDocumentExporter().export(view.webContents, target);
+    return target;
   }
 
   /**

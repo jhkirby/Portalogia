@@ -15,6 +15,7 @@ import {
   createTabRequestSchema,
   createWorkspaceRequestSchema,
   createWorkspaceWithTabRequestSchema,
+  exportMenuSyncRequestSchema,
   focusModeRequestSchema,
   highlighterRequestSchema,
   laserPointerRequestSchema,
@@ -299,6 +300,12 @@ export function registerTabIpc(
   // Same fire-and-forget shape as `AddressSuggestionsSync` above —
   // `ColorPicker` pushes a fresh sync on every open/close and on every
   // accent/recents change while it's open.
+  ipcMain.on(IpcChannel.ExportMenuSync, (event: IpcMainEvent, rawRequest: unknown) => {
+    const parsed = exportMenuSyncRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      resolveTabManager(event).syncExportMenu(parsed.data);
+    }
+  });
   ipcMain.on(IpcChannel.ColorPickerSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = colorPickerSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {

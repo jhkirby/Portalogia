@@ -208,6 +208,16 @@ export const colorPickerColorChangeRequestSchema = z.object({
   commit: z.boolean(),
 });
 
+export const exportMenuSyncRequestSchema = z.object({
+  open: z.boolean(),
+  rect: z.object({ top: z.number(), left: z.number() }).nullable(),
+  canExportDocuments: z.boolean(),
+});
+
+export const exportMenuSelectRequestSchema = z.object({
+  action: z.enum(['pdf', 'documents']),
+});
+
 export const themeSetRequestSchema = z.object({
   theme: z.enum(['light', 'dark']),
 });
