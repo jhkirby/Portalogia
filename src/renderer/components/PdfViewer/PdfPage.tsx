@@ -4,7 +4,7 @@
 // Last Modified: 2026-10-01
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 /** PDF pages are sized in points (1/72 in); the layout `width`/`height` props are already in CSS pixels, so the rasterization scale needs this factor too. */
 const CSS_PIXELS_PER_POINT = 96 / 72;
