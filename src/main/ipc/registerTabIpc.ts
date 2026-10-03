@@ -26,6 +26,7 @@ import {
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
   pdfModeRequestSchema,
+  pdfSaveAnnotationsRequestSchema,
   pdfRenameRequestSchema,
   tabIdRequestSchema,
   zoomWheelRequestSchema,
@@ -36,6 +37,7 @@ import {
   zoomSetRequestSchema,
 } from '@shared/ipc-schemas';
 import type { BrowserState } from '@shared/tab-state';
+import { pdfAnnotationStore } from '../browser/PdfAnnotationStore';
 import type { TabManager } from '../browser/TabManager';
 
 /**
@@ -267,6 +269,14 @@ export function registerTabIpc(
       return { ok: true, data: null };
     } catch (error) {
       return toErrorResult(error);
+    }
+  });
+
+  // Fire-and-forget from the PDF page after every edit; the store debounces the disk write.
+  ipcMain.on(IpcChannel.PdfSaveAnnotations, (_event, rawRequest: unknown) => {
+    const parsed = pdfSaveAnnotationsRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      pdfAnnotationStore.set(parsed.data.key, parsed.data.annotations);
     }
   });
 

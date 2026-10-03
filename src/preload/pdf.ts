@@ -4,6 +4,7 @@
 // Last Modified: 2026-10-01
 
 import { contextBridge, ipcRenderer } from 'electron';
+import type { PdfAnnotations } from '@shared/ipc-schemas';
 import type { NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 import type { PdfMode } from '@shared/tab-state';
@@ -12,6 +13,8 @@ import type { PdfMode } from '@shared/tab-state';
 // preload can't share the `IpcChannel` runtime object.
 const PdfFile = 'pdf:file';
 const PdfModeChanged = 'pdf:mode-changed';
+const PdfSaveAnnotations = 'pdf:save-annotations';
+const PdfClear = 'pdf:clear';
 // Same strings `PenController` / `CommentController` (main) send on; hardcoded for the same sandboxed-preload reason as above.
 const PenState = 'pen:state';
 const CommentToolState = 'comment-tool:state';
@@ -83,7 +86,19 @@ ipcRenderer.on(CommentToolState, (_event, payload: { active: boolean; color: RGB
   notifyTool();
 });
 
+const clearListeners = new Set<() => void>();
+ipcRenderer.on(PdfClear, () => clearListeners.forEach((listener) => listener()));
+
 const api: NorthstarPdfApi = {
+  saveAnnotations: (key: string, annotations: PdfAnnotations) => {
+    ipcRenderer.send(PdfSaveAnnotations, { key, annotations });
+  },
+  onClear: (listener) => {
+    clearListeners.add(listener);
+    return () => {
+      clearListeners.delete(listener);
+    };
+  },
   onTool: (listener) => {
     toolListeners.add(listener);
     if (toolReceived) {

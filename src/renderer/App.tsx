@@ -334,6 +334,8 @@ export function App() {
               showExportMenu={activeTab?.kind !== 'pdf'}
               showCommentTool={activeTab?.kind !== 'terminal'}
               showPen={activeTab?.kind !== 'terminal'}
+              showHighlighter={activeTab?.kind !== 'terminal'}
+              showRevert={activeTab?.kind !== 'terminal'}
               onNewTerminal={createTerminalTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}
               onZoomOut={zoomOut}

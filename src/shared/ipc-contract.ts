@@ -4,6 +4,7 @@
 // Last Modified: 2026-09-12
 
 import type { RGB } from '@shared/color';
+import type { PdfAnnotations } from '@shared/ipc-schemas';
 import type { BrowserState, PdfMode } from '@shared/tab-state';
 
 /**
@@ -35,6 +36,10 @@ export const IpcChannel = {
   PdfOpenFile: 'pdf:open-file',
   PdfRename: 'pdf:rename',
   PdfSetMode: 'pdf:set-mode',
+  /** PDF page → main: the marks drawn on the open document, to persist. */
+  PdfSaveAnnotations: 'pdf:save-annotations',
+  /** Main → PDF page: remove every mark (Revert Annotations). */
+  PdfClear: 'pdf:clear',
   /** Main → PDF page: the file the user just opened. */
   PdfFile: 'pdf:file',
   /** Main → PDF page: the tab's current mode. */
@@ -618,6 +623,10 @@ export interface NorthstarExportMenuApi {
 export interface PdfOpenResult {
   readonly name: string;
   readonly data: Uint8Array;
+  /** Hash of `data`: the key marks are saved under, so they come back whenever the same document is opened. */
+  readonly key: string;
+  /** The marks previously saved for this document. */
+  readonly annotations: PdfAnnotations;
 }
 
 /** Which annotation tool the window has on for a PDF tab. The tools are mutually exclusive in main. */
@@ -636,6 +645,10 @@ export interface PdfToolState {
 export interface NorthstarPdfApi {
   /** Subscribes to files opened for this tab (via the chrome toolbar or a shortcut). */
   onFile(listener: (file: PdfOpenResult) => void): () => void;
+  /** Reports the marks currently on the open document so main can persist them. Fire-and-forget. */
+  saveAnnotations(key: string, annotations: PdfAnnotations): void;
+  /** Subscribes to "remove every mark" (Revert Annotations). */
+  onClear(listener: () => void): () => void;
   /** Subscribes to the annotation tool in use; called immediately with the latest value if one already arrived. */
   onTool(listener: (state: PdfToolState) => void): () => void;
   /** Subscribes to this tab's mode; called immediately with the latest value if one already arrived. */

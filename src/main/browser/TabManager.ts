@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-12
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents } from 'electron';
@@ -39,6 +39,7 @@ import {
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, PdfMode, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
+import { pdfAnnotationStore } from './PdfAnnotationStore';
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -685,7 +686,13 @@ export class TabManager {
       this.emitState();
     }
     if (!view.webContents.isDestroyed()) {
-      view.webContents.send(IpcChannel.PdfFile, { name: basename(filePath), data } satisfies PdfOpenResult);
+      const key = createHash('sha256').update(data).digest('hex');
+      view.webContents.send(IpcChannel.PdfFile, {
+        name: basename(filePath),
+        data,
+        key,
+        annotations: pdfAnnotationStore.get(key),
+      } satisfies PdfOpenResult);
     }
   }
 
@@ -2621,6 +2628,9 @@ export class TabManager {
       this.highlighter.clearTab(id);
       this.commentController.clearTab(id);
       this.penController.clearTab(id);
+    } else if (this.states.get(id)?.kind === 'pdf') {
+      // The page clears its own marks and reports the empty set back, which removes them from the store too.
+      this.views.get(id)?.webContents.send(IpcChannel.PdfClear);
     }
     return this.getState();
   }
@@ -2634,7 +2644,8 @@ export class TabManager {
 
   /** Pushes this window's current highlighter on/off state to a specific tab, active or not — `wireEvents`' own `dom-ready` handler uses this directly (rather than `pushHighlighterState`) since a fresh document has a fresh preload that's never been told anything, whether or not that tab happens to be the active one right now. */
   private pushHighlighterStateTo(tabId: string): void {
-    this.highlighter.syncState(tabId, this.highlighterActive);
+    // Terminal tabs have no highlighter; never tell one it's on.
+    this.highlighter.syncState(tabId, this.highlighterActive && this.states.get(tabId)?.kind !== 'terminal');
   }
 
   /**

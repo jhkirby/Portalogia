@@ -35,6 +35,10 @@ interface PageActionsProps {
   readonly showCommentTool: boolean;
   /** Whether the pen is shown — hidden on a terminal tab, which has no document to draw on. */
   readonly showPen: boolean;
+  /** Whether the highlighter is shown — hidden on a terminal tab. */
+  readonly showHighlighter: boolean;
+  /** Whether Revert Annotations is shown — hidden on a terminal tab, which can't be annotated. */
+  readonly showRevert: boolean;
   readonly canZoom: boolean;
   /** The active tab's current zoom, 25–200. */
   readonly zoomPercent: number;
@@ -90,6 +94,8 @@ export function PageActions({
   showExportMenu,
   showCommentTool,
   showPen,
+  showHighlighter,
+  showRevert,
   onNewTerminal,
   onOpenTabSearch,
   onZoomOut,
@@ -130,17 +136,19 @@ export function PageActions({
           <PenIcon />
         </button>
       )}
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onToggleHighlighter}
-        disabled={!canExportPdf}
-        aria-pressed={highlighterActive}
-        aria-label={highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'}
-        data-tooltip={`${highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'} (${formatShortcut('J')})`}
-      >
-        <HighlighterIcon />
-      </button>
+      {showHighlighter && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onToggleHighlighter}
+          disabled={!canExportPdf}
+          aria-pressed={highlighterActive}
+          aria-label={highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'}
+          data-tooltip={`${highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'} (${formatShortcut('J')})`}
+        >
+          <HighlighterIcon />
+        </button>
+      )}
       {showCommentTool && (
         <button
           type="button"
@@ -154,16 +162,18 @@ export function PageActions({
           <CommentIcon />
         </button>
       )}
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onRevertPage}
-        disabled={!canActOnPage}
-        aria-label="Revert page (remove all highlights and comments)"
-        data-tooltip={`Revert page (${formatShortcut('Shift+R')})`}
-      >
-        <RevertIcon />
-      </button>
+      {showRevert && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onRevertPage}
+          disabled={!canAnnotate}
+          aria-label="Revert annotations"
+          data-tooltip={`Revert annotations (${formatShortcut('Shift+R')})`}
+        >
+          <RevertIcon />
+        </button>
+      )}
       <span className="page-actions__divider" role="separator" aria-hidden="true" />
       <button
         type="button"

@@ -35,6 +35,56 @@ export const pdfRenameRequestSchema = z.object({
     .max(255)
     .regex(/\.pdf$/i),
 });
+const pageNumberSchema = z.number().int().min(1).max(100000);
+const unitSchema = z.number().min(0).max(1);
+
+/**
+ * Everything drawn on one PDF in this app (never written into the file):
+ * coordinates are fractions of a page's width/height, so they hold at any
+ * zoom. Size caps keep a misbehaving page from filling the user's disk.
+ */
+export const pdfAnnotationsSchema = z.object({
+  strokes: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        page: pageNumberSchema,
+        points: z.array(z.object({ x: unitSchema, y: unitSchema })).min(2).max(5000),
+      }),
+    )
+    .max(5000),
+  comments: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        page: pageNumberSchema,
+        x: unitSchema,
+        y: unitSchema,
+        text: z.string().max(5000),
+      }),
+    )
+    .max(2000),
+  highlights: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        page: pageNumberSchema,
+        rects: z
+          .array(z.object({ x: unitSchema, y: unitSchema, w: unitSchema, h: unitSchema }))
+          .min(1)
+          .max(2000),
+      }),
+    )
+    .max(10000),
+});
+export type PdfAnnotations = z.infer<typeof pdfAnnotationsSchema>;
+
+export const pdfSaveAnnotationsRequestSchema = z.object({
+  /** SHA-256 of the document's bytes, hex. */
+  key: z.string().regex(/^[0-9a-f]{64}$/),
+  annotations: pdfAnnotationsSchema,
+});
+
 export const pdfModeRequestSchema = z.object({
   id: z.string().min(1),
   mode: z.enum(['view', 'edit']),

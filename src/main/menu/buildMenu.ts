@@ -274,7 +274,7 @@ export function buildMenu(
           click: () => getTabManager()?.toggleCommentTool(),
         },
         {
-          label: 'Revert Page',
+          label: 'Revert Annotations',
           accelerator: 'CmdOrCtrl+Shift+R',
           click: () => {
             const id = getActiveTabId();

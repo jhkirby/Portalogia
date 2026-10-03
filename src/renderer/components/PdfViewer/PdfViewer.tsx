@@ -111,6 +111,8 @@ export function PdfViewer() {
   const [hoveredHighlightId, setHoveredHighlightId] = useState<string | null>(null);
   /** The comment whose box is open while the comment tool is off. */
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  /** Hash of the open document, the key its marks are saved under (see `PdfAnnotationStore`); `null` before one is open. */
+  const [docKey, setDocKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [zoomPercent, setZoomPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [renderPercent, setRenderPercent] = useState(ZOOM_PERCENT_DEFAULT);
@@ -179,10 +181,12 @@ export function PdfViewer() {
       });
       setPageSizes(sizes);
       setDocVersion((version) => version + 1);
-      setStrokes([]);
-      setComments([]);
-      setHighlights([]);
+      // Marks saved for this exact document come back; they're kept by the app, never written into the PDF.
+      setStrokes(file.annotations.strokes);
+      setComments(file.annotations.comments.map((comment) => ({ ...comment, committed: true })));
+      setHighlights(file.annotations.highlights);
       setOpenCommentId(null);
+      setDocKey(file.key);
       scrollRef.current?.scrollTo({ left: 0, top: 0 });
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : 'Could not open that PDF.');
@@ -192,6 +196,30 @@ export function PdfViewer() {
   useEffect(() => window.northstarPdf.onFile((file) => void loadFile(file)), [loadFile]);
   useEffect(() => window.northstarPdf.onMode(setMode), []);
   useEffect(() => window.northstarPdf.onTool(setTool), []);
+
+  // Revert Annotations.
+  useEffect(
+    () =>
+      window.northstarPdf.onClear(() => {
+        setStrokes([]);
+        setComments([]);
+        setHighlights([]);
+        setOpenCommentId(null);
+      }),
+    [],
+  );
+
+  // Every edit is reported so main can persist it; an unsaved (uncommitted) comment isn't.
+  useEffect(() => {
+    if (docKey === null) {
+      return;
+    }
+    window.northstarPdf.saveAnnotations(docKey, {
+      strokes: strokes.map(({ id, page, points }) => ({ id, page, points: [...points] })),
+      comments: comments.filter((c) => c.committed).map(({ id, page, x, y, text }) => ({ id, page, x, y, text })),
+      highlights: highlights.map(({ id, page, rects }) => ({ id, page, rects: [...rects] })),
+    });
+  }, [docKey, strokes, comments, highlights]);
 
   const activeTool: PdfTool = tool.tool;
 

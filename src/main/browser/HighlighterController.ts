@@ -137,7 +137,9 @@ export class HighlighterController {
       if (view.webContents.isDestroyed()) {
         continue;
       }
-      view.webContents.send(HighlighterState, { active: isActiveForTab(tabId), color });
+      // Terminal tabs have no highlighter, so they're never told it's on.
+      const active = isActiveForTab(tabId) && this.registry.states.get(tabId)?.kind !== 'terminal';
+      view.webContents.send(HighlighterState, { active, color });
     }
   }
 

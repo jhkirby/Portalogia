@@ -14,6 +14,7 @@ import { CommentStore } from './browser/CommentStore';
 import { HighlighterController } from './browser/HighlighterController';
 import { HighlightStore } from './browser/HighlightStore';
 import { PenController } from './browser/PenController';
+import { pdfAnnotationStore } from './browser/PdfAnnotationStore';
 import { PenStore } from './browser/PenStore';
 import { SessionStore } from './browser/SessionStore';
 import { SharedTabRegistry } from './browser/SharedTabRegistry';
@@ -91,6 +92,10 @@ const commentController = new CommentController(sharedRegistry, commentStore);
 // `highlightStore`/`highlighterController` just above.
 const penStore = new PenStore(join(app.getPath('userData'), 'pen-strokes.json'));
 const penController = new PenController(sharedRegistry, penStore);
+
+// Marks drawn on PDFs live here, not in the PDFs — see `PdfAnnotationStore`.
+pdfAnnotationStore.init(join(app.getPath('userData'), 'pdf-annotations.json'));
+app.on('before-quit', () => pdfAnnotationStore.flush());
 
 // Every open terminal tab's own pty process — one instance shared the same
 // way `sharedRegistry` is, since a terminal tab can now move between
