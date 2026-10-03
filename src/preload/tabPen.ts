@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-27
 
 import { ipcRenderer } from 'electron';
-import { isEditableTarget } from './tabHighlighter';
+import { isEditableTarget, toolInk } from './tabHighlighter';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — same reason
 // `tabHighlighter.ts`/`tabComments.ts` hardcode their own channel names: this
@@ -90,10 +90,11 @@ function rgba(color: RgbColor, alpha: number): string {
 
 /** A small pen-nib cursor, encoded as a data URI — shown in place of the ordinary pointer while the pen tool is active. */
 function penCursorCss(): string {
+  const ink = toolInk();
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
-    '<path d="M4 20 5.2 15.6 14.8 6 18 9.2 8.4 18.8 4 20Z" fill="%23222" stroke="%23222" stroke-width="1.2" stroke-linejoin="round"/>' +
-    '<path d="m14.8 6 2-2a1.7 1.7 0 0 1 2.4 0l.8.8a1.7 1.7 0 0 1 0 2.4l-2 2Z" fill="none" stroke="%23222" stroke-width="1.4" stroke-linejoin="round"/>' +
+    '<path d="M4 20 5.2 15.6 14.8 6 18 9.2 8.4 18.8 4 20Z" fill="' + ink + '" stroke="' + ink + '" stroke-width="1.2" stroke-linejoin="round"/>' +
+    '<path d="m14.8 6 2-2a1.7 1.7 0 0 1 2.4 0l.8.8a1.7 1.7 0 0 1 0 2.4l-2 2Z" fill="none" stroke="' + ink + '" stroke-width="1.4" stroke-linejoin="round"/>' +
     '</svg>';
   // Single-quoted `url(...)` wrapper — see `tabHighlighter.ts`'s own comment
   // on `highlighterCursorCss` for why this matters.
@@ -427,3 +428,6 @@ ipcRenderer.on(
     }
   },
 );
+
+// See `tabHighlighter.ts`: rebuild the cursor rule if the theme flips mid-use.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setActive(active, currentColor));

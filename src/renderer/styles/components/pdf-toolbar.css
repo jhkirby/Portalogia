@@ -1,0 +1,112 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-02 */
+
+/* ── PDF TOOLBAR ──────────────────────────────────────────────────────── */
+/* The PDF tab's controls inside the chrome's main toolbar, in the slot a
+   browser tab gives to NavControls + AddressBar. */
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: var(--size-spacing-sm);
+  min-width: 0;
+}
+
+.pdf-toolbar__file-name {
+  overflow: hidden;
+  flex: 1;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Edit mode: the name becomes a text box; selectable, unlike the page body. */
+.pdf-toolbar__file-name--input {
+  flex: 1;
+  height: 26px;
+  padding: 0 var(--size-spacing-sm);
+  min-width: 0;
+
+  background: transparent;
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+  user-select: text;
+}
+
+.pdf-toolbar__file-name--input:hover {
+  border-color: var(--color-accent-text);
+}
+
+.pdf-toolbar__file-name--input:focus {
+  outline: none;
+  border-color: var(--color-accent-text);
+}
+
+.pdf-toolbar__button {
+  height: 28px;
+  padding: 0 var(--size-spacing-md);
+
+  background: transparent;
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+
+  cursor: pointer;
+}
+
+.pdf-toolbar__button:hover {
+  background: var(--color-button-hover-bg);
+}
+
+/* View / Edit segmented toggle */
+
+.pdf-toolbar__modes {
+  display: flex;
+  overflow: hidden;
+
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+}
+
+.pdf-toolbar__mode {
+  height: 26px;
+  padding: 0 var(--size-spacing-md);
+
+  background: transparent;
+  border: none;
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.pdf-toolbar__mode:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.pdf-toolbar__mode[aria-pressed='true'] {
+  background: var(--color-selection-bg);
+  color: var(--color-accent-text);
+}
+
+
+.pdf-toolbar__error {
+  flex-shrink: 0;
+
+  font-size: var(--size-font-sm);
+  color: #d93025;
+}

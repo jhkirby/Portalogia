@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { DropRegionRect, IpcResult } from '@shared/ipc-contract';
-import type { BrowserState } from '@shared/tab-state';
+import type { BrowserState, PdfMode } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
   tabs: [],
@@ -145,6 +145,20 @@ export function useTabs() {
     void window.northstar.createPdfTab().then(logIfFailed);
   }, []);
 
+  const openPdfFile = useCallback((id: string) => {
+    void window.northstar.openPdfFile(id).then(logIfFailed);
+  }, []);
+
+  const setPdfMode = useCallback((id: string, mode: PdfMode) => {
+    void window.northstar.setPdfMode(id, mode).then(logIfFailed);
+  }, []);
+
+  /** Resolves to an error message to show the user, or `null` on success. */
+  const renamePdfFile = useCallback(async (id: string, name: string): Promise<string | null> => {
+    const result = await window.northstar.renamePdfFile(id, name);
+    return result.ok ? null : result.message;
+  }, []);
+
   const createTerminalTab = useCallback(() => {
     void window.northstar.createTerminalTab().then(logIfFailed);
   }, []);
@@ -265,6 +279,9 @@ export function useTabs() {
     exportToPdf,
     createTerminalTab,
     createPdfTab,
+    openPdfFile,
+    setPdfMode,
+    renamePdfFile,
     revertPage,
 
     createWorkspace,

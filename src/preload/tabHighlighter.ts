@@ -62,13 +62,23 @@ function rgba(color: RgbColor, alpha: number): string {
   return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
 }
 
+/**
+ * The color tool cursors are drawn in (percent-encoded for a data-URI SVG):
+ * light in dark mode, dark in light mode, so they stay visible against the
+ * app theme. `tabPen.ts`/`tabComments.ts` import this too.
+ */
+export function toolInk(): string {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? '%23f2f2f2' : '%23222';
+}
+
 /** A small pen-nib cursor, encoded as a data URI — shown in place of the ordinary pointer while the highlighter tool is active. */
 function highlighterCursorCss(): string {
+  const ink = toolInk();
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
-    '<path d="M9.7 15.3 15.3 9.7l4 4-5.6 5.6a1 1 0 0 1-1.4 0l-2.6-2.6a1 1 0 0 1 0-1.4Z" fill="%23222"/>' +
-    '<path d="m15.3 9.7 4.6-4.6a1.7 1.7 0 0 1 2.4 2.4l-4.6 4.6-2.4-2.4Z" fill="none" stroke="%23222" stroke-width="1.6"/>' +
-    '<path d="m9.5 15.5-5 5 2 2 5-5" fill="none" stroke="%23222" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M9.7 15.3 15.3 9.7l4 4-5.6 5.6a1 1 0 0 1-1.4 0l-2.6-2.6a1 1 0 0 1 0-1.4Z" fill="' + ink + '"/>' +
+    '<path d="m15.3 9.7 4.6-4.6a1.7 1.7 0 0 1 2.4 2.4l-4.6 4.6-2.4-2.4Z" fill="none" stroke="' + ink + '" stroke-width="1.6"/>' +
+    '<path d="m9.5 15.5-5 5 2 2 5-5" fill="none" stroke="' + ink + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>' +
     '</svg>';
   // Single-quoted `url(...)` wrapper — the embedded SVG's own XML attributes
   // are double-quoted, and matching that outer delimiter would let the
@@ -643,3 +653,7 @@ ipcRenderer.on(
     }
   },
 );
+
+// The theme can flip while the tool is on; rebuild the cursor rule so it
+// doesn't keep the old ink.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setActive(active, currentColor));

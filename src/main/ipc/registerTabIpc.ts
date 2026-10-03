@@ -5,7 +5,7 @@
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
-import { IpcChannel, type ExportPdfResult, type IpcResult, type PdfOpenResult } from '@shared/ipc-contract';
+import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-contract';
 import {
   addBookmarkRequestSchema,
   addressSuggestionsSyncRequestSchema,
@@ -25,6 +25,8 @@ import {
   penRequestSchema,
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
+  pdfModeRequestSchema,
+  pdfRenameRequestSchema,
   tabIdRequestSchema,
   zoomWheelRequestSchema,
   terminalInputRequestSchema,
@@ -253,23 +255,42 @@ export function registerTabIpc(
     }
   });
 
-  // From a PDF tab's own child view (not the chrome's), so resolved by tab
-  // id like the terminal channels below.
-  ipcMain.handle(
-    IpcChannel.PdfOpenFile,
-    async (_event, rawRequest: unknown): Promise<IpcResult<PdfOpenResult | null>> => {
-      const parsed = tabIdRequestSchema.safeParse(rawRequest);
-      if (!parsed.success) {
-        return { ok: false, code: 'invalid-request', message: parsed.error.message };
-      }
-      try {
-        const result = (await resolveTabManagerForTab(parsed.data.id)?.openPdfFile(parsed.data.id)) ?? null;
-        return { ok: true, data: result };
-      } catch (error) {
-        return toErrorResult(error);
-      }
-    },
-  );
+  // PDF toolbar actions come from the chrome but are routed by tab id, as
+  // the tab may have been moved to another window's manager.
+  ipcMain.handle(IpcChannel.PdfOpenFile, async (_event, rawRequest: unknown): Promise<IpcResult<null>> => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    try {
+      await resolveTabManagerForTab(parsed.data.id)?.openPdfFile(parsed.data.id);
+      return { ok: true, data: null };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
+  ipcMain.handle(IpcChannel.PdfSetMode, (_event, rawRequest: unknown): IpcResult<null> => {
+    const parsed = pdfModeRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    resolveTabManagerForTab(parsed.data.id)?.setPdfMode(parsed.data.id, parsed.data.mode);
+    return { ok: true, data: null };
+  });
+
+  ipcMain.handle(IpcChannel.PdfRename, async (_event, rawRequest: unknown): Promise<IpcResult<null>> => {
+    const parsed = pdfRenameRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: 'File name must end in .pdf' };
+    }
+    try {
+      await resolveTabManagerForTab(parsed.data.id)?.renamePdfTab(parsed.data.id, parsed.data.name);
+      return { ok: true, data: null };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
 
   // Sent by a tab's own preload on Ctrl+wheel. Tab views are shared by every
   // window's manager, so any one can resolve the sender to its tab.

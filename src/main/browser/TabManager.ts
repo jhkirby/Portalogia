@@ -4,8 +4,8 @@
 // Last Modified: 2026-09-12
 
 import { randomUUID } from 'node:crypto';
-import { readFile, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents } from 'electron';
 import {
   CHROME_HEIGHT_FOCUSED_PX,
@@ -38,7 +38,7 @@ import {
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
-import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
+import type { BrowserState, BrowserTabState, PdfMode, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -95,6 +95,9 @@ const MAX_PDF_BYTES = 512 * 1024 * 1024;
 
 /** True while `moveTabToWorkspace` is relocating the rest of a linked group, so those nested calls don't expand the group again. */
 let relocatingLinkGroup = false;
+
+/** On-disk path of the file each PDF tab has open, by tab id. Module-level so it survives a tab moving between windows' managers. */
+const pdfFilePaths = new Map<string, string>();
 
 /**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
@@ -607,13 +610,26 @@ export class TabManager {
     this.wireSharedInputHandling(id, view.webContents);
     // A fresh document starts at 100%; re-send whatever zoom this tab holds
     // (a restored/torn-off tab may already have one).
-    view.webContents.on('did-finish-load', () => this.applyZoom(id));
+    view.webContents.on('did-finish-load', () => {
+      this.applyZoom(id);
+      const state = this.states.get(id);
+      if (state?.kind === 'pdf') {
+        view.webContents.send(IpcChannel.PdfModeChanged, state.mode);
+      }
+      // A fresh document has a fresh preload that's never been told which
+      // annotation tool (if any) is on — same reason as a browser tab's `dom-ready` push.
+      this.pushPenStateTo(id);
+      this.pushCommentToolStateTo(id);
+      this.pushHighlighterStateTo(id);
+    });
 
     this.views.set(id, view);
     this.states.set(id, {
       kind: 'pdf',
       id,
       title: 'PDF',
+      fileName: null,
+      mode: 'view',
       workspaceId: workspaceId ?? this.activeWorkspaceId,
     });
     this.activateTab(id);
@@ -629,16 +645,17 @@ export class TabManager {
   }
 
   /**
-   * Lets the user pick a PDF from disk for a PDF tab and returns its
-   * bytes, renaming the tab to the file's name.
-   * @param id The PDF tab asking.
-   * @returns The file, or `null` if the tab is gone, isn't a PDF tab, or
-   *   the user canceled.
+   * Lets the user pick a PDF from disk for a PDF tab, sends its bytes to the
+   * tab's page, and renames the tab to the file's name. Failures to read the
+   * file are reported in a native error box rather than thrown, since this
+   * is also reached from a keyboard shortcut that has nowhere else to show them.
+   * @param id The PDF tab to open the file in. A no-op if it isn't a PDF tab.
    */
-  public async openPdfFile(id: string): Promise<PdfOpenResult | null> {
+  public async openPdfFile(id: string): Promise<void> {
     const state = this.states.get(id);
-    if (!state || state.kind !== 'pdf') {
-      return null;
+    const view = this.views.get(id);
+    if (!state || state.kind !== 'pdf' || !view) {
+      return;
     }
     const window = (this.registry.mountOwners.get(id) ?? this).window;
     const { canceled, filePaths } = await dialog.showOpenDialog(window, {
@@ -648,19 +665,74 @@ export class TabManager {
     });
     const [filePath] = filePaths;
     if (canceled || !filePath) {
-      return null;
+      return;
     }
-    if ((await stat(filePath)).size > MAX_PDF_BYTES) {
-      throw new Error('That PDF is too large to open (limit 512 MB).');
+    let data: Buffer;
+    try {
+      if ((await stat(filePath)).size > MAX_PDF_BYTES) {
+        throw new Error('That PDF is too large to open (limit 512 MB).');
+      }
+      data = await readFile(filePath);
+    } catch (error) {
+      dialog.showErrorBox('Could not open PDF', error instanceof Error ? error.message : String(error));
+      return;
     }
-    const data = await readFile(filePath);
+    pdfFilePaths.set(id, filePath);
 
     const current = this.states.get(id);
     if (current?.kind === 'pdf') {
-      this.states.set(id, { ...current, title: basename(filePath) });
+      this.states.set(id, { ...current, title: basename(filePath), fileName: basename(filePath) });
       this.emitState();
     }
-    return { name: basename(filePath), data };
+    if (!view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.PdfFile, { name: basename(filePath), data } satisfies PdfOpenResult);
+    }
+  }
+
+  /**
+   * Switches a PDF tab between View and Edit and tells its page.
+   * @param id The PDF tab. A no-op if it isn't one.
+   * @param mode The new mode.
+   */
+  public setPdfMode(id: string, mode: PdfMode): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'pdf' || current.mode === mode) {
+      return;
+    }
+    this.states.set(id, { ...current, mode });
+    this.emitState();
+    this.views.get(id)?.webContents.send(IpcChannel.PdfModeChanged, mode);
+  }
+
+  /**
+   * Renames a PDF tab's file on disk (in its own folder) and retitles the tab.
+   * @param id The PDF tab.
+   * @param name The new file name, already validated to end in `.pdf`.
+   * @throws If no file is open, the name has path separators, or the target exists.
+   */
+  public async renamePdfTab(id: string, name: string): Promise<void> {
+    const current = this.states.get(id);
+    const oldPath = pdfFilePaths.get(id);
+    if (current?.kind !== 'pdf' || !oldPath) {
+      throw new Error('Open a PDF before renaming it.');
+    }
+    // A bare file name only: anything else could move the file elsewhere.
+    if (basename(name) !== name || name.includes('/') || name.includes('\\')) {
+      throw new Error('File name cannot contain a folder path.');
+    }
+    const newPath = join(dirname(oldPath), name);
+    if (newPath !== oldPath) {
+      // Windows paths are case-insensitive, so a case-only rename is allowed
+      // through; anything else that already exists is never overwritten.
+      const caseOnly = newPath.toLowerCase() === oldPath.toLowerCase();
+      if (!caseOnly && (await stat(newPath).then(() => true, () => false))) {
+        throw new Error('A file with that name already exists.');
+      }
+      await rename(oldPath, newPath);
+      pdfFilePaths.set(id, newPath);
+    }
+    this.states.set(id, { ...current, title: name, fileName: name });
+    this.emitState();
   }
 
   /** Forwards a terminal tab's keystroke/paste bytes to its pty. A no-op if `id` isn't a live terminal tab. */
@@ -1254,6 +1326,7 @@ export class TabManager {
     this.selectedTabIds.clear();
     this.pushHighlighterState();
     this.pushCommentToolState();
+    this.pushPenState();
 
     const workspaceId = this.states.get(id)?.workspaceId;
     if (workspaceId) {
@@ -3621,6 +3694,11 @@ export class TabManager {
             event.preventDefault();
             owner.duplicateTab(id);
             return;
+          case 'p':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+P` ("New PDF Viewer").
+            event.preventDefault();
+            owner.createPdfTab();
+            return;
           case 'r':
             event.preventDefault();
             owner.revertPage(id);
@@ -3639,6 +3717,11 @@ export class TabManager {
       }
 
       switch (key) {
+        case 'o':
+          // Same as buildMenu.ts's `CmdOrCtrl+O` ("Open PDF"); a no-op on non-PDF tabs.
+          event.preventDefault();
+          void owner.openPdfFile(id);
+          return;
         case 'w':
           event.preventDefault();
           owner.closeSelectionOrTab(id);

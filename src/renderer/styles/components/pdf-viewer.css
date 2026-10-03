@@ -34,87 +34,6 @@ body {
   height: 100%;
 }
 
-/* ── Toolbar ── */
-
-.pdf-viewer__toolbar {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: var(--size-spacing-sm);
-  height: 40px;
-  padding: 0 var(--size-spacing-md);
-
-  background: var(--color-chrome-bg);
-  border-bottom: 1px solid var(--color-chrome-border);
-}
-
-.pdf-viewer__file-name {
-  overflow: hidden;
-  flex: 1;
-
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pdf-viewer__button {
-  height: 28px;
-  padding: 0 var(--size-spacing-md);
-
-  background: transparent;
-  border: 1px solid var(--color-chrome-border);
-  border-radius: var(--size-radius-sm);
-
-  font: inherit;
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text-active);
-
-  cursor: pointer;
-}
-
-.pdf-viewer__button:hover {
-  background: var(--color-button-hover-bg);
-}
-
-.pdf-viewer__button--large {
-  height: 36px;
-  padding: 0 var(--size-spacing-md);
-}
-
-/* View / Edit segmented toggle */
-
-.pdf-viewer__modes {
-  display: flex;
-  overflow: hidden;
-
-  border: 1px solid var(--color-chrome-border);
-  border-radius: var(--size-radius-sm);
-}
-
-.pdf-viewer__mode {
-  height: 26px;
-  padding: 0 var(--size-spacing-md);
-
-  background: transparent;
-  border: none;
-
-  font: inherit;
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text);
-
-  cursor: pointer;
-}
-
-.pdf-viewer__mode:hover {
-  background: var(--color-button-hover-bg);
-}
-
-.pdf-viewer__mode[aria-pressed='true'] {
-  background: var(--color-selection-bg);
-  color: var(--color-accent-text);
-}
-
 /* ── Document area ── */
 
 .pdf-viewer__scroll {
@@ -149,6 +68,8 @@ body {
 }
 
 .pdf-viewer__page {
+  /* Anchors the highlight, text and annotation layers stacked on the canvas. */
+  position: relative;
   flex-shrink: 0;
 
   background: #ffffff;
@@ -186,4 +107,159 @@ body {
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
   border-radius: var(--size-radius-sm);
+}
+
+/* ── Tools ── */
+
+/* Each tool's cursor (set inline as `--pdf-tool-cursor`) wins over the
+   text layer's own I-beam, everywhere on the page. */
+.pdf-viewer__scroll[data-tool='pen'] *,
+.pdf-viewer__scroll[data-tool='highlighter'] *,
+.pdf-viewer__scroll[data-tool='comment'] * {
+  cursor: var(--pdf-tool-cursor) !important;
+}
+
+/* Highlighter: text becomes selectable (no panning), the native selection
+   stays invisible, and the drag preview is painted via `::highlight()`. */
+.pdf-viewer__scroll[data-tool='highlighter'] {
+  user-select: text;
+}
+
+.pdf-viewer__scroll[data-tool='highlighter'] ::selection {
+  background: transparent !important;
+}
+
+/* ── Highlights ── */
+
+.pdf-hl-layer {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+/* `multiply` keeps the page's text readable through the tint. */
+.pdf-hl-rect {
+  position: absolute;
+
+  mix-blend-mode: multiply;
+}
+
+.pdf-hl-rect--hovered {
+  opacity: 0.5;
+}
+
+/* ── Annotations (pen strokes, comments) ── */
+
+/* Covers the page exactly. Pointer events pass through unless the pen or
+   comment tool is on, so the document still pans and its text selects. */
+.pdf-annot {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+.pdf-annot--pen,
+.pdf-annot--comment {
+  pointer-events: auto;
+}
+
+.pdf-annot__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+
+  pointer-events: none;
+}
+
+/* Page-relative coordinates stretch with the page, so the stroke width is
+   pinned to screen pixels instead of scaling with it. */
+.pdf-annot__line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Wider, invisible copy of each stroke so it's easy to hover and click. */
+.pdf-annot__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  vector-effect: non-scaling-stroke;
+}
+
+.pdf-annot--pen .pdf-annot__hit {
+  pointer-events: stroke;
+}
+
+.pdf-annot--pen .pdf-annot__stroke:hover .pdf-annot__line {
+  stroke-opacity: 0.4;
+}
+
+/* Comment dot and box — same look as the browser tabs' (`tabComments.ts`),
+   positioned on the page instead of the viewport. The dot stays clickable
+   with any tool, so a saved comment can always be opened. */
+.pdf-annot__dot {
+  position: absolute;
+  z-index: 5;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  transition: box-shadow 120ms ease;
+
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.pdf-annot__dot:hover {
+  box-shadow:
+    0 0 0 5px var(--ns-comment-glow, rgba(66, 133, 244, 0.55)),
+    0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.pdf-annot__box {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  width: 220px;
+  padding: 6px;
+
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+
+  font:
+    13px/1.4 system-ui,
+    -apple-system,
+    sans-serif;
+  color: #1b1b1b;
+
+  pointer-events: auto;
+  user-select: text;
+}
+
+.pdf-annot__input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+
+  font: inherit;
+  color: inherit;
 }

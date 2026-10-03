@@ -20,6 +20,8 @@ import { ZoomControl } from '../ZoomControl';
 interface PageActionsProps {
   /** Whether there's an active tab to bookmark — browser-only, unlike `canExportPdf`, since a terminal tab has no URL to bookmark. */
   readonly canActOnPage: boolean;
+  /** Whether the pen and comment tools are usable — browser tabs and PDF tabs, unlike `canActOnPage` (a PDF has no URL to bookmark or revert). */
+  readonly canAnnotate: boolean;
   /** Whether there's an active tab to export to PDF — unlike `canActOnPage`, true for a terminal tab too (its `WebContentsView` prints its on-screen output same as a browser tab prints its page). */
   readonly canExportPdf: boolean;
   /** Whether there's an active tab to zoom — unlike `canActOnPage`, true for a terminal tab too (zoom isn't browser-only). */
@@ -27,6 +29,12 @@ interface PageActionsProps {
   readonly canExportMenu: boolean;
   /** Whether the active tab has HTML/CSS/JS to save — browser tabs only, unlike `canExportPdf`. */
   readonly canExportDocuments: boolean;
+  /** Whether the export dropdown is shown at all — hidden on a PDF tab, which has nothing to export. */
+  readonly showExportMenu: boolean;
+  /** Whether the comment tool is shown — hidden on a terminal tab, which has no document to anchor a comment to. */
+  readonly showCommentTool: boolean;
+  /** Whether the pen is shown — hidden on a terminal tab, which has no document to draw on. */
+  readonly showPen: boolean;
   readonly canZoom: boolean;
   /** The active tab's current zoom, 25–200. */
   readonly zoomPercent: number;
@@ -66,6 +74,7 @@ interface PageActionsProps {
  */
 export function PageActions({
   canActOnPage,
+  canAnnotate,
   canExportPdf,
   canZoom,
   zoomPercent,
@@ -78,6 +87,9 @@ export function PageActions({
   onOpenPdfViewer,
   canExportMenu,
   canExportDocuments,
+  showExportMenu,
+  showCommentTool,
+  showPen,
   onNewTerminal,
   onOpenTabSearch,
   onZoomOut,
@@ -105,17 +117,19 @@ export function PageActions({
       >
         <LaserPointerIcon />
       </button>
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onTogglePen}
-        disabled={!canActOnPage}
-        aria-pressed={penActive}
-        aria-label={penActive ? 'Turn off pen' : 'Turn on pen'}
-        data-tooltip={`${penActive ? 'Turn off pen' : 'Turn on pen'} (${formatShortcut('P')})`}
-      >
-        <PenIcon />
-      </button>
+      {showPen && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onTogglePen}
+          disabled={!canAnnotate}
+          aria-pressed={penActive}
+          aria-label={penActive ? 'Turn off pen' : 'Turn on pen'}
+          data-tooltip={`${penActive ? 'Turn off pen' : 'Turn on pen'} (${formatShortcut('P')})`}
+        >
+          <PenIcon />
+        </button>
+      )}
       <button
         type="button"
         className="page-actions__button chrome-tooltip"
@@ -127,17 +141,19 @@ export function PageActions({
       >
         <HighlighterIcon />
       </button>
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onToggleCommentTool}
-        disabled={!canActOnPage}
-        aria-pressed={commentToolActive}
-        aria-label={commentToolActive ? 'Turn off comments' : 'Turn on comments'}
-        data-tooltip={`${commentToolActive ? 'Turn off comments' : 'Turn on comments'} (${formatShortcut('M')})`}
-      >
-        <CommentIcon />
-      </button>
+      {showCommentTool && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onToggleCommentTool}
+          disabled={!canAnnotate}
+          aria-pressed={commentToolActive}
+          aria-label={commentToolActive ? 'Turn off comments' : 'Turn on comments'}
+          data-tooltip={`${commentToolActive ? 'Turn off comments' : 'Turn on comments'} (${formatShortcut('M')})`}
+        >
+          <CommentIcon />
+        </button>
+      )}
       <button
         type="button"
         className="page-actions__button chrome-tooltip"
@@ -154,11 +170,11 @@ export function PageActions({
         className="page-actions__button page-actions__button--pdf chrome-tooltip"
         onClick={onOpenPdfViewer}
         aria-label="Open PDF viewer"
-        data-tooltip="Open PDF viewer"
+        data-tooltip={`Open PDF viewer (${formatShortcut('Shift+P')})`}
       >
         PDF
       </button>
-      <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} />
+      {showExportMenu && <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} />}
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

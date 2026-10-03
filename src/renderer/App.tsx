@@ -9,6 +9,7 @@ import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
+import { PdfToolbar } from './components/PdfToolbar';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
 import { TitlebarGrip } from './components/TitlebarGrip';
@@ -72,6 +73,9 @@ export function App() {
     reload,
     stop,
     createPdfTab,
+    openPdfFile,
+    setPdfMode,
+    renamePdfFile,
     createTerminalTab,
     revertPage,
     createWorkspace,
@@ -273,7 +277,15 @@ export function App() {
             <WindowControls />
           </div>
           <div className="toolbar">
-            {activeTab?.kind === 'terminal' || activeTab?.kind === 'pdf' ? (
+            {activeTab?.kind === 'pdf' ? (
+              <PdfToolbar
+                key={activeTab.id}
+                tab={activeTab}
+                onOpen={openPdfFile}
+                onSetMode={setPdfMode}
+                onRename={renamePdfFile}
+              />
+            ) : activeTab?.kind === 'terminal' ? (
               // Empty on purpose — occupies the same flex space
               // NavControls + AddressBar would, so PageActions stays
               // right-aligned, without showing the tab's title text.
@@ -306,6 +318,7 @@ export function App() {
             {secondaryTab && <SplitIndicator secondaryTab={secondaryTab} onExit={exitSplitView} />}
             <PageActions
               canActOnPage={browserTab !== null}
+              canAnnotate={browserTab !== null || activeTab?.kind === 'pdf'}
               canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
@@ -318,6 +331,9 @@ export function App() {
               onOpenPdfViewer={createPdfTab}
               canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf'}
               canExportDocuments={browserTab !== null && !isHome}
+              showExportMenu={activeTab?.kind !== 'pdf'}
+              showCommentTool={activeTab?.kind !== 'terminal'}
+              showPen={activeTab?.kind !== 'terminal'}
               onNewTerminal={createTerminalTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}
               onZoomOut={zoomOut}

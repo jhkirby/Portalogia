@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-12
 
 import type { RGB } from '@shared/color';
-import type { BrowserState } from '@shared/tab-state';
+import type { BrowserState, PdfMode } from '@shared/tab-state';
 
 /**
  * Every IPC channel name in the app, enumerated once. Both main and
@@ -33,6 +33,12 @@ export const IpcChannel = {
   TabsCreateTerminal: 'tabs:create-terminal',
   TabsCreatePdf: 'tabs:create-pdf',
   PdfOpenFile: 'pdf:open-file',
+  PdfRename: 'pdf:rename',
+  PdfSetMode: 'pdf:set-mode',
+  /** Main → PDF page: the file the user just opened. */
+  PdfFile: 'pdf:file',
+  /** Main → PDF page: the tab's current mode. */
+  PdfModeChanged: 'pdf:mode-changed',
   ZoomWheel: 'zoom:wheel',
   TabsRevertPage: 'tabs:revert-page',
   TerminalInput: 'terminal:input',
@@ -280,6 +286,11 @@ export interface NorthstarApi {
 
   /** Opens a new PDF viewer tab (the toolbar's PDF button). */
   createPdfTab(): Promise<IpcResult<BrowserState>>;
+  /** Shows the open dialog for a PDF tab; the chosen file is delivered to that tab's page by main. */
+  openPdfFile(id: string): Promise<IpcResult<null>>;
+  /** Renames a PDF tab's file on disk (same folder). Fails unless the name ends in `.pdf` and doesn't already exist. */
+  renamePdfFile(id: string, name: string): Promise<IpcResult<null>>;
+  setPdfMode(id: string, mode: PdfMode): Promise<IpcResult<null>>;
 
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;
   /**
@@ -609,13 +620,26 @@ export interface PdfOpenResult {
   readonly data: Uint8Array;
 }
 
+/** Which annotation tool the window has on for a PDF tab. The tools are mutually exclusive in main. */
+export type PdfTool = 'none' | 'pen' | 'comment' | 'highlighter';
+
+/** The active annotation tool plus the accent color to mark with. */
+export interface PdfToolState {
+  readonly tool: PdfTool;
+  readonly color: RGB;
+}
+
 /**
  * The narrower API surface exposed to a PDF tab's own `WebContentsView`
  * (`src/preload/pdf.ts`, `pdf.html`). See `TabManager.createPdfTab`.
  */
 export interface NorthstarPdfApi {
-  /** Shows the native open dialog and reads the chosen PDF; `null` if the user canceled. Also renames this tab to the file's name. */
-  openFile(id: string): Promise<PdfOpenResult | null>;
+  /** Subscribes to files opened for this tab (via the chrome toolbar or a shortcut). */
+  onFile(listener: (file: PdfOpenResult) => void): () => void;
+  /** Subscribes to the annotation tool in use; called immediately with the latest value if one already arrived. */
+  onTool(listener: (state: PdfToolState) => void): () => void;
+  /** Subscribes to this tab's mode; called immediately with the latest value if one already arrived. */
+  onMode(listener: (mode: PdfMode) => void): () => void;
   /**
    * Subscribes to this tab's zoom, as a whole percent (100 = actual size).
    * Called immediately with the latest value if one has already arrived —

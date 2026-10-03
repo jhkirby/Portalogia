@@ -4,7 +4,15 @@
 // Last Modified: 2026-09-26
 
 import { ipcRenderer } from 'electron';
-import { buildBodyTextIndex, isEditableTarget, isInteractiveTarget, resolveOffset, textAfter, textBefore } from './tabHighlighter';
+import {
+  buildBodyTextIndex,
+  isEditableTarget,
+  isInteractiveTarget,
+  resolveOffset,
+  textAfter,
+  textBefore,
+  toolInk,
+} from './tabHighlighter';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — same reason
 // `tabHighlighter.ts` hardcodes its own four channel names: this module is
@@ -116,7 +124,7 @@ function hexColor(color: RgbColor): string {
 function commentCursorCss(color: RgbColor): string {
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
-    `<path d="M3 4.5h16a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H10l-5 4.5V16H3a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" fill="${hexColor(color)}" stroke="%23222" stroke-width="1.2"/>` +
+    `<path d="M3 4.5h16a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H10l-5 4.5V16H3a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" fill="${hexColor(color)}" stroke="${toolInk()}" stroke-width="1.2"/>` +
     '</svg>';
   return `url('data:image/svg+xml,${svg}') 1 22, text`;
 }
@@ -805,3 +813,6 @@ ipcRenderer.on(
     }
   },
 );
+
+// See `tabHighlighter.ts`: rebuild the cursor rule if the theme flips mid-use.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => updateCursorStyle());

@@ -4,11 +4,18 @@
 // Last Modified: 2026-10-01
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { IpcResult, NorthstarPdfApi, PdfOpenResult } from '@shared/ipc-contract';
+import type { NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
+import type { RGB } from '@shared/color';
+import type { PdfMode } from '@shared/tab-state';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object.
-const PdfOpenFile = 'pdf:open-file';
+const PdfFile = 'pdf:file';
+const PdfModeChanged = 'pdf:mode-changed';
+// Same strings `PenController` / `CommentController` (main) send on; hardcoded for the same sandboxed-preload reason as above.
+const PenState = 'pen:state';
+const CommentToolState = 'comment-tool:state';
+const HighlighterState = 'highlighter:state';
 const ZoomApply = 'zoom:apply';
 const ZoomWheel = 'zoom:wheel';
 
@@ -37,13 +44,69 @@ window.addEventListener(
   { passive: false, capture: true },
 );
 
+const fileListeners = new Set<(file: PdfOpenResult) => void>();
+ipcRenderer.on(PdfFile, (_event, file: PdfOpenResult) => {
+  fileListeners.forEach((listener) => listener(file));
+});
+
+let latestMode: PdfMode | null = null;
+const modeListeners = new Set<(mode: PdfMode) => void>();
+ipcRenderer.on(PdfModeChanged, (_event, mode: PdfMode) => {
+  latestMode = mode;
+  modeListeners.forEach((listener) => listener(mode));
+});
+
+let penOn = false;
+let commentOn = false;
+let highlighterOn = false;
+let toolColor: RGB = { r: 26, g: 115, b: 232 };
+let toolReceived = false;
+const toolListeners = new Set<(state: PdfToolState) => void>();
+const currentTool = (): PdfToolState => ({ tool: penOn ? 'pen' : commentOn ? 'comment' : highlighterOn ? 'highlighter' : 'none', color: toolColor });
+const notifyTool = (): void => {
+  toolReceived = true;
+  toolListeners.forEach((listener) => listener(currentTool()));
+};
+ipcRenderer.on(PenState, (_event, payload: { active: boolean; color: RGB }) => {
+  penOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+ipcRenderer.on(HighlighterState, (_event, payload: { active: boolean; color: RGB }) => {
+  highlighterOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+ipcRenderer.on(CommentToolState, (_event, payload: { active: boolean; color: RGB }) => {
+  commentOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+
 const api: NorthstarPdfApi = {
-  openFile: async (id) => {
-    const result = (await ipcRenderer.invoke(PdfOpenFile, { id })) as IpcResult<PdfOpenResult | null>;
-    if (!result.ok) {
-      throw new Error(result.message);
+  onTool: (listener) => {
+    toolListeners.add(listener);
+    if (toolReceived) {
+      listener(currentTool());
     }
-    return result.data;
+    return () => {
+      toolListeners.delete(listener);
+    };
+  },
+  onFile: (listener) => {
+    fileListeners.add(listener);
+    return () => {
+      fileListeners.delete(listener);
+    };
+  },
+  onMode: (listener) => {
+    modeListeners.add(listener);
+    if (latestMode !== null) {
+      listener(latestMode);
+    }
+    return () => {
+      modeListeners.delete(listener);
+    };
   },
   onZoom: (listener) => {
     listeners.add(listener);

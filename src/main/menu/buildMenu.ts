@@ -65,6 +65,22 @@ export function buildMenu(
           click: () => getTabManager()?.createTerminalTab(),
         },
         {
+          label: 'New PDF Viewer',
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: () => getTabManager()?.createPdfTab(),
+        },
+        {
+          // Does nothing unless the active tab is a PDF viewer (`openPdfFile` ignores other tabs).
+          label: 'Open PDF',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => {
+            const id = getActiveTabId();
+            if (id) {
+              void getTabManager()?.openPdfFile(id);
+            }
+          },
+        },
+        {
           label: 'Duplicate Tab',
           accelerator: 'CmdOrCtrl+Shift+D',
           click: () => {

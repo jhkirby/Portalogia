@@ -25,6 +25,24 @@ export const tabIdRequestSchema = z.object({
 });
 export type TabIdRequest = z.infer<typeof tabIdRequestSchema>;
 
+/** A PDF tab's new display name; must end in `.pdf` (case-insensitive) with something before it. */
+export const pdfRenameRequestSchema = z.object({
+  id: z.string().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(5)
+    .max(255)
+    .regex(/\.pdf$/i),
+});
+export const pdfModeRequestSchema = z.object({
+  id: z.string().min(1),
+  mode: z.enum(['view', 'edit']),
+});
+export type PdfModeRequest = z.infer<typeof pdfModeRequestSchema>;
+
+export type PdfRenameRequest = z.infer<typeof pdfRenameRequestSchema>;
+
 export const moveTabRequestSchema = z.object({
   id: z.string().min(1),
   beforeId: z.string().min(1).nullable(),

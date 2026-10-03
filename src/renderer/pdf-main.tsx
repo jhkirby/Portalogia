@@ -32,6 +32,6 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <PdfViewer tabId={id} />
+    <PdfViewer />
   </StrictMode>,
 );
