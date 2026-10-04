@@ -274,6 +274,11 @@ export function buildMenu(
           click: () => getTabManager()?.toggleCommentTool(),
         },
         {
+          label: 'Toggle Crop',
+          accelerator: 'CmdOrCtrl+Shift+X',
+          click: () => getTabManager()?.toggleCrop(),
+        },
+        {
           label: 'Revert Annotations',
           accelerator: 'CmdOrCtrl+Shift+R',
           click: () => {

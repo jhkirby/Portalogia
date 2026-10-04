@@ -7,15 +7,17 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
 import type { NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
-import type { PdfMode } from '@shared/tab-state';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object.
 const PdfFile = 'pdf:file';
-const PdfModeChanged = 'pdf:mode-changed';
 const PdfSaveAnnotations = 'pdf:save-annotations';
 const PdfClear = 'pdf:clear';
+const PdfClosed = 'pdf:closed';
+const PdfUndo = 'pdf:undo';
+const PdfRedo = 'pdf:redo';
 const PdfPageInfo = 'pdf:page-info';
+const PdfCropState = 'pdf:crop-state';
 const PdfScrollToPage = 'pdf:scroll-to-page';
 
 // main created this page with `?id=<tab id>`; it's echoed back so main knows which tab a report is from.
@@ -60,20 +62,17 @@ ipcRenderer.on(PdfFile, (_event, file: PdfOpenResult) => {
   fileListeners.forEach((listener) => listener(file));
 });
 
-let latestMode: PdfMode | null = null;
-const modeListeners = new Set<(mode: PdfMode) => void>();
-ipcRenderer.on(PdfModeChanged, (_event, mode: PdfMode) => {
-  latestMode = mode;
-  modeListeners.forEach((listener) => listener(mode));
-});
-
 let penOn = false;
 let commentOn = false;
 let highlighterOn = false;
 let toolColor: RGB = { r: 26, g: 115, b: 232 };
 let toolReceived = false;
 const toolListeners = new Set<(state: PdfToolState) => void>();
-const currentTool = (): PdfToolState => ({ tool: penOn ? 'pen' : commentOn ? 'comment' : highlighterOn ? 'highlighter' : 'none', color: toolColor });
+let cropOn = false;
+const currentTool = (): PdfToolState => ({
+  tool: penOn ? 'pen' : commentOn ? 'comment' : highlighterOn ? 'highlighter' : cropOn ? 'crop' : 'none',
+  color: toolColor,
+});
 const notifyTool = (): void => {
   toolReceived = true;
   toolListeners.forEach((listener) => listener(currentTool()));
@@ -94,8 +93,21 @@ ipcRenderer.on(CommentToolState, (_event, payload: { active: boolean; color: RGB
   notifyTool();
 });
 
+ipcRenderer.on(PdfCropState, (_event, payload: { active: boolean }) => {
+  cropOn = payload.active;
+  notifyTool();
+});
+
 const clearListeners = new Set<() => void>();
 ipcRenderer.on(PdfClear, () => clearListeners.forEach((listener) => listener()));
+
+const undoListeners = new Set<() => void>();
+const redoListeners = new Set<() => void>();
+ipcRenderer.on(PdfUndo, () => undoListeners.forEach((listener) => listener()));
+ipcRenderer.on(PdfRedo, () => redoListeners.forEach((listener) => listener()));
+
+const closeListeners = new Set<() => void>();
+ipcRenderer.on(PdfClosed, () => closeListeners.forEach((listener) => listener()));
 
 const api: NorthstarPdfApi = {
   saveAnnotations: (key: string, annotations: PdfAnnotations) => {
@@ -108,6 +120,24 @@ const api: NorthstarPdfApi = {
     scrollListeners.add(listener);
     return () => {
       scrollListeners.delete(listener);
+    };
+  },
+  onUndo: (listener) => {
+    undoListeners.add(listener);
+    return () => {
+      undoListeners.delete(listener);
+    };
+  },
+  onRedo: (listener) => {
+    redoListeners.add(listener);
+    return () => {
+      redoListeners.delete(listener);
+    };
+  },
+  onClose: (listener) => {
+    closeListeners.add(listener);
+    return () => {
+      closeListeners.delete(listener);
     };
   },
   onClear: (listener) => {
@@ -129,15 +159,6 @@ const api: NorthstarPdfApi = {
     fileListeners.add(listener);
     return () => {
       fileListeners.delete(listener);
-    };
-  },
-  onMode: (listener) => {
-    modeListeners.add(listener);
-    if (latestMode !== null) {
-      listener(latestMode);
-    }
-    return () => {
-      modeListeners.delete(listener);
     };
   },
   onZoom: (listener) => {

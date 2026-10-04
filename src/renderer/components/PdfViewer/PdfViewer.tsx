@@ -16,7 +16,6 @@ import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-d
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract';
-import type { PdfMode } from '@shared/tab-state';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 import { commentCursor, highlighterCursor, penCursor } from '../../lib/toolCursors';
 import { PdfPage, type PageHighlight, type PageRect } from './PdfPage';
@@ -77,6 +76,21 @@ function subtractRects(rect: PageRect, blockers: readonly PageRect[], minWidth: 
 /** A mark tagged with the 1-based page it belongs to. */
 type OnPage<T> = T & { readonly page: number };
 
+/** The undoable marks: what Ctrl+Z / Ctrl+Y step through. */
+interface MarksSnapshot {
+  readonly strokes: readonly OnPage<PdfStroke>[];
+  readonly highlights: readonly OnPage<PageHighlight>[];
+  readonly crops: readonly OnPage<PageRect>[];
+}
+
+/** How many edits Ctrl+Z can step back through. */
+const MAX_HISTORY = 200;
+
+// Shared empties, so closing a file resets the history baseline to exactly what the state holds.
+const EMPTY_STROKES: readonly OnPage<PdfStroke>[] = [];
+const EMPTY_HIGHLIGHTS: readonly OnPage<PageHighlight>[] = [];
+const EMPTY_CROPS: readonly OnPage<PageRect>[] = [];
+
 interface PageSize {
   readonly width: number;
   readonly height: number;
@@ -84,12 +98,11 @@ interface PageSize {
 
 /**
  * The whole of `pdf.html`'s page: just the document in a scroll area. The
- * controls (Open PDF, file name, View/Edit) live in the chrome's main
- * toolbar (`PdfToolbar`); main pushes opened files and mode changes here.
+ * controls (Open PDF, file name, page counter, Export) live in the chrome's main
+ * toolbar (`PdfToolbar`); main pushes opened files here.
  *
- * The pointer works like Okular's Browse tool in both modes: press and drag
- * anywhere on the document to pan it (hand cursor), rather than selecting.
- * Edit mode has no tools behind it yet — those come later and will hang off `mode`.
+ * The pointer works like Okular's Browse tool: press and drag anywhere on
+ * the document to pan it (hand cursor), rather than selecting.
  *
  * Zoom is owned by main (the app toolbar, menu shortcuts and Ctrl+wheel all
  * go through `TabManager`) and arrives via `onZoom`; this page only applies
@@ -101,13 +114,18 @@ export function PdfViewer() {
   /** Bumped per opened document so renaming the file doesn't remount the pages. */
   const [docVersion, setDocVersion] = useState(0);
   const [pageSizes, setPageSizes] = useState<readonly PageSize[]>([]);
-  const [mode, setMode] = useState<PdfMode>('view');
   const [tool, setTool] = useState<PdfToolState>({ tool: 'none', color: { r: 26, g: 115, b: 232 } });
   // Held in memory only: marks aren't written into the PDF, and are dropped when another file is opened.
   const [strokes, setStrokes] = useState<readonly OnPage<PdfStroke>[]>([]);
   const [comments, setComments] = useState<readonly OnPage<PdfComment>[]>([]);
   /** One entry per page a highlight touches; entries of one highlight share an id. */
   const [highlights, setHighlights] = useState<readonly OnPage<PageHighlight>[]>([]);
+  /** At most one crop box per page; applied only to exports (see `PdfCropExporter`). */
+  const [crops, setCrops] = useState<readonly OnPage<PageRect>[]>([]);
+  /** The crop drag in progress: its box, and every page it applies to (more than one with Shift held at the start). */
+  const [cropDrag, setCropDrag] = useState<{ pages: readonly number[]; rect: PageRect | null } | null>(null);
+  /** Shift is down while the crop tool is on — shown on every page's corners as multi-crop mode. */
+  const [shiftHeld, setShiftHeld] = useState(false);
   const [hoveredHighlightId, setHoveredHighlightId] = useState<string | null>(null);
   /** The comment whose box is open while the comment tool is off. */
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
@@ -184,9 +202,18 @@ export function PdfViewer() {
       setPageSizes(sizes);
       setDocVersion((version) => version + 1);
       // Marks saved for this exact document come back; they're kept by the app, never written into the PDF.
+      // A new document starts with no history, and what was just loaded isn't an edit.
+      undoRef.current = [];
+      redoRef.current = [];
+      baselineRef.current = {
+        strokes: file.annotations.strokes,
+        highlights: file.annotations.highlights,
+        crops: file.annotations.crops,
+      };
       setStrokes(file.annotations.strokes);
       setComments(file.annotations.comments.map((comment) => ({ ...comment, committed: true })));
       setHighlights(file.annotations.highlights);
+      setCrops(file.annotations.crops);
       setOpenCommentId(null);
       setDocKey(file.key);
       scrollRef.current?.scrollTo({ left: 0, top: 0 });
@@ -247,7 +274,29 @@ export function PdfViewer() {
   );
 
   useEffect(() => window.northstarPdf.onFile((file) => void loadFile(file)), [loadFile]);
-  useEffect(() => window.northstarPdf.onMode(setMode), []);
+
+  // The toolbar's Close: back to the empty page, as before a file was opened.
+  useEffect(
+    () =>
+      window.northstarPdf.onClose(() => {
+        setDoc((previous) => {
+          void previous?.loadingTask.destroy();
+          return null;
+        });
+        setPageSizes([]);
+        undoRef.current = [];
+        redoRef.current = [];
+        baselineRef.current = { strokes: EMPTY_STROKES, highlights: EMPTY_HIGHLIGHTS, crops: EMPTY_CROPS };
+        setStrokes(EMPTY_STROKES);
+        setComments([]);
+        setHighlights(EMPTY_HIGHLIGHTS);
+        setCrops(EMPTY_CROPS);
+        setOpenCommentId(null);
+        setDocKey(null);
+        setError(null);
+      }),
+    [],
+  );
   useEffect(() => window.northstarPdf.onTool(setTool), []);
 
   // Revert Annotations.
@@ -257,6 +306,7 @@ export function PdfViewer() {
         setStrokes([]);
         setComments([]);
         setHighlights([]);
+        setCrops([]);
         setOpenCommentId(null);
       }),
     [],
@@ -271,10 +321,110 @@ export function PdfViewer() {
       strokes: strokes.map(({ id, page, points }) => ({ id, page, points: [...points] })),
       comments: comments.filter((c) => c.committed).map(({ id, page, x, y, text }) => ({ id, page, x, y, text })),
       highlights: highlights.map(({ id, page, rects }) => ({ id, page, rects: [...rects] })),
+      crops: crops.map(({ page, x, y, w, h }) => ({ page, x, y, w, h })),
     });
-  }, [docKey, strokes, comments, highlights]);
+  }, [docKey, strokes, comments, highlights, crops]);
 
   const activeTool: PdfTool = tool.tool;
+
+  // Undo/redo of pen strokes, highlights and crops, as snapshots of just those marks (comments edit
+  // per keystroke, so they're left out). Any change to them that didn't come from undo/redo or from
+  // loading a file is a user edit and pushes the previous state onto the undo stack.
+  const undoRef = useRef<MarksSnapshot[]>([]);
+  const redoRef = useRef<MarksSnapshot[]>([]);
+  const baselineRef = useRef<MarksSnapshot>({ strokes: [], highlights: [], crops: [] });
+  const historyStartedRef = useRef(false);
+  useEffect(() => {
+    // The first run is just the initial empty state, not an edit.
+    if (!historyStartedRef.current) {
+      historyStartedRef.current = true;
+      baselineRef.current = { strokes, highlights, crops };
+      return;
+    }
+    const baseline = baselineRef.current;
+    if (strokes === baseline.strokes && highlights === baseline.highlights && crops === baseline.crops) {
+      return;
+    }
+    undoRef.current.push(baseline);
+    if (undoRef.current.length > MAX_HISTORY) {
+      undoRef.current.shift();
+    }
+    redoRef.current = [];
+    baselineRef.current = { strokes, highlights, crops };
+  }, [strokes, highlights, crops]);
+
+  /** Makes `snapshot` the current marks without recording an edit. */
+  const applySnapshot = useCallback((snapshot: MarksSnapshot): void => {
+    baselineRef.current = snapshot;
+    setStrokes(snapshot.strokes);
+    setHighlights(snapshot.highlights);
+    setCrops(snapshot.crops);
+  }, []);
+
+  useEffect(
+    () =>
+      window.northstarPdf.onUndo(() => {
+        const previous = undoRef.current.pop();
+        if (previous) {
+          redoRef.current.push(baselineRef.current);
+          applySnapshot(previous);
+        }
+      }),
+    [applySnapshot],
+  );
+  useEffect(
+    () =>
+      window.northstarPdf.onRedo(() => {
+        const next = redoRef.current.pop();
+        if (next) {
+          undoRef.current.push(baselineRef.current);
+          applySnapshot(next);
+        }
+      }),
+    [applySnapshot],
+  );
+
+  // Tracks Shift only while cropping; it's cleared on blur so a key released elsewhere can't stick.
+  useEffect(() => {
+    if (activeTool !== 'crop') {
+      setShiftHeld(false);
+      return;
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Shift') {
+        setShiftHeld(event.type === 'keydown');
+      }
+    };
+    const onBlur = (): void => setShiftHeld(false);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [activeTool]);
+
+  /** Starts a crop drag on `page`; with Shift, it takes along every page whose crop matches this one's (uncropped pages match each other). */
+  const startCropDrag = (page: number, shift: boolean): void => {
+    const cropOf = (n: number): PageRect => crops.find((c) => c.page === n) ?? { x: 0, y: 0, w: 1, h: 1 };
+    const mine = cropOf(page);
+    const same = (a: PageRect): boolean =>
+      Math.abs(a.x - mine.x) < 0.002 && Math.abs(a.y - mine.y) < 0.002 && Math.abs(a.w - mine.w) < 0.002 && Math.abs(a.h - mine.h) < 0.002;
+    const pages = shift ? pageSizes.map((_, index) => index + 1).filter((n) => n === page || same(cropOf(n))) : [page];
+    setCropDrag({ pages, rect: null });
+  };
+
+  /** Applies a finished crop to the drag's pages (or just `page` for a reset); `null` clears them. */
+  const commitCrop = (page: number, next: PageRect | null): void => {
+    const pages = cropDrag?.pages ?? [page];
+    setCropDrag(null);
+    setCrops((previous) => [
+      ...previous.filter((c) => !pages.includes(c.page)),
+      ...(next ? pages.map((n) => ({ ...next, page: n })) : []),
+    ]);
+  };
 
   // A comment left unsaved when the tool turns off is kept if it has text and
   // dropped if empty, as in the browser.
@@ -438,6 +588,10 @@ export function PdfViewer() {
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    if (activeTool === 'crop') {
+      // Also read here: the page may not have keyboard focus, so Shift can go unseen as a key event.
+      setShiftHeld(event.shiftKey);
+    }
     if (activeTool === 'highlighter') {
       setHoveredHighlightId(highlightIdAt(event.clientX, event.clientY));
     }
@@ -485,7 +639,8 @@ export function PdfViewer() {
     );
     const id = crypto.randomUUID();
     const pieces: OnPage<PageHighlight>[] = [];
-    container.querySelectorAll<HTMLElement>('[data-page-number]').forEach((pageEl) => {
+    // The full-page content box, not the (possibly cropped) frame around it, since the fractions are of the whole page.
+    container.querySelectorAll<HTMLElement>('[data-page-content]').forEach((pageEl) => {
       const box = pageEl.getBoundingClientRect();
       const mine: PageRect[] = rects
         .filter((r) => {
@@ -501,7 +656,7 @@ export function PdfViewer() {
         }));
       // A character can only be highlighted once: carve out whatever is
       // already covered, by earlier highlights or earlier rects of this one.
-      const pageNumber = Number(pageEl.dataset['pageNumber']);
+      const pageNumber = Number(pageEl.dataset['pageContent']);
       const minWidth = MIN_HIGHLIGHT_WIDTH_PX / box.width;
       const blockers: PageRect[] = highlights.filter((h) => h.page === pageNumber).flatMap((h) => h.rects);
       const accepted: PageRect[] = [];
@@ -563,7 +718,6 @@ export function PdfViewer() {
       <div
         ref={scrollRef}
         className={`pdf-viewer__scroll${doc ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
-        data-mode={mode}
         data-tool={activeTool}
         style={toolCursor ? ({ '--pdf-tool-cursor': toolCursor } as CSSProperties) : undefined}
         onPointerDown={handlePointerDown}
@@ -588,6 +742,13 @@ export function PdfViewer() {
                   highlights={highlights.filter((h) => h.page === page)}
                   hoveredHighlightId={hoveredHighlightId}
                   highlightColor={tool.color}
+                  cropEditing={activeTool === 'crop'}
+                  crop={crops.find((c) => c.page === page) ?? null}
+                  cropDraft={cropDrag?.pages.includes(page) ? cropDrag.rect : null}
+                  cropMulti={shiftHeld}
+                  onCropDragStart={(shift) => startCropDrag(page, shift)}
+                  onCropDrag={(rect) => setCropDrag((previous) => (previous ? { ...previous, rect } : previous))}
+                  onCropCommit={(next) => commitCrop(page, next)}
                   annotations={{
                     tool: activeTool,
                     color: tool.color,

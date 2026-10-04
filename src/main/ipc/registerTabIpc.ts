@@ -25,7 +25,7 @@ import {
   penRequestSchema,
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
-  pdfModeRequestSchema,
+  cropRequestSchema,
   pdfGoToPageRequestSchema,
   pdfPageInfoRequestSchema,
   pdfSaveAnnotationsRequestSchema,
@@ -202,6 +202,30 @@ export function registerTabIpc(
 
   handle(IpcChannel.PenSet, penRequestSchema, (request, event) => resolveTabManager(event).setPen(request.enabled));
 
+  handle(IpcChannel.CropSet, cropRequestSchema, (request, event) => resolveTabManager(event).setCrop(request.enabled));
+
+  ipcMain.handle(IpcChannel.PdfCloseFile, (_event, rawRequest: unknown): IpcResult<null> => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    resolveTabManagerForTab(parsed.data.id)?.closePdfFile(parsed.data.id);
+    return { ok: true, data: null };
+  });
+
+  ipcMain.handle(IpcChannel.PdfExport, async (_event, rawRequest: unknown): Promise<IpcResult<null>> => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    try {
+      await resolveTabManagerForTab(parsed.data.id)?.exportPdfFile(parsed.data.id);
+      return { ok: true, data: null };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   ipcMain.handle(IpcChannel.ZoomIn, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).zoomIn() };
@@ -296,15 +320,6 @@ export function registerTabIpc(
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
     resolveTabManagerForTab(parsed.data.id)?.goToPdfPage(parsed.data.id, parsed.data.page);
-    return { ok: true, data: null };
-  });
-
-  ipcMain.handle(IpcChannel.PdfSetMode, (_event, rawRequest: unknown): IpcResult<null> => {
-    const parsed = pdfModeRequestSchema.safeParse(rawRequest);
-    if (!parsed.success) {
-      return { ok: false, code: 'invalid-request', message: parsed.error.message };
-    }
-    resolveTabManagerForTab(parsed.data.id)?.setPdfMode(parsed.data.id, parsed.data.mode);
     return { ok: true, data: null };
   });
 

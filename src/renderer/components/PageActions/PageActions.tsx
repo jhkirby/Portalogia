@@ -9,6 +9,7 @@ import { ColorPicker } from '../ColorPicker';
 import { ExportMenu } from '../ExportMenu';
 import {
   CommentIcon,
+  CropIcon,
   HighlighterIcon,
   LaserPointerIcon,
   OpenInNewWindowIcon,
@@ -51,6 +52,10 @@ interface PageActionsProps {
   readonly commentToolActive: boolean;
   /** Whether the pen tool is currently on. */
   readonly penActive: boolean;
+  /** Whether the PDF crop tool is currently on. */
+  readonly cropActive: boolean;
+  /** Whether the crop tool is shown — PDF tabs only, the one document type it applies to. */
+  readonly showCrop: boolean;
   readonly theme: Theme;
   /** Opens a new PDF viewer tab. */
   readonly onOpenPdfViewer: () => void;
@@ -65,6 +70,7 @@ interface PageActionsProps {
   readonly onToggleHighlighter: () => void;
   readonly onToggleCommentTool: () => void;
   readonly onTogglePen: () => void;
+  readonly onToggleCrop: () => void;
   /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
   readonly onRevertPage: () => void;
   readonly onToggleTheme: () => void;
@@ -87,6 +93,8 @@ export function PageActions({
   highlighterActive,
   commentToolActive,
   penActive,
+  cropActive,
+  showCrop,
   theme,
   onOpenPdfViewer,
   canExportMenu,
@@ -107,6 +115,7 @@ export function PageActions({
   onToggleHighlighter,
   onToggleCommentTool,
   onTogglePen,
+  onToggleCrop,
   onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
@@ -160,6 +169,18 @@ export function PageActions({
           data-tooltip={`${commentToolActive ? 'Turn off comments' : 'Turn on comments'} (${formatShortcut('M')})`}
         >
           <CommentIcon />
+        </button>
+      )}
+      {showCrop && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onToggleCrop}
+          aria-pressed={cropActive}
+          aria-label={cropActive ? 'Turn off crop' : 'Turn on crop'}
+          data-tooltip={`${cropActive ? 'Turn off crop' : 'Turn on crop'} (${formatShortcut('Shift+X')})`}
+        >
+          <CropIcon />
         </button>
       )}
       {showRevert && (

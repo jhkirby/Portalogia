@@ -33,9 +33,6 @@ export interface TerminalTabState {
   readonly workspaceId: string;
 }
 
-/** A PDF tab's mode: reading only, or (eventually) annotating. */
-export type PdfMode = 'view' | 'edit';
-
 /**
  * A PDF viewer/editor, rendered with pdf.js in its own `WebContentsView`
  * (`pdf.html`) — see `TabManager.createPdfTab`. No URL, favicon, or
@@ -46,9 +43,8 @@ export interface PdfTabState {
   readonly kind: 'pdf';
   readonly id: string;
   readonly title: string;
-  /** The open file's name, or `null` before one is opened. Editable in Edit mode; the chrome toolbar shows it. */
+  /** The open file's name, or `null` before one is opened. Always editable in the chrome toolbar. */
   readonly fileName: string | null;
-  readonly mode: PdfMode;
   /** The 1-based page in view; meaningless while `pageCount` is 0. */
   readonly page: number;
   /** Pages in the open document, 0 before one is opened. */
@@ -110,4 +106,6 @@ export interface BrowserState {
   readonly commentToolActive: boolean;
   /** Whether the pen tool is currently on (Ctrl+P, or the toolbar button) — see `PenController`. */
   readonly penActive: boolean;
+  /** Whether the PDF crop tool is currently on (Ctrl+Shift+X, or the toolbar button). */
+  readonly cropActive: boolean;
 }

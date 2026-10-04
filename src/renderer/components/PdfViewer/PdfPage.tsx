@@ -3,10 +3,24 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-02
 
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import { TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import type { RGB } from '../../lib/color';
-import { PdfAnnotationLayer, type PdfAnnotationLayerProps } from './PdfAnnotationLayer';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react";
+import {
+  TextLayer,
+  type PDFDocumentProxy,
+  type RenderTask,
+} from "pdfjs-dist/legacy/build/pdf.mjs";
+import type { RGB } from "../../lib/color";
+import {
+  PdfAnnotationLayer,
+  type PdfAnnotationLayerProps,
+} from "./PdfAnnotationLayer";
+import { PdfCropLayer } from "./PdfCropLayer";
 
 /** PDF pages are sized in points (1/72 in); the layout `width`/`height` props are already in CSS pixels, so the rasterization scale needs this factor too. */
 const CSS_PIXELS_PER_POINT = 96 / 72;
@@ -46,6 +60,17 @@ interface PdfPageProps {
   readonly highlightColor: RGB;
   /** Props for this page's pen/comment overlay. */
   readonly annotations: PdfAnnotationLayerProps;
+  /** Whether the crop tool is on, so this page's crop box can be edited. */
+  readonly cropEditing: boolean;
+  /** This page's crop, or `null` for the whole page. */
+  readonly crop: PageRect | null;
+  /** The in-progress crop drag's box for this page, when it's being cropped (alone or along with others). */
+  readonly cropDraft: PageRect | null;
+  /** Shift is held in crop mode (multi-crop). */
+  readonly cropMulti: boolean;
+  readonly onCropDragStart: (shift: boolean) => void;
+  readonly onCropDrag: (rect: PageRect) => void;
+  readonly onCropCommit: (crop: PageRect | null) => void;
 }
 
 /**
@@ -56,7 +81,7 @@ interface PdfPageProps {
  * feels immediate and sharpens once `renderScale` catches up.
  *
  * Layers, bottom to top: the canvas; highlights; pdf.js's invisible text
- * layer (what makes text selectable); pen/comment marks.
+ * layer (what makes text selectable); pen/comment marks; the crop box.
  */
 export function PdfPage({
   doc,
@@ -70,6 +95,13 @@ export function PdfPage({
   hoveredHighlightId,
   highlightColor,
   annotations,
+  cropEditing,
+  crop,
+  cropDraft,
+  cropMulti,
+  onCropDragStart,
+  onCropDrag,
+  onCropCommit,
 }: PdfPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,10 +114,13 @@ export function PdfPage({
     if (!element || !root) {
       return;
     }
-    const observer = new IntersectionObserver(([entry]) => setIsNear(entry?.isIntersecting ?? false), {
-      root,
-      rootMargin: '100% 0px',
-    });
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsNear(entry?.isIntersecting ?? false),
+      {
+        root,
+        rootMargin: "100% 0px",
+      },
+    );
     observer.observe(element);
     return () => observer.disconnect();
   }, [rootRef]);
@@ -103,7 +138,10 @@ export function PdfPage({
       if (cancelled) {
         return;
       }
-      const viewport = page.getViewport({ scale: renderScale * CSS_PIXELS_PER_POINT * (window.devicePixelRatio || 1) });
+      const viewport = page.getViewport({
+        scale:
+          renderScale * CSS_PIXELS_PER_POINT * (window.devicePixelRatio || 1),
+      });
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       task = page.render({ canvas, viewport });
@@ -167,42 +205,73 @@ export function PdfPage({
 
   const scaleFactor = scale * CSS_PIXELS_PER_POINT;
   const textLayerStyle = {
-    '--scale-factor': scaleFactor,
-    '--user-unit': 1,
-    '--total-scale-factor': scaleFactor,
-    '--scale-round-x': '1px',
-    '--scale-round-y': '1px',
+    "--scale-factor": scaleFactor,
+    "--user-unit": 1,
+    "--total-scale-factor": scaleFactor,
+    "--scale-round-x": "1px",
+    "--scale-round-y": "1px",
   } as CSSProperties;
   const fill = `rgba(${highlightColor.r}, ${highlightColor.g}, ${highlightColor.b}, ${HIGHLIGHT_ALPHA})`;
+
+  // Off the crop tool, a cropped page shows only its crop — as the export will. The
+  // full page is still laid out (so every layer keeps its page-relative coordinates)
+  // and is just shifted behind the clipping frame.
+  const shown = !cropEditing && crop ? crop : { x: 0, y: 0, w: 1, h: 1 };
+  const fullWidth = width * scale;
+  const fullHeight = height * scale;
 
   return (
     <div
       ref={containerRef}
       className="pdf-viewer__page"
-      style={{ width: width * scale, height: height * scale }}
+      style={{ width: fullWidth * shown.w, height: fullHeight * shown.h }}
       data-page-number={pageNumber}
     >
-      <canvas ref={canvasRef} className="pdf-viewer__canvas" style={{ width: '100%', height: '100%' }} />
-      <div className="pdf-hl-layer">
-        {highlights.flatMap((highlight) =>
-          highlight.rects.map((rect, index) => (
-            <div
-              key={`${highlight.id}-${index}`}
-              className={`pdf-hl-rect${highlight.id === hoveredHighlightId ? ' pdf-hl-rect--hovered' : ''}`}
-              data-highlight-id={highlight.id}
-              style={{
-                left: `${rect.x * 100}%`,
-                top: `${rect.y * 100}%`,
-                width: `${rect.w * 100}%`,
-                height: `${rect.h * 100}%`,
-                backgroundColor: fill,
-              }}
-            />
-          )),
-        )}
+      <div
+        className="pdf-viewer__page-content"
+        style={{
+          width: fullWidth,
+          height: fullHeight,
+          left: -shown.x * fullWidth,
+          top: -shown.y * fullHeight,
+        }}
+        data-page-content={pageNumber}
+      >
+        <canvas
+          ref={canvasRef}
+          className="pdf-viewer__canvas"
+          style={{ width: "100%", height: "100%" }}
+        />
+        <div className="pdf-hl-layer">
+          {highlights.flatMap((highlight) =>
+            highlight.rects.map((rect, index) => (
+              <div
+                key={`${highlight.id}-${index}`}
+                className={`pdf-hl-rect${highlight.id === hoveredHighlightId ? " pdf-hl-rect--hovered" : ""}`}
+                data-highlight-id={highlight.id}
+                style={{
+                  left: `${rect.x * 100}%`,
+                  top: `${rect.y * 100}%`,
+                  width: `${rect.w * 100}%`,
+                  height: `${rect.h * 100}%`,
+                  backgroundColor: fill,
+                }}
+              />
+            )),
+          )}
+        </div>
+        <div ref={textLayerRef} className="textLayer" style={textLayerStyle} />
+        <PdfAnnotationLayer {...annotations} />
+        <PdfCropLayer
+          editing={cropEditing}
+          crop={crop}
+          draft={cropDraft}
+          multi={cropMulti}
+          onDragStart={onCropDragStart}
+          onDrag={onCropDrag}
+          onCommit={onCropCommit}
+        />
       </div>
-      <div ref={textLayerRef} className="textLayer" style={textLayerStyle} />
-      <PdfAnnotationLayer {...annotations} />
     </div>
   );
 }

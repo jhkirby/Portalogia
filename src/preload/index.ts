@@ -56,7 +56,6 @@ const api: NorthstarApi = {
   createPdfTab: () => invoke(IpcChannel.TabsCreatePdf),
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
-  setPdfMode: (id, mode) => invoke(IpcChannel.PdfSetMode, { id, mode }),
   goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),
   revertPage: (id) => invoke(IpcChannel.TabsRevertPage, { id }),
 
@@ -110,6 +109,9 @@ const api: NorthstarApi = {
   setHighlighter: (enabled) => invoke(IpcChannel.HighlighterSet, { enabled }),
   setCommentTool: (enabled) => invoke(IpcChannel.CommentToolSet, { enabled }),
   setPen: (enabled) => invoke(IpcChannel.PenSet, { enabled }),
+  setCrop: (enabled) => invoke(IpcChannel.CropSet, { enabled }),
+  closePdfFile: (id) => invoke(IpcChannel.PdfCloseFile, { id }),
+  exportPdfFile: (id) => invoke(IpcChannel.PdfExport, { id }),
 
   zoomIn: () => invoke(IpcChannel.ZoomIn),
   zoomOut: () => invoke(IpcChannel.ZoomOut),

@@ -76,6 +76,22 @@ export const pdfAnnotationsSchema = z.object({
       }),
     )
     .max(10000),
+  /**
+   * Crop boxes, at most one per page, as fractions of the page as displayed.
+   * Applied only to exports; defaulted so stores written before the crop tool still parse.
+   */
+  crops: z
+    .array(
+      z.object({
+        page: pageNumberSchema,
+        x: unitSchema,
+        y: unitSchema,
+        w: unitSchema,
+        h: unitSchema,
+      }),
+    )
+    .max(100000)
+    .default([]),
 });
 export type PdfAnnotations = z.infer<typeof pdfAnnotationsSchema>;
 
@@ -84,12 +100,6 @@ export const pdfSaveAnnotationsRequestSchema = z.object({
   key: z.string().regex(/^[0-9a-f]{64}$/),
   annotations: pdfAnnotationsSchema,
 });
-
-export const pdfModeRequestSchema = z.object({
-  id: z.string().min(1),
-  mode: z.enum(['view', 'edit']),
-});
-export type PdfModeRequest = z.infer<typeof pdfModeRequestSchema>;
 
 export const pdfGoToPageRequestSchema = z.object({
   id: z.string().min(1),
@@ -204,6 +214,11 @@ export const penRequestSchema = z.object({
   enabled: z.boolean(),
 });
 export type PenRequest = z.infer<typeof penRequestSchema>;
+
+export const cropRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+export type CropRequest = z.infer<typeof cropRequestSchema>;
 
 // Deliberately not `.min(25).max(200)` here — `TabManager.setZoom` clamps
 // to that range itself, the same as `zoomIn`/`zoomOut` clamp their own

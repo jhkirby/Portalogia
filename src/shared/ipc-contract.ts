@@ -5,7 +5,7 @@
 
 import type { RGB } from '@shared/color';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
-import type { BrowserState, PdfMode } from '@shared/tab-state';
+import type { BrowserState } from '@shared/tab-state';
 
 /**
  * Every IPC channel name in the app, enumerated once. Both main and
@@ -35,17 +35,28 @@ export const IpcChannel = {
   TabsCreatePdf: 'tabs:create-pdf',
   PdfOpenFile: 'pdf:open-file',
   PdfRename: 'pdf:rename',
-  PdfSetMode: 'pdf:set-mode',
   /** PDF page → main: the marks drawn on the open document, to persist. */
   PdfSaveAnnotations: 'pdf:save-annotations',
   /** Main → PDF page: remove every mark (Revert Annotations). */
   PdfClear: 'pdf:clear',
+  /** Main → PDF page: Ctrl+Z while a mark-making tool is on. */
+  PdfUndo: 'pdf:undo',
+  /** Main → PDF page: Ctrl+Y while a mark-making tool is on. */
+  PdfRedo: 'pdf:redo',
+  /** Chrome → main: close the tab's open PDF (the tab stays, empty). */
+  PdfCloseFile: 'pdf:close-file',
+  /** Main → PDF page: the open file was closed; show the empty page. */
+  PdfClosed: 'pdf:closed',
   /** Main → PDF page: the file the user just opened. */
   PdfFile: 'pdf:file',
-  /** Main → PDF page: the tab's current mode. */
-  PdfModeChanged: 'pdf:mode-changed',
   /** PDF page → main: which page is in view, and how many there are. */
   PdfPageInfo: 'pdf:page-info',
+  /** Chrome → main: save a copy of the tab's PDF with its crop boxes applied. */
+  PdfExport: 'pdf:export',
+  /** Chrome → main: turn the crop tool on or off for this window. */
+  CropSet: 'crop:set',
+  /** Main → PDF page: whether the crop tool is on. */
+  PdfCropState: 'pdf:crop-state',
   /** Chrome → main: jump the tab's PDF to a page. */
   PdfGoToPage: 'pdf:go-to-page',
   /** Main → PDF page: scroll to this 1-based page. */
@@ -301,7 +312,6 @@ export interface NorthstarApi {
   openPdfFile(id: string): Promise<IpcResult<null>>;
   /** Renames a PDF tab's file on disk (same folder). Fails unless the name ends in `.pdf` and doesn't already exist. */
   renamePdfFile(id: string, name: string): Promise<IpcResult<null>>;
-  setPdfMode(id: string, mode: PdfMode): Promise<IpcResult<null>>;
   /** Scrolls the tab's PDF to a 1-based page (clamped to the document). */
   goToPdfPage(id: string, page: number): Promise<IpcResult<null>>;
 
@@ -449,6 +459,12 @@ export interface NorthstarApi {
    * space for a freehand overlay to live in.
    */
   setPen(enabled: boolean): Promise<IpcResult<BrowserState>>;
+  /** Turns the PDF crop tool on or off. */
+  setCrop(enabled: boolean): Promise<IpcResult<BrowserState>>;
+  /** Closes the tab's open PDF, leaving the tab empty. */
+  closePdfFile(id: string): Promise<IpcResult<null>>;
+  /** Saves a copy of the tab's PDF with its crop boxes applied (asks where in a native dialog). */
+  exportPdfFile(id: string): Promise<IpcResult<null>>;
 
   /**
    * Turns the comment tool on or off (Ctrl+M, or the toolbar button next to
@@ -638,7 +654,7 @@ export interface PdfOpenResult {
 }
 
 /** Which annotation tool the window has on for a PDF tab. The tools are mutually exclusive in main. */
-export type PdfTool = 'none' | 'pen' | 'comment' | 'highlighter';
+export type PdfTool = 'none' | 'pen' | 'comment' | 'highlighter' | 'crop';
 
 /** The active annotation tool plus the accent color to mark with. */
 export interface PdfToolState {
@@ -655,12 +671,16 @@ export interface NorthstarPdfApi {
   onFile(listener: (file: PdfOpenResult) => void): () => void;
   /** Reports the marks currently on the open document so main can persist them. Fire-and-forget. */
   saveAnnotations(key: string, annotations: PdfAnnotations): void;
+  /** Subscribes to undo (Ctrl+Z) of the page's marks and crops. */
+  onUndo(listener: () => void): () => void;
+  /** Subscribes to redo (Ctrl+Y) of the page's marks and crops. */
+  onRedo(listener: () => void): () => void;
+  /** Subscribes to the open file being closed from the toolbar. */
+  onClose(listener: () => void): () => void;
   /** Subscribes to "remove every mark" (Revert Annotations). */
   onClear(listener: () => void): () => void;
   /** Subscribes to the annotation tool in use; called immediately with the latest value if one already arrived. */
   onTool(listener: (state: PdfToolState) => void): () => void;
-  /** Subscribes to this tab's mode; called immediately with the latest value if one already arrived. */
-  onMode(listener: (mode: PdfMode) => void): () => void;
   /** Reports the page in view and the page count so the chrome can show "page / total". Fire-and-forget. */
   reportPage(page: number, pageCount: number): void;
   /** Subscribes to requests to scroll to a 1-based page. */

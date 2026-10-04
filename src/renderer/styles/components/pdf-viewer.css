@@ -276,3 +276,124 @@ body {
   font: inherit;
   color: inherit;
 }
+
+/* ── Crop ── */
+
+/* Covers the page; the box inside it is the crop. Clipped so the dimming
+   shadow below stays on the page. */
+.pdf-crop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+
+  pointer-events: none;
+}
+
+/* With the tool on, the page isn't pannable, so the grab hand would mislead. */
+.pdf-viewer__scroll[data-tool='crop'],
+.pdf-viewer__scroll[data-tool='crop'] .pdf-crop {
+  cursor: default;
+}
+
+.pdf-crop__box {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* The shadow dims everything outside the box (the layer clips it to the page). */
+.pdf-crop__box--cropped {
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+
+.pdf-crop--editing .pdf-crop__box {
+  outline: 2px dotted var(--color-accent-text, #1a73e8);
+  outline-offset: -1px;
+}
+
+/* Edge handles are thin strips along each side; corners are small squares.
+   Both sit inside the box so they're never clipped by the page edge. */
+.pdf-crop__handle {
+  position: absolute;
+
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.pdf-crop__handle--n,
+.pdf-crop__handle--s {
+  left: 12px;
+  right: 12px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.pdf-crop__handle--e,
+.pdf-crop__handle--w {
+  top: 12px;
+  bottom: 12px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.pdf-crop__handle--n { top: 0; }
+.pdf-crop__handle--s { bottom: 0; }
+.pdf-crop__handle--e { right: 0; }
+.pdf-crop__handle--w { left: 0; }
+
+.pdf-crop__handle--nw,
+.pdf-crop__handle--ne,
+.pdf-crop__handle--sw,
+.pdf-crop__handle--se {
+  width: 12px;
+  height: 12px;
+
+  background: var(--color-accent-text, #1a73e8);
+  border: 1px solid #ffffff;
+  border-radius: 2px;
+}
+
+.pdf-crop__handle--nw { top: 0; left: 0; cursor: nwse-resize; }
+.pdf-crop__handle--se { right: 0; bottom: 0; cursor: nwse-resize; }
+.pdf-crop__handle--ne { top: 0; right: 0; cursor: nesw-resize; }
+.pdf-crop__handle--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+.pdf-crop__reset {
+  position: absolute;
+  top: var(--size-spacing-sm, 6px);
+  left: var(--size-spacing-sm, 6px);
+  padding: 2px var(--size-spacing-sm, 6px);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* The page frame clips to the crop (or the whole page); the content box inside
+   is always the full page, shifted so the crop lands in the frame. */
+.pdf-viewer__page {
+  overflow: hidden;
+}
+
+.pdf-viewer__page-content {
+  position: absolute;
+}
+
+/* Multi-crop (Shift held): corners become larger rings on every page, so it's
+   clear a drag will crop all the slides in the same state together. */
+.pdf-crop--multi .pdf-crop__handle--nw,
+.pdf-crop--multi .pdf-crop__handle--ne,
+.pdf-crop--multi .pdf-crop__handle--sw,
+.pdf-crop--multi .pdf-crop__handle--se {
+  width: 18px;
+  height: 18px;
+
+  background: transparent;
+  border: 3px solid var(--color-accent-text, #1a73e8);
+  border-radius: 50%;
+}

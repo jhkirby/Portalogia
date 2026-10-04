@@ -10,7 +10,7 @@ import { pdfAnnotationsSchema, type PdfAnnotations } from '@shared/ipc-schemas';
 const storeFileSchema = z.record(z.string(), pdfAnnotationsSchema);
 
 /** What a PDF with nothing drawn on it holds — also what an unknown key returns. */
-export const EMPTY_PDF_ANNOTATIONS: PdfAnnotations = { strokes: [], comments: [], highlights: [] };
+export const EMPTY_PDF_ANNOTATIONS: PdfAnnotations = { strokes: [], comments: [], highlights: [], crops: [] };
 
 /**
  * Persists the pen strokes, comments and highlights drawn on PDFs, as JSON in
@@ -50,7 +50,10 @@ class PdfAnnotationStore {
       return;
     }
     const isEmpty =
-      annotations.strokes.length === 0 && annotations.comments.length === 0 && annotations.highlights.length === 0;
+      annotations.strokes.length === 0 &&
+      annotations.comments.length === 0 &&
+      annotations.highlights.length === 0 &&
+      annotations.crops.length === 0;
     if (isEmpty) {
       delete this.entries[key];
     } else {

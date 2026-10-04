@@ -74,7 +74,6 @@ export function App() {
     stop,
     createPdfTab,
     openPdfFile,
-    setPdfMode,
     goToPdfPage,
     renamePdfFile,
     createTerminalTab,
@@ -104,6 +103,10 @@ export function App() {
     setCommentTool,
     penActive,
     setPen,
+    cropActive,
+    setCrop,
+    exportPdfFile,
+    closePdfFile,
   } = useTabs();
 
   const [isTabSearchOpen, setTabSearchOpen] = useState(false);
@@ -142,7 +145,7 @@ export function App() {
   // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
   // WorkspaceBar's rename, TabSearch) when none of them are active.
   useEffect(() => {
-    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !penActive) {
+    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !penActive && !cropActive) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -164,6 +167,9 @@ export function App() {
       if (penActive) {
         setPen(false);
       }
+      if (cropActive) {
+        setCrop(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -178,6 +184,8 @@ export function App() {
     setCommentTool,
     penActive,
     setPen,
+    cropActive,
+    setCrop,
   ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
@@ -283,8 +291,9 @@ export function App() {
                 key={activeTab.id}
                 tab={activeTab}
                 onOpen={openPdfFile}
-                onSetMode={setPdfMode}
                 onGoToPage={goToPdfPage}
+                onExport={exportPdfFile}
+                onClose={closePdfFile}
                 onRename={renamePdfFile}
               />
             ) : activeTab?.kind === 'terminal' ? (
@@ -329,6 +338,8 @@ export function App() {
               highlighterActive={highlighterActive}
               commentToolActive={commentToolActive}
               penActive={penActive}
+              cropActive={cropActive}
+              showCrop={activeTab?.kind === 'pdf'}
               theme={theme}
               onOpenPdfViewer={createPdfTab}
               canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf'}
@@ -349,6 +360,7 @@ export function App() {
               onToggleHighlighter={() => setHighlighter(!highlighterActive)}
               onToggleCommentTool={() => setCommentTool(!commentToolActive)}
               onTogglePen={() => setPen(!penActive)}
+              onToggleCrop={() => setCrop(!cropActive)}
               onRevertPage={() => activeTabId && revertPage(activeTabId)}
               onToggleTheme={toggleTheme}
             />

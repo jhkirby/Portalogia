@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { DropRegionRect, IpcResult } from '@shared/ipc-contract';
-import type { BrowserState, PdfMode } from '@shared/tab-state';
+import type { BrowserState } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
   tabs: [],
@@ -25,6 +25,7 @@ const EMPTY_STATE: BrowserState = {
   highlighterActive: false,
   commentToolActive: false,
   penActive: false,
+  cropActive: false,
 };
 
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
@@ -149,10 +150,6 @@ export function useTabs() {
     void window.northstar.openPdfFile(id).then(logIfFailed);
   }, []);
 
-  const setPdfMode = useCallback((id: string, mode: PdfMode) => {
-    void window.northstar.setPdfMode(id, mode).then(logIfFailed);
-  }, []);
-
   const goToPdfPage = useCallback((id: string, page: number) => {
     void window.northstar.goToPdfPage(id, page).then(logIfFailed);
   }, []);
@@ -233,6 +230,18 @@ export function useTabs() {
     void window.northstar.setCommentTool(enabled).then(logIfFailed);
   }, []);
 
+  const setCrop = useCallback((enabled: boolean) => {
+    void window.northstar.setCrop(enabled).then(logIfFailed);
+  }, []);
+
+  const closePdfFile = useCallback((id: string) => {
+    void window.northstar.closePdfFile(id).then(logIfFailed);
+  }, []);
+
+  const exportPdfFile = useCallback((id: string) => {
+    void window.northstar.exportPdfFile(id).then(logIfFailed);
+  }, []);
+
   const setPen = useCallback((enabled: boolean) => {
     void window.northstar.setPen(enabled).then(logIfFailed);
   }, []);
@@ -284,7 +293,6 @@ export function useTabs() {
     createTerminalTab,
     createPdfTab,
     openPdfFile,
-    setPdfMode,
     goToPdfPage,
     renamePdfFile,
     revertPage,
@@ -320,5 +328,9 @@ export function useTabs() {
     setCommentTool,
     penActive: state.penActive,
     setPen,
+    cropActive: state.cropActive,
+    setCrop,
+    exportPdfFile,
+    closePdfFile,
   };
 }

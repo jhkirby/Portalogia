@@ -4,7 +4,7 @@
 // Last Modified: 2026-10-02
 
 import { useState } from 'react';
-import type { PdfMode, PdfTabState } from '@shared/tab-state';
+import type { PdfTabState } from '@shared/tab-state';
 import { formatShortcut } from '../../lib/shortcuts';
 
 /** Must match `pdfRenameRequestSchema` in main: something, then ".pdf". */
@@ -13,25 +13,28 @@ const PDF_NAME_PATTERN = /.\.pdf$/i;
 interface PdfToolbarProps {
   readonly tab: PdfTabState;
   readonly onOpen: (id: string) => void;
-  readonly onSetMode: (id: string, mode: PdfMode) => void;
   readonly onGoToPage: (id: string, page: number) => void;
+  /** Saves a copy of the open file with its crops, drawings and highlights applied. */
+  readonly onExport: (id: string) => void;
+  /** Closes the open file, leaving the tab empty. */
+  readonly onClose: (id: string) => void;
   /** Renames the file on disk; resolves to an error message, or `null` on success. */
   readonly onRename: (id: string, name: string) => Promise<string | null>;
 }
 
 /**
  * The PDF tab's controls, shown in the main toolbar where a browser tab has
- * its address bar: Open PDF, the file name (a text box in Edit mode), and
- * the View/Edit toggle. The PDF page itself only draws the document.
+ * its address bar: Open PDF, the file name (always an editable text box), the
+ * page counter, and Export. The PDF page itself only draws the document.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
-export function PdfToolbar({ tab, onOpen, onSetMode, onGoToPage, onRename }: PdfToolbarProps) {
+export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRename }: PdfToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   /** Uncommitted text while the page box is being edited; null shows the live page. */
   const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { fileName, mode, page, pageCount } = tab;
+  const { fileName, page, pageCount } = tab;
 
   const commitPage = (): void => {
     const requested = Number.parseInt(pageDraft ?? '', 10);
@@ -61,47 +64,51 @@ export function PdfToolbar({ tab, onOpen, onSetMode, onGoToPage, onRename }: Pdf
 
   return (
     <div className="pdf-toolbar">
-      <div className="pdf-toolbar__modes" role="group" aria-label="Mode">
-        {(['view', 'edit'] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            className="pdf-toolbar__mode"
-            aria-pressed={mode === value}
-            onClick={() => onSetMode(tab.id, value)}
-          >
-            {value === 'view' ? 'View' : 'Edit'}
-          </button>
-        ))}
-      </div>
       <button
         type="button"
         className="pdf-toolbar__button chrome-tooltip"
         onClick={() => onOpen(tab.id)}
         data-tooltip={`Open PDF (${formatShortcut('O')})`}
       >
-        Open PDF
+        Open
       </button>
-      {mode === 'edit' && fileName !== null ? (
-        <input
-          type="text"
-          className="pdf-toolbar__file-name pdf-toolbar__file-name--input"
-          aria-label="File name"
-          value={nameDraft ?? fileName}
-          onChange={(event) => setNameDraft(event.target.value)}
-          onBlur={commitName}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            } else if (event.key === 'Escape') {
-              setNameDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      ) : (
-        <span className="pdf-toolbar__file-name">{fileName ?? 'No file open'}</span>
-      )}
+      <button
+        type="button"
+        className="pdf-toolbar__button chrome-tooltip"
+        onClick={() => onClose(tab.id)}
+        disabled={fileName === null}
+        data-tooltip="Close the open PDF"
+      >
+        Close
+      </button>
+      <button
+        type="button"
+        className="pdf-toolbar__button chrome-tooltip"
+        onClick={() => onExport(tab.id)}
+        disabled={fileName === null}
+        data-tooltip="Export a copy with crops, drawings and highlights"
+      >
+        Export
+      </button>
+      {/* Before a file is open there's nothing to rename: it reads "No file open" with no box and can't be focused. */}
+      <input
+        type="text"
+        className={`pdf-toolbar__file-name${fileName === null ? ' pdf-toolbar__file-name--empty' : ''}`}
+        aria-label="File name"
+        value={nameDraft ?? fileName ?? 'No file open'}
+        readOnly={fileName === null}
+        tabIndex={fileName === null ? -1 : undefined}
+        onChange={(event) => setNameDraft(event.target.value)}
+        onBlur={commitName}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur();
+          } else if (event.key === 'Escape') {
+            setNameDraft(null);
+            event.currentTarget.blur();
+          }
+        }}
+      />
       {pageCount > 0 && (
         <div className="pdf-toolbar__pages">
           <input

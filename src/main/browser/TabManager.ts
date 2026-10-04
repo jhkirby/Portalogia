@@ -38,8 +38,9 @@ import {
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
-import type { BrowserState, BrowserTabState, PdfMode, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
+import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import { pdfAnnotationStore } from './PdfAnnotationStore';
+import { PdfCropExporter } from './PdfCropExporter';
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -48,7 +49,7 @@ import type { HighlighterController } from './HighlighterController';
 import { LaserPointerOverlay } from './LaserPointerOverlay';
 import { PageDocumentExporter } from './PageDocumentExporter';
 import type { PenController } from './PenController';
-import { trackPageSelectionAccent } from './pageSelectionAccent';
+import { getCurrentAccent, trackPageSelectionAccent } from './pageSelectionAccent';
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
@@ -139,6 +140,7 @@ export class TabManager {
   private highlighterActive = false;
   private commentToolActive = false;
   private penActive = false;
+  private cropActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
   private grabbedTabId: string | null = null;
   /** Armed while a tab is grabbed; see `armSpaceHoldTimeout`. */
@@ -613,15 +615,12 @@ export class TabManager {
     // (a restored/torn-off tab may already have one).
     view.webContents.on('did-finish-load', () => {
       this.applyZoom(id);
-      const state = this.states.get(id);
-      if (state?.kind === 'pdf') {
-        view.webContents.send(IpcChannel.PdfModeChanged, state.mode);
-      }
       // A fresh document has a fresh preload that's never been told which
       // annotation tool (if any) is on — same reason as a browser tab's `dom-ready` push.
       this.pushPenStateTo(id);
       this.pushCommentToolStateTo(id);
       this.pushHighlighterStateTo(id);
+      this.pushCropStateTo(id);
     });
 
     this.views.set(id, view);
@@ -630,7 +629,6 @@ export class TabManager {
       id,
       title: 'PDF',
       fileName: null,
-      mode: 'view',
       page: 1,
       pageCount: 0,
       workspaceId: workspaceId ?? this.activeWorkspaceId,
@@ -699,18 +697,53 @@ export class TabManager {
   }
 
   /**
-   * Switches a PDF tab between View and Edit and tells its page.
-   * @param id The PDF tab. A no-op if it isn't one.
-   * @param mode The new mode.
+   * Closes a PDF tab's open file: the tab stays but goes back to empty, as
+   * if nothing had been opened. The file on disk and its saved marks are untouched.
+   * @param id The PDF tab. A no-op if it isn't one or has no file open.
    */
-  public setPdfMode(id: string, mode: PdfMode): void {
+  public closePdfFile(id: string): void {
     const current = this.states.get(id);
-    if (current?.kind !== 'pdf' || current.mode === mode) {
+    if (current?.kind !== 'pdf' || !pdfFilePaths.has(id)) {
       return;
     }
-    this.states.set(id, { ...current, mode });
+    pdfFilePaths.delete(id);
+    this.states.set(id, { ...current, title: 'PDF', fileName: null, page: 1, pageCount: 0 });
     this.emitState();
-    this.views.get(id)?.webContents.send(IpcChannel.PdfModeChanged, mode);
+    this.views.get(id)?.webContents.send(IpcChannel.PdfClosed);
+  }
+
+  /**
+   * Saves a copy of a PDF tab's file with its crops, pen strokes and highlights applied, to a
+   * location the user picks. The original file is left alone. Failures are
+   * shown in a native error box (this is also reached from a toolbar button
+   * with nowhere else to show them).
+   * @param id The PDF tab. A no-op if it isn't one or has no file open.
+   */
+  public async exportPdfFile(id: string): Promise<void> {
+    const state = this.states.get(id);
+    const sourcePath = pdfFilePaths.get(id);
+    if (state?.kind !== 'pdf' || !sourcePath) {
+      return;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const stem = basename(sourcePath).replace(/\.pdf$/i, '');
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      title: 'Export PDF',
+      defaultPath: join(dirname(sourcePath), `${sanitizeFileName(stem)} - exported.pdf`),
+      filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) {
+      return;
+    }
+    try {
+      const data = await readFile(sourcePath);
+      // The key is the hash of the file's bytes, same as `openPdfFile`, so this reads the marks saved for exactly this document.
+      const key = createHash('sha256').update(data).digest('hex');
+      const exported = await new PdfCropExporter().export(data, pdfAnnotationStore.get(key), getCurrentAccent());
+      await writeFile(filePath, exported);
+    } catch (error) {
+      dialog.showErrorBox('Could not export PDF', error instanceof Error ? error.message : String(error));
+    }
   }
 
   /**
@@ -1360,6 +1393,7 @@ export class TabManager {
     this.pushHighlighterState();
     this.pushCommentToolState();
     this.pushPenState();
+    this.pushCropState();
 
     const workspaceId = this.states.get(id)?.workspaceId;
     if (workspaceId) {
@@ -2433,6 +2467,9 @@ export class TabManager {
     if (enabled && this.penActive) {
       this.setPen(false);
     }
+    if (enabled && this.cropActive) {
+      this.setCrop(false);
+    }
     this.laserPointerActive = enabled;
     this.syncLaserPointerOverlay();
     this.emitState();
@@ -2454,7 +2491,8 @@ export class TabManager {
    *   this to decide whether Escape should be treated as handled.
    */
   private exitPointerTools(): boolean {
-    const wasOn = this.laserPointerActive || this.highlighterActive || this.commentToolActive || this.penActive;
+    const wasOn =
+      this.laserPointerActive || this.highlighterActive || this.commentToolActive || this.penActive || this.cropActive;
     if (this.laserPointerActive) {
       this.setLaserPointer(false);
     }
@@ -2466,6 +2504,9 @@ export class TabManager {
     }
     if (this.penActive) {
       this.setPen(false);
+    }
+    if (this.cropActive) {
+      this.setCrop(false);
     }
     return wasOn;
   }
@@ -2512,6 +2553,9 @@ export class TabManager {
     if (enabled && this.penActive) {
       this.setPen(false);
     }
+    if (enabled && this.cropActive) {
+      this.setCrop(false);
+    }
     this.highlighterActive = enabled;
     this.pushHighlighterState();
     this.nudgeActiveTabCursor();
@@ -2551,6 +2595,9 @@ export class TabManager {
     }
     if (enabled && this.penActive) {
       this.setPen(false);
+    }
+    if (enabled && this.cropActive) {
+      this.setCrop(false);
     }
     this.commentToolActive = enabled;
     this.pushCommentToolState();
@@ -2604,6 +2651,9 @@ export class TabManager {
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
     }
+    if (enabled && this.cropActive) {
+      this.setCrop(false);
+    }
     this.penActive = enabled;
     this.pushPenState();
     this.nudgeActiveTabCursor();
@@ -2631,6 +2681,65 @@ export class TabManager {
   /** Pushes this window's current pen on/off state to a specific tab, active or not — `wireEvents`'s own `dom-ready` handler uses this directly, same reasoning as `pushHighlighterStateTo`. */
   private pushPenStateTo(tabId: string): void {
     this.penController.syncState(tabId, this.penActive);
+  }
+
+  // ── Crop ─────────────────────────────────────────────────────────────
+
+  /**
+   * Turns the PDF crop tool on or off (Ctrl+Shift+X, or `PageActions`' toolbar
+   * button) for this window. Only a PDF tab's page draws anything for it; the
+   * boxes themselves are edited in the page and persisted with the document's
+   * other marks (see `PdfAnnotationStore`).
+   * @param enabled Whether the crop tool should be on.
+   * @returns The full browser state after the change.
+   */
+  public setCrop(enabled: boolean): BrowserState {
+    // Mutually exclusive with the other pointer tools — see `setLaserPointer`'s own comment.
+    if (enabled && this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
+    if (enabled && this.highlighterActive) {
+      this.setHighlighter(false);
+    }
+    if (enabled && this.commentToolActive) {
+      this.setCommentTool(false);
+    }
+    if (enabled && this.penActive) {
+      this.setPen(false);
+    }
+    this.cropActive = enabled;
+    this.pushCropState();
+    // The page needs keyboard focus to see Shift (multi-crop) and Ctrl+Z; a toolbar click leaves it with the chrome.
+    const activeView = enabled && this.activeTabId ? this.views.get(this.activeTabId) : undefined;
+    if (activeView && this.states.get(this.activeTabId!)?.kind === 'pdf' && !activeView.webContents.isDestroyed()) {
+      activeView.webContents.focus();
+    }
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Toggles the crop tool; does nothing unless the active tab is a PDF (there is nothing to crop elsewhere, and the shortcut mustn't switch on an invisible tool). */
+  public toggleCrop(): BrowserState {
+    const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
+    if (!this.cropActive && active?.kind !== 'pdf') {
+      return this.getState();
+    }
+    return this.setCrop(!this.cropActive);
+  }
+
+  /** Pushes the crop tool's on/off state to whichever tab is active — call on `setCrop` and `activateTab`. */
+  private pushCropState(): void {
+    if (this.activeTabId) {
+      this.pushCropStateTo(this.activeTabId);
+    }
+  }
+
+  /** Pushes the crop tool's on/off state to one PDF tab (others have no crop tool, so they're never told). */
+  private pushCropStateTo(tabId: string): void {
+    const view = this.views.get(tabId);
+    if (view && !view.webContents.isDestroyed() && this.states.get(tabId)?.kind === 'pdf') {
+      view.webContents.send(IpcChannel.PdfCropState, { active: this.cropActive });
+    }
   }
 
   // ── Revert page ──────────────────────────────────────────────────────
@@ -3225,6 +3334,7 @@ export class TabManager {
       highlighterActive: this.highlighterActive,
       commentToolActive: this.commentToolActive,
       penActive: this.penActive,
+      cropActive: this.cropActive,
     };
   }
 
@@ -3740,6 +3850,11 @@ export class TabManager {
             event.preventDefault();
             owner.revertPage(id);
             return;
+          case 'x':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+X` ("Toggle Crop"); a no-op off a PDF tab.
+            event.preventDefault();
+            owner.toggleCrop();
+            return;
           case '>':
             // Shift is what actually produces '>' (it's Shift+Period on a
             // US layout) — this is Ctrl+> from a key-event's perspective,
@@ -3792,7 +3907,13 @@ export class TabManager {
           // this app must never shadow. The two tools are mutually
           // exclusive (`setHighlighter`/`setPen`), so at most one branch
           // below ever actually runs.
-          if (owner.highlighterActive) {
+          if (owner.states.get(id)?.kind === 'pdf') {
+            // A PDF page keeps its own history (marks and crops); it undoes when told to.
+            if (owner.highlighterActive || owner.penActive || owner.cropActive) {
+              event.preventDefault();
+              owner.views.get(id)?.webContents.send(IpcChannel.PdfUndo);
+            }
+          } else if (owner.highlighterActive) {
             event.preventDefault();
             owner.highlighter.undo(id);
           } else if (owner.penActive) {
@@ -3801,7 +3922,12 @@ export class TabManager {
           }
           return;
         case 'y':
-          if (owner.highlighterActive) {
+          if (owner.states.get(id)?.kind === 'pdf') {
+            if (owner.highlighterActive || owner.penActive || owner.cropActive) {
+              event.preventDefault();
+              owner.views.get(id)?.webContents.send(IpcChannel.PdfRedo);
+            }
+          } else if (owner.highlighterActive) {
             event.preventDefault();
             owner.highlighter.redo(id);
           } else if (owner.penActive) {
