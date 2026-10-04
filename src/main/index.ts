@@ -120,12 +120,29 @@ const sharedTerminalManager = new TerminalManager(
   },
 );
 
+/**
+ * Pointer lock is the one permission granted, and only to the app's own PDF
+ * viewer page: it lets a grab-drag keep going past the screen edge (see
+ * `PdfViewer`). A web page asking for it is still refused.
+ * @param url The URL of the page making the request.
+ */
+function isOwnPdfViewerUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const isOwnOrigin =
+      parsed.protocol === 'file:' || (!app.isPackaged && parsed.origin === new URL(process.env['ELECTRON_RENDERER_URL'] ?? 'about:blank').origin);
+    return isOwnOrigin && parsed.pathname.endsWith('/pdf.html');
+  } catch {
+    return false;
+  }
+}
+
 void app.whenReady().then(() => {
   // Deny every site permission request (camera, mic, geolocation, ...) by
   // default. A future version should replace this with a per-origin
   // prompt; refusing everything is the safe default until that exists.
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    callback(permission === 'pointerLock' && isOwnPdfViewerUrl(details.requestingUrl));
   });
 
   protocol.handle(NORTHSTAR_SCHEME, (request) => {

@@ -26,6 +26,8 @@ import {
   renameWorkspaceRequestSchema,
   splitEnterRequestSchema,
   pdfModeRequestSchema,
+  pdfGoToPageRequestSchema,
+  pdfPageInfoRequestSchema,
   pdfSaveAnnotationsRequestSchema,
   pdfRenameRequestSchema,
   tabIdRequestSchema,
@@ -278,6 +280,23 @@ export function registerTabIpc(
     if (parsed.success) {
       pdfAnnotationStore.set(parsed.data.key, parsed.data.annotations);
     }
+  });
+
+  // Fire-and-forget from the PDF page whenever the page in view changes.
+  ipcMain.on(IpcChannel.PdfPageInfo, (_event, rawRequest: unknown) => {
+    const parsed = pdfPageInfoRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      resolveTabManagerForTab(parsed.data.id)?.setPdfPageInfo(parsed.data.id, parsed.data.page, parsed.data.pageCount);
+    }
+  });
+
+  ipcMain.handle(IpcChannel.PdfGoToPage, (_event, rawRequest: unknown): IpcResult<null> => {
+    const parsed = pdfGoToPageRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    resolveTabManagerForTab(parsed.data.id)?.goToPdfPage(parsed.data.id, parsed.data.page);
+    return { ok: true, data: null };
   });
 
   ipcMain.handle(IpcChannel.PdfSetMode, (_event, rawRequest: unknown): IpcResult<null> => {

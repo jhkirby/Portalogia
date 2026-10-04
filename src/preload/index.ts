@@ -57,6 +57,7 @@ const api: NorthstarApi = {
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
   setPdfMode: (id, mode) => invoke(IpcChannel.PdfSetMode, { id, mode }),
+  goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),
   revertPage: (id) => invoke(IpcChannel.TabsRevertPage, { id }),
 
   createWorkspace: (name) => invoke(IpcChannel.WorkspacesCreate, { name }),

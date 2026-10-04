@@ -631,6 +631,8 @@ export class TabManager {
       title: 'PDF',
       fileName: null,
       mode: 'view',
+      page: 1,
+      pageCount: 0,
       workspaceId: workspaceId ?? this.activeWorkspaceId,
     });
     this.activateTab(id);
@@ -709,6 +711,30 @@ export class TabManager {
     this.states.set(id, { ...current, mode });
     this.emitState();
     this.views.get(id)?.webContents.send(IpcChannel.PdfModeChanged, mode);
+  }
+
+  /**
+   * Records which page a PDF tab's viewer reports in view, for the toolbar.
+   * @param id The PDF tab. A no-op if it isn't one or nothing changed.
+   */
+  public setPdfPageInfo(id: string, page: number, pageCount: number): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'pdf' || (current.page === page && current.pageCount === pageCount)) {
+      return;
+    }
+    this.states.set(id, { ...current, page, pageCount });
+    this.emitState();
+  }
+
+  /**
+   * Asks a PDF tab's viewer to scroll to a page.
+   * @param id The PDF tab. A no-op if it isn't one.
+   * @param page 1-based; the viewer clamps it to the document.
+   */
+  public goToPdfPage(id: string, page: number): void {
+    if (this.states.get(id)?.kind === 'pdf') {
+      this.views.get(id)?.webContents.send(IpcChannel.PdfScrollToPage, page);
+    }
   }
 
   /**

@@ -52,6 +52,19 @@ body {
   cursor: grabbing;
 }
 
+/* Stands in for the pointer while the page is grabbed: the real one is
+   locked in place so the drag can loop past the view's edges. */
+.pdf-viewer__grab-hand {
+  position: fixed;
+  top: -12px;
+  left: -12px;
+  z-index: 10;
+  display: none;
+
+  color: var(--color-tab-text-active);
+  pointer-events: none;
+}
+
 /* `min-width: 100%` + `width: max-content` keeps a document narrower than
    the view centered, while a wider-than-view one overflows to the right
    and stays fully scrollable (plain `align-items: center` would clip its

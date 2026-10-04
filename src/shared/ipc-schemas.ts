@@ -91,6 +91,17 @@ export const pdfModeRequestSchema = z.object({
 });
 export type PdfModeRequest = z.infer<typeof pdfModeRequestSchema>;
 
+export const pdfGoToPageRequestSchema = z.object({
+  id: z.string().min(1),
+  page: z.number().int().min(1).max(1_000_000),
+});
+
+export const pdfPageInfoRequestSchema = z.object({
+  id: z.string().min(1),
+  page: z.number().int().min(1).max(1_000_000),
+  pageCount: z.number().int().min(0).max(1_000_000),
+});
+
 export type PdfRenameRequest = z.infer<typeof pdfRenameRequestSchema>;
 
 export const moveTabRequestSchema = z.object({

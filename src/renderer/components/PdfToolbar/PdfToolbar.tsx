@@ -14,6 +14,7 @@ interface PdfToolbarProps {
   readonly tab: PdfTabState;
   readonly onOpen: (id: string) => void;
   readonly onSetMode: (id: string, mode: PdfMode) => void;
+  readonly onGoToPage: (id: string, page: number) => void;
   /** Renames the file on disk; resolves to an error message, or `null` on success. */
   readonly onRename: (id: string, name: string) => Promise<string | null>;
 }
@@ -24,11 +25,25 @@ interface PdfToolbarProps {
  * the View/Edit toggle. The PDF page itself only draws the document.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
-export function PdfToolbar({ tab, onOpen, onSetMode, onRename }: PdfToolbarProps) {
+export function PdfToolbar({ tab, onOpen, onSetMode, onGoToPage, onRename }: PdfToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  /** Uncommitted text while the page box is being edited; null shows the live page. */
+  const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { fileName, mode } = tab;
+  const { fileName, mode, page, pageCount } = tab;
+
+  const commitPage = (): void => {
+    const requested = Number.parseInt(pageDraft ?? '', 10);
+    setPageDraft(null);
+    if (Number.isNaN(requested)) {
+      return;
+    }
+    const target = Math.min(Math.max(requested, 1), pageCount);
+    if (target !== page) {
+      onGoToPage(tab.id, target);
+    }
+  };
 
   const commitName = (): void => {
     const trimmed = nameDraft?.trim();
@@ -86,6 +101,30 @@ export function PdfToolbar({ tab, onOpen, onSetMode, onRename }: PdfToolbarProps
         />
       ) : (
         <span className="pdf-toolbar__file-name">{fileName ?? 'No file open'}</span>
+      )}
+      {pageCount > 0 && (
+        <div className="pdf-toolbar__pages">
+          <input
+            type="text"
+            inputMode="numeric"
+            className="pdf-toolbar__page-input"
+            aria-label="Current page"
+            value={pageDraft ?? String(page)}
+            size={String(pageCount).length}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setPageDraft(event.target.value.replace(/\D/g, ''))}
+            onBlur={commitPage}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                setPageDraft(null);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <span className="pdf-toolbar__page-total">/ {pageCount}</span>
+        </div>
       )}
       {error && <span className="pdf-toolbar__error">{error}</span>}
     </div>

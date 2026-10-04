@@ -17,7 +17,12 @@
 
 .pdf-toolbar__file-name {
   overflow: hidden;
-  flex: 1;
+  /* Same footprint as the Edit-mode text box (width, padding, border) so the
+     page counter never moves when the mode is toggled. */
+  flex: 0 1 280px;
+  padding: 0 var(--size-spacing-sm);
+  min-width: 0;
+  border: 1px solid transparent;
 
   font-size: var(--size-font-sm);
   color: var(--color-tab-text);
@@ -27,7 +32,7 @@
 
 /* Edit mode: the name becomes a text box; selectable, unlike the page body. */
 .pdf-toolbar__file-name--input {
-  flex: 1;
+  flex: 0 1 280px;
   height: 26px;
   padding: 0 var(--size-spacing-sm);
   min-width: 0;
@@ -47,6 +52,40 @@
 }
 
 .pdf-toolbar__file-name--input:focus {
+  outline: none;
+  border-color: var(--color-accent-text);
+}
+
+/* "current / total" right after the file name; the auto margin pushes any
+   trailing content (errors) to the far edge. */
+.pdf-toolbar__pages {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--size-spacing-xs, 4px);
+  margin-right: auto;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+}
+
+.pdf-toolbar__page-input {
+  height: 24px;
+  padding: 0 var(--size-spacing-xs, 4px);
+  min-width: 2.5ch;
+
+  background: transparent;
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  color: var(--color-tab-text-active);
+  text-align: center;
+  user-select: text;
+}
+
+.pdf-toolbar__page-input:hover,
+.pdf-toolbar__page-input:focus {
   outline: none;
   border-color: var(--color-accent-text);
 }

@@ -49,6 +49,10 @@ export interface PdfTabState {
   /** The open file's name, or `null` before one is opened. Editable in Edit mode; the chrome toolbar shows it. */
   readonly fileName: string | null;
   readonly mode: PdfMode;
+  /** The 1-based page in view; meaningless while `pageCount` is 0. */
+  readonly page: number;
+  /** Pages in the open document, 0 before one is opened. */
+  readonly pageCount: number;
   readonly workspaceId: string;
 }
 

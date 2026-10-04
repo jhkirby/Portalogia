@@ -75,6 +75,7 @@ export function App() {
     createPdfTab,
     openPdfFile,
     setPdfMode,
+    goToPdfPage,
     renamePdfFile,
     createTerminalTab,
     revertPage,
@@ -283,6 +284,7 @@ export function App() {
                 tab={activeTab}
                 onOpen={openPdfFile}
                 onSetMode={setPdfMode}
+                onGoToPage={goToPdfPage}
                 onRename={renamePdfFile}
               />
             ) : activeTab?.kind === 'terminal' ? (

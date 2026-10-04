@@ -15,6 +15,14 @@ const PdfFile = 'pdf:file';
 const PdfModeChanged = 'pdf:mode-changed';
 const PdfSaveAnnotations = 'pdf:save-annotations';
 const PdfClear = 'pdf:clear';
+const PdfPageInfo = 'pdf:page-info';
+const PdfScrollToPage = 'pdf:scroll-to-page';
+
+// main created this page with `?id=<tab id>`; it's echoed back so main knows which tab a report is from.
+const tabId = new URLSearchParams(window.location.search).get('id') ?? '';
+
+const scrollListeners = new Set<(page: number) => void>();
+ipcRenderer.on(PdfScrollToPage, (_event, page: number) => scrollListeners.forEach((listener) => listener(page)));
 // Same strings `PenController` / `CommentController` (main) send on; hardcoded for the same sandboxed-preload reason as above.
 const PenState = 'pen:state';
 const CommentToolState = 'comment-tool:state';
@@ -92,6 +100,15 @@ ipcRenderer.on(PdfClear, () => clearListeners.forEach((listener) => listener()))
 const api: NorthstarPdfApi = {
   saveAnnotations: (key: string, annotations: PdfAnnotations) => {
     ipcRenderer.send(PdfSaveAnnotations, { key, annotations });
+  },
+  reportPage: (page, pageCount) => {
+    ipcRenderer.send(PdfPageInfo, { id: tabId, page, pageCount });
+  },
+  onScrollToPage: (listener) => {
+    scrollListeners.add(listener);
+    return () => {
+      scrollListeners.delete(listener);
+    };
   },
   onClear: (listener) => {
     clearListeners.add(listener);

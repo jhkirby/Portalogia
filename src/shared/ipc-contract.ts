@@ -44,6 +44,12 @@ export const IpcChannel = {
   PdfFile: 'pdf:file',
   /** Main → PDF page: the tab's current mode. */
   PdfModeChanged: 'pdf:mode-changed',
+  /** PDF page → main: which page is in view, and how many there are. */
+  PdfPageInfo: 'pdf:page-info',
+  /** Chrome → main: jump the tab's PDF to a page. */
+  PdfGoToPage: 'pdf:go-to-page',
+  /** Main → PDF page: scroll to this 1-based page. */
+  PdfScrollToPage: 'pdf:scroll-to-page',
   ZoomWheel: 'zoom:wheel',
   TabsRevertPage: 'tabs:revert-page',
   TerminalInput: 'terminal:input',
@@ -296,6 +302,8 @@ export interface NorthstarApi {
   /** Renames a PDF tab's file on disk (same folder). Fails unless the name ends in `.pdf` and doesn't already exist. */
   renamePdfFile(id: string, name: string): Promise<IpcResult<null>>;
   setPdfMode(id: string, mode: PdfMode): Promise<IpcResult<null>>;
+  /** Scrolls the tab's PDF to a 1-based page (clamped to the document). */
+  goToPdfPage(id: string, page: number): Promise<IpcResult<null>>;
 
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;
   /**
@@ -653,6 +661,10 @@ export interface NorthstarPdfApi {
   onTool(listener: (state: PdfToolState) => void): () => void;
   /** Subscribes to this tab's mode; called immediately with the latest value if one already arrived. */
   onMode(listener: (mode: PdfMode) => void): () => void;
+  /** Reports the page in view and the page count so the chrome can show "page / total". Fire-and-forget. */
+  reportPage(page: number, pageCount: number): void;
+  /** Subscribes to requests to scroll to a 1-based page. */
+  onScrollToPage(listener: (page: number) => void): () => void;
   /**
    * Subscribes to this tab's zoom, as a whole percent (100 = actual size).
    * Called immediately with the latest value if one has already arrived —

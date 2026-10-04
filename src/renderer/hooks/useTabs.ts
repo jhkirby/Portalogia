@@ -153,6 +153,10 @@ export function useTabs() {
     void window.northstar.setPdfMode(id, mode).then(logIfFailed);
   }, []);
 
+  const goToPdfPage = useCallback((id: string, page: number) => {
+    void window.northstar.goToPdfPage(id, page).then(logIfFailed);
+  }, []);
+
   /** Resolves to an error message to show the user, or `null` on success. */
   const renamePdfFile = useCallback(async (id: string, name: string): Promise<string | null> => {
     const result = await window.northstar.renamePdfFile(id, name);
@@ -281,6 +285,7 @@ export function useTabs() {
     createPdfTab,
     openPdfFile,
     setPdfMode,
+    goToPdfPage,
     renamePdfFile,
     revertPage,
 
