@@ -14,7 +14,7 @@ import { PdfToolbar } from './components/PdfToolbar';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
 import { TitlebarGrip } from './components/TitlebarGrip';
-import { TabSearch } from './components/TabSearch';
+import { TabSearchPopup } from './components/TabSearchPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
 import { useTabs } from './hooks/useTabs';
@@ -95,7 +95,6 @@ export function App() {
     openPdfPath,
     beginTabPreview,
     endTabPreview,
-    enterSplitView,
     exitSplitView,
     toggleSidebar,
     setFocusMode,
@@ -119,16 +118,10 @@ export function App() {
     closePdfFile,
   } = useTabs();
 
-  const [isTabSearchOpen, setTabSearchOpen] = useState(false);
+  /** The tab-search popup's state while open: the active tab's last frame, shown blurred behind it. */
+  const [tabSearch, setTabSearch] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
   const { theme, toggleTheme } = useTheme();
-
-  // The chrome window can lose OS focus to whatever tab's WebContentsView
-  // the user last clicked into, so the "Search Tabs" keyboard shortcut is
-  // an Electron menu accelerator (see buildMenu.ts) that reaches here via
-  // this push instead of a renderer-level keydown listener, which a
-  // focused tab would simply swallow.
-  useEffect(() => window.northstar.onOpenTabSearch(() => setTabSearchOpen(true)), []);
 
   // Tells main a dragged tab was dropped on this window, as a backup to the
   // dragged tab's own `dragend` (which can go missing if the tab's element
@@ -153,7 +146,7 @@ export function App() {
   // highlighter is on, both of which are meant to be used over a tab's own
   // content — see there). Gated on all three so it can never interfere with
   // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
-  // WorkspaceBar's rename, TabSearch) when none of them are active.
+  // WorkspaceBar's rename, the tab search popup) when none of them are active.
   useEffect(() => {
     if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !textToolActive && !penActive && !cropActive) {
       return;
@@ -285,12 +278,45 @@ export function App() {
     setBookmarkPopup(null);
   };
 
-  const handleSplitWithActive = (secondaryId: string): void => {
-    if (activeTabId && activeTabId !== secondaryId) {
-      enterSplitView(secondaryId);
+  // Opens over whichever kind of tab is showing, so the tab's native view comes off the window first (it would paint above
+  // this popup and swallow its clicks) and a still of its last frame stands in behind it — same as the bookmark popup.
+  const openTabSearch = (): void => {
+    if (tabSearch) {
+      return;
     }
-    setTabSearchOpen(false);
+    const tabId = activeTabId;
+    if (!tabId) {
+      setTabSearch({ tabId: null, previewImage: null });
+      return;
+    }
+    // Set at once, before the capture resolves, so a second press while it's in flight doesn't open another.
+    setTabSearch({ tabId, previewImage: null });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setTabSearch((current) => (current ? { tabId, previewImage } : current));
+    });
   };
+
+  // Jumping to a tab: it's activated first, so the view `endTabPreview` re-shows (the old active tab's) is only
+  // put back if the search ended on that same tab — otherwise main finds it's no longer the active one and leaves it be.
+  const closeTabSearch = (jumpTo: string | null): void => {
+    if (!tabSearch) {
+      return;
+    }
+    if (jumpTo) {
+      activateTab(jumpTo);
+    }
+    if (tabSearch.tabId) {
+      endTabPreview(tabSearch.tabId);
+    }
+    setTabSearch(null);
+  };
+
+  // The chrome window can lose OS focus to whatever tab's WebContentsView
+  // the user last clicked into, so the "Search Tabs" keyboard shortcut is
+  // an Electron menu accelerator (see buildMenu.ts) that reaches here via
+  // this push instead of a renderer-level keydown listener, which a
+  // focused tab would simply swallow.
+  useEffect(() => window.northstar.onOpenTabSearch(openTabSearch));
 
   return (
     <div className="app-shell">
@@ -382,7 +408,7 @@ export function App() {
             <PageActions
               canActOnPage={browserTab !== null}
               canAnnotate={browserTab !== null || activeTab?.kind === 'pdf'}
-              annotationToolsLocked={activeTab?.kind === 'pdf' && activeTab.fileName === null}
+              annotationToolsLocked={isHome || (activeTab?.kind === 'pdf' && activeTab.fileName === null)}
               canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
@@ -408,7 +434,7 @@ export function App() {
               showRevert={!isAppPage}
               onNewTerminal={createTerminalTab}
               onOpenHistory={createHistoryTab}
-              onOpenTabSearch={() => setTabSearchOpen(true)}
+              onOpenTabSearch={openTabSearch}
               onZoomOut={zoomOut}
               onZoomIn={zoomIn}
               onSetZoom={setZoom}
@@ -425,19 +451,6 @@ export function App() {
             />
           </div>
         </div>
-        {isTabSearchOpen && (
-          <TabSearch
-            tabs={tabs}
-            workspaces={workspaces}
-            activeTabId={activeTabId}
-            onClose={() => setTabSearchOpen(false)}
-            onActivate={(id) => {
-              activateTab(id);
-              setTabSearchOpen(false);
-            }}
-            onSplitWithActive={handleSplitWithActive}
-          />
-        )}
       </div>
       <div className="main-row">
         {/* Stays mounted (same reasoning as `.app__bar` above) so Focus
@@ -479,6 +492,15 @@ export function App() {
               previewImage={bookmarkPopup.previewImage}
               onSave={handleSaveBookmark}
               onClose={handleCloseBookmarkPopup}
+            />
+          )}
+          {tabSearch && (
+            <TabSearchPopup
+              tabs={tabs}
+              workspaces={workspaces}
+              previewImage={tabSearch.previewImage}
+              onSelect={(tabId) => closeTabSearch(tabId)}
+              onClose={() => closeTabSearch(null)}
             />
           )}
         </div>

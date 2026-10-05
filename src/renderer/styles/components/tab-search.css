@@ -1,47 +1,73 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-12 */
+   Last Modified: 2026-10-05 */
 
-/* ── TAB SEARCH ───────────────────────────────────────────────────────── */
+/* ── TAB SEARCH POPUP ─────────────────────────────────────────────────── */
 
+/* Like `.bookmark-popup__backdrop`: anchored to `.tab-content`, which has
+   exactly the bounds the tab's own `WebContentsView` occupies, so the blur
+   stays off the chrome above and beside it. The blurred still and the scrim
+   over it are the bookmark popup's own `__preview` and `__scrim` pieces
+   (bookmark-popup.css) — the same backdrop, so every popup looks alike.
+   Top-aligned rather than centered, since the list below the search box
+   grows and shrinks as it filters and the box shouldn't jump. */
 .tab-search__backdrop {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 100;
   display: flex;
   justify-content: center;
-  padding-top: 12vh;
+  align-items: flex-start;
+  padding-top: 10%;
+  box-sizing: border-box;
 
-  background: var(--color-overlay-backdrop);
+  cursor: default;
 }
 
 .tab-search {
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: min(34rem, 90vw);
-  max-height: 60vh;
-  overflow: hidden;
+  width: min(36rem, 90%);
+  max-height: 70%;
+  padding: var(--size-spacing-md);
+  gap: var(--size-spacing-sm);
+  box-sizing: border-box;
 
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
   border-radius: var(--size-radius-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* The address bar's look, since it plays the same part: a box you type into to find somewhere. */
 .tab-search__input {
-  padding: var(--size-spacing-md);
+  flex: none;
+  height: 34px;
+  padding: 0 var(--size-spacing-md);
+  box-sizing: border-box;
 
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--color-panel-border);
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
 
+  font: inherit;
   font-size: 15px;
   color: var(--color-address-text);
 }
 
+.tab-search__input::placeholder {
+  color: var(--color-address-placeholder);
+}
+
+.tab-search__input:hover {
+  border-color: var(--color-address-border-hover);
+}
+
 .tab-search__input:focus {
   outline: none;
+  border-color: var(--color-address-border-focus);
 }
 
 .tab-search__results {
@@ -50,8 +76,9 @@
      this is explicit rather than left to default to `visible` — a lone
      `overflow-y` computes `overflow-x: auto` too. */
   overflow-x: hidden;
+  min-height: 0;
   margin: 0;
-  padding: var(--size-spacing-xs);
+  padding: 0;
   list-style: none;
 }
 
@@ -65,7 +92,7 @@
 .tab-search__result {
   display: flex;
   align-items: center;
-  height: 34px;
+  height: 36px;
   padding: 0 var(--size-spacing-sm);
   gap: var(--size-spacing-sm);
 
@@ -77,8 +104,10 @@
   cursor: pointer;
 }
 
+/* The highlighted row is the app's accent color — whatever the color picker has chosen — like the History unit dropdown. */
 .tab-search__result--selected {
-  background: var(--color-selection-bg);
+  background: rgb(var(--color-accent-rgb));
+  color: #ffffff;
 }
 
 .tab-search__favicon {
@@ -96,6 +125,19 @@
   border-radius: 50%;
 }
 
+/* The glyph for a tab with no favicon: ">_", "PDF", or the history clock — one width, so titles line up. */
+.tab-search__kind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex-shrink: 0;
+
+  font-family: Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--color-accent-text);
+}
+
 .tab-search__title {
   overflow: hidden;
   flex: 1;
@@ -111,20 +153,7 @@
   color: var(--color-address-placeholder);
 }
 
-.tab-search__split {
-  flex-shrink: 0;
-  padding: 2px var(--size-spacing-sm);
-
-  background: transparent;
-  border: 1px solid var(--color-panel-border);
-  border-radius: var(--size-radius-sm);
-
-  font-size: var(--size-font-sm);
-  color: var(--color-accent-text);
-
-  cursor: pointer;
-}
-
-.tab-search__split:hover {
-  background: var(--color-button-hover-bg);
+.tab-search__result--selected .tab-search__kind,
+.tab-search__result--selected .tab-search__workspace {
+  color: rgba(255, 255, 255, 0.85);
 }

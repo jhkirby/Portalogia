@@ -2572,15 +2572,16 @@ export class TabManager {
   }
 
   /**
-   * Captures the active browser tab's current frame and hides its native
-   * `WebContentsView` — what `BookmarkPopup` shows blurred behind itself
-   * instead of the live page, since it's a true modal. The view has to
+   * Captures the active tab's current frame (any kind — browser, terminal,
+   * PDF or History) and hides its native `WebContentsView` — what
+   * `BookmarkPopup` and `TabSearchPopup` show blurred behind themselves
+   * instead of the live page, since they're true modals. The view has to
    * actually come off the window, not just be covered by chrome-drawn UI,
    * since it's a separate native surface layered above the chrome (same
    * reason `activateTab` needs `webContents.focus()` — see there) that
    * would otherwise render on top of the popup and swallow every click
    * meant for it. A no-op (returns `null`, nothing hidden) for anything
-   * but the active browser or PDF tab.
+   * but the active tab.
    *
    * Not used by the address bar's suggestions dropdown or `ColorPicker` —
    * both have their own dedicated overlay `WebContentsView`s instead
@@ -2594,7 +2595,7 @@ export class TabManager {
   public async beginTabPreview(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || (state.kind !== 'browser' && state.kind !== 'pdf') || id !== this.activeTabId) {
+    if (!view || !state || id !== this.activeTabId) {
       return null;
     }
 
@@ -2720,7 +2721,8 @@ export class TabManager {
    * button shows as disabled.
    *
    * Every tool needs an active tab, and none works on a History tab. Beyond the
-   * laser pointer, none can mark a terminal or a PDF tab with no file open, and the crop tool only exists
+   * laser pointer, none can mark a terminal, the blank home page, or a PDF tab
+   * with no file open, and the crop tool only exists
    * for a PDF.
    * @param tool Which tool is being switched on.
    * @returns Whether it may be.
@@ -2733,7 +2735,12 @@ export class TabManager {
     if (tool === 'laser') {
       return active.kind !== 'history';
     }
-    if (active.kind === 'terminal' || active.kind === 'history' || (active.kind === 'pdf' && active.fileName === null)) {
+    if (
+      active.kind === 'terminal' ||
+      active.kind === 'history' ||
+      (active.kind === 'pdf' && active.fileName === null) ||
+      (active.kind === 'browser' && active.url === HOME_URL)
+    ) {
       return false;
     }
     return tool !== 'crop' || active.kind === 'pdf';
@@ -3181,6 +3188,11 @@ export class TabManager {
    *   push to the tab's own preload).
    */
   public revertPage(id: string): BrowserState {
+    // Nothing can have been marked on the blank home page or an empty PDF tab — the toolbar button is disabled there, and so is this.
+    const target = this.states.get(id);
+    if ((target?.kind === 'browser' && target.url === HOME_URL) || (target?.kind === 'pdf' && target.fileName === null)) {
+      return this.getState();
+    }
     if (this.states.get(id)?.kind === 'browser') {
       this.highlighter.clearTab(id);
       this.commentController.clearTab(id);
@@ -4000,6 +4012,10 @@ export class TabManager {
     wc.on('did-stop-loading', () => this.patchState(id, { isLoading: false, ...historyFlags() }));
     wc.on('did-navigate', (_event, url) => {
       this.patchState(id, { url, ...historyFlags() });
+      if (id === this.activeTabId) {
+        // Navigating to the home page leaves nothing to mark, so any tool left on turns off.
+        this.releaseUnavailableTools();
+      }
       this.propagateLinkedNavigation(id, url);
     });
     wc.on('did-navigate-in-page', (_event, url) => {

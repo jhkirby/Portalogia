@@ -23,7 +23,7 @@ import { ZoomControl } from '../ZoomControl';
 interface PageActionsProps {
   /** Whether there's an active tab to bookmark — browser-only, unlike `canExportPdf`, since a terminal tab has no URL to bookmark. */
   readonly canActOnPage: boolean;
-  /** True on a PDF tab with no file open: the pen, highlighter, comment, text box and crop tools have nothing to mark, so they're disabled. */
+  /** True on the blank home page, or a PDF tab with no file open: the pen, highlighter, comment, text box and crop tools — and Revert — have nothing to act on, so they're disabled. */
   readonly annotationToolsLocked: boolean;
   /** Whether the pen and comment tools are usable — browser tabs and PDF tabs, unlike `canActOnPage` (a PDF has no URL to bookmark or revert). */
   readonly canAnnotate: boolean;
@@ -230,7 +230,7 @@ export function PageActions({
           type="button"
           className="page-actions__button chrome-tooltip"
           onClick={onRevertPage}
-          disabled={!canAnnotate}
+          disabled={!canAnnotate || annotationToolsLocked}
           aria-label="Revert annotations"
           data-tooltip={`Revert annotations (${formatShortcut('Shift+R')})`}
         >

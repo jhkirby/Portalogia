@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-15
+// Last Modified: 2026-10-05
 
 import { test, expect } from './fixtures';
 
@@ -11,12 +11,19 @@ test.describe('tab search', () => {
 
     const dialog = window.getByRole('dialog', { name: 'Search tabs' });
     await expect(dialog).toBeVisible();
+    // It takes the keyboard straight away, so typing needs no extra click.
+    await expect(window.getByRole('combobox', { name: 'Search tabs' })).toBeFocused();
 
     await window.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
   });
 
-  test('filters results by title as you type', async ({ window, server }) => {
+  test('is a modal over the page: blurred still of the tab behind it', async ({ window }) => {
+    await window.getByRole('button', { name: 'Search tabs' }).click();
+    await expect(window.locator('.bookmark-popup__preview')).toHaveAttribute('src', /^data:image/);
+  });
+
+  test('lists every tab with its workspace, and filters as you type', async ({ window, server }) => {
     await window.getByRole('button', { name: 'New tab', exact: true }).click();
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
@@ -26,10 +33,11 @@ test.describe('tab search', () => {
     ).toHaveCount(1);
 
     await window.getByRole('button', { name: 'Search tabs' }).click();
-    const results = window.getByRole('dialog', { name: 'Search tabs' }).getByRole('listitem');
+    const results = window.getByRole('dialog', { name: 'Search tabs' }).getByRole('option');
     await expect(results).toHaveCount(2);
+    await expect(results.first()).toContainText('Home');
 
-    const searchInput = window.getByRole('textbox', { name: 'Search tabs' });
+    const searchInput = window.getByRole('combobox', { name: 'Search tabs' });
     await searchInput.fill('widgets');
     await expect(results).toHaveCount(1);
     await expect(results.first()).toContainText('Widgets Catalog');
@@ -38,27 +46,83 @@ test.describe('tab search', () => {
     await expect(window.getByText('No matching tabs')).toBeVisible();
   });
 
-  test('splitting from a search result shows the split indicator; exiting removes it', async ({
-    window,
-    server,
-  }) => {
+  test('Up/Down move the highlight and Enter jumps to that tab', async ({ window, server }) => {
     await window.getByRole('button', { name: 'New tab', exact: true }).click();
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     await expect(tabs.filter({ hasText: 'localhost' })).toHaveCount(1);
+    // Make the first tab active, so jumping to the other is a real change.
+    await tabs.first().click();
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
 
-    // Make the home tab active again so it's the split's primary pane.
+    await window.getByRole('button', { name: 'Search tabs' }).click();
+    const results = window.getByRole('dialog', { name: 'Search tabs' }).getByRole('option');
+    await expect(results.first()).toHaveAttribute('aria-selected', 'true');
+
+    await window.keyboard.press('ArrowDown');
+    await expect(results.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await window.keyboard.press('ArrowUp');
+    await expect(results.first()).toHaveAttribute('aria-selected', 'true');
+    await window.keyboard.press('ArrowDown');
+    await window.keyboard.press('Enter');
+
+    await expect(window.getByRole('dialog', { name: 'Search tabs' })).toBeHidden();
+    await expect(tabs.filter({ hasText: 'localhost' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('clicking a row jumps to that tab', async ({ window, server }) => {
+    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    const addressBar = window.getByLabel('Search the internet...');
+    await addressBar.fill(server.url('/widgets'));
+    await addressBar.press('Enter');
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    await expect(tabs.filter({ hasText: 'localhost' })).toHaveCount(1);
     await tabs.first().click();
 
     await window.getByRole('button', { name: 'Search tabs' }).click();
-    await window.getByRole('button', { name: 'Split' }).click();
+    await window.getByRole('option').filter({ hasText: 'Widgets Catalog' }).click();
 
-    const indicator = window.locator('.split-indicator');
-    await expect(indicator).toContainText('Widgets Catalog');
+    await expect(window.getByRole('dialog', { name: 'Search tabs' })).toBeHidden();
+    await expect(tabs.filter({ hasText: 'localhost' })).toHaveAttribute('aria-selected', 'true');
+  });
 
-    await window.getByRole('button', { name: 'Exit split view' }).click();
-    await expect(indicator).toHaveCount(0);
+  test('reaches tabs in other workspaces and switches to their workspace', async ({ window }) => {
+    // A second workspace, with a tab of its own, made active.
+    const research = await window.evaluate(async () => {
+      const created = await window.northstar.createWorkspace('Research');
+      if (!created.ok) {
+        throw new Error('could not create a workspace');
+      }
+      return created.data.activeWorkspaceId;
+    });
+    await window.evaluate(() => window.northstar.createTerminalTab());
+    // Back to the first workspace, so the terminal tab is out of sight.
+    await window.evaluate(async () => {
+      const state = await window.northstar.getState();
+      if (state.ok) {
+        const first = state.data.workspaces[0];
+        if (first) {
+          await window.northstar.switchWorkspace(first.id);
+        }
+      }
+    });
+
+    await window.getByRole('button', { name: 'Search tabs' }).click();
+    const results = window.getByRole('dialog', { name: 'Search tabs' }).getByRole('option');
+    await window.getByRole('combobox', { name: 'Search tabs' }).fill('terminal');
+    await expect(results).toHaveCount(1);
+    await expect(results.first()).toContainText('Research');
+    await results.first().click();
+
+    await expect
+      .poll(() =>
+        window.evaluate(async () => {
+          const state = await window.northstar.getState();
+          return state.ok ? state.data.activeWorkspaceId : null;
+        }),
+      )
+      .toBe(research);
   });
 });
