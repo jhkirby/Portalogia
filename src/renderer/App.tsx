@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
@@ -101,6 +101,8 @@ export function App() {
     setHighlighter,
     commentToolActive,
     setCommentTool,
+    textToolActive,
+    setTextTool,
     penActive,
     setPen,
     cropActive,
@@ -145,7 +147,7 @@ export function App() {
   // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
   // WorkspaceBar's rename, TabSearch) when none of them are active.
   useEffect(() => {
-    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !penActive && !cropActive) {
+    if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !textToolActive && !penActive && !cropActive) {
       return;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -163,6 +165,9 @@ export function App() {
       }
       if (commentToolActive) {
         setCommentTool(false);
+      }
+      if (textToolActive) {
+        setTextTool(false);
       }
       if (penActive) {
         setPen(false);
@@ -182,6 +187,8 @@ export function App() {
     setHighlighter,
     commentToolActive,
     setCommentTool,
+    textToolActive,
+    setTextTool,
     penActive,
     setPen,
     cropActive,
@@ -330,6 +337,7 @@ export function App() {
             <PageActions
               canActOnPage={browserTab !== null}
               canAnnotate={browserTab !== null || activeTab?.kind === 'pdf'}
+              annotationToolsLocked={activeTab?.kind === 'pdf' && activeTab.fileName === null}
               canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
@@ -337,6 +345,7 @@ export function App() {
               laserPointerActive={laserPointerActive}
               highlighterActive={highlighterActive}
               commentToolActive={commentToolActive}
+              textToolActive={textToolActive}
               penActive={penActive}
               cropActive={cropActive}
               showCrop={activeTab?.kind === 'pdf'}
@@ -346,6 +355,7 @@ export function App() {
               canExportDocuments={browserTab !== null && !isHome}
               showExportMenu={activeTab?.kind !== 'pdf'}
               showCommentTool={activeTab?.kind !== 'terminal'}
+              showTextTool={activeTab?.kind !== 'terminal'}
               showPen={activeTab?.kind !== 'terminal'}
               showHighlighter={activeTab?.kind !== 'terminal'}
               showRevert={activeTab?.kind !== 'terminal'}
@@ -359,6 +369,7 @@ export function App() {
               onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}
               onToggleHighlighter={() => setHighlighter(!highlighterActive)}
               onToggleCommentTool={() => setCommentTool(!commentToolActive)}
+              onToggleTextTool={() => setTextTool(!textToolActive)}
               onTogglePen={() => setPen(!penActive)}
               onToggleCrop={() => setCrop(!cropActive)}
               onRevertPage={() => activeTabId && revertPage(activeTabId)}

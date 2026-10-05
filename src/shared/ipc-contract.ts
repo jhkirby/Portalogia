@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 import type { RGB } from '@shared/color';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
@@ -95,6 +95,7 @@ export const IpcChannel = {
   LaserPointerSet: 'laser-pointer:set',
   HighlighterSet: 'highlighter:set',
   CommentToolSet: 'comment-tool:set',
+  TextToolSet: 'text-tool:set',
   PenSet: 'pen:set',
   ZoomIn: 'zoom:in',
   ZoomOut: 'zoom:out',
@@ -483,6 +484,18 @@ export interface NorthstarApi {
   setCommentTool(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
   /**
+   * Turns the text box tool on or off (Ctrl+E, or the toolbar button next to
+   * the comment tool) — see `TextBoxController`. While on, clicking anywhere
+   * on a browser or PDF tab's page drops an editable text box there; while
+   * the caret is in one, Ctrl+. / Ctrl+, step its font size (8–48) and the
+   * size is shown, editable, beside it. Boxes stay on the page when the tool
+   * is off, in the accent color, and a PDF's boxes are baked into its export.
+   * Mutually exclusive with the other pointer tools. Not available on a
+   * terminal tab, like the comment tool.
+   */
+  setTextTool(enabled: boolean): Promise<IpcResult<BrowserState>>;
+
+  /**
    * Reverts a browser tab's page back to how it looked before any
    * highlighting, drawing, or commenting on it — removes every highlight,
    * pen stroke, and comment for that tab's current URL outright
@@ -654,7 +667,7 @@ export interface PdfOpenResult {
 }
 
 /** Which annotation tool the window has on for a PDF tab. The tools are mutually exclusive in main. */
-export type PdfTool = 'none' | 'pen' | 'comment' | 'highlighter' | 'crop';
+export type PdfTool = 'none' | 'pen' | 'comment' | 'highlighter' | 'crop' | 'text';
 
 /** The active annotation tool plus the accent color to mark with. */
 export interface PdfToolState {

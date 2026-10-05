@@ -8,3 +8,4 @@ export { LaserPointerIcon } from './LaserPointerIcon';
 export { OpenInNewWindowIcon } from './OpenInNewWindowIcon';
 export { PenIcon } from './PenIcon';
 export { RevertIcon } from './RevertIcon';
+export { TextBoxIcon } from './TextBoxIcon';

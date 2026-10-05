@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-02
+// Last Modified: 2026-10-04
 
 import type { RGB } from '@shared/color';
 import { rgbToHex } from './color';
@@ -47,4 +47,15 @@ export function commentCursor(color: RGB): string {
     `<path d="M3 4.5h16a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H10l-5 4.5V16H3a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" fill="${fill}" stroke="${ink()}" stroke-width="1.2"/>` +
     '</svg>';
   return `url('data:image/svg+xml,${svg}') 1 22, text`;
+}
+
+/** Text-box cursor (a "T" in a box) filled with the accent color. */
+export function textCursor(color: RGB): string {
+  const fill = `%23${rgbToHex(color).slice(1).toLowerCase()}`;
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    `<rect x="2.5" y="4.5" width="19" height="15" rx="2" fill="${fill}" stroke="${ink()}" stroke-width="1.2"/>` +
+    `<path d="M8 9.5h8M12 9.5v6.5" fill="none" stroke="${ink()}" stroke-width="1.6" stroke-linecap="round"/>` +
+    '</svg>';
+  return `url('data:image/svg+xml,${svg}') 12 12, text`;
 }

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-01
+// Last Modified: 2026-10-04
 
 import {
   useCallback,
@@ -17,9 +17,10 @@ import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
-import { commentCursor, highlighterCursor, penCursor } from '../../lib/toolCursors';
+import { commentCursor, highlighterCursor, penCursor, textCursor } from '../../lib/toolCursors';
 import { PdfPage, type PageHighlight, type PageRect } from './PdfPage';
-import type { PagePoint, PdfComment, PdfStroke } from './PdfAnnotationLayer';
+import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
+import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -118,6 +119,7 @@ export function PdfViewer() {
   // Held in memory only: marks aren't written into the PDF, and are dropped when another file is opened.
   const [strokes, setStrokes] = useState<readonly OnPage<PdfStroke>[]>([]);
   const [comments, setComments] = useState<readonly OnPage<PdfComment>[]>([]);
+  const [textBoxes, setTextBoxes] = useState<readonly OnPage<PdfTextBoxModel>[]>([]);
   /** One entry per page a highlight touches; entries of one highlight share an id. */
   const [highlights, setHighlights] = useState<readonly OnPage<PageHighlight>[]>([]);
   /** At most one crop box per page; applied only to exports (see `PdfCropExporter`). */
@@ -212,6 +214,7 @@ export function PdfViewer() {
       };
       setStrokes(file.annotations.strokes);
       setComments(file.annotations.comments.map((comment) => ({ ...comment, committed: true })));
+      setTextBoxes(file.annotations.textBoxes);
       setHighlights(file.annotations.highlights);
       setCrops(file.annotations.crops);
       setOpenCommentId(null);
@@ -289,6 +292,7 @@ export function PdfViewer() {
         baselineRef.current = { strokes: EMPTY_STROKES, highlights: EMPTY_HIGHLIGHTS, crops: EMPTY_CROPS };
         setStrokes(EMPTY_STROKES);
         setComments([]);
+        setTextBoxes([]);
         setHighlights(EMPTY_HIGHLIGHTS);
         setCrops(EMPTY_CROPS);
         setOpenCommentId(null);
@@ -305,6 +309,7 @@ export function PdfViewer() {
       window.northstarPdf.onClear(() => {
         setStrokes([]);
         setComments([]);
+        setTextBoxes([]);
         setHighlights([]);
         setCrops([]);
         setOpenCommentId(null);
@@ -321,9 +326,12 @@ export function PdfViewer() {
       strokes: strokes.map(({ id, page, points }) => ({ id, page, points: [...points] })),
       comments: comments.filter((c) => c.committed).map(({ id, page, x, y, text }) => ({ id, page, x, y, text })),
       highlights: highlights.map(({ id, page, rects }) => ({ id, page, rects: [...rects] })),
+      textBoxes: textBoxes
+        .filter((box) => box.text.trim() !== '')
+        .map(({ id, page, x, y, text, size, align }) => ({ id, page, x, y, text, size, align })),
       crops: crops.map(({ page, x, y, w, h }) => ({ page, x, y, w, h })),
     });
-  }, [docKey, strokes, comments, highlights, crops]);
+  }, [docKey, strokes, comments, textBoxes, highlights, crops]);
 
   const activeTool: PdfTool = tool.tool;
 
@@ -435,6 +443,14 @@ export function PdfViewer() {
         previous.filter((comment) => comment.committed || comment.text.trim() !== '').map((c) => ({ ...c, committed: true })),
       );
       setOpenCommentId(null);
+    }
+    if (previousToolRef.current === 'text' && activeTool !== 'text') {
+      // Boxes read-only from here on: release the caret (which ends the edit) and drop any left empty.
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && focused.closest('.pdf-tb')) {
+        focused.blur();
+      }
+      setTextBoxes((previous) => previous.filter((box) => box.text.trim() !== ''));
     }
     if (activeTool !== 'highlighter') {
       setHoveredHighlightId(null);
@@ -709,7 +725,9 @@ export function PdfViewer() {
         ? highlighterCursor()
         : activeTool === 'comment'
           ? commentCursor(tool.color)
-          : undefined;
+          : activeTool === 'text'
+            ? textCursor(tool.color)
+            : undefined;
   const { r, g, b } = tool.color;
 
   return (
@@ -754,6 +772,8 @@ export function PdfViewer() {
                     color: tool.color,
                     strokes: strokes.filter((stroke) => stroke.page === page),
                     comments: comments.filter((comment) => comment.page === page),
+                    textBoxes: textBoxes.filter((box) => box.page === page),
+                    scale,
                     openCommentId,
                     onAddStroke: (points: readonly PagePoint[]) =>
                       setStrokes((previous) => [...previous, { id: crypto.randomUUID(), page, points }]),
@@ -779,6 +799,19 @@ export function PdfViewer() {
                       setOpenCommentId((current) => (current === id ? null : current));
                     },
                     onToggleComment: (id: string) => setOpenCommentId((current) => (current === id ? null : id)),
+                    onAddTextBox: (point: PagePoint) => {
+                      const id = crypto.randomUUID();
+                      setTextBoxes((previous) => [
+                        ...previous,
+                        { id, page, x: point.x, y: point.y, text: '', size: TEXT_BOX_FONT_SIZE_DEFAULT, align: 'left' },
+                      ]);
+                      return id;
+                    },
+                    onChangeTextBox: (id: string, patch: PdfTextBoxPatch) =>
+                      setTextBoxes((previous) => previous.map((b) => (b.id === id ? { ...b, ...patch } : b))),
+                    onEndTextBox: (id: string) =>
+                      setTextBoxes((previous) => previous.filter((b) => b.id !== id || b.text.trim() !== '')),
+                    onRemoveTextBox: (id: string) => setTextBoxes((previous) => previous.filter((b) => b.id !== id)),
                   }}
                 />
               );

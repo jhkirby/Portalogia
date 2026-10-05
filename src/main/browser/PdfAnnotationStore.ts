@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-02
+// Last Modified: 2026-10-04
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -10,10 +10,16 @@ import { pdfAnnotationsSchema, type PdfAnnotations } from '@shared/ipc-schemas';
 const storeFileSchema = z.record(z.string(), pdfAnnotationsSchema);
 
 /** What a PDF with nothing drawn on it holds — also what an unknown key returns. */
-export const EMPTY_PDF_ANNOTATIONS: PdfAnnotations = { strokes: [], comments: [], highlights: [], crops: [] };
+export const EMPTY_PDF_ANNOTATIONS: PdfAnnotations = {
+  strokes: [],
+  comments: [],
+  highlights: [],
+  textBoxes: [],
+  crops: [],
+};
 
 /**
- * Persists the pen strokes, comments and highlights drawn on PDFs, as JSON in
+ * Persists the pen strokes, comments, text boxes and highlights drawn on PDFs, as JSON in
  * the app's user-data directory. Marks live only here: the PDF file itself is
  * never written to, so another viewer shows the document unmarked.
  *
@@ -53,6 +59,7 @@ class PdfAnnotationStore {
       annotations.strokes.length === 0 &&
       annotations.comments.length === 0 &&
       annotations.highlights.length === 0 &&
+      annotations.textBoxes.length === 0 &&
       annotations.crops.length === 0;
     if (isEmpty) {
       delete this.entries[key];

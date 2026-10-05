@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-04
 
 import { ipcRenderer, webFrame } from 'electron';
 // Folded into this same preload entry rather than given its own
@@ -11,6 +11,7 @@ import { ipcRenderer, webFrame } from 'electron';
 // sandboxed CJS loader can't `require()` (see that file's own comment).
 import './tabHighlighter';
 import './tabComments';
+import './tabTextBoxes';
 import './tabPen';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see

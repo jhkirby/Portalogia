@@ -1,17 +1,20 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-02
+// Last Modified: 2026-10-04
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { PdfTool } from '@shared/ipc-contract';
 import { rgbToHex, type RGB } from '../../lib/color';
+import { PdfTextBox, type PdfTextBoxModel, type PdfTextBoxPatch } from './PdfTextBox';
 
 /** A point on a page as a fraction (0–1) of its width/height, so marks stay put at any zoom. */
 export interface PagePoint {
   readonly x: number;
   readonly y: number;
 }
+
+export type { PdfTextBoxModel, PdfTextBoxPatch };
 
 export interface PdfStroke {
   readonly id: string;
@@ -39,6 +42,9 @@ export interface PdfAnnotationLayerProps {
   readonly color: RGB;
   readonly strokes: readonly PdfStroke[];
   readonly comments: readonly PdfComment[];
+  readonly textBoxes: readonly PdfTextBoxModel[];
+  /** The page's live zoom (1 = 100%) — text boxes scale their font with it. */
+  readonly scale: number;
   /** The one comment whose box is open while the comment tool is off. */
   readonly openCommentId: string | null;
   readonly onAddStroke: (points: readonly PagePoint[]) => void;
@@ -51,26 +57,36 @@ export interface PdfAnnotationLayerProps {
   readonly onRemoveComment: (id: string) => void;
   /** A dot clicked while the comment tool is off: opens or closes its box. */
   readonly onToggleComment: (id: string) => void;
+  /** Returns the new text box's id so it can take focus immediately. */
+  readonly onAddTextBox: (point: PagePoint) => string;
+  readonly onChangeTextBox: (id: string, patch: PdfTextBoxPatch) => void;
+  /** Focus left a text box: the viewer drops it if it's empty. */
+  readonly onEndTextBox: (id: string) => void;
+  readonly onRemoveTextBox: (id: string) => void;
 }
 
 const toPolyline = (points: readonly PagePoint[]): string => points.map((p) => `${p.x},${p.y}`).join(' ');
 
 /**
- * Pen strokes and comment pins drawn over one PDF page, working like the
+ * Pen strokes, comment pins and text boxes drawn over one PDF page, working like the
  * browser tabs' tools. Marks live in page-relative coordinates, so they
  * scroll and zoom with the page.
  *
  * Pen: drag to draw, click a stroke to delete it. Comments: click the page
  * to drop a dot with a box beside it; Enter saves. While the tool is on
  * every box shows and clicking a dot deletes it; with it off only the dots
- * show, and clicking one opens its box. With any other tool (or none) the
- * layer lets pointer events through so the page still pans or selects.
+ * show, and clicking one opens its box. Text boxes: click the page to drop
+ * one and type; they stay on the page with the tool off but can only be
+ * edited with it on. With any other tool (or none) the layer lets pointer
+ * events through so the page still pans or selects.
  */
 export function PdfAnnotationLayer({
   tool,
   color,
   strokes,
   comments,
+  textBoxes,
+  scale,
   openCommentId,
   onAddStroke,
   onRemoveStroke,
@@ -79,6 +95,10 @@ export function PdfAnnotationLayer({
   onCommitComment,
   onRemoveComment,
   onToggleComment,
+  onAddTextBox,
+  onChangeTextBox,
+  onEndTextBox,
+  onRemoveTextBox,
 }: PdfAnnotationLayerProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<{ hitId: string | null; startX: number; startY: number } | null>(null);
@@ -146,8 +166,11 @@ export function PdfAnnotationLayer({
   // A click, not a press: the new box's textarea takes focus on render, and a
   // press's own default focus handling would immediately take it back.
   const handleClick = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (tool === 'comment' && (event.target === event.currentTarget || (event.target as Element).closest('svg'))) {
+    const onEmptyPage = event.target === event.currentTarget || (event.target as Element).closest('svg');
+    if (tool === 'comment' && onEmptyPage) {
       setFocusId(onAddComment(pointOf(event)));
+    } else if (tool === 'text' && onEmptyPage) {
+      setFocusId(onAddTextBox(pointOf(event)));
     }
   };
 
@@ -238,6 +261,19 @@ export function PdfAnnotationLayer({
           </div>
         );
       })}
+      {textBoxes.map((box) => (
+        <PdfTextBox
+          key={box.id}
+          box={box}
+          hex={hex}
+          scale={scale}
+          editing={tool === 'text'}
+          autoFocus={box.id === focusId}
+          onChange={onChangeTextBox}
+          onEditEnd={onEndTextBox}
+          onRemove={onRemoveTextBox}
+        />
+      ))}
     </div>
   );
 }

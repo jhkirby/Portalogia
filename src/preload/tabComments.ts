@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-26
+// Last Modified: 2026-10-04
 
 import { ipcRenderer } from 'electron';
 import {
@@ -160,7 +160,8 @@ function buildBaseStyleText(): string {
   );
 }
 
-function ensureBaseStyle(): void {
+/** Exported so `tabTextBoxes.ts` can reuse this file's point-anchor helpers, which rely on the `ANCHOR_CLASS` rule this inserts. */
+export function ensureBaseStyle(): void {
   if (!baseStyleEl) {
     baseStyleEl = document.createElement('style');
     baseStyleEl.setAttribute('data-northstar', 'comment-tool-base');
@@ -244,7 +245,7 @@ function buildQuote(range: Range): CommentQuote {
 }
 
 /** Builds a fresh anchor span at the caret position under `(x, y)`, or — if there's no text there, or insertion fails — a fixed-position fallback anchored directly at that viewport point (degrades to "floats at a screen position" rather than "tracks page content", same accepted best-effort tradeoff `applyStoredComment`'s own quote search makes). */
-function createLiveAnchor(x: number, y: number): { anchor: HTMLElement; dx: number; dy: number; quote: CommentQuote } {
+export function createLiveAnchor(x: number, y: number): { anchor: HTMLElement; dx: number; dy: number; quote: CommentQuote } {
   const range = caretRangeAt(x, y);
   if (range) {
     try {
@@ -300,7 +301,7 @@ function findQuoteLocation(quote: CommentQuote): { node: Text; offset: number } 
   return resolveOffset(map, anchorOffset);
 }
 
-function buildRestoredAnchor(quote: CommentQuote): { anchor: HTMLElement; dx: number; dy: number } {
+export function buildRestoredAnchor(quote: CommentQuote): { anchor: HTMLElement; dx: number; dy: number } {
   const location = findQuoteLocation(quote);
   const marker = document.createElement('span');
   styleAnchor(marker);

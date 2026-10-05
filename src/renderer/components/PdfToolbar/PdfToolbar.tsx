@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-02
+// Last Modified: 2026-10-04
 
 import { useState } from 'react';
 import type { PdfTabState } from '@shared/tab-state';
@@ -14,7 +14,7 @@ interface PdfToolbarProps {
   readonly tab: PdfTabState;
   readonly onOpen: (id: string) => void;
   readonly onGoToPage: (id: string, page: number) => void;
-  /** Saves a copy of the open file with its crops, drawings and highlights applied. */
+  /** Saves a copy of the open file with its crops, drawings, text boxes and highlights applied. */
   readonly onExport: (id: string) => void;
   /** Closes the open file, leaving the tab empty. */
   readonly onClose: (id: string) => void;
@@ -86,7 +86,7 @@ export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRenam
         className="pdf-toolbar__button chrome-tooltip"
         onClick={() => onExport(tab.id)}
         disabled={fileName === null}
-        data-tooltip="Export a copy with crops, drawings and highlights"
+        data-tooltip="Export a copy with crops, drawings, text boxes and highlights"
       >
         Export
       </button>

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 /**
  * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
@@ -240,3 +240,16 @@ export const MAX_TABS_PER_WORKSPACE = 8;
  * removed.
  */
 export const MAX_WORKSPACES = 20;
+
+/**
+ * Smallest and largest font size, and the starting one, of a text box
+ * (browser tab: CSS px; PDF tab: points, so the export matches the screen at
+ * 100% zoom). `src/preload/tabTextBoxes.ts` and `ipc-schemas.ts` hold their
+ * own copies of the range, for the reasons given there — keep all three in step.
+ */
+export const TEXT_BOX_FONT_SIZE_MIN = 8;
+export const TEXT_BOX_FONT_SIZE_MAX = 48;
+export const TEXT_BOX_FONT_SIZE_DEFAULT = 16;
+
+/** How a text box's lines sit within its own width. */
+export type TextBoxAlign = 'left' | 'center' | 'right';

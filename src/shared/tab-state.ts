@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -104,6 +104,8 @@ export interface BrowserState {
   readonly highlighterActive: boolean;
   /** Whether the comment tool is currently on (Ctrl+M, or the toolbar button) — see `CommentController`. */
   readonly commentToolActive: boolean;
+  /** Whether the text box tool is currently on (Ctrl+E, or the toolbar button) — see `TextBoxController`. */
+  readonly textToolActive: boolean;
   /** Whether the pen tool is currently on (Ctrl+P, or the toolbar button) — see `PenController`. */
   readonly penActive: boolean;
   /** Whether the PDF crop tool is currently on (Ctrl+Shift+X, or the toolbar button). */

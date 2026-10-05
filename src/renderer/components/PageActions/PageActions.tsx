@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-18
+// Last Modified: 2026-10-04
 
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -15,12 +15,15 @@ import {
   OpenInNewWindowIcon,
   PenIcon,
   RevertIcon,
+  TextBoxIcon,
 } from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
   /** Whether there's an active tab to bookmark — browser-only, unlike `canExportPdf`, since a terminal tab has no URL to bookmark. */
   readonly canActOnPage: boolean;
+  /** True on a PDF tab with no file open: the pen, highlighter, comment, text box and crop tools have nothing to mark, so they're disabled. */
+  readonly annotationToolsLocked: boolean;
   /** Whether the pen and comment tools are usable — browser tabs and PDF tabs, unlike `canActOnPage` (a PDF has no URL to bookmark or revert). */
   readonly canAnnotate: boolean;
   /** Whether there's an active tab to export to PDF — unlike `canActOnPage`, true for a terminal tab too (its `WebContentsView` prints its on-screen output same as a browser tab prints its page). */
@@ -34,6 +37,8 @@ interface PageActionsProps {
   readonly showExportMenu: boolean;
   /** Whether the comment tool is shown — hidden on a terminal tab, which has no document to anchor a comment to. */
   readonly showCommentTool: boolean;
+  /** Whether the text box tool is shown — hidden on a terminal tab, like the comment tool. */
+  readonly showTextTool: boolean;
   /** Whether the pen is shown — hidden on a terminal tab, which has no document to draw on. */
   readonly showPen: boolean;
   /** Whether the highlighter is shown — hidden on a terminal tab. */
@@ -50,6 +55,8 @@ interface PageActionsProps {
   readonly highlighterActive: boolean;
   /** Whether the comment tool is currently on. */
   readonly commentToolActive: boolean;
+  /** Whether the text box tool is currently on. */
+  readonly textToolActive: boolean;
   /** Whether the pen tool is currently on. */
   readonly penActive: boolean;
   /** Whether the PDF crop tool is currently on. */
@@ -69,6 +76,7 @@ interface PageActionsProps {
   readonly onToggleLaserPointer: () => void;
   readonly onToggleHighlighter: () => void;
   readonly onToggleCommentTool: () => void;
+  readonly onToggleTextTool: () => void;
   readonly onTogglePen: () => void;
   readonly onToggleCrop: () => void;
   /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
@@ -85,6 +93,7 @@ interface PageActionsProps {
 export function PageActions({
   canActOnPage,
   canAnnotate,
+  annotationToolsLocked,
   canExportPdf,
   canZoom,
   zoomPercent,
@@ -92,6 +101,7 @@ export function PageActions({
   laserPointerActive,
   highlighterActive,
   commentToolActive,
+  textToolActive,
   penActive,
   cropActive,
   showCrop,
@@ -101,6 +111,7 @@ export function PageActions({
   canExportDocuments,
   showExportMenu,
   showCommentTool,
+  showTextTool,
   showPen,
   showHighlighter,
   showRevert,
@@ -114,6 +125,7 @@ export function PageActions({
   onToggleLaserPointer,
   onToggleHighlighter,
   onToggleCommentTool,
+  onToggleTextTool,
   onTogglePen,
   onToggleCrop,
   onRevertPage,
@@ -137,7 +149,7 @@ export function PageActions({
           type="button"
           className="page-actions__button chrome-tooltip"
           onClick={onTogglePen}
-          disabled={!canAnnotate}
+          disabled={!canAnnotate || annotationToolsLocked}
           aria-pressed={penActive}
           aria-label={penActive ? 'Turn off pen' : 'Turn on pen'}
           data-tooltip={`${penActive ? 'Turn off pen' : 'Turn on pen'} (${formatShortcut('P')})`}
@@ -150,7 +162,7 @@ export function PageActions({
           type="button"
           className="page-actions__button chrome-tooltip"
           onClick={onToggleHighlighter}
-          disabled={!canExportPdf}
+          disabled={!canExportPdf || annotationToolsLocked}
           aria-pressed={highlighterActive}
           aria-label={highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'}
           data-tooltip={`${highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'} (${formatShortcut('J')})`}
@@ -163,7 +175,7 @@ export function PageActions({
           type="button"
           className="page-actions__button chrome-tooltip"
           onClick={onToggleCommentTool}
-          disabled={!canAnnotate}
+          disabled={!canAnnotate || annotationToolsLocked}
           aria-pressed={commentToolActive}
           aria-label={commentToolActive ? 'Turn off comments' : 'Turn on comments'}
           data-tooltip={`${commentToolActive ? 'Turn off comments' : 'Turn on comments'} (${formatShortcut('M')})`}
@@ -171,11 +183,25 @@ export function PageActions({
           <CommentIcon />
         </button>
       )}
+      {showTextTool && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onToggleTextTool}
+          disabled={!canAnnotate || annotationToolsLocked}
+          aria-pressed={textToolActive}
+          aria-label={textToolActive ? 'Turn off text box' : 'Turn on text box'}
+          data-tooltip={`${textToolActive ? 'Turn off text box' : 'Turn on text box'} (${formatShortcut('E')})`}
+        >
+          <TextBoxIcon />
+        </button>
+      )}
       {showCrop && (
         <button
           type="button"
           className="page-actions__button chrome-tooltip"
           onClick={onToggleCrop}
+          disabled={annotationToolsLocked}
           aria-pressed={cropActive}
           aria-label={cropActive ? 'Turn off crop' : 'Turn on crop'}
           data-tooltip={`${cropActive ? 'Turn off crop' : 'Turn on crop'} (${formatShortcut('Shift+X')})`}

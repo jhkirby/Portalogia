@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
@@ -24,6 +24,7 @@ const EMPTY_STATE: BrowserState = {
   laserPointerActive: false,
   highlighterActive: false,
   commentToolActive: false,
+  textToolActive: false,
   penActive: false,
   cropActive: false,
 };
@@ -230,6 +231,10 @@ export function useTabs() {
     void window.northstar.setCommentTool(enabled).then(logIfFailed);
   }, []);
 
+  const setTextTool = useCallback((enabled: boolean) => {
+    void window.northstar.setTextTool(enabled).then(logIfFailed);
+  }, []);
+
   const setCrop = useCallback((enabled: boolean) => {
     void window.northstar.setCrop(enabled).then(logIfFailed);
   }, []);
@@ -326,6 +331,8 @@ export function useTabs() {
     setHighlighter,
     commentToolActive: state.commentToolActive,
     setCommentTool,
+    textToolActive: state.textToolActive,
+    setTextTool,
     penActive: state.penActive,
     setPen,
     cropActive: state.cropActive,

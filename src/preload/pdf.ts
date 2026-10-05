@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-01
+// Last Modified: 2026-10-04
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
@@ -28,6 +28,7 @@ ipcRenderer.on(PdfScrollToPage, (_event, page: number) => scrollListeners.forEac
 // Same strings `PenController` / `CommentController` (main) send on; hardcoded for the same sandboxed-preload reason as above.
 const PenState = 'pen:state';
 const CommentToolState = 'comment-tool:state';
+const TextToolState = 'text-tool:state';
 const HighlighterState = 'highlighter:state';
 const ZoomApply = 'zoom:apply';
 const ZoomWheel = 'zoom:wheel';
@@ -64,13 +65,24 @@ ipcRenderer.on(PdfFile, (_event, file: PdfOpenResult) => {
 
 let penOn = false;
 let commentOn = false;
+let textOn = false;
 let highlighterOn = false;
 let toolColor: RGB = { r: 26, g: 115, b: 232 };
 let toolReceived = false;
 const toolListeners = new Set<(state: PdfToolState) => void>();
 let cropOn = false;
 const currentTool = (): PdfToolState => ({
-  tool: penOn ? 'pen' : commentOn ? 'comment' : highlighterOn ? 'highlighter' : cropOn ? 'crop' : 'none',
+  tool: penOn
+    ? 'pen'
+    : commentOn
+      ? 'comment'
+      : textOn
+        ? 'text'
+        : highlighterOn
+          ? 'highlighter'
+          : cropOn
+            ? 'crop'
+            : 'none',
   color: toolColor,
 });
 const notifyTool = (): void => {
@@ -89,6 +101,12 @@ ipcRenderer.on(HighlighterState, (_event, payload: { active: boolean; color: RGB
 });
 ipcRenderer.on(CommentToolState, (_event, payload: { active: boolean; color: RGB }) => {
   commentOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+
+ipcRenderer.on(TextToolState, (_event, payload: { active: boolean; color: RGB }) => {
+  textOn = payload.active;
   toolColor = payload.color;
   notifyTool();
 });

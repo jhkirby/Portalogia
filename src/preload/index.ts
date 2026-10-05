@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -108,6 +108,7 @@ const api: NorthstarApi = {
   setLaserPointer: (enabled) => invoke(IpcChannel.LaserPointerSet, { enabled }),
   setHighlighter: (enabled) => invoke(IpcChannel.HighlighterSet, { enabled }),
   setCommentTool: (enabled) => invoke(IpcChannel.CommentToolSet, { enabled }),
+  setTextTool: (enabled) => invoke(IpcChannel.TextToolSet, { enabled }),
   setPen: (enabled) => invoke(IpcChannel.PenSet, { enabled }),
   setCrop: (enabled) => invoke(IpcChannel.CropSet, { enabled }),
   closePdfFile: (id) => invoke(IpcChannel.PdfCloseFile, { id }),

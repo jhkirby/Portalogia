@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 import { Menu, type MenuItemConstructorOptions } from 'electron';
 import type { TabManager } from '../browser/TabManager';
@@ -272,6 +272,11 @@ export function buildMenu(
           label: 'Toggle Comments',
           accelerator: 'CmdOrCtrl+M',
           click: () => getTabManager()?.toggleCommentTool(),
+        },
+        {
+          label: 'Toggle Text Box',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => getTabManager()?.toggleTextTool(),
         },
         {
           label: 'Toggle Crop',

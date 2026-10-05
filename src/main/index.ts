@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-04
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
@@ -14,6 +14,8 @@ import { CommentStore } from './browser/CommentStore';
 import { HighlighterController } from './browser/HighlighterController';
 import { HighlightStore } from './browser/HighlightStore';
 import { PenController } from './browser/PenController';
+import { TextBoxController } from './browser/TextBoxController';
+import { TextBoxStore } from './browser/TextBoxStore';
 import { pdfAnnotationStore } from './browser/PdfAnnotationStore';
 import { PenStore } from './browser/PenStore';
 import { SessionStore } from './browser/SessionStore';
@@ -87,6 +89,12 @@ const highlighterController = new HighlighterController(sharedRegistry, highligh
 // `highlightStore`/`highlighterController` just above.
 const commentStore = new CommentStore(join(app.getPath('userData'), 'comments.json'));
 const commentController = new CommentController(sharedRegistry, commentStore);
+
+// Text boxes aren't scoped to a window either — same reasoning as `commentStore`/
+// `commentController` just above.
+const textBoxStore = new TextBoxStore(join(app.getPath('userData'), 'text-boxes.json'));
+const textBoxController = new TextBoxController(sharedRegistry, textBoxStore);
+app.on('before-quit', () => textBoxController.flush());
 
 // Pen strokes aren't scoped to a window either — same reasoning as
 // `highlightStore`/`highlighterController` just above.
@@ -167,6 +175,7 @@ void app.whenReady().then(() => {
   registerAccentColorIpc(() => {
     highlighterController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isHighlighterActive() ?? false);
     commentController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isCommentToolActive() ?? false);
+    textBoxController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isTextToolActive() ?? false);
     penController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isPenActive() ?? false);
   });
   registerTearOffIpc();
@@ -277,6 +286,7 @@ function launchWindow(
     highlighterController,
     commentController,
     penController,
+    textBoxController,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);

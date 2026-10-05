@@ -128,8 +128,19 @@ body {
    text layer's own I-beam, everywhere on the page. */
 .pdf-viewer__scroll[data-tool='pen'] *,
 .pdf-viewer__scroll[data-tool='highlighter'] *,
-.pdf-viewer__scroll[data-tool='comment'] * {
+.pdf-viewer__scroll[data-tool='comment'] *,
+.pdf-viewer__scroll[data-tool='text'] * {
   cursor: var(--pdf-tool-cursor) !important;
+}
+
+/* Inside a text box the caret's own I-beam is what the user needs. */
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb__input {
+  cursor: text !important;
+}
+
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb__size,
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb__button {
+  cursor: auto !important;
 }
 
 /* Highlighter: text becomes selectable (no panning), the native selection
@@ -174,7 +185,8 @@ body {
 }
 
 .pdf-annot--pen,
-.pdf-annot--comment {
+.pdf-annot--comment,
+.pdf-annot--text {
   pointer-events: auto;
 }
 
@@ -275,6 +287,187 @@ body {
 
   font: inherit;
   color: inherit;
+}
+
+/* ── Text boxes ── */
+
+/* Placed by its top-left corner on the page: the padding is a grabbable
+   frame around the text (dragging it moves the box), pulled back out with a
+   negative margin so the text still lands where it was dropped. Inert unless
+   the text tool is on, so with it off the page beneath still pans and
+   selects. Helvetica is what the export sets the text in, so screen and file
+   match. */
+.pdf-tb {
+  position: absolute;
+  z-index: 5;
+  box-sizing: content-box;
+  margin: -8px 0 0 -8px;
+  padding: 8px;
+
+  font-family: Helvetica, Arial, sans-serif;
+
+  pointer-events: none;
+}
+
+.pdf-annot--text .pdf-tb {
+  pointer-events: auto;
+}
+
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb {
+  cursor: move !important;
+}
+
+/* No padding or border, so the textarea's corner is the text's own origin;
+   the visible frame is an outline for the same reason. */
+.pdf-tb__input {
+  display: block;
+  box-sizing: content-box;
+  min-width: 2px;
+  min-height: 1.2em;
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  resize: none;
+  overflow: hidden;
+
+  font-family: inherit;
+  line-height: 1.2;
+  white-space: pre;
+  field-sizing: content;
+  color: inherit;
+  caret-color: var(--pdf-tb-color);
+  user-select: text;
+}
+
+.pdf-annot--text .pdf-tb:hover .pdf-tb__input {
+  outline-color: color-mix(in srgb, var(--pdf-tb-color) 45%, transparent);
+}
+
+.pdf-tb:focus-within .pdf-tb__input {
+  outline-color: var(--pdf-tb-color);
+}
+
+/* The options panel (size, alignment, delete), shown only while the box is
+   being edited. It's the opposite of the app's theme — dark on a light
+   theme, light on a dark one — so it stands out from the page behind it. */
+.pdf-tb__bar {
+  position: absolute;
+  top: 4px;
+  left: 100%;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding: 3px 4px;
+
+  background: #2b2d31;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+
+  font:
+    12px/1 system-ui,
+    -apple-system,
+    sans-serif;
+  color: #f2f2f2;
+  white-space: nowrap;
+
+  cursor: default !important;
+}
+
+.pdf-tb:focus-within .pdf-tb__bar {
+  display: flex;
+}
+
+.pdf-tb--flip .pdf-tb__bar {
+  right: 100%;
+  left: auto;
+  margin-right: 4px;
+  margin-left: 0;
+}
+
+.pdf-tb__size {
+  box-sizing: border-box;
+  width: 44px;
+  margin: 0 4px 0 0;
+  padding: 2px 3px;
+
+  background: #1e1f22;
+  border: 1px solid #4a4d52;
+  border-radius: 4px;
+
+  font: inherit;
+  text-align: center;
+  color: #f2f2f2;
+}
+
+.pdf-tb__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+
+  font: inherit;
+  font-size: 15px;
+  color: #c9ccd1;
+
+  cursor: pointer;
+}
+
+.pdf-tb__button:hover {
+  background: #3d4045;
+  color: #fff;
+}
+
+.pdf-tb__button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--pdf-tb-color) 45%, transparent);
+  color: #fff;
+}
+
+.pdf-tb__button--delete:hover {
+  color: #ff7b72;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pdf-tb__bar {
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    color: #1b1b1b;
+  }
+
+  .pdf-tb__size {
+    background: #fff;
+    border-color: #c4c4c4;
+    color: #1b1b1b;
+  }
+
+  .pdf-tb__button {
+    color: #555;
+  }
+
+  .pdf-tb__button:hover {
+    background: #eee;
+    color: #111;
+  }
+
+  .pdf-tb__button[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--pdf-tb-color) 30%, transparent);
+    color: #111;
+  }
+
+  .pdf-tb__button--delete:hover {
+    color: #c5221f;
+  }
 }
 
 /* ── Crop ── */

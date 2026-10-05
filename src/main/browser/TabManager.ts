@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-04
 
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
@@ -43,6 +43,7 @@ import { pdfAnnotationStore } from './PdfAnnotationStore';
 import { PdfCropExporter } from './PdfCropExporter';
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
+import type { TextBoxController } from './TextBoxController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
 import { ExportMenuOverlay } from './ExportMenuOverlay';
 import type { HighlighterController } from './HighlighterController';
@@ -139,6 +140,7 @@ export class TabManager {
   private dropRegions: readonly { x: number; y: number; width: number; height: number }[] = [];
   private highlighterActive = false;
   private commentToolActive = false;
+  private textToolActive = false;
   private penActive = false;
   private cropActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
@@ -191,6 +193,10 @@ export class TabManager {
    *   `highlighter` is and for the same reason. This `TabManager` only owns
    *   the per-window on/off toggle; see `PenController`'s own class doc
    *   comment.
+   * @param textBoxController Every browser tab's text boxes and on-disk
+   *   persistence, shared the same way `commentController` is. This
+   *   `TabManager` only owns the per-window on/off toggle; see
+   *   `TextBoxController`'s own class doc comment.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -202,6 +208,7 @@ export class TabManager {
     private readonly highlighter: HighlighterController,
     private readonly commentController: CommentController,
     private readonly penController: PenController,
+    private readonly textBoxController: TextBoxController,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -619,6 +626,7 @@ export class TabManager {
       // annotation tool (if any) is on — same reason as a browser tab's `dom-ready` push.
       this.pushPenStateTo(id);
       this.pushCommentToolStateTo(id);
+      this.pushTextToolStateTo(id);
       this.pushHighlighterStateTo(id);
       this.pushCropStateTo(id);
     });
@@ -708,6 +716,7 @@ export class TabManager {
     }
     pdfFilePaths.delete(id);
     this.states.set(id, { ...current, title: 'PDF', fileName: null, page: 1, pageCount: 0 });
+    this.releaseUnavailableTools();
     this.emitState();
     this.views.get(id)?.webContents.send(IpcChannel.PdfClosed);
   }
@@ -1135,6 +1144,7 @@ export class TabManager {
       this.registry.zoomPercentByTabId.delete(memberId);
       this.highlighter.disposeTab(memberId);
       this.commentController.disposeTab(memberId);
+      this.textBoxController.disposeTab(memberId);
       this.penController.disposeTab(memberId);
       this.registry.removeFromLinkGroup(memberId);
       if (showingWindow && memberState && showingWindow !== this && showingWindow.activeTabId === memberId) {
@@ -1180,6 +1190,7 @@ export class TabManager {
     this.registry.zoomPercentByTabId.delete(id);
     this.highlighter.disposeTab(id);
     this.commentController.disposeTab(id);
+    this.textBoxController.disposeTab(id);
     this.penController.disposeTab(id);
     this.unlinkTab(id);
 
@@ -1390,8 +1401,10 @@ export class TabManager {
     // Showing a different tab (a plain click, a shortcut, a fallback after a
     // close) ends a multi-selection; Ctrl/Shift+click never reach here.
     this.selectedTabIds.clear();
+    this.releaseUnavailableTools();
     this.pushHighlighterState();
     this.pushCommentToolState();
+    this.pushTextToolState();
     this.pushPenState();
     this.pushCropState();
 
@@ -1504,16 +1517,18 @@ export class TabManager {
 
   /** Navigates a tab back one entry in its history, if possible. A no-op for a terminal tab; see `navigate`. */
   public goBack(id: string): BrowserState {
-    if (this.states.get(id)?.kind === 'browser') {
-      this.views.get(id)?.webContents.navigationHistory.goBack();
+    const history = this.states.get(id)?.kind === 'browser' ? this.views.get(id)?.webContents.navigationHistory : undefined;
+    if (history?.canGoBack()) {
+      history.goBack();
     }
     return this.getState();
   }
 
   /** Navigates a tab forward one entry in its history, if possible. A no-op for a terminal tab; see `navigate`. */
   public goForward(id: string): BrowserState {
-    if (this.states.get(id)?.kind === 'browser') {
-      this.views.get(id)?.webContents.navigationHistory.goForward();
+    const history = this.states.get(id)?.kind === 'browser' ? this.views.get(id)?.webContents.navigationHistory : undefined;
+    if (history?.canGoForward()) {
+      history.goForward();
     }
     return this.getState();
   }
@@ -1621,7 +1636,8 @@ export class TabManager {
   public async exportToPdf(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state) {
+    // Mirrors the toolbar's export menu: not offered on a PDF tab (see `exportPdfFile`) or the blank home page.
+    if (!view || !state || state.kind === 'pdf' || (state.kind === 'browser' && state.url === HOME_URL)) {
       return null;
     }
 
@@ -1652,7 +1668,7 @@ export class TabManager {
   public async exportDocuments(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || state.kind !== 'browser') {
+    if (!view || !state || state.kind !== 'browser' || state.url === HOME_URL) {
       return null;
     }
 
@@ -2226,6 +2242,7 @@ export class TabManager {
       this.registry.zoomPercentByTabId.delete(tabId);
       this.highlighter.disposeTab(tabId);
       this.commentController.disposeTab(tabId);
+      this.textBoxController.disposeTab(tabId);
       this.penController.disposeTab(tabId);
       this.unlinkTab(tabId);
       if (this.grabbedTabId === tabId) {
@@ -2443,6 +2460,54 @@ export class TabManager {
     return this.setFocusMode(!this.focusMode);
   }
 
+  // ── Annotation tool availability ─────────────────────────────────────
+
+  /**
+   * Whether a pointer tool may be switched on right now: the single rule
+   * behind each toolbar button's `disabled` state (`PageActions`), enforced
+   * here so no other path to the same toggle — the menu accelerators, the
+   * tab views' own key handling, a direct IPC call — can turn on a tool its
+   * button shows as disabled.
+   *
+   * Every tool needs an active tab. Beyond the laser pointer, none can mark a
+   * terminal or a PDF tab with no file open, and the crop tool only exists
+   * for a PDF.
+   * @param tool Which tool is being switched on.
+   * @returns Whether it may be.
+   */
+  private canEnableTool(tool: 'laser' | 'highlighter' | 'pen' | 'comment' | 'text' | 'crop'): boolean {
+    const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
+    if (!active) {
+      return false;
+    }
+    if (tool === 'laser') {
+      return true;
+    }
+    if (active.kind === 'terminal' || (active.kind === 'pdf' && active.fileName === null)) {
+      return false;
+    }
+    return tool !== 'crop' || active.kind === 'pdf';
+  }
+
+  /** Turns off any tool that's on but unavailable on the now-active tab (`canEnableTool`) — call when a tab is activated or a PDF is closed, since a tool left on would mark nothing and its button would sit pressed and disabled. */
+  private releaseUnavailableTools(): void {
+    if (this.highlighterActive && !this.canEnableTool('highlighter')) {
+      this.setHighlighter(false);
+    }
+    if (this.commentToolActive && !this.canEnableTool('comment')) {
+      this.setCommentTool(false);
+    }
+    if (this.textToolActive && !this.canEnableTool('text')) {
+      this.setTextTool(false);
+    }
+    if (this.penActive && !this.canEnableTool('pen')) {
+      this.setPen(false);
+    }
+    if (this.cropActive && !this.canEnableTool('crop')) {
+      this.setCrop(false);
+    }
+  }
+
   // ── Laser pointer ────────────────────────────────────────────────────
 
   /**
@@ -2454,6 +2519,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setLaserPointer(enabled: boolean): BrowserState {
+    // Same rule as the toolbar button's disabled state — see `canEnableTool`.
+    if (enabled && !this.canEnableTool('laser')) {
+      return this.getState();
+    }
     // Mutually exclusive with the highlighter, the comment tool, and the pen
     // — all four are full-window "the pointer does something else now"
     // modes, and having more than one on at once made no sense (each one's
@@ -2463,6 +2532,9 @@ export class TabManager {
     }
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (enabled && this.textToolActive) {
+      this.setTextTool(false);
     }
     if (enabled && this.penActive) {
       this.setPen(false);
@@ -2492,7 +2564,12 @@ export class TabManager {
    */
   private exitPointerTools(): boolean {
     const wasOn =
-      this.laserPointerActive || this.highlighterActive || this.commentToolActive || this.penActive || this.cropActive;
+      this.laserPointerActive ||
+      this.highlighterActive ||
+      this.commentToolActive ||
+      this.textToolActive ||
+      this.penActive ||
+      this.cropActive;
     if (this.laserPointerActive) {
       this.setLaserPointer(false);
     }
@@ -2501,6 +2578,9 @@ export class TabManager {
     }
     if (this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (this.textToolActive) {
+      this.setTextTool(false);
     }
     if (this.penActive) {
       this.setPen(false);
@@ -2542,6 +2622,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setHighlighter(enabled: boolean): BrowserState {
+    // Same rule as the toolbar button's disabled state — see `canEnableTool`.
+    if (enabled && !this.canEnableTool('highlighter')) {
+      return this.getState();
+    }
     // Mutually exclusive with the laser pointer, the comment tool, and the
     // pen — see `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
@@ -2549,6 +2633,9 @@ export class TabManager {
     }
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (enabled && this.textToolActive) {
+      this.setTextTool(false);
     }
     if (enabled && this.penActive) {
       this.setPen(false);
@@ -2585,6 +2672,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setCommentTool(enabled: boolean): BrowserState {
+    // Same rule as the toolbar button's disabled state — see `canEnableTool`.
+    if (enabled && !this.canEnableTool('comment')) {
+      return this.getState();
+    }
     // Mutually exclusive with the laser pointer, the highlighter, and the
     // pen — see `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
@@ -2598,6 +2689,9 @@ export class TabManager {
     }
     if (enabled && this.cropActive) {
       this.setCrop(false);
+    }
+    if (enabled && this.textToolActive) {
+      this.setTextTool(false);
     }
     this.commentToolActive = enabled;
     this.pushCommentToolState();
@@ -2628,6 +2722,70 @@ export class TabManager {
     return this.commentToolActive;
   }
 
+  // ── Text box tool ────────────────────────────────────────────────────
+
+  /**
+   * Turns the text box tool on or off (Ctrl+E, or `PageActions`' toolbar
+   * button) for this window — see `TextBoxController`. A browser tab's
+   * preload (`src/preload/tabTextBoxes.ts`) and a PDF tab's page both do the
+   * drop/edit work themselves; this just pushes the new state down.
+   * @param enabled Whether the text box tool should be on.
+   * @returns The full browser state after the change.
+   */
+  public setTextTool(enabled: boolean): BrowserState {
+    // Same rule as the toolbar button's disabled state — see `canEnableTool`.
+    if (enabled && !this.canEnableTool('text')) {
+      return this.getState();
+    }
+    // Mutually exclusive with the other pointer tools — see `setLaserPointer`'s own comment.
+    if (enabled && this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
+    if (enabled && this.highlighterActive) {
+      this.setHighlighter(false);
+    }
+    if (enabled && this.commentToolActive) {
+      this.setCommentTool(false);
+    }
+    if (enabled && this.penActive) {
+      this.setPen(false);
+    }
+    if (enabled && this.cropActive) {
+      this.setCrop(false);
+    }
+    this.textToolActive = enabled;
+    this.pushTextToolState();
+    this.nudgeActiveTabCursor();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Toggles the text box tool; does nothing on a terminal tab, where the shortcut mustn't switch on an invisible tool. */
+  public toggleTextTool(): BrowserState {
+    const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
+    if (!this.textToolActive && active?.kind === 'terminal') {
+      return this.getState();
+    }
+    return this.setTextTool(!this.textToolActive);
+  }
+
+  /** Pushes this window's text-tool on/off state to whichever tab is active — call on `setTextTool` and `activateTab`. */
+  private pushTextToolState(): void {
+    if (this.activeTabId) {
+      this.pushTextToolStateTo(this.activeTabId);
+    }
+  }
+
+  /** Pushes this window's text-tool on/off state to a specific tab, active or not — a fresh document's preload has never been told. */
+  private pushTextToolStateTo(tabId: string): void {
+    this.textBoxController.syncState(tabId, this.textToolActive);
+  }
+
+  /** Whether this window currently has the text box tool on — read by `main/index.ts`'s accent-color broadcast. */
+  public isTextToolActive(): boolean {
+    return this.textToolActive;
+  }
+
   // ── Pen ──────────────────────────────────────────────────────────────
 
   /**
@@ -2640,6 +2798,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setPen(enabled: boolean): BrowserState {
+    // Same rule as the toolbar button's disabled state — see `canEnableTool`.
+    if (enabled && !this.canEnableTool('pen')) {
+      return this.getState();
+    }
     // Mutually exclusive with the laser pointer, the highlighter, and the
     // comment tool — see `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
@@ -2650,6 +2812,9 @@ export class TabManager {
     }
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (enabled && this.textToolActive) {
+      this.setTextTool(false);
     }
     if (enabled && this.cropActive) {
       this.setCrop(false);
@@ -2694,6 +2859,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setCrop(enabled: boolean): BrowserState {
+    // Same rule as the toolbar button's disabled state — see `canEnableTool`.
+    if (enabled && !this.canEnableTool('crop')) {
+      return this.getState();
+    }
     // Mutually exclusive with the other pointer tools — see `setLaserPointer`'s own comment.
     if (enabled && this.laserPointerActive) {
       this.setLaserPointer(false);
@@ -2703,6 +2872,9 @@ export class TabManager {
     }
     if (enabled && this.commentToolActive) {
       this.setCommentTool(false);
+    }
+    if (enabled && this.textToolActive) {
+      this.setTextTool(false);
     }
     if (enabled && this.penActive) {
       this.setPen(false);
@@ -2762,6 +2934,7 @@ export class TabManager {
     if (this.states.get(id)?.kind === 'browser') {
       this.highlighter.clearTab(id);
       this.commentController.clearTab(id);
+      this.textBoxController.clearTab(id);
       this.penController.clearTab(id);
     } else if (this.states.get(id)?.kind === 'pdf') {
       // The page clears its own marks and reports the empty set back, which removes them from the store too.
@@ -3333,6 +3506,7 @@ export class TabManager {
       laserPointerActive: this.laserPointerActive,
       highlighterActive: this.highlighterActive,
       commentToolActive: this.commentToolActive,
+      textToolActive: this.textToolActive,
       penActive: this.penActive,
       cropActive: this.cropActive,
     };
@@ -3544,12 +3718,15 @@ export class TabManager {
       this.pushHighlighterStateTo(id);
       this.commentController.resetTab(id);
       this.pushCommentToolStateTo(id);
+      this.textBoxController.resetTab(id);
+      this.pushTextToolStateTo(id);
       this.penController.resetTab(id);
       this.pushPenStateTo(id);
       const state = this.states.get(id);
       if (state?.kind === 'browser') {
         this.highlighter.restoreFor(id, state.url);
         this.commentController.restoreFor(id, state.url);
+        this.textBoxController.restoreFor(id, state.url);
         this.penController.restoreFor(id, state.url);
       }
     });
@@ -3934,6 +4111,11 @@ export class TabManager {
             event.preventDefault();
             owner.penController.redo(id);
           }
+          return;
+        case 'e':
+          // Same as buildMenu.ts's `CmdOrCtrl+E` ("Toggle Text Box"); a no-op on a terminal tab.
+          event.preventDefault();
+          owner.toggleTextTool();
           return;
         case 'm':
           // Never intercepted on a terminal tab at all (see this method's

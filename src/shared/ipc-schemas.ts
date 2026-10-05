@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-15
+// Last Modified: 2026-10-04
 
 import { z } from 'zod';
 
@@ -37,6 +37,9 @@ export const pdfRenameRequestSchema = z.object({
 });
 const pageNumberSchema = z.number().int().min(1).max(100000);
 const unitSchema = z.number().min(0).max(1);
+/** Same range as `TEXT_BOX_FONT_SIZE_MIN`/`MAX` in `constants.ts`, repeated because a zod literal can't read them back. */
+const textBoxFontSizeSchema = z.number().int().min(8).max(48);
+const textBoxAlignSchema = z.enum(['left', 'center', 'right']).default('left');
 
 /**
  * Everything drawn on one PDF in this app (never written into the file):
@@ -76,6 +79,25 @@ export const pdfAnnotationsSchema = z.object({
       }),
     )
     .max(10000),
+  /**
+   * Text boxes. `size` is the font size in PDF points (what the export draws
+   * with); defaulted so stores written before the text tool still parse.
+   */
+  textBoxes: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        page: pageNumberSchema,
+        x: unitSchema,
+        y: unitSchema,
+        text: z.string().min(1).max(10000),
+        size: textBoxFontSizeSchema,
+        /** Defaulted so boxes saved before alignment existed still parse. */
+        align: textBoxAlignSchema,
+      }),
+    )
+    .max(2000)
+    .default([]),
   /**
    * Crop boxes, at most one per page, as fractions of the page as displayed.
    * Applied only to exports; defaulted so stores written before the crop tool still parse.
@@ -209,6 +231,11 @@ export const commentToolRequestSchema = z.object({
   enabled: z.boolean(),
 });
 export type CommentToolRequest = z.infer<typeof commentToolRequestSchema>;
+
+export const textToolRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+export type TextToolRequest = z.infer<typeof textToolRequestSchema>;
 
 export const penRequestSchema = z.object({
   enabled: z.boolean(),
