@@ -38,6 +38,10 @@ export const IpcChannel = {
   HistoryEntries: 'history:entries',
   /** History page → main: delete one visit. */
   HistoryDelete: 'history:delete',
+  /** History page → main: copy one visit's stored URL (or PDF path) to the clipboard. */
+  HistoryCopy: 'history:copy',
+  /** Main → history page: the bookmark names the table's Bookmark column looks routes up in. */
+  HistoryBookmarks: 'history:bookmarks',
   /** Chrome → main: clear the visits within a time range (or all of them). */
   HistoryClear: 'history:clear',
   /** Chrome → main: the History toolbar's search text for a History tab. */
@@ -739,14 +743,31 @@ export interface NorthstarPdfApi {
   onZoom(listener: (percent: number) => void): () => void;
 }
 
-/** One page reached in a browser tab: when its request was made, the route requested, and the status code it came back with. */
+/**
+ * One access in the browsing history: a page reached in a browser tab (when
+ * its request was made, the route requested, and the status code it came
+ * back with), or a PDF file opened in a PDF tab.
+ */
 export interface HistoryEntry {
   readonly id: string;
   /** Milliseconds since the epoch. */
   readonly timestamp: number;
+  /** `'url'` for a page, `'pdf'` for a file on disk. */
+  readonly type: 'url' | 'pdf';
+  /** The route requested — a page's URL, or a PDF's path on disk. */
   readonly url: string;
-  /** The HTTP status code (a redirect hop records its own 3xx). */
+  /** The HTTP status code (a redirect hop records its own 3xx); `0` for a PDF, which has none. */
   readonly status: number;
+}
+
+/**
+ * The names of the bookmarks, for the table's Bookmark column to look each
+ * route up in: pages by exact URL, PDFs by lower-cased path (Windows paths
+ * are case-insensitive, and the page can't tell the platform).
+ */
+export interface HistoryBookmarkIndex {
+  readonly urls: Readonly<Record<string, string>>;
+  readonly pdfs: Readonly<Record<string, string>>;
 }
 
 /** How far back a clear reaches: the last `amount` of a unit, or everything. */
@@ -763,6 +784,10 @@ export interface NorthstarHistoryApi {
   onEntries(listener: (entries: readonly HistoryEntry[]) => void): () => void;
   /** Deletes one visit. Fire-and-forget. */
   deleteEntry(id: string): void;
+  /** Copies one visit's stored URL (a PDF's path) to the clipboard — main reads it from its own record, so the page can't put arbitrary text there. Fire-and-forget. */
+  copyEntry(id: string): void;
+  /** Subscribes to the bookmark names the Bookmark column uses; called immediately with the latest if one already arrived. */
+  onBookmarks(listener: (index: HistoryBookmarkIndex) => void): () => void;
   /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
   onQuery(listener: (query: string) => void): () => void;
 }

@@ -800,6 +800,7 @@ export class TabManager {
       return;
     }
     pdfFilePaths.set(id, filePath);
+    this.historyController.recordPdfAccess(filePath);
 
     const current = this.states.get(id);
     if (current?.kind === 'pdf') {
@@ -926,6 +927,7 @@ export class TabManager {
       await rename(oldPath, newPath);
       pdfFilePaths.set(id, newPath);
       this.bookmarkStore.renamePdf(oldPath, newPath);
+      this.historyController.pushBookmarksToAll();
     }
     this.states.set(id, { ...current, title: this.pdfTabTitle(newPath), fileName: name, filePath: newPath });
     this.emitState();
@@ -2427,6 +2429,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.add(title, url);
+    this.historyController.pushBookmarksToAll();
     this.emitState();
     return this.getState();
   }
@@ -2434,6 +2437,7 @@ export class TabManager {
   /** Removes a bookmark by id. */
   public removeBookmark(id: string): BrowserState {
     this.bookmarkStore.remove(id);
+    this.historyController.pushBookmarksToAll();
     this.syncPdfTabTitles();
     this.emitState();
     return this.getState();
@@ -2456,6 +2460,7 @@ export class TabManager {
         return this.getState();
       }
       this.bookmarkStore.togglePdf(path);
+      this.historyController.pushBookmarksToAll();
       this.syncPdfTabTitles();
       this.emitState();
       return this.getState();
@@ -2464,6 +2469,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.toggle(state.title, state.url);
+    this.historyController.pushBookmarksToAll();
     this.emitState();
     return this.getState();
   }
@@ -2481,6 +2487,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.addPdf(name, path);
+    this.historyController.pushBookmarksToAll();
     this.syncPdfTabTitles();
     this.emitState();
     return this.getState();
@@ -2516,6 +2523,7 @@ export class TabManager {
       await Promise.all(paths.map(async (path) => ((await stat(path).then(() => true, () => false)) ? null : path)))
     ).filter((path): path is string => path !== null);
     if (this.bookmarkStore.removePdfPaths(missing)) {
+      this.historyController.pushBookmarksToAll();
       this.syncPdfTabTitles();
       this.emitState();
     }
@@ -2534,6 +2542,7 @@ export class TabManager {
     }
     if (!(await stat(bookmark.path).then(() => true, () => false))) {
       this.bookmarkStore.remove(bookmark.id);
+      this.historyController.pushBookmarksToAll();
       this.syncPdfTabTitles();
       this.emitState();
       return;

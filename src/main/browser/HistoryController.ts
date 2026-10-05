@@ -4,8 +4,9 @@
 // Last Modified: 2026-10-05
 
 import { randomUUID } from 'node:crypto';
-import { ipcMain, type Session, type WebContents } from 'electron';
-import { IpcChannel, type HistoryClearRange } from '@shared/ipc-contract';
+import { clipboard, ipcMain, type Session, type WebContents } from 'electron';
+import { IpcChannel, type HistoryBookmarkIndex, type HistoryClearRange } from '@shared/ipc-contract';
+import type { BookmarkState } from '@shared/tab-state';
 import { historyDeleteRequestSchema } from '@shared/ipc-schemas';
 import type { HistoryStore } from './HistoryStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
@@ -26,7 +27,7 @@ const MS_PER_HOUR = 60 * 60 * 1000;
  * every window's `TabManager`, since a History tab (like any tab) can move
  * between windows. It does three things:
  *
- * - **Records** every main-frame request a *browser* tab makes, with the
+ * - **Records** every PDF opened in a PDF tab (`recordPdfAccess`), and every main-frame request a *browser* tab makes, with the
  *   status code it came back with, by listening on the session's web
  *   requests (`attachTo`). A redirect hop is recorded too, under its own
  *   3xx — the history is of routes requested, not just where they ended up.
@@ -43,11 +44,20 @@ export class HistoryController {
   /**
    * @param registry The shared tabs/views, used to tell which `webContents` are browser or History tabs.
    * @param store Where visits are kept.
+   * @param listBookmarks The current bookmarks — the table's Bookmark column shows a route's bookmark name.
    */
   public constructor(
     private readonly registry: SharedTabRegistry,
     private readonly store: HistoryStore,
+    private readonly listBookmarks: () => readonly BookmarkState[],
   ) {
+    ipcMain.on(IpcChannel.HistoryCopy, (event, rawRequest: unknown) => {
+      const parsed = historyDeleteRequestSchema.safeParse(rawRequest);
+      const entry = parsed.success && this.isHistoryView(event.sender) ? this.store.find(parsed.data.id) : undefined;
+      if (entry) {
+        clipboard.writeText(entry.url);
+      }
+    });
     ipcMain.on(IpcChannel.HistoryDelete, (event, rawRequest: unknown) => {
       const parsed = historyDeleteRequestSchema.safeParse(rawRequest);
       if (parsed.success && this.isHistoryView(event.sender) && this.store.remove(parsed.data.id)) {
@@ -84,12 +94,37 @@ export class HistoryController {
     }
   }
 
-  /** Sends the current list to one History tab — call once its page has loaded, since a fresh page has never been sent anything. */
+  /** Sends the current list (and the bookmark names) to one History tab — call once its page has loaded, since a fresh page has never been sent anything. */
   public pushTo(tabId: string): void {
     const view = this.registry.views.get(tabId);
     if (view && !view.webContents.isDestroyed() && this.registry.states.get(tabId)?.kind === 'history') {
       view.webContents.send(IpcChannel.HistoryEntries, this.store.listNewestFirst());
+      view.webContents.send(IpcChannel.HistoryBookmarks, this.bookmarkIndex());
     }
+  }
+
+  /** Re-sends the bookmark names to every open History tab — call whenever a bookmark is added, removed or renamed. Small, so it goes at once. */
+  public pushBookmarksToAll(): void {
+    const index = this.bookmarkIndex();
+    for (const [tabId, state] of this.registry.states) {
+      const view = this.registry.views.get(tabId);
+      if (state.kind === 'history' && view && !view.webContents.isDestroyed()) {
+        view.webContents.send(IpcChannel.HistoryBookmarks, index);
+      }
+    }
+  }
+
+  private bookmarkIndex(): HistoryBookmarkIndex {
+    const urls: Record<string, string> = {};
+    const pdfs: Record<string, string> = {};
+    for (const bookmark of this.listBookmarks()) {
+      if (bookmark.kind === 'pdf' && bookmark.path) {
+        pdfs[bookmark.path.toLowerCase()] = bookmark.title;
+      } else if (bookmark.kind === 'page') {
+        urls[bookmark.url] = bookmark.title;
+      }
+    }
+    return { urls, pdfs };
   }
 
   /** Writes any pending save now — call on quit. */
@@ -137,9 +172,21 @@ export class HistoryController {
     this.store.add({
       id: randomUUID(),
       timestamp: Math.round(timestamp),
+      type: 'url',
       url: url.slice(0, MAX_URL_LENGTH),
       status,
     });
+    this.pushToAll();
+  }
+
+  /**
+   * Records a PDF opened in a PDF tab — however it was picked (the open
+   * dialog, the bookmark search). It has a path where a page has a URL and no
+   * status code.
+   * @param path The file's path on disk.
+   */
+  public recordPdfAccess(path: string): void {
+    this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'pdf', url: path, status: 0 });
     this.pushToAll();
   }
 

@@ -101,7 +101,7 @@ app.on('before-quit', () => textBoxController.flush());
 // The browsing history isn't scoped to a window either, and a History tab can move between them — same
 // reasoning as `commentStore`/`commentController` above. Recording starts once the app is ready (see below).
 const historyStore = new HistoryStore(join(app.getPath('userData'), 'history.json'));
-const historyController = new HistoryController(sharedRegistry, historyStore);
+const historyController = new HistoryController(sharedRegistry, historyStore, () => bookmarkStore.list());
 app.on('before-quit', () => historyController.flush());
 
 // Pen strokes aren't scoped to a window either — same reasoning as

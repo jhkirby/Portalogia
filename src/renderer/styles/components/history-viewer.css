@@ -75,12 +75,21 @@ body {
   width: 200px;
 }
 
+.history__th--type {
+  width: 56px;
+}
+
 .history__th--status {
   width: 72px;
 }
 
-.history__th--action {
-  width: 40px;
+.history__th--bookmark {
+  width: 170px;
+}
+
+/* Room for the copy and delete buttons side by side. */
+.history__th--actions {
+  width: 72px;
 }
 
 .history__cell {
@@ -93,8 +102,14 @@ body {
   white-space: nowrap;
 }
 
-.history__cell--time {
+.history__cell--time,
+.history__cell--type {
   color: var(--color-tab-text);
+}
+
+/* "None", and a PDF's missing status: there's nothing to show, so it recedes. */
+.history__cell--muted {
+  color: var(--color-address-placeholder);
 }
 
 .history__cell--status {
@@ -117,13 +132,22 @@ body {
   background: var(--color-button-hover-bg);
 }
 
-.history__cell--action {
+.history__cell--actions {
   padding: 0 var(--size-spacing-xs);
-  text-align: center;
 }
 
-/* Hidden until the pointer is over the row (or the button itself is focused with the keyboard). */
-.history__delete {
+.history__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* Copy and delete: hidden until the pointer is over the row (or the button itself is focused with the keyboard). */
+.history__action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
   padding: 0;
@@ -141,14 +165,20 @@ body {
   cursor: pointer;
 }
 
-.history__row:hover .history__delete,
-.history__delete:focus-visible {
+.history__row:hover .history__action-button,
+.history__action-button:focus-visible {
   opacity: 1;
 }
 
-.history__delete:hover {
+.history__action-button:hover {
   background: var(--color-close-hover-bg);
   color: var(--color-tab-text-active);
+}
+
+/* Shown after a copy lands, and kept visible for as long as it's up even if the pointer moves off the row. */
+.history__copy--done {
+  opacity: 1;
+  color: var(--color-accent-text);
 }
 
 .history__empty {

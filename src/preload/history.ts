@@ -4,7 +4,7 @@
 // Last Modified: 2026-10-05
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
+import type { HistoryBookmarkIndex, HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object. `HistoryController`
@@ -12,6 +12,8 @@ import type { HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
 const HistoryEntries = 'history:entries';
 const HistoryQuery = 'history:query';
 const HistoryDelete = 'history:delete';
+const HistoryCopy = 'history:copy';
+const HistoryBookmarks = 'history:bookmarks';
 
 // The page has no zoom: stopping Ctrl+wheel here keeps Chromium's own pinch/ctrl-wheel zoom from acting on it.
 window.addEventListener(
@@ -38,6 +40,13 @@ ipcRenderer.on(HistoryQuery, (_event, query: string) => {
   queryListeners.forEach((listener) => listener(query));
 });
 
+let latestBookmarks: HistoryBookmarkIndex | null = null;
+const bookmarkListeners = new Set<(index: HistoryBookmarkIndex) => void>();
+ipcRenderer.on(HistoryBookmarks, (_event, index: HistoryBookmarkIndex) => {
+  latestBookmarks = index;
+  bookmarkListeners.forEach((listener) => listener(index));
+});
+
 const api: NorthstarHistoryApi = {
   onEntries: (listener) => {
     entryListeners.add(listener);
@@ -57,8 +66,20 @@ const api: NorthstarHistoryApi = {
       queryListeners.delete(listener);
     };
   },
+  onBookmarks: (listener) => {
+    bookmarkListeners.add(listener);
+    if (latestBookmarks !== null) {
+      listener(latestBookmarks);
+    }
+    return () => {
+      bookmarkListeners.delete(listener);
+    };
+  },
   deleteEntry: (id: string) => {
     ipcRenderer.send(HistoryDelete, { id });
+  },
+  copyEntry: (id: string) => {
+    ipcRenderer.send(HistoryCopy, { id });
   },
 };
 

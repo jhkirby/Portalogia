@@ -13,6 +13,8 @@ const historyFileSchema = z.array(
   z.object({
     id: z.string().min(1).max(64),
     timestamp: z.number().finite(),
+    // Absent in files written before PDF accesses were recorded: those are all pages.
+    type: z.enum(['url', 'pdf']).default('url'),
     url: z.string().min(1).max(4096),
     status: z.number().int().min(0).max(999),
   }),
@@ -40,6 +42,11 @@ export class HistoryStore {
   /** @returns Every recorded visit, newest first. */
   public listNewestFirst(): readonly HistoryEntry[] {
     return [...this.entries].reverse();
+  }
+
+  /** @returns The visit with this id, if there is one. */
+  public find(id: string): HistoryEntry | undefined {
+    return this.entries.find((entry) => entry.id === id);
   }
 
   /** Records one visit, dropping the oldest if the history is full. */
