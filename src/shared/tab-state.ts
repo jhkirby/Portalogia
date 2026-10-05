@@ -45,6 +45,8 @@ export interface PdfTabState {
   readonly title: string;
   /** The open file's name, or `null` before one is opened. Always editable in the chrome toolbar. */
   readonly fileName: string | null;
+  /** The open file's full path on disk, or `null` before one is opened — what a PDF bookmark saves. */
+  readonly filePath: string | null;
   /** The 1-based page in view; meaningless while `pageCount` is 0. */
   readonly page: number;
   /** Pages in the open document, 0 before one is opened. */
@@ -62,11 +64,19 @@ export interface WorkspaceState {
   readonly color: string;
 }
 
-/** A saved page, persisted across restarts by the main process. */
+/**
+ * A saved page, or a saved PDF file on disk, persisted across restarts by the
+ * main process. A PDF bookmark's `url` is the file's `file://` URL (never
+ * navigable — a bookmark is only ever navigated to when `kind` is `'page'`)
+ * and `path` is the file's location, which is what it's matched and reopened by.
+ */
 export interface BookmarkState {
   readonly id: string;
   readonly title: string;
   readonly url: string;
+  readonly kind: 'page' | 'pdf';
+  /** The PDF's path on disk; `null` for a page. */
+  readonly path: string | null;
 }
 
 /** The pair of tabs shown side by side when split view is active. */

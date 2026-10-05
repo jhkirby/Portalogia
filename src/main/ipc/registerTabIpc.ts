@@ -8,6 +8,7 @@ import type { ZodType } from 'zod';
 import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-contract';
 import {
   addBookmarkRequestSchema,
+  addPdfBookmarkRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
   colorPickerSyncRequestSchema,
@@ -28,6 +29,7 @@ import {
   textToolRequestSchema,
   cropRequestSchema,
   pdfGoToPageRequestSchema,
+  pdfOpenBookmarkRequestSchema,
   pdfPageInfoRequestSchema,
   pdfSaveAnnotationsRequestSchema,
   pdfRenameRequestSchema,
@@ -300,6 +302,22 @@ export function registerTabIpc(
       return { ok: true, data: null };
     } catch (error) {
       return toErrorResult(error);
+    }
+  });
+
+  handle(IpcChannel.BookmarksToggle, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).toggleBookmark(request.id),
+  );
+
+  handle(IpcChannel.BookmarksAddPdf, addPdfBookmarkRequestSchema, (request, event) =>
+    resolveTabManager(event).addPdfBookmark(request.id, request.name),
+  );
+
+  // From the empty PDF page's bookmark list, routed by tab id like the toolbar actions above.
+  ipcMain.on(IpcChannel.PdfOpenBookmark, (_event, rawRequest: unknown) => {
+    const parsed = pdfOpenBookmarkRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      void resolveTabManagerForTab(parsed.data.id)?.openPdfBookmark(parsed.data.id, parsed.data.bookmarkId);
     }
   });
 

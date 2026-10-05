@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-02 */
+   Last Modified: 2026-10-04 */
 
 /* ── PDF TOOLBAR ──────────────────────────────────────────────────────── */
 /* The PDF tab's controls inside the chrome's main toolbar, in the slot a
@@ -43,43 +43,40 @@
   border-color: var(--color-accent-text);
 }
 
-/* No file open: just the text, never a box — no hover or focus outline. */
-.pdf-toolbar__file-name--empty,
-.pdf-toolbar__file-name--empty:hover,
-.pdf-toolbar__file-name--empty:focus {
-  border-color: transparent;
-  color: var(--color-tab-text);
-  cursor: default;
-  pointer-events: none;
-}
-
-/* "current / total" right after the file name. */
+/* "current / total", just before the file name. */
 .pdf-toolbar__pages {
   display: flex;
   align-items: center;
   flex: none;
-  gap: var(--size-spacing-xs, 4px);
+  /* No gap: the number's own right padding and the total's left margin are the only space around the "/", so it reads as one fraction. */
+  gap: 0;
 
   font-size: var(--size-font-sm);
   color: var(--color-tab-text);
 }
 
 .pdf-toolbar__page-input {
+  box-sizing: content-box;
   height: 24px;
-  padding: 0 var(--size-spacing-xs, 4px);
-  min-width: 2.5ch;
+  padding: 0 3px;
 
   background: transparent;
-  border: 1px solid var(--color-chrome-border);
+  /* No box until the pointer is over it or the cursor is in it, like the file name. */
+  border: 1px solid transparent;
   border-radius: var(--size-radius-sm);
 
   font: inherit;
   color: var(--color-tab-text-active);
-  text-align: center;
+  /* Right-aligned so the digits hug the "/" however wide the box is. */
+  text-align: right;
   user-select: text;
 }
 
-.pdf-toolbar__page-input:hover,
+/* Hovering shows the toolbar's grey border; the accent color is for when the cursor is inside. */
+.pdf-toolbar__page-input:hover {
+  border-color: var(--color-chrome-border);
+}
+
 .pdf-toolbar__page-input:focus {
   outline: none;
   border-color: var(--color-accent-text);
@@ -114,4 +111,78 @@
 
   font-size: var(--size-font-sm);
   color: #d93025;
+}
+
+/* The bookmark star, left of Open — same look as the address bar's. */
+.pdf-toolbar__bookmark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-address-placeholder);
+  cursor: pointer;
+}
+
+/* Sits at the toolbar's left edge, so the shared tooltip must grow rightward
+   from the button: left alone, the button's centered flex layout would
+   center it on the 20px star, pushing half of it off the window. */
+.pdf-toolbar__bookmark::after {
+  left: 0;
+}
+
+.pdf-toolbar__bookmark:hover:not(:disabled) {
+  background: var(--color-button-hover-bg);
+}
+
+.pdf-toolbar__bookmark[aria-pressed='true'] {
+  color: var(--color-accent-text);
+}
+
+.pdf-toolbar__bookmark:disabled {
+  color: var(--color-button-disabled-text);
+  cursor: default;
+}
+
+/* The search box shown in the file name's place while no file is open — the
+   address bar's look, since it plays the same part for bookmarked PDFs. */
+.pdf-search {
+  display: flex;
+  flex: 0 1 280px;
+  min-width: 0;
+}
+
+.pdf-search__input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--size-spacing-sm);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-address-text);
+}
+
+.pdf-search__input::placeholder {
+  color: var(--color-address-placeholder);
+}
+
+.pdf-search__input:hover {
+  border-color: var(--color-address-border-hover);
+}
+
+.pdf-search__input:focus {
+  outline: none;
+  border-color: var(--color-address-border-focus);
 }

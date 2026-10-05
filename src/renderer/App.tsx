@@ -22,6 +22,8 @@ import { useTheme } from './hooks/useTheme';
 /** `BookmarkPopup`'s state while open — captured once, when the star button is clicked, not re-derived live, since the popup edits its own copy of the name/URL independent of whatever the tab does in the meantime. */
 interface BookmarkPopupState {
   readonly tabId: string;
+  /** What the popup saves: a page by its URL, or the tab's open PDF by its file path. */
+  readonly variant: 'page' | 'pdf';
   readonly url: string;
   readonly title: string;
   readonly previewImage: string | null;
@@ -85,6 +87,9 @@ export function App() {
     openWorkspaceInNewWindow,
     addBookmark,
     removeBookmark,
+    toggleBookmark,
+    addPdfBookmark,
+    openPdfBookmark,
     beginTabPreview,
     endTabPreview,
     enterSplitView,
@@ -197,10 +202,17 @@ export function App() {
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
   const isHome = browserTab?.url === HOME_URL;
+  // PDF bookmarks are files, not pages: the address bar and tab labels only ever deal in the page ones.
+  const pageBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'page'), [bookmarks]);
   const activeBookmark = useMemo(
-    () => (browserTab ? (bookmarks.find((bookmark) => bookmark.url === browserTab.url) ?? null) : null),
-    [browserTab, bookmarks],
+    () => (browserTab ? (pageBookmarks.find((bookmark) => bookmark.url === browserTab.url) ?? null) : null),
+    [browserTab, pageBookmarks],
   );
+  const pdfBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'pdf'), [bookmarks]);
+  const pdfBookmarked =
+    activeTab?.kind === 'pdf' &&
+    activeTab.filePath !== null &&
+    bookmarks.some((bookmark) => bookmark.kind === 'pdf' && bookmark.path === activeTab.filePath);
   const handleReloadOrStop = (): void => {
     if (!activeTabId) {
       return;
@@ -226,7 +238,23 @@ export function App() {
     }
     const tabId = activeTabId;
     void beginTabPreview(tabId).then((previewImage) => {
-      setBookmarkPopup({ tabId, url: browserTab.url, title: browserTab.title, previewImage });
+      setBookmarkPopup({ tabId, variant: 'page', url: browserTab.url, title: browserTab.title, previewImage });
+    });
+  };
+
+  // The same shape as the page star: an already-bookmarked PDF un-bookmarks instantly; otherwise the
+  // popup asks for the name first, with the file's path where a page shows its URL.
+  const handleTogglePdfBookmark = (): void => {
+    if (activeTab?.kind !== 'pdf' || activeTab.filePath === null || activeTab.fileName === null) {
+      return;
+    }
+    if (pdfBookmarked) {
+      toggleBookmark(activeTab.id);
+      return;
+    }
+    const { id: tabId, filePath, fileName } = activeTab;
+    void beginTabPreview(tabId).then((previewImage) => {
+      setBookmarkPopup({ tabId, variant: 'pdf', url: filePath, title: fileName, previewImage });
     });
   };
 
@@ -234,7 +262,12 @@ export function App() {
     if (!bookmarkPopup) {
       return;
     }
-    addBookmark(name, url);
+    if (bookmarkPopup.variant === 'pdf') {
+      // The path isn't editable, so only the name travels: main knows which file the tab has open.
+      addPdfBookmark(bookmarkPopup.tabId, name);
+    } else {
+      addBookmark(name, url);
+    }
     endTabPreview(bookmarkPopup.tabId);
     setBookmarkPopup(null);
   };
@@ -275,7 +308,7 @@ export function App() {
             <TitlebarGrip />
             <TabBar
               tabs={workspaceTabs}
-              bookmarks={bookmarks}
+              bookmarks={pageBookmarks}
               activeTabId={activeTabId}
               selectedTabIds={selectedTabIds}
               onToggleSelect={toggleTabSelection}
@@ -297,6 +330,10 @@ export function App() {
               <PdfToolbar
                 key={activeTab.id}
                 tab={activeTab}
+                isBookmarked={pdfBookmarked}
+                onToggleBookmark={handleTogglePdfBookmark}
+                pdfBookmarks={pdfBookmarks}
+                onOpenBookmark={openPdfBookmark}
                 onOpen={openPdfFile}
                 onGoToPage={goToPdfPage}
                 onExport={exportPdfFile}
@@ -325,7 +362,7 @@ export function App() {
                   url={isHome ? '' : (browserTab?.url ?? '')}
                   isLoading={browserTab?.isLoading ?? false}
                   onNavigate={(input) => activeTabId && navigate(activeTabId, input)}
-                  bookmarks={bookmarks}
+                  bookmarks={pageBookmarks}
                   isBookmarked={activeBookmark !== null}
                   canBookmark={browserTab !== null && !isHome}
                   bookmarkName={activeBookmark?.title ?? null}
@@ -425,6 +462,7 @@ export function App() {
         <div className="tab-content">
           {bookmarkPopup && (
             <BookmarkPopup
+              variant={bookmarkPopup.variant}
               url={bookmarkPopup.url}
               title={bookmarkPopup.title}
               previewImage={bookmarkPopup.previewImage}

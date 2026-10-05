@@ -4,14 +4,24 @@
 // Last Modified: 2026-10-04
 
 import { useState } from 'react';
-import type { PdfTabState } from '@shared/tab-state';
+import type { BookmarkState, PdfTabState } from '@shared/tab-state';
 import { formatShortcut } from '../../lib/shortcuts';
+import { BookmarkStarIcon } from '../icons';
+import { PdfSearchBox } from './PdfSearchBox';
 
 /** Must match `pdfRenameRequestSchema` in main: something, then ".pdf". */
 const PDF_NAME_PATTERN = /.\.pdf$/i;
 
 interface PdfToolbarProps {
   readonly tab: PdfTabState;
+  /** Whether the open file's path is already bookmarked — drives the star's filled/outline state. */
+  readonly isBookmarked: boolean;
+  /** Bookmarks the open file (by its path on disk), or removes its bookmark. */
+  readonly onToggleBookmark: (id: string) => void;
+  /** The bookmarked PDFs, searched by the box an empty tab shows in place of a file name. */
+  readonly pdfBookmarks: readonly BookmarkState[];
+  /** Opens a bookmarked PDF in the tab. */
+  readonly onOpenBookmark: (id: string, bookmarkId: string) => void;
   readonly onOpen: (id: string) => void;
   readonly onGoToPage: (id: string, page: number) => void;
   /** Saves a copy of the open file with its crops, drawings, text boxes and highlights applied. */
@@ -24,11 +34,22 @@ interface PdfToolbarProps {
 
 /**
  * The PDF tab's controls, shown in the main toolbar where a browser tab has
- * its address bar: Open PDF, the file name (always an editable text box), the
+ * its address bar: the bookmark star, Open PDF, the page counter, the file name (an editable text box — or, while no file is open, a search over the bookmarked PDFs), the
  * page counter, and Export. The PDF page itself only draws the document.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
-export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRename }: PdfToolbarProps) {
+export function PdfToolbar({
+  tab,
+  isBookmarked,
+  onToggleBookmark,
+  pdfBookmarks,
+  onOpenBookmark,
+  onOpen,
+  onGoToPage,
+  onExport,
+  onClose,
+  onRename,
+}: PdfToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   /** Uncommitted text while the page box is being edited; null shows the live page. */
@@ -66,6 +87,17 @@ export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRenam
     <div className="pdf-toolbar">
       <button
         type="button"
+        className="pdf-toolbar__bookmark chrome-tooltip"
+        onClick={() => onToggleBookmark(tab.id)}
+        disabled={fileName === null}
+        aria-pressed={isBookmarked}
+        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this PDF'}
+        data-tooltip={`${isBookmarked ? 'Remove bookmark' : 'Bookmark this PDF'} (${formatShortcut('B')})`}
+      >
+        <BookmarkStarIcon filled={isBookmarked} size={14} />
+      </button>
+      <button
+        type="button"
         className="pdf-toolbar__button chrome-tooltip"
         onClick={() => onOpen(tab.id)}
         data-tooltip={`Open PDF (${formatShortcut('O')})`}
@@ -90,25 +122,6 @@ export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRenam
       >
         Export
       </button>
-      {/* Before a file is open there's nothing to rename: it reads "No file open" with no box and can't be focused. */}
-      <input
-        type="text"
-        className={`pdf-toolbar__file-name${fileName === null ? ' pdf-toolbar__file-name--empty' : ''}`}
-        aria-label="File name"
-        value={nameDraft ?? fileName ?? 'No file open'}
-        readOnly={fileName === null}
-        tabIndex={fileName === null ? -1 : undefined}
-        onChange={(event) => setNameDraft(event.target.value)}
-        onBlur={commitName}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.currentTarget.blur();
-          } else if (event.key === 'Escape') {
-            setNameDraft(null);
-            event.currentTarget.blur();
-          }
-        }}
-      />
       {pageCount > 0 && (
         <div className="pdf-toolbar__pages">
           <input
@@ -117,7 +130,8 @@ export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRenam
             className="pdf-toolbar__page-input"
             aria-label="Current page"
             value={pageDraft ?? String(page)}
-            size={String(pageCount).length}
+            // Just wide enough for the largest page number, so it sits snug against the "/".
+            style={{ width: `${String(pageCount).length}ch` }}
             onFocus={(event) => event.currentTarget.select()}
             onChange={(event) => setPageDraft(event.target.value.replace(/\D/g, ''))}
             onBlur={commitPage}
@@ -132,6 +146,27 @@ export function PdfToolbar({ tab, onOpen, onGoToPage, onExport, onClose, onRenam
           />
           <span className="pdf-toolbar__page-total">/ {pageCount}</span>
         </div>
+      )}
+      {/* Before a file is open there's nothing to rename, so the slot is a search over the bookmarked PDFs instead. */}
+      {fileName === null ? (
+        <PdfSearchBox bookmarks={pdfBookmarks} onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)} />
+      ) : (
+        <input
+          type="text"
+          className="pdf-toolbar__file-name"
+          aria-label="File name"
+          value={nameDraft ?? fileName}
+          onChange={(event) => setNameDraft(event.target.value)}
+          onBlur={commitName}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur();
+            } else if (event.key === 'Escape') {
+              setNameDraft(null);
+              event.currentTarget.blur();
+            }
+          }}
+        />
       )}
       {error && <span className="pdf-toolbar__error">{error}</span>}
     </div>

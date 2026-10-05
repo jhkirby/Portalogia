@@ -629,6 +629,8 @@ export class TabManager {
       this.pushTextToolStateTo(id);
       this.pushHighlighterStateTo(id);
       this.pushCropStateTo(id);
+      // An empty PDF page lists the bookmarked files; any that have since been moved or deleted are dropped first.
+      void this.refreshPdfBookmarks();
     });
 
     this.views.set(id, view);
@@ -637,6 +639,7 @@ export class TabManager {
       id,
       title: 'PDF',
       fileName: null,
+      filePath: null,
       page: 1,
       pageCount: 0,
       workspaceId: workspaceId ?? this.activeWorkspaceId,
@@ -676,6 +679,21 @@ export class TabManager {
     if (canceled || !filePath) {
       return;
     }
+    await this.loadPdfFromPath(id, filePath);
+  }
+
+  /**
+   * Reads a PDF from disk into a PDF tab: sends its bytes to the tab's page,
+   * and retitles the tab to the file's name. Failures are reported in a
+   * native error box, not thrown — see `openPdfFile`.
+   * @param id The PDF tab. A no-op if it isn't one.
+   * @param filePath The file to open.
+   */
+  private async loadPdfFromPath(id: string, filePath: string): Promise<void> {
+    const view = this.views.get(id);
+    if (this.states.get(id)?.kind !== 'pdf' || !view) {
+      return;
+    }
     let data: Buffer;
     try {
       if ((await stat(filePath)).size > MAX_PDF_BYTES) {
@@ -690,7 +708,12 @@ export class TabManager {
 
     const current = this.states.get(id);
     if (current?.kind === 'pdf') {
-      this.states.set(id, { ...current, title: basename(filePath), fileName: basename(filePath) });
+      this.states.set(id, {
+        ...current,
+        title: this.pdfTabTitle(filePath),
+        fileName: basename(filePath),
+        filePath,
+      });
       this.emitState();
     }
     if (!view.webContents.isDestroyed()) {
@@ -715,10 +738,12 @@ export class TabManager {
       return;
     }
     pdfFilePaths.delete(id);
-    this.states.set(id, { ...current, title: 'PDF', fileName: null, page: 1, pageCount: 0 });
+    this.states.set(id, { ...current, title: 'PDF', fileName: null, filePath: null, page: 1, pageCount: 0 });
     this.releaseUnavailableTools();
     this.emitState();
     this.views.get(id)?.webContents.send(IpcChannel.PdfClosed);
+    // Back to the empty page: re-check the bookmarked files before it lists them.
+    void this.refreshPdfBookmarks();
   }
 
   /**
@@ -805,8 +830,9 @@ export class TabManager {
       }
       await rename(oldPath, newPath);
       pdfFilePaths.set(id, newPath);
+      this.bookmarkStore.renamePdf(oldPath, newPath);
     }
-    this.states.set(id, { ...current, title: name, fileName: name });
+    this.states.set(id, { ...current, title: this.pdfTabTitle(newPath), fileName: name, filePath: newPath });
     this.emitState();
   }
 
@@ -1402,6 +1428,10 @@ export class TabManager {
     // close) ends a multi-selection; Ctrl/Shift+click never reach here.
     this.selectedTabIds.clear();
     this.releaseUnavailableTools();
+    const shown = this.states.get(id);
+    if (shown?.kind === 'pdf' && shown.fileName === null) {
+      void this.refreshPdfBookmarks();
+    }
     this.pushHighlighterState();
     this.pushCommentToolState();
     this.pushTextToolState();
@@ -2299,6 +2329,7 @@ export class TabManager {
   /** Removes a bookmark by id. */
   public removeBookmark(id: string): BrowserState {
     this.bookmarkStore.remove(id);
+    this.syncPdfTabTitles();
     this.emitState();
     return this.getState();
   }
@@ -2313,12 +2344,96 @@ export class TabManager {
    */
   public toggleBookmark(id: string): BrowserState {
     const state = this.states.get(id);
+    if (state?.kind === 'pdf') {
+      // A PDF is bookmarked by its path on disk, and only once a file is open.
+      const path = pdfFilePaths.get(id);
+      if (!path) {
+        return this.getState();
+      }
+      this.bookmarkStore.togglePdf(path);
+      this.syncPdfTabTitles();
+      this.emitState();
+      return this.getState();
+    }
     if (!state || state.kind !== 'browser' || state.url === HOME_URL) {
       return this.getState();
     }
     this.bookmarkStore.toggle(state.title, state.url);
     this.emitState();
     return this.getState();
+  }
+
+  /**
+   * Bookmarks a PDF tab's open file under a name the user chose (the
+   * bookmark popup's Save). The tab then goes by that name too.
+   * @param id The PDF tab. A no-op if it isn't one or has no file open.
+   * @param name What to call the bookmark.
+   * @returns The full browser state after the change.
+   */
+  public addPdfBookmark(id: string, name: string): BrowserState {
+    const path = this.states.get(id)?.kind === 'pdf' ? pdfFilePaths.get(id) : undefined;
+    if (!path) {
+      return this.getState();
+    }
+    this.bookmarkStore.addPdf(name, path);
+    this.syncPdfTabTitles();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** What a PDF tab with this file open is titled: its bookmark's name if it has one, else the file's own name. */
+  private pdfTabTitle(path: string): string {
+    return this.bookmarkStore.findPdf(path)?.title ?? basename(path);
+  }
+
+  /** Re-titles every PDF tab from its file's bookmark (or lack of one) — call after bookmarks change. Doesn't emit; the caller does. */
+  private syncPdfTabTitles(): void {
+    for (const [id, state] of this.states) {
+      if (state.kind !== 'pdf' || !state.filePath) {
+        continue;
+      }
+      const title = this.pdfTabTitle(state.filePath);
+      if (title !== state.title) {
+        this.states.set(id, { ...state, title });
+      }
+    }
+  }
+
+  /**
+   * Drops every PDF bookmark whose file no longer exists (moved, renamed
+   * outside the app, or deleted) — the bookmark is disconnected from
+   * anything — Run whenever an
+   * empty PDF page loads or comes back (a new PDF tab, a closed file).
+   */
+  private async refreshPdfBookmarks(): Promise<void> {
+    const paths = this.bookmarkStore.listPdfs().flatMap((bookmark) => (bookmark.path ? [bookmark.path] : []));
+    const missing = (
+      await Promise.all(paths.map(async (path) => ((await stat(path).then(() => true, () => false)) ? null : path)))
+    ).filter((path): path is string => path !== null);
+    if (this.bookmarkStore.removePdfPaths(missing)) {
+      this.syncPdfTabTitles();
+      this.emitState();
+    }
+  }
+
+  /**
+   * Opens a bookmarked PDF in a PDF tab. If the file has gone missing since
+   * the list was shown, its bookmark is dropped instead.
+   * @param id The PDF tab to open it in.
+   * @param bookmarkId The bookmark picked from the empty page's list.
+   */
+  public async openPdfBookmark(id: string, bookmarkId: string): Promise<void> {
+    const bookmark = this.bookmarkStore.listPdfs().find((candidate) => candidate.id === bookmarkId);
+    if (!bookmark?.path || this.states.get(id)?.kind !== 'pdf') {
+      return;
+    }
+    if (!(await stat(bookmark.path).then(() => true, () => false))) {
+      this.bookmarkStore.remove(bookmark.id);
+      this.syncPdfTabTitles();
+      this.emitState();
+      return;
+    }
+    await this.loadPdfFromPath(id, bookmark.path);
   }
 
   /**
@@ -2330,7 +2445,7 @@ export class TabManager {
    * reason `activateTab` needs `webContents.focus()` — see there) that
    * would otherwise render on top of the popup and swallow every click
    * meant for it. A no-op (returns `null`, nothing hidden) for anything
-   * but the active browser tab.
+   * but the active browser or PDF tab.
    *
    * Not used by the address bar's suggestions dropdown or `ColorPicker` —
    * both have their own dedicated overlay `WebContentsView`s instead
@@ -2344,7 +2459,7 @@ export class TabManager {
   public async beginTabPreview(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
-    if (!view || !state || state.kind !== 'browser' || id !== this.activeTabId) {
+    if (!view || !state || (state.kind !== 'browser' && state.kind !== 'pdf') || id !== this.activeTabId) {
       return null;
     }
 

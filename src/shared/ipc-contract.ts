@@ -51,6 +51,8 @@ export const IpcChannel = {
   PdfFile: 'pdf:file',
   /** PDF page → main: which page is in view, and how many there are. */
   PdfPageInfo: 'pdf:page-info',
+  /** Chrome → main: open a bookmarked PDF in this tab (picked from the toolbar's PDF search). */
+  PdfOpenBookmark: 'pdf:open-bookmark',
   /** Chrome → main: save a copy of the tab's PDF with its crop boxes applied. */
   PdfExport: 'pdf:export',
   /** Chrome → main: turn the crop tool on or off for this window. */
@@ -77,6 +79,10 @@ export const IpcChannel = {
   WorkspaceOpenInNewWindow: 'workspaces:open-in-new-window',
   BookmarksAdd: 'bookmarks:add',
   BookmarksRemove: 'bookmarks:remove',
+  /** Chrome → main: bookmark the tab's page (or open PDF's file), or remove its bookmark. */
+  BookmarksToggle: 'bookmarks:toggle',
+  /** Chrome → main: bookmark the tab's open PDF under a chosen name (the bookmark popup's Save). */
+  BookmarksAddPdf: 'bookmarks:add-pdf',
   TabsBeginTabPreview: 'tabs:begin-tab-preview',
   TabsEndTabPreview: 'tabs:end-tab-preview',
   AddressSuggestionsSync: 'address-suggestions:sync',
@@ -354,6 +360,12 @@ export interface NorthstarApi {
 
   addBookmark(title: string, url: string): Promise<IpcResult<BrowserState>>;
   removeBookmark(id: string): Promise<IpcResult<BrowserState>>;
+  /** Bookmarks the tab's page — or, for a PDF tab, its open file's path — or removes that bookmark (Ctrl+B, or the star button). */
+  toggleBookmark(id: string): Promise<IpcResult<BrowserState>>;
+  /** Bookmarks a PDF tab's open file by its path on disk, under `name` — also the name its tab shows. */
+  addPdfBookmark(id: string, name: string): Promise<IpcResult<BrowserState>>;
+  /** Opens a bookmarked PDF in a PDF tab (picked from the toolbar's PDF search). Fire-and-forget. */
+  openPdfBookmark(id: string, bookmarkId: string): void;
 
   /**
    * Captures the active browser tab's current frame and hides its native

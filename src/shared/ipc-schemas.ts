@@ -123,6 +123,16 @@ export const pdfSaveAnnotationsRequestSchema = z.object({
   annotations: pdfAnnotationsSchema,
 });
 
+export const addPdfBookmarkRequestSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(255),
+});
+
+export const pdfOpenBookmarkRequestSchema = z.object({
+  id: z.string().min(1),
+  bookmarkId: z.string().min(1),
+});
+
 export const pdfGoToPageRequestSchema = z.object({
   id: z.string().min(1),
   page: z.number().int().min(1).max(1_000_000),

@@ -70,6 +70,9 @@ const api: NorthstarApi = {
 
   addBookmark: (title, url) => invoke(IpcChannel.BookmarksAdd, { title, url }),
   removeBookmark: (id) => invoke(IpcChannel.BookmarksRemove, { id }),
+  toggleBookmark: (id) => invoke(IpcChannel.BookmarksToggle, { id }),
+  addPdfBookmark: (id, name) => invoke(IpcChannel.BookmarksAddPdf, { id, name }),
+  openPdfBookmark: (id, bookmarkId) => ipcRenderer.send(IpcChannel.PdfOpenBookmark, { id, bookmarkId }),
   beginTabPreview: (id) => invoke(IpcChannel.TabsBeginTabPreview, { id }),
   endTabPreview: (id) => invoke(IpcChannel.TabsEndTabPreview, { id }),
   syncAddressSuggestions: (payload) => ipcRenderer.send(IpcChannel.AddressSuggestionsSync, payload),

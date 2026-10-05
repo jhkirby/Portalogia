@@ -191,6 +191,15 @@ export function useTabs() {
   const addBookmark = useCallback((title: string, url: string) => {
     void window.northstar.addBookmark(title, url).then(logIfFailed);
   }, []);
+  const addPdfBookmark = useCallback((id: string, name: string) => {
+    void window.northstar.addPdfBookmark(id, name).then(logIfFailed);
+  }, []);
+  const openPdfBookmark = useCallback((id: string, bookmarkId: string) => {
+    window.northstar.openPdfBookmark(id, bookmarkId);
+  }, []);
+  const toggleBookmark = useCallback((id: string) => {
+    void window.northstar.toggleBookmark(id).then(logIfFailed);
+  }, []);
   const removeBookmark = useCallback((id: string) => {
     void window.northstar.removeBookmark(id).then(logIfFailed);
   }, []);
@@ -311,6 +320,9 @@ export function useTabs() {
 
     addBookmark,
     removeBookmark,
+    toggleBookmark,
+    addPdfBookmark,
+    openPdfBookmark,
     beginTabPreview,
     endTabPreview,
 

@@ -1,11 +1,13 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-04
 
 import { useState, type KeyboardEvent } from 'react';
 
 interface BookmarkPopupProps {
+  /** `'pdf'` shows the file's path (read-only: it's where the file is, not something to retype) where a page shows its URL. */
+  readonly variant?: 'page' | 'pdf';
   /** The active tab's URL when the popup opened — editable before saving. */
   readonly url: string;
   /** The active tab's title when the popup opened — editable before saving. */
@@ -32,7 +34,15 @@ interface BookmarkPopupProps {
  * entirely for this popup to be visible or clickable at all, so what's
  * shown here is a snapshot taken the instant the popup opened.
  */
-export function BookmarkPopup({ url: initialUrl, title, previewImage, onSave, onClose }: BookmarkPopupProps) {
+export function BookmarkPopup({
+  variant = 'page',
+  url: initialUrl,
+  title,
+  previewImage,
+  onSave,
+  onClose,
+}: BookmarkPopupProps) {
+  const isPdf = variant === 'pdf';
   const [name, setName] = useState(title);
   const [url, setUrl] = useState(initialUrl);
 
@@ -74,10 +84,11 @@ export function BookmarkPopup({ url: initialUrl, title, previewImage, onSave, on
         </div>
 
         <label className="bookmark-popup__field">
-          <span className="bookmark-popup__label">URL</span>
+          <span className="bookmark-popup__label">{isPdf ? 'File path' : 'URL'}</span>
           <input
             className="bookmark-popup__input"
             value={url}
+            readOnly={isPdf}
             onChange={(event) => setUrl(event.target.value)}
             spellCheck={false}
           />
