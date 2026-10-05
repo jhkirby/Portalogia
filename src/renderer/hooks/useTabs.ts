@@ -25,6 +25,7 @@ const EMPTY_STATE: BrowserState = {
   highlighterActive: false,
   commentToolActive: false,
   textToolActive: false,
+  findOpen: false,
   penActive: false,
   cropActive: false,
 };
@@ -251,6 +252,10 @@ export function useTabs() {
     void window.northstar.setTextTool(enabled).then(logIfFailed);
   }, []);
 
+  const setFind = useCallback((enabled: boolean) => {
+    void window.northstar.setFind(enabled).then(logIfFailed);
+  }, []);
+
   const setCrop = useCallback((enabled: boolean) => {
     void window.northstar.setCrop(enabled).then(logIfFailed);
   }, []);
@@ -353,6 +358,8 @@ export function useTabs() {
     commentToolActive: state.commentToolActive,
     setCommentTool,
     textToolActive: state.textToolActive,
+    findOpen: state.findOpen,
+    setFind,
     setTextTool,
     penActive: state.penActive,
     setPen,

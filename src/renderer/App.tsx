@@ -110,6 +110,8 @@ export function App() {
     setCommentTool,
     textToolActive,
     setTextTool,
+    findOpen,
+    setFind,
     penActive,
     setPen,
     cropActive,
@@ -197,6 +199,11 @@ export function App() {
   ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
+  // Find searches a page, a terminal's buffer, or a PDF that has a file open — not the History tab (it has its own search) or an empty PDF.
+  const canFind =
+    activeTab?.kind === 'browser' ||
+    activeTab?.kind === 'terminal' ||
+    (activeTab?.kind === 'pdf' && activeTab.fileName !== null);
   // A terminal or History tab is an app page, not a document: none of the page-marking tools apply to it.
   const isAppPage = activeTab?.kind === 'terminal' || activeTab?.kind === 'history';
   const isHome = browserTab?.url === HOME_URL;
@@ -435,6 +442,9 @@ export function App() {
               onNewTerminal={createTerminalTab}
               onOpenHistory={createHistoryTab}
               onOpenTabSearch={openTabSearch}
+              findOpen={findOpen}
+              canFind={canFind}
+              onToggleFind={() => setFind(!findOpen)}
               onZoomOut={zoomOut}
               onZoomIn={zoomIn}
               onSetZoom={setZoom}

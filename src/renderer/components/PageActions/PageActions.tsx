@@ -10,6 +10,7 @@ import { ExportMenu } from '../ExportMenu';
 import {
   CommentIcon,
   CropIcon,
+  FindIcon,
   HighlighterIcon,
   HistoryIcon,
   LaserPointerIcon,
@@ -75,6 +76,11 @@ interface PageActionsProps {
   /** Opens a new History tab. */
   readonly onOpenHistory: () => void;
   readonly onOpenTabSearch: () => void;
+  /** Whether the find bar is open. */
+  readonly findOpen: boolean;
+  /** Whether find can search the active tab: a page, a terminal, or a PDF with a file open — not the History tab or an empty PDF. */
+  readonly canFind: boolean;
+  readonly onToggleFind: () => void;
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
   readonly onSetZoom: (percent: number) => void;
@@ -127,6 +133,9 @@ export function PageActions({
   onNewTerminal,
   onOpenHistory,
   onOpenTabSearch,
+  findOpen,
+  canFind,
+  onToggleFind,
   onZoomOut,
   onZoomIn,
   onSetZoom,
@@ -274,6 +283,17 @@ export function PageActions({
         data-tooltip={`Search tabs (${formatShortcut('K')})`}
       >
         ⌕
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onToggleFind}
+        disabled={!canFind}
+        aria-pressed={findOpen}
+        aria-label={findOpen ? 'Close find' : 'Find'}
+        data-tooltip={`${findOpen ? 'Close find' : 'Find'} (${formatShortcut('F')})`}
+      >
+        <FindIcon />
       </button>
       <span className="page-actions__divider" role="separator" aria-hidden="true" />
       {showZoom && (

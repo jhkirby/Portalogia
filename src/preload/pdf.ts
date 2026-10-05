@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
-import type { NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
+import type { FindCommand, FindResult, NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
@@ -19,6 +19,8 @@ const PdfRedo = 'pdf:redo';
 const PdfPageInfo = 'pdf:page-info';
 const PdfCropState = 'pdf:crop-state';
 const PdfScrollToPage = 'pdf:scroll-to-page';
+const FindCommandChannel = 'find:command';
+const FindResultChannel = 'find:result';
 
 // main created this page with `?id=<tab id>`; it's echoed back so main knows which tab a report is from.
 const tabId = new URLSearchParams(window.location.search).get('id') ?? '';
@@ -57,6 +59,9 @@ window.addEventListener(
   },
   { passive: false, capture: true },
 );
+
+const findListeners = new Set<(command: FindCommand) => void>();
+ipcRenderer.on(FindCommandChannel, (_event, command: FindCommand) => findListeners.forEach((listener) => listener(command)));
 
 const fileListeners = new Set<(file: PdfOpenResult) => void>();
 ipcRenderer.on(PdfFile, (_event, file: PdfOpenResult) => {
@@ -172,6 +177,15 @@ const api: NorthstarPdfApi = {
     return () => {
       toolListeners.delete(listener);
     };
+  },
+  onFind: (listener) => {
+    findListeners.add(listener);
+    return () => {
+      findListeners.delete(listener);
+    };
+  },
+  reportFind: (result: FindResult) => {
+    ipcRenderer.send(FindResultChannel, result);
   },
   onFile: (listener) => {
     fileListeners.add(listener);

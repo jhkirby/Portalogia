@@ -249,6 +249,11 @@ export function buildMenu(
           click: () => getTabManager()?.requestTabSearch(),
         },
         {
+          label: 'Find',
+          accelerator: 'CmdOrCtrl+F',
+          click: () => getTabManager()?.openFind(),
+        },
+        {
           label: 'Focus Address Bar',
           accelerator: 'CmdOrCtrl+/',
           click: () => getTabManager()?.requestFocusAddressBar(),

@@ -4,7 +4,7 @@
 // Last Modified: 2026-09-24
 
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import type { NorthstarTerminalApi } from '@shared/ipc-contract';
+import type { FindCommand, FindResult, NorthstarTerminalApi } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 
 // Deliberately NOT importing the `IpcChannel` runtime object from
@@ -24,6 +24,8 @@ const TerminalResize = 'terminal:resize';
 const TerminalData = 'terminal:data';
 const TerminalExited = 'terminal:exited';
 const ZoomApply = 'zoom:apply';
+const FindCommandChannel = 'find:command';
+const FindResultChannel = 'find:result';
 // Same hardcoded string `HighlighterController` (main) and
 // `src/preload/tabHighlighter.ts` (a browser tab's own preload) both use for
 // this — not shared as a runtime import for the same chunking reason noted
@@ -82,6 +84,12 @@ const api: NorthstarTerminalApi = {
     ipcRenderer.on(HighlighterState, handler);
     return () => ipcRenderer.removeListener(HighlighterState, handler);
   },
+  onFind: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, command: FindCommand): void => listener(command);
+    ipcRenderer.on(FindCommandChannel, handler);
+    return () => ipcRenderer.removeListener(FindCommandChannel, handler);
+  },
+  reportFind: (result: FindResult) => ipcRenderer.send(FindResultChannel, result),
 };
 
 contextBridge.exposeInMainWorld('northstarTerminal', api satisfies NorthstarTerminalApi);

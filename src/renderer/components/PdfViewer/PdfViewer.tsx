@@ -19,6 +19,7 @@ import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract'
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 import { commentCursor, highlighterCursor, penCursor, textCursor } from '../../lib/toolCursors';
 import { PdfPage, type PageHighlight, type PageRect } from './PdfPage';
+import { usePdfFind } from './usePdfFind';
 import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
 
@@ -148,6 +149,8 @@ export function PdfViewer() {
   }, []);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  // The find bar's search of this document (see `usePdfFind`).
+  usePdfFind(doc, scrollRef);
   /** Where the current highlighter press began, to tell a click on a highlight from a drag. */
   const pressRef = useRef<{ x: number; y: number } | null>(null);
   /** Present while the page is grabbed. `x`/`y` are the stand-in hand's position in the view, which wraps at its edges. */

@@ -9,6 +9,7 @@ import { IpcChannel, type ExportPdfResult, type HistorySuggestion, type IpcResul
 import {
   addBookmarkRequestSchema,
   addPdfBookmarkRequestSchema,
+  findSetRequestSchema,
   historyClearRequestSchema,
   historySearchRequestSchema,
   pdfOpenPathRequestSchema,
@@ -320,6 +321,8 @@ export function registerTabIpc(
   handle(IpcChannel.BookmarksToggle, tabIdRequestSchema, (request, event) =>
     resolveTabManager(event).toggleBookmark(request.id),
   );
+
+  handle(IpcChannel.FindSet, findSetRequestSchema, (request, event) => resolveTabManager(event).setFind(request.enabled));
 
   // Clearing history is the chrome's action (its toolbar's button); `resolveTabManager` only resolves for a
   // chrome window's own sender, so a tab's page can't send it.

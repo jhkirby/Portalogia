@@ -129,6 +129,34 @@ export const addPdfBookmarkRequestSchema = z.object({
   name: z.string().trim().min(1).max(255),
 });
 
+export const findSetRequestSchema = z.object({
+  enabled: z.boolean(),
+});
+
+export const findOptionsSchema = z.object({
+  matchCase: z.boolean(),
+  wholeWord: z.boolean(),
+  regex: z.boolean(),
+});
+
+/** From the find bar's own page — a query is bounded so a runaway page can't hand main an enormous string. */
+export const findInputRequestSchema = z.object({
+  query: z.string().max(1000),
+  options: findOptionsSchema,
+});
+
+export const findStepRequestSchema = z.union([z.literal(1), z.literal(-1)]);
+
+export const findGotoRequestSchema = z.number().int().min(0).max(1_000_000);
+
+/** From a tab's own page — what it found, bounded like everything else a page sends. */
+export const findResultRequestSchema = z.object({
+  index: z.number().int().min(0).max(1_000_000),
+  total: z.number().int().min(0).max(1_000_000),
+  capped: z.boolean(),
+  invalid: z.boolean(),
+});
+
 export const historyDeleteRequestSchema = z.object({
   id: z.string().min(1).max(64),
 });

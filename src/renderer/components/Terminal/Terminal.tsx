@@ -11,6 +11,7 @@ import '@xterm/xterm/css/xterm.css';
 import { TERMINAL_PREPARE_PRINT_GLOBAL } from '@shared/constants';
 import type { RGB } from '@shared/color';
 import { ACCENT_STORAGE_KEY } from '../../lib/accentStorage';
+import { createTerminalFind } from './terminalFind';
 import { currentXtermTheme } from './xtermThemes';
 
 /** One highlighted selection in a terminal's buffer — one `IDecoration` per row it spans (xterm's own API has no multi-row decoration), plus the original buffer range and the exact color used, both needed to correctly re-wrap the matching text in `<mark>` when preparing to print (see `TERMINAL_PREPARE_PRINT_GLOBAL` below). */
@@ -338,6 +339,10 @@ export function Terminal({ id }: TerminalProps) {
       repaintHighlights();
     });
 
+    // The find bar's search of this terminal's buffer (see `terminalFind.ts`).
+    const find = createTerminalFind(term, (result) => window.northstarTerminal.reportFind(result));
+    const unsubscribeFind = window.northstarTerminal.onFind((command) => find.handle(command));
+
     const handleHighlighterMouseUp = (): void => {
       if (!highlighterActive || !term.hasSelection()) {
         return;
@@ -525,6 +530,8 @@ export function Terminal({ id }: TerminalProps) {
       unsubscribeData();
       unsubscribeExited();
       unsubscribeHighlighterState();
+      unsubscribeFind();
+      find.dispose();
       container.removeEventListener('mouseup', handleHighlighterMouseUp);
       container.removeEventListener('click', handleHighlighterClick);
       document.removeEventListener('mousemove', handleHighlighterMouseMove);

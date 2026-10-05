@@ -76,6 +76,8 @@
      this is explicit rather than left to default to `visible` — a lone
      `overflow-y` computes `overflow-x: auto` too. */
   overflow-x: hidden;
+  /* Ten rows (`.tab-search__result`'s height each) show at once; past that the list scrolls. */
+  max-height: calc(10 * 36px);
   min-height: 0;
   margin: 0;
   padding: 0;

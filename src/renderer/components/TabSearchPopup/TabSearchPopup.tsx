@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-05
 
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { TabState, WorkspaceState } from '@shared/tab-state';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import { HistoryIcon } from '../icons';
@@ -72,6 +72,12 @@ export function TabSearchPopup({ tabs, workspaces, previewImage, onSelect, onClo
   }, [tabs, query, workspaceNameById]);
 
   const clampedIndex = results.length === 0 ? 0 : Math.min(selectedIndex, results.length - 1);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // With more than ten tabs the list scrolls: keep the highlighted row in view as the arrow keys move it.
+  useEffect(() => {
+    listRef.current?.querySelector('.tab-search__result--selected')?.scrollIntoView({ block: 'nearest' });
+  }, [clampedIndex, results]);
   // Types itself in once, then its trailing dots loop — the same animation as the address bar's.
   const placeholder = useAnimatedPlaceholder(query === '', 'Search tabs');
 
@@ -124,7 +130,7 @@ export function TabSearchPopup({ tabs, workspaces, previewImage, onSelect, onClo
           autoCapitalize="off"
           autoCorrect="off"
         />
-        <ul id="tab-search-results" className="tab-search__results" role="listbox" aria-label="Open tabs">
+        <ul ref={listRef} id="tab-search-results" className="tab-search__results" role="listbox" aria-label="Open tabs">
           {results.length === 0 && <li className="tab-search__empty">No matching tabs</li>}
           {results.map((tab, index) => (
             <li

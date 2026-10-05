@@ -590,3 +590,17 @@ body {
   border: 3px solid var(--color-accent-text, #1a73e8);
   border-radius: 50%;
 }
+
+/* ── Find ── */
+
+/* The find bar's matches, painted over the text layer with the CSS Custom
+   Highlight API (see `usePdfFind`). Both are translucent: the page's own text
+   is drawn on the canvas beneath this layer, and a solid highlight would hide
+   it. The current match is just a stronger tint than the rest. */
+::highlight(northstar-pdf-find) {
+  background-color: rgba(var(--color-accent-rgb), 0.35);
+}
+
+::highlight(northstar-pdf-find-current) {
+  background-color: rgba(var(--color-accent-rgb), 0.75);
+}

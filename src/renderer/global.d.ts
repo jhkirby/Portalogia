@@ -8,6 +8,7 @@ import type {
   NorthstarApi,
   NorthstarColorPickerApi,
   NorthstarExportMenuApi,
+  NorthstarFindApi,
   NorthstarHistoryApi,
   NorthstarPdfApi,
   NorthstarTerminalApi,
@@ -32,6 +33,8 @@ declare global {
     readonly northstarPdf: NorthstarPdfApi;
     /** The bridge exposed by a History tab's own preload script (`src/preload/history.ts`). Only present in `history.html`'s page. */
     readonly northstarHistory: NorthstarHistoryApi;
+    /** The bridge exposed by the find bar's own preload script (`src/preload/find.ts`). Only present in `find.html`'s page. */
+    readonly northstarFind: NorthstarFindApi;
   }
 }
 

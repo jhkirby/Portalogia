@@ -4,6 +4,7 @@
 // Last Modified: 2026-10-05
 
 import type { RGB } from '@shared/color';
+import type { FindOptions } from '@shared/find';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
 import type { BrowserState } from '@shared/tab-state';
 
@@ -34,6 +35,24 @@ export const IpcChannel = {
   TabsCreateTerminal: 'tabs:create-terminal',
   TabsCreatePdf: 'tabs:create-pdf',
   TabsCreateHistory: 'tabs:create-history',
+  /** Chrome → main: open or close this window's find bar. */
+  FindSet: 'find:set',
+  /** Main → tab page (browser, PDF or terminal): search, step, jump to an occurrence, or clear the highlights. */
+  FindCommand: 'find:command',
+  /** Tab page → main: how many matches there are and which is current. */
+  FindResult: 'find:result',
+  /** Main → find bar: what it shows — the query, the switches, the count. */
+  FindState: 'find:state',
+  /** Main → find bar: take the keyboard and select the query (Ctrl+F while it's open). */
+  FindFocus: 'find:focus',
+  /** Find bar → main: the query or a switch changed. */
+  FindInput: 'find:input',
+  /** Find bar → main: jump to the next or previous match. */
+  FindStep: 'find:step',
+  /** Find bar → main: jump to a typed occurrence number. */
+  FindGoto: 'find:goto',
+  /** Find bar → main: close the bar. */
+  FindClose: 'find:close',
   /** Main → history page: every recorded visit, newest first. */
   HistoryEntries: 'history:entries',
   /** History page → main: delete one visit. */
@@ -340,6 +359,8 @@ export interface NorthstarApi {
   createPdfTab(): Promise<IpcResult<BrowserState>>;
   /** Opens a new History tab (the toolbar's history button, Ctrl+Shift+H, or File > New History Tab). */
   createHistoryTab(): Promise<IpcResult<BrowserState>>;
+  /** Opens or closes this window's find bar (the toolbar's find button, or Ctrl+F). Browser, PDF (with a file open) and terminal tabs only. */
+  setFind(enabled: boolean): Promise<IpcResult<BrowserState>>;
   /** Sets the search text a History tab's table filters by — typed in the toolbar, shown in the tab's page. Fire-and-forget. */
   setHistoryQuery(id: string, query: string): void;
   /** Clears the browsing history within a range (the History toolbar's "Clear History"). */
@@ -640,6 +661,10 @@ export interface NorthstarTerminalApi {
    * why), so on/off-plus-color is the only thing this tab ever needs told.
    */
   onHighlighterState(listener: (active: boolean, color: RGB) => void): () => void;
+  /** Subscribes to find-bar commands for this terminal's buffer. */
+  onFind(listener: (command: FindCommand) => void): () => void;
+  /** Reports the result of the latest find command. Fire-and-forget. */
+  reportFind(result: FindResult): void;
 }
 
 /**
@@ -731,6 +756,10 @@ export interface PdfToolState {
  * (`src/preload/pdf.ts`, `pdf.html`). See `TabManager.createPdfTab`.
  */
 export interface NorthstarPdfApi {
+  /** Subscribes to find-bar commands for this tab's document. */
+  onFind(listener: (command: FindCommand) => void): () => void;
+  /** Reports the result of the latest find command. Fire-and-forget. */
+  reportFind(result: FindResult): void;
   /** Subscribes to files opened for this tab (via the chrome toolbar or a shortcut). */
   onFile(listener: (file: PdfOpenResult) => void): () => void;
   /** Reports the marks currently on the open document so main can persist them. Fire-and-forget. */
@@ -813,4 +842,54 @@ export interface NorthstarHistoryApi {
   onBookmarks(listener: (index: HistoryBookmarkIndex) => void): () => void;
   /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
   onQuery(listener: (query: string) => void): () => void;
+}
+
+/** What a tab's page reports back about a search: how many matches, and which one is current. */
+export interface FindResult {
+  /** The current match, 1-based; `0` when there are none. */
+  readonly index: number;
+  readonly total: number;
+  /** Counting stopped at the cap (`MAX_FIND_MATCHES`), so `total` is a floor. */
+  readonly capped: boolean;
+  /** The query is a regular expression that doesn't compile. */
+  readonly invalid: boolean;
+}
+
+/** What main tells a tab's page to do for the find bar. */
+export type FindCommand =
+  | {
+      readonly action: 'search';
+      readonly query: string;
+      readonly options: FindOptions;
+      /** The accent color matches are painted in. */
+      readonly color: RGB;
+    }
+  | { readonly action: 'step'; readonly direction: 1 | -1 }
+  | { readonly action: 'goto'; readonly index: number }
+  | { readonly action: 'clear' };
+
+/** Everything the find bar draws. */
+export interface FindBarState {
+  readonly query: string;
+  readonly options: FindOptions;
+  readonly result: FindResult;
+}
+
+/**
+ * The narrower API surface exposed to the find bar's own overlay view
+ * (`src/preload/find.ts`, `find.html`). See `FindOverlay`.
+ */
+export interface NorthstarFindApi {
+  /** Subscribes to what the bar should show; called immediately with the latest if one already arrived. */
+  onState(listener: (state: FindBarState) => void): () => void;
+  /** Subscribes to "take the keyboard and select the query". */
+  onFocus(listener: () => void): () => void;
+  /** The query or a switch changed. Fire-and-forget. */
+  search(query: string, options: FindOptions): void;
+  /** Jumps to the next (`1`) or previous (`-1`) match, looping. Fire-and-forget. */
+  step(direction: 1 | -1): void;
+  /** Jumps to a typed, 1-based occurrence number. Fire-and-forget. */
+  goTo(index: number): void;
+  /** Closes the bar. Fire-and-forget. */
+  close(): void;
 }

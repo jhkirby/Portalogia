@@ -269,3 +269,12 @@ export type HistoryUnit = keyof typeof HISTORY_UNIT_LIMITS;
 
 /** The most visits the history keeps; past this, the oldest are dropped. */
 export const HISTORY_MAX_ENTRIES = 50_000;
+
+/**
+ * The find bar's overlay view: its size, and its gap from the top-right
+ * corner of the area the tab occupies. The bar's own page (`FindBar`) lays
+ * itself out to fit this exactly — keep `find-bar.css` in step.
+ */
+export const FIND_BAR_WIDTH_PX = 440;
+export const FIND_BAR_HEIGHT_PX = 44;
+export const FIND_BAR_MARGIN_PX = 12;

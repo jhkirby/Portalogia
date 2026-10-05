@@ -6,7 +6,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { app, BrowserWindow, WebContentsView, dialog, screen, type WebContents } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  WebContentsView,
+  dialog,
+  ipcMain,
+  screen,
+  type IpcMainEvent,
+  type WebContents,
+} from 'electron';
+import { findResultRequestSchema } from '@shared/ipc-schemas';
 import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
@@ -34,6 +44,8 @@ import {
   type ColorPickerSyncPayload,
   type ExportMenuAction,
   type ExportMenuSyncPayload,
+  type FindCommand,
+  type FindResult,
   type HistoryClearRange,
   type HistoryEntry,
   type HistorySuggestion,
@@ -48,6 +60,8 @@ import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import type { TextBoxController } from './TextBoxController';
 import type { HistoryController } from './HistoryController';
+import { FindOverlay } from './FindOverlay';
+import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
 import { ExportMenuOverlay } from './ExportMenuOverlay';
 import type { HighlighterController } from './HighlighterController';
@@ -67,6 +81,9 @@ interface Rect {
   readonly width: number;
   readonly height: number;
 }
+
+/** What the find bar shows before a search has answered, and after a search of nothing. */
+const NO_FIND_RESULT: FindResult = { index: 0, total: 0, capped: false, invalid: false };
 
 /** A closed tab's minimal recreatable state — enough to reopen it, not to replay its full history. */
 interface ClosedTab {
@@ -147,6 +164,12 @@ export class TabManager {
   private highlighterActive = false;
   private commentToolActive = false;
   private textToolActive = false;
+  /** Whether this window's find bar is open, and what it holds — the bar is one view for every kind of tab; the search itself runs in whichever tab is active. */
+  private findOpen = false;
+  private findQuery = '';
+  private findOptions: FindOptions = DEFAULT_FIND_OPTIONS;
+  private findResult: FindResult = NO_FIND_RESULT;
+  private readonly onFindResult = (event: IpcMainEvent, raw: unknown): void => this.handleFindResult(event.sender, raw);
   private penActive = false;
   private cropActive = false;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held); see `grabTabForReorder`. */
@@ -165,6 +188,7 @@ export class TabManager {
   private readonly colorPickerOverlay: ColorPickerOverlay;
   private readonly exportMenuOverlay: ExportMenuOverlay;
   private readonly laserPointerOverlay: LaserPointerOverlay;
+  private readonly findOverlay: FindOverlay;
   /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
   private readonly unregisterFromRegistry: () => void;
 
@@ -275,6 +299,17 @@ export class TabManager {
       (action) => this.runExportAction(action),
       () => this.window.webContents.send(IpcChannel.ExportMenuCloseRequested),
     );
+    this.findOverlay = new FindOverlay(this.window, {
+      onInput: (query, options) => {
+        this.findQuery = query;
+        this.findOptions = options;
+        this.runFind();
+      },
+      onStep: (direction) => this.sendFindCommand({ action: 'step', direction }),
+      onGoTo: (index) => this.sendFindCommand({ action: 'goto', index }),
+      onClose: () => void this.closeFind(),
+    });
+    ipcMain.on(IpcChannel.FindResult, this.onFindResult);
     this.laserPointerOverlay = new LaserPointerOverlay(
       this.window,
       () => this.exitPointerTools(),
@@ -641,6 +676,9 @@ export class TabManager {
       this.pushTextToolStateTo(id);
       this.pushHighlighterStateTo(id);
       this.pushCropStateTo(id);
+      if (this.findOpen && id === this.activeTabId) {
+        this.runFind();
+      }
       // An empty PDF page lists the bookmarked files; any that have since been moved or deleted are dropped first.
       void this.refreshPdfBookmarks();
     });
@@ -857,6 +895,9 @@ export class TabManager {
     pdfFilePaths.delete(id);
     this.states.set(id, { ...current, title: 'PDF', fileName: null, filePath: null, page: 1, pageCount: 0 });
     this.releaseUnavailableTools();
+    if (this.findOpen && !this.canFind(this.activeTabId)) {
+      this.closeFind();
+    }
     this.emitState();
     this.views.get(id)?.webContents.send(IpcChannel.PdfClosed);
     // Back to the empty page: re-check the bookmarked files before it lists them.
@@ -1014,6 +1055,8 @@ export class TabManager {
     this.colorPickerOverlay.dispose();
     this.exportMenuOverlay.dispose();
     this.laserPointerOverlay.dispose();
+    this.findOverlay.dispose();
+    ipcMain.removeListener(IpcChannel.FindResult, this.onFindResult);
     this.unregisterFromRegistry();
   }
 
@@ -1543,6 +1586,7 @@ export class TabManager {
       view.webContents.focus();
       this.registry.mountOwners.set(id, this);
     }
+    const previousTabId = this.activeTabId;
     this.activeTabId = id;
     // Showing a different tab (a plain click, a shortcut, a fallback after a
     // close) ends a multi-selection; Ctrl/Shift+click never reach here.
@@ -1557,6 +1601,7 @@ export class TabManager {
     this.pushTextToolState();
     this.pushPenState();
     this.pushCropState();
+    this.refreshFindAfterTabChange(previousTabId);
 
     const workspaceId = this.states.get(id)?.workspaceId;
     if (workspaceId) {
@@ -3043,6 +3088,143 @@ export class TabManager {
     return this.textToolActive;
   }
 
+  // ── Find ─────────────────────────────────────────────────────────────
+
+  /**
+   * Whether the find bar can search a tab: a browser tab's page, a terminal's
+   * buffer, or a PDF with a file open — not the History tab (its table has
+   * its own search box) and not an empty PDF tab.
+   * @param tabId The tab to ask about.
+   */
+  private canFind(tabId: string | null): boolean {
+    const state = tabId ? this.states.get(tabId) : undefined;
+    if (!state) {
+      return false;
+    }
+    return state.kind === 'browser' || state.kind === 'terminal' || (state.kind === 'pdf' && state.fileName !== null);
+  }
+
+  /**
+   * Opens the find bar (Ctrl+F, or the toolbar's find button) over the active
+   * tab and gives it the keyboard — or, if it's already open, just pulls the
+   * keyboard back to it with the query selected, as Ctrl+F does in an editor.
+   * A no-op where find can't search (see `canFind`).
+   * @returns The full browser state after the change.
+   */
+  public openFind(): BrowserState {
+    if (!this.canFind(this.activeTabId)) {
+      return this.getState();
+    }
+    const wasOpen = this.findOpen;
+    this.findOpen = true;
+    this.syncFindOverlay();
+    this.findOverlay.focus();
+    if (!wasOpen) {
+      this.runFind();
+      this.emitState();
+    }
+    return this.getState();
+  }
+
+  /**
+   * Closes the find bar, clears its highlights from the tab, and hands the
+   * keyboard back to the tab. A no-op if it isn't open.
+   * @returns The full browser state after the change.
+   */
+  public closeFind(): BrowserState {
+    if (!this.findOpen) {
+      return this.getState();
+    }
+    this.sendFindCommand({ action: 'clear' });
+    this.findOpen = false;
+    this.findResult = NO_FIND_RESULT;
+    this.findOverlay.hide();
+    const view = this.activeTabId ? this.views.get(this.activeTabId) : undefined;
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.focus();
+    }
+    this.emitState();
+    return this.getState();
+  }
+
+  /** Opens or closes the find bar — what the toolbar button does. */
+  public setFind(enabled: boolean): BrowserState {
+    return enabled ? this.openFind() : this.closeFind();
+  }
+
+  /** Puts the bar where the active tab's top-right corner is (or removes it), and tells it what to show. */
+  private syncFindOverlay(): void {
+    if (!this.findOpen || !this.activeTabId) {
+      this.findOverlay.hide();
+      return;
+    }
+    const main = this.computeMainBounds(this.targetLeftInset(), this.targetTopInset());
+    this.findOverlay.show(this.splitView ? this.computeSplitBoundsFor(main).primary : main);
+    this.pushFindState();
+  }
+
+  private pushFindState(): void {
+    this.findOverlay.sync({ query: this.findQuery, options: this.findOptions, result: this.findResult });
+  }
+
+  /** Sends a command to the active tab's page, which does the searching. */
+  private sendFindCommand(command: FindCommand): void {
+    const view = this.activeTabId ? this.views.get(this.activeTabId) : undefined;
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.FindCommand, command);
+    }
+  }
+
+  /** Searches the active tab for the bar's current query and switches. An empty query just clears. */
+  private runFind(): void {
+    if (!this.findOpen || !this.canFind(this.activeTabId)) {
+      return;
+    }
+    this.sendFindCommand({
+      action: 'search',
+      query: this.findQuery,
+      options: this.findOptions,
+      color: getCurrentAccent(),
+    });
+    if (this.findQuery === '') {
+      this.findResult = NO_FIND_RESULT;
+      this.pushFindState();
+    }
+  }
+
+  /**
+   * A page's answer to a search: how many matches and which is current.
+   * Only the active tab's answer counts — a page that was searched and then
+   * switched away from may still be replying.
+   */
+  private handleFindResult(sender: WebContents, raw: unknown): void {
+    const parsed = findResultRequestSchema.safeParse(raw);
+    const activeView = this.activeTabId ? this.views.get(this.activeTabId) : undefined;
+    if (!parsed.success || !this.findOpen || !activeView || activeView.webContents !== sender) {
+      return;
+    }
+    this.findResult = parsed.data;
+    this.pushFindState();
+  }
+
+  /** Called when a tab is activated: clears the tab left behind, and searches the new one — or closes the bar if find can't search it. */
+  private refreshFindAfterTabChange(previousTabId: string | null): void {
+    if (!this.findOpen) {
+      return;
+    }
+    const previous = previousTabId && previousTabId !== this.activeTabId ? this.views.get(previousTabId) : undefined;
+    if (previous && !previous.webContents.isDestroyed()) {
+      previous.webContents.send(IpcChannel.FindCommand, { action: 'clear' } satisfies FindCommand);
+    }
+    if (!this.canFind(this.activeTabId)) {
+      this.closeFind();
+      return;
+    }
+    this.findResult = NO_FIND_RESULT;
+    this.syncFindOverlay();
+    this.runFind();
+  }
+
   // ── Pen ──────────────────────────────────────────────────────────────
 
   /**
@@ -3780,6 +3962,7 @@ export class TabManager {
       highlighterActive: this.highlighterActive,
       commentToolActive: this.commentToolActive,
       textToolActive: this.textToolActive,
+      findOpen: this.findOpen,
       penActive: this.penActive,
       cropActive: this.cropActive,
     };
@@ -3906,6 +4089,7 @@ export class TabManager {
   private applyBounds(left: number, top: number): void {
     const main = this.computeMainBounds(left, top);
     this.laserPointerOverlay.setActive(this.laserPointerActive && this.activeTabId !== null, main);
+    this.syncFindOverlay();
     if (this.splitView) {
       const { primary, secondary } = this.computeSplitBoundsFor(main);
       this.views.get(this.splitView.primaryTabId)?.setBounds(primary);
@@ -3995,6 +4179,9 @@ export class TabManager {
       this.pushTextToolStateTo(id);
       this.penController.resetTab(id);
       this.pushPenStateTo(id);
+      if (this.findOpen && id === this.activeTabId) {
+        this.runFind();
+      }
       const state = this.states.get(id);
       if (state?.kind === 'browser') {
         this.highlighter.restoreFor(id, state.url);
@@ -4153,6 +4340,14 @@ export class TabManager {
         if (!input.shift && input.key.toLowerCase() === '`') {
           event.preventDefault();
           owner.focusChrome();
+          return;
+        }
+        // Find is taken here too, deliberately: a terminal has a buffer worth searching, and Ctrl+F is the
+        // shortcut for it (VS Code's integrated terminal does the same). It costs the shell its Ctrl+F
+        // forward-one-character binding; the Right arrow does the same job.
+        if (!input.shift && input.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          owner.openFind();
           return;
         }
         // Zoom, unlike every other chrome shortcut, isn't suppressed here
@@ -4393,6 +4588,11 @@ export class TabManager {
             event.preventDefault();
             owner.penController.redo(id);
           }
+          return;
+        case 'f':
+          // Same as buildMenu.ts's `CmdOrCtrl+F` ("Find"). Shift+F is Focus Mode, handled above.
+          event.preventDefault();
+          owner.openFind();
           return;
         case 'e':
           // Same as buildMenu.ts's `CmdOrCtrl+E` ("Toggle Text Box"); a no-op on a terminal tab.

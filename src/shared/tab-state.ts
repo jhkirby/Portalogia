@@ -126,6 +126,8 @@ export interface BrowserState {
   readonly highlighterActive: boolean;
   /** Whether the comment tool is currently on (Ctrl+M, or the toolbar button) — see `CommentController`. */
   readonly commentToolActive: boolean;
+  /** Whether this window's find bar (Ctrl+F) is open — see `FindOverlay`. */
+  readonly findOpen: boolean;
   /** Whether the text box tool is currently on (Ctrl+E, or the toolbar button) — see `TextBoxController`. */
   readonly textToolActive: boolean;
   /** Whether the pen tool is currently on (Ctrl+P, or the toolbar button) — see `PenController`. */

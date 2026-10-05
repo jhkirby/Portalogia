@@ -3,6 +3,7 @@ export { ColorDropletIcon } from './ColorDropletIcon';
 export { CommentIcon } from './CommentIcon';
 export { CropIcon } from './CropIcon';
 export { ExportIcon } from './ExportIcon';
+export { FindIcon } from './FindIcon';
 export { HighlighterIcon } from './HighlighterIcon';
 export { HistoryIcon } from './HistoryIcon';
 export { LaserPointerIcon } from './LaserPointerIcon';

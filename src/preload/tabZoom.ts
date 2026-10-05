@@ -12,6 +12,7 @@ import { ipcRenderer, webFrame } from 'electron';
 import './tabHighlighter';
 import './tabComments';
 import './tabTextBoxes';
+import './tabFind';
 import './tabPen';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see

@@ -55,6 +55,7 @@ const api: NorthstarApi = {
   createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
   createPdfTab: () => invoke(IpcChannel.TabsCreatePdf),
   createHistoryTab: () => invoke(IpcChannel.TabsCreateHistory),
+  setFind: (enabled) => invoke(IpcChannel.FindSet, { enabled }),
   setHistoryQuery: (id, query) => ipcRenderer.send(IpcChannel.HistorySetQuery, { id, query }),
   clearHistory: (range) => invoke(IpcChannel.HistoryClear, range),
   searchHistory: (type, query) => invoke(IpcChannel.HistorySearch, { type, query }),
