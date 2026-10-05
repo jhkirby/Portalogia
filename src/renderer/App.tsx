@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
@@ -75,6 +75,7 @@ export function App() {
     reload,
     stop,
     createPdfTab,
+    createHistoryTab,
     openPdfFile,
     goToPdfPage,
     renamePdfFile,
@@ -201,6 +202,8 @@ export function App() {
   ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
+  // A terminal or History tab is an app page, not a document: none of the page-marking tools apply to it.
+  const isAppPage = activeTab?.kind === 'terminal' || activeTab?.kind === 'history';
   const isHome = browserTab?.url === HOME_URL;
   // PDF bookmarks are files, not pages: the address bar and tab labels only ever deal in the page ones.
   const pageBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'page'), [bookmarks]);
@@ -340,7 +343,7 @@ export function App() {
                 onClose={closePdfFile}
                 onRename={renamePdfFile}
               />
-            ) : activeTab?.kind === 'terminal' ? (
+            ) : activeTab?.kind === 'terminal' || activeTab?.kind === 'history' ? (
               // Empty on purpose — occupies the same flex space
               // NavControls + AddressBar would, so PageActions stays
               // right-aligned, without showing the tab's title text.
@@ -388,15 +391,16 @@ export function App() {
               showCrop={activeTab?.kind === 'pdf'}
               theme={theme}
               onOpenPdfViewer={createPdfTab}
-              canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf'}
+              canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
               canExportDocuments={browserTab !== null && !isHome}
-              showExportMenu={activeTab?.kind !== 'pdf'}
-              showCommentTool={activeTab?.kind !== 'terminal'}
-              showTextTool={activeTab?.kind !== 'terminal'}
-              showPen={activeTab?.kind !== 'terminal'}
-              showHighlighter={activeTab?.kind !== 'terminal'}
-              showRevert={activeTab?.kind !== 'terminal'}
+              showExportMenu={activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
+              showCommentTool={!isAppPage}
+              showTextTool={!isAppPage}
+              showPen={!isAppPage}
+              showHighlighter={!isAppPage}
+              showRevert={!isAppPage}
               onNewTerminal={createTerminalTab}
+              onOpenHistory={createHistoryTab}
               onOpenTabSearch={() => setTabSearchOpen(true)}
               onZoomOut={zoomOut}
               onZoomIn={zoomIn}

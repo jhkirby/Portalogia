@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 /**
  * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
@@ -253,3 +253,19 @@ export const TEXT_BOX_FONT_SIZE_DEFAULT = 16;
 
 /** How a text box's lines sit within its own width. */
 export type TextBoxAlign = 'left' | 'center' | 'right';
+
+/**
+ * The units "Clear History" can clear back through, and the most of each it
+ * offers (the History tab's number box is capped to match). Enforced in main
+ * (`historyClearRequestSchema`) too, since the page that sends it isn't trusted.
+ */
+export const HISTORY_UNIT_LIMITS = {
+  hours: 23,
+  days: 6,
+  weeks: 4,
+  months: 12,
+} as const;
+export type HistoryUnit = keyof typeof HISTORY_UNIT_LIMITS;
+
+/** The most visits the history keeps; past this, the oldest are dropped. */
+export const HISTORY_MAX_ENTRIES = 50_000;

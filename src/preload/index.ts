@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -54,6 +54,7 @@ const api: NorthstarApi = {
 
   createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
   createPdfTab: () => invoke(IpcChannel.TabsCreatePdf),
+  createHistoryTab: () => invoke(IpcChannel.TabsCreateHistory),
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
   goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),

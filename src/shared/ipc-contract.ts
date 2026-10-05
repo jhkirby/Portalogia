@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import type { RGB } from '@shared/color';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
@@ -33,6 +33,13 @@ export const IpcChannel = {
   TabsExportPdf: 'tabs:export-pdf',
   TabsCreateTerminal: 'tabs:create-terminal',
   TabsCreatePdf: 'tabs:create-pdf',
+  TabsCreateHistory: 'tabs:create-history',
+  /** Main → history page: every recorded visit, newest first. */
+  HistoryEntries: 'history:entries',
+  /** History page → main: delete one visit. */
+  HistoryDelete: 'history:delete',
+  /** History page → main: clear the visits within a time range (or all of them). */
+  HistoryClear: 'history:clear',
   PdfOpenFile: 'pdf:open-file',
   PdfRename: 'pdf:rename',
   /** PDF page → main: the marks drawn on the open document, to persist. */
@@ -315,6 +322,8 @@ export interface NorthstarApi {
 
   /** Opens a new PDF viewer tab (the toolbar's PDF button). */
   createPdfTab(): Promise<IpcResult<BrowserState>>;
+  /** Opens a new History tab (the toolbar's history button, Ctrl+Shift+H, or File > New History Tab). */
+  createHistoryTab(): Promise<IpcResult<BrowserState>>;
   /** Shows the open dialog for a PDF tab; the chosen file is delivered to that tab's page by main. */
   openPdfFile(id: string): Promise<IpcResult<null>>;
   /** Renames a PDF tab's file on disk (same folder). Fails unless the name ends in `.pdf` and doesn't already exist. */
@@ -718,4 +727,32 @@ export interface NorthstarPdfApi {
    * its own rendering so pages re-rasterize crisply instead of stretching.
    */
   onZoom(listener: (percent: number) => void): () => void;
+}
+
+/** One page reached in a browser tab: when its request was made, the route requested, and the status code it came back with. */
+export interface HistoryEntry {
+  readonly id: string;
+  /** Milliseconds since the epoch. */
+  readonly timestamp: number;
+  readonly url: string;
+  /** The HTTP status code (a redirect hop records its own 3xx). */
+  readonly status: number;
+}
+
+/** How far back a clear reaches: the last `amount` of a unit, or everything. */
+export type HistoryClearRange =
+  | { readonly unit: 'all' }
+  | { readonly unit: 'hours' | 'days' | 'weeks' | 'months'; readonly amount: number };
+
+/**
+ * The narrower API surface exposed to a History tab's own `WebContentsView`
+ * (`src/preload/history.ts`, `history.html`). See `TabManager.createHistoryTab`.
+ */
+export interface NorthstarHistoryApi {
+  /** Subscribes to the recorded visits (newest first); called immediately with the latest list if one already arrived. */
+  onEntries(listener: (entries: readonly HistoryEntry[]) => void): () => void;
+  /** Deletes one visit. Fire-and-forget. */
+  deleteEntry(id: string): void;
+  /** Clears the visits within a range. Fire-and-forget. */
+  clear(range: HistoryClearRange): void;
 }

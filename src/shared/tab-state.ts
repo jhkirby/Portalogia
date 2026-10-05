@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -54,8 +54,20 @@ export interface PdfTabState {
   readonly workspaceId: string;
 }
 
-/** Everything the chrome UI needs to render one tab, browser, terminal or PDF. */
-export type TabState = BrowserTabState | TerminalTabState | PdfTabState;
+/**
+ * The browsing history: a table of the pages reached, rendered in its own
+ * `WebContentsView` (`history.html`) — see `TabManager.createHistoryTab` and
+ * `HistoryController`. No URL, favicon, or navigation state applies.
+ */
+export interface HistoryTabState {
+  readonly kind: 'history';
+  readonly id: string;
+  readonly title: string;
+  readonly workspaceId: string;
+}
+
+/** Everything the chrome UI needs to render one tab: browser, terminal, PDF or history. */
+export type TabState = BrowserTabState | TerminalTabState | PdfTabState | HistoryTabState;
 
 /** A named, colored group that a tab belongs to (see `WorkspaceBar`). */
 export interface WorkspaceState {

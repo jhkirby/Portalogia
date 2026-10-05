@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { Menu, type MenuItemConstructorOptions } from 'electron';
 import type { TabManager } from '../browser/TabManager';
@@ -68,6 +68,11 @@ export function buildMenu(
           label: 'New PDF Viewer',
           accelerator: 'CmdOrCtrl+Shift+P',
           click: () => getTabManager()?.createPdfTab(),
+        },
+        {
+          label: 'New History Tab',
+          accelerator: 'CmdOrCtrl+Shift+H',
+          click: () => getTabManager()?.createHistoryTab(),
         },
         {
           // Does nothing unless the active tab is a PDF viewer (`openPdfFile` ignores other tabs).

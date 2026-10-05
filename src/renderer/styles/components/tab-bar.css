@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-11 */
+   Last Modified: 2026-10-05 */
 
 /* ── TAB BAR ──────────────────────────────────────────────────────────── */
 
@@ -139,6 +139,12 @@
   font-size: 11px;
   font-family: Menlo, Consolas, monospace;
   color: var(--color-accent-text);
+}
+
+/* An SVG, not text like the terminal's and PDF's glyphs — centered on the same line. */
+.tab-bar__history-icon {
+  display: flex;
+  align-items: center;
 }
 
 .tab-bar__spinner {

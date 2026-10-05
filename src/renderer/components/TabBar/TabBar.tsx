@@ -1,13 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-18
+// Last Modified: 2026-10-05
 
 import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import { formatShortcut } from '../../lib/shortcuts';
+import { HistoryIcon } from '../icons';
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
 // element following the cursor by default; over this chrome's mix of HTML
@@ -420,6 +421,10 @@ function Tab({
       ) : tab.kind === 'pdf' ? (
         <span className="tab-bar__terminal-icon" aria-hidden="true">
           PDF
+        </span>
+      ) : tab.kind === 'history' ? (
+        <span className="tab-bar__terminal-icon tab-bar__history-icon" aria-hidden="true">
+          <HistoryIcon size={13} />
         </span>
       ) : tab.isLoading ? (
         <span className="tab-bar__spinner" aria-hidden="true" />

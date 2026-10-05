@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
@@ -145,6 +145,10 @@ export function useTabs() {
 
   const createPdfTab = useCallback(() => {
     void window.northstar.createPdfTab().then(logIfFailed);
+  }, []);
+
+  const createHistoryTab = useCallback(() => {
+    void window.northstar.createHistoryTab().then(logIfFailed);
   }, []);
 
   const openPdfFile = useCallback((id: string) => {
@@ -306,6 +310,7 @@ export function useTabs() {
     exportToPdf,
     createTerminalTab,
     createPdfTab,
+    createHistoryTab,
     openPdfFile,
     goToPdfPage,
     renamePdfFile,

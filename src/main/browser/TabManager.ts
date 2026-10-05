@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
@@ -44,6 +44,7 @@ import { PdfCropExporter } from './PdfCropExporter';
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import type { TextBoxController } from './TextBoxController';
+import type { HistoryController } from './HistoryController';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
 import { ExportMenuOverlay } from './ExportMenuOverlay';
 import type { HighlighterController } from './HighlighterController';
@@ -197,6 +198,9 @@ export class TabManager {
    *   persistence, shared the same way `commentController` is. This
    *   `TabManager` only owns the per-window on/off toggle; see
    *   `TextBoxController`'s own class doc comment.
+   * @param historyController The browsing history — recording, serving and
+   *   clearing it — shared the same way, since a History tab can move
+   *   between windows. See `HistoryController`'s own class doc comment.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -209,6 +213,7 @@ export class TabManager {
     private readonly commentController: CommentController,
     private readonly penController: PenController,
     private readonly textBoxController: TextBoxController,
+    private readonly historyController: HistoryController,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -377,7 +382,9 @@ export class TabManager {
           ? this.createTerminalTab(workspaceId)
           : tab.kind === 'pdf'
             ? this.createPdfTab(workspaceId)
-            : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
+            : tab.kind === 'history'
+              ? this.createHistoryTab(workspaceId)
+              : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
       if (tab.active) {
         activeId = state.activeTabId;
       }
@@ -651,6 +658,62 @@ export class TabManager {
       void view.webContents.loadURL(`${devServerUrl}/pdf.html?id=${id}`);
     } else {
       void view.webContents.loadFile(join(__dirname, '../renderer/pdf.html'), { query: { id } });
+    }
+
+    return this.getState();
+  }
+
+  /**
+   * Opens a new History tab (the toolbar's history button, Ctrl+Shift+H, or
+   * File > New History Tab) and makes it active. Structured like
+   * `createPdfTab`: its own `WebContentsView` loading `history.html?id=`
+   * through its own narrow preload, which only carries the history list in
+   * and delete/clear requests out. Input handling is the default
+   * (browser-tab) shortcut flow.
+   * @param workspaceId Workspace to create it in; defaults to the active workspace.
+   * @returns The full browser state after the tab is created.
+   */
+  public createHistoryTab(workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: join(__dirname, '../preload/history.cjs'),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+      },
+    });
+
+    // Trusted, app-owned content — same reasoning as `createTerminalTab`.
+    view.webContents.on('will-navigate', (event) => event.preventDefault());
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.wireSharedInputHandling(id, view.webContents);
+    // A fresh page has never been sent the history or its zoom, and `activateTab`'s own pushes land before it has loaded.
+    view.webContents.on('did-finish-load', () => {
+      this.applyZoom(id);
+      this.historyController.pushTo(id);
+    });
+
+    this.views.set(id, view);
+    this.states.set(id, {
+      kind: 'history',
+      id,
+      title: 'History',
+      workspaceId: workspaceId ?? this.activeWorkspaceId,
+    });
+    this.activateTab(id);
+
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+    if (!app.isPackaged && devServerUrl) {
+      void view.webContents.loadURL(`${devServerUrl}/history.html?id=${id}`);
+    } else {
+      void view.webContents.loadFile(join(__dirname, '../renderer/history.html'), { query: { id } });
     }
 
     return this.getState();
@@ -1635,7 +1698,9 @@ export class TabManager {
         ? this.createTerminalTab(state.workspaceId)
         : state.kind === 'pdf'
           ? this.createPdfTab(state.workspaceId)
-          : this.createTab(state.url, state.workspaceId);
+          : state.kind === 'history'
+            ? this.createHistoryTab(state.workspaceId)
+            : this.createTab(state.url, state.workspaceId);
     if (newState.activeTabId) {
       // `createTab`/`createTerminalTab` both append at the end of the
       // workspace's own tabs and activate it; this repositions it next to
@@ -1667,7 +1732,13 @@ export class TabManager {
     const view = this.views.get(id);
     const state = this.states.get(id);
     // Mirrors the toolbar's export menu: not offered on a PDF tab (see `exportPdfFile`) or the blank home page.
-    if (!view || !state || state.kind === 'pdf' || (state.kind === 'browser' && state.url === HOME_URL)) {
+    if (
+      !view ||
+      !state ||
+      state.kind === 'pdf' ||
+      state.kind === 'history' ||
+      (state.kind === 'browser' && state.url === HOME_URL)
+    ) {
       return null;
     }
 
@@ -2585,7 +2656,7 @@ export class TabManager {
    * button shows as disabled.
    *
    * Every tool needs an active tab. Beyond the laser pointer, none can mark a
-   * terminal or a PDF tab with no file open, and the crop tool only exists
+   * terminal, a History tab, or a PDF tab with no file open, and the crop tool only exists
    * for a PDF.
    * @param tool Which tool is being switched on.
    * @returns Whether it may be.
@@ -2598,7 +2669,7 @@ export class TabManager {
     if (tool === 'laser') {
       return true;
     }
-    if (active.kind === 'terminal' || (active.kind === 'pdf' && active.fileName === null)) {
+    if (active.kind === 'terminal' || active.kind === 'history' || (active.kind === 'pdf' && active.fileName === null)) {
       return false;
     }
     return tool !== 'crop' || active.kind === 'pdf';
@@ -4141,6 +4212,11 @@ export class TabManager {
           case 'r':
             event.preventDefault();
             owner.revertPage(id);
+            return;
+          case 'h':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+H` ("New History Tab").
+            event.preventDefault();
+            owner.createHistoryTab();
             return;
           case 'x':
             // Same as buildMenu.ts's `CmdOrCtrl+Shift+X` ("Toggle Crop"); a no-op off a PDF tab.

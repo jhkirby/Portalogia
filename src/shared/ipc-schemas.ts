@@ -1,9 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { z } from 'zod';
+import { HISTORY_UNIT_LIMITS } from './constants';
 
 // Every ipcMain.handle validates its payload against one of these before
 // acting on it — the renderer is untrusted, even though it's our own code.
@@ -127,6 +128,21 @@ export const addPdfBookmarkRequestSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).max(255),
 });
+
+export const historyDeleteRequestSchema = z.object({
+  id: z.string().min(1).max(64),
+});
+
+/** "All time", or the last N of a unit — N within the same range the History tab's number box offers. */
+export const historyClearRequestSchema = z.union([
+  z.object({ unit: z.literal('all') }),
+  z
+    .object({
+      unit: z.enum(['hours', 'days', 'weeks', 'months']),
+      amount: z.number().int().min(1),
+    })
+    .refine((range) => range.amount <= HISTORY_UNIT_LIMITS[range.unit], { message: 'amount out of range' }),
+]);
 
 export const pdfOpenBookmarkRequestSchema = z.object({
   id: z.string().min(1),

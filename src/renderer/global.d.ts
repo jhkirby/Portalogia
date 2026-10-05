@@ -1,13 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-11
+// Last Modified: 2026-10-05
 
 import type {
   NorthstarAddressSuggestionsApi,
   NorthstarApi,
   NorthstarColorPickerApi,
   NorthstarExportMenuApi,
+  NorthstarHistoryApi,
   NorthstarPdfApi,
   NorthstarTerminalApi,
   NorthstarTooltipApi,
@@ -29,6 +30,8 @@ declare global {
     readonly northstarExportMenu: NorthstarExportMenuApi;
     /** The bridge exposed by a PDF tab's own preload script (`src/preload/pdf.ts`). Only present in `pdf.html`'s page. */
     readonly northstarPdf: NorthstarPdfApi;
+    /** The bridge exposed by a History tab's own preload script (`src/preload/history.ts`). Only present in `history.html`'s page. */
+    readonly northstarHistory: NorthstarHistoryApi;
   }
 }
 

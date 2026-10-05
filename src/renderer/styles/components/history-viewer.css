@@ -1,0 +1,315 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-05 */
+
+/* ── HISTORY VIEWER ───────────────────────────────────────────────────── */
+/* `history.html`'s whole page — a History tab's own `WebContentsView` (see
+   `TabManager.createHistoryTab`), so none of the chrome's stylesheets reach it. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background: var(--color-chrome-bg);
+  color: var(--color-tab-text-active);
+}
+
+#root {
+  height: 100%;
+}
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-spacing-md);
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--size-spacing-md) 20px;
+}
+
+/* ── Controls: search, then what "Clear History" clears, then the button ── */
+
+.history__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-sm);
+  flex: none;
+}
+
+.history__search,
+.history__amount,
+.history__unit {
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 var(--size-spacing-sm);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-md);
+  color: var(--color-address-text);
+}
+
+.history__search {
+  flex: 1;
+  min-width: 0;
+}
+
+.history__search::placeholder {
+  color: var(--color-address-placeholder);
+}
+
+.history__amount {
+  width: 64px;
+  flex: none;
+}
+
+/* The unit dropdown: a button (see `UnitSelect`) that opens a list drawn in the page, so its highlight can use the accent color. */
+.history__unit-wrap {
+  position: relative;
+  flex: none;
+}
+
+.history__unit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-spacing-md);
+  min-width: 112px;
+
+  text-align: left;
+  cursor: pointer;
+}
+
+.history__unit-chevron {
+  flex: none;
+  color: var(--color-tab-text);
+}
+
+.history__unit-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  min-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--size-spacing-xs);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+
+  list-style: none;
+}
+
+.history__unit-option {
+  padding: 6px var(--size-spacing-md);
+
+  border-radius: 4px;
+
+  font-size: var(--size-font-md);
+  color: var(--color-address-text);
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+/* The row under the pointer or the keyboard: the app's accent color (whatever the color picker has chosen), not the system's blue. */
+.history__unit-option--active {
+  background: rgb(var(--color-accent-rgb));
+  color: #ffffff;
+}
+
+.history__search:hover,
+.history__amount:hover:not(:disabled),
+.history__unit:hover {
+  border-color: var(--color-address-border-hover);
+}
+
+.history__search:focus,
+.history__amount:focus,
+.history__unit:focus {
+  outline: none;
+  border-color: var(--color-address-border-focus);
+}
+
+/* A number the unit doesn't allow (empty, or past its limit). */
+.history__amount[aria-invalid='true']:not(:disabled) {
+  border-color: #d93025;
+}
+
+/* "All Time" takes no number. */
+.history__amount:disabled {
+  opacity: 0.4;
+}
+
+.history__clear {
+  height: 28px;
+  flex: none;
+  padding: 0 var(--size-spacing-md);
+
+  background: transparent;
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text-active);
+
+  cursor: pointer;
+}
+
+.history__clear:hover:not(:disabled) {
+  background: var(--color-button-hover-bg);
+  border-color: #d93025;
+  color: #d93025;
+}
+
+.history__clear:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Table ── */
+
+.history__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+}
+
+.history__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  font-size: var(--size-font-md);
+}
+
+.history__th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--size-spacing-sm) var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  border-bottom: 1px solid var(--color-panel-border);
+
+  font-size: var(--size-font-sm);
+  font-weight: 600;
+  text-align: left;
+  color: var(--color-tab-text);
+}
+
+.history__th--time {
+  width: 200px;
+}
+
+.history__th--status {
+  width: 72px;
+}
+
+.history__th--action {
+  width: 40px;
+}
+
+.history__cell {
+  padding: 6px var(--size-spacing-md);
+  overflow: hidden;
+
+  border-bottom: 1px solid var(--color-chrome-border);
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history__cell--time {
+  color: var(--color-tab-text);
+}
+
+.history__cell--status {
+  font-variant-numeric: tabular-nums;
+}
+
+.history__status--ok {
+  color: #34a853;
+}
+
+.history__status--redirect {
+  color: #f9ab00;
+}
+
+.history__status--error {
+  color: #d93025;
+}
+
+.history__row:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.history__cell--action {
+  padding: 0 var(--size-spacing-xs);
+  text-align: center;
+}
+
+/* Hidden until the pointer is over the row (or the button itself is focused with the keyboard). */
+.history__delete {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-tab-text);
+
+  opacity: 0;
+  cursor: pointer;
+}
+
+.history__row:hover .history__delete,
+.history__delete:focus-visible {
+  opacity: 1;
+}
+
+.history__delete:hover {
+  background: var(--color-close-hover-bg);
+  color: var(--color-tab-text-active);
+}
+
+.history__empty {
+  margin: 0;
+  padding: 40px var(--size-spacing-md);
+
+  text-align: center;
+  color: var(--color-tab-text);
+}
+
+.history__note {
+  flex: none;
+  margin: 0;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+}

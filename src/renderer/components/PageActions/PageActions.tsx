@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -11,6 +11,7 @@ import {
   CommentIcon,
   CropIcon,
   HighlighterIcon,
+  HistoryIcon,
   LaserPointerIcon,
   OpenInNewWindowIcon,
   PenIcon,
@@ -67,6 +68,8 @@ interface PageActionsProps {
   /** Opens a new PDF viewer tab. */
   readonly onOpenPdfViewer: () => void;
   readonly onNewTerminal: () => void;
+  /** Opens a new History tab. */
+  readonly onOpenHistory: () => void;
   readonly onOpenTabSearch: () => void;
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
@@ -116,6 +119,7 @@ export function PageActions({
   showHighlighter,
   showRevert,
   onNewTerminal,
+  onOpenHistory,
   onOpenTabSearch,
   onZoomOut,
   onZoomIn,
@@ -240,6 +244,15 @@ export function PageActions({
         data-tooltip={`New terminal (${formatShortcut('>')})`}
       >
         {'>_'}
+      </button>
+      <button
+        type="button"
+        className="page-actions__button chrome-tooltip"
+        onClick={onOpenHistory}
+        aria-label="Open history"
+        data-tooltip={`Open history (${formatShortcut('Shift+H')})`}
+      >
+        <HistoryIcon />
       </button>
       <button
         type="button"

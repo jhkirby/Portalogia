@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -281,6 +281,14 @@ export function registerTabIpc(
       }
     },
   );
+
+  ipcMain.handle(IpcChannel.TabsCreateHistory, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).createHistoryTab() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
 
   ipcMain.handle(IpcChannel.TabsCreatePdf, (event): IpcResult<BrowserState> => {
     try {

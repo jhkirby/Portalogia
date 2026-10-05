@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
@@ -15,6 +15,8 @@ import { HighlighterController } from './browser/HighlighterController';
 import { HighlightStore } from './browser/HighlightStore';
 import { PenController } from './browser/PenController';
 import { TextBoxController } from './browser/TextBoxController';
+import { HistoryController } from './browser/HistoryController';
+import { HistoryStore } from './browser/HistoryStore';
 import { TextBoxStore } from './browser/TextBoxStore';
 import { pdfAnnotationStore } from './browser/PdfAnnotationStore';
 import { PenStore } from './browser/PenStore';
@@ -96,6 +98,12 @@ const textBoxStore = new TextBoxStore(join(app.getPath('userData'), 'text-boxes.
 const textBoxController = new TextBoxController(sharedRegistry, textBoxStore);
 app.on('before-quit', () => textBoxController.flush());
 
+// The browsing history isn't scoped to a window either, and a History tab can move between them — same
+// reasoning as `commentStore`/`commentController` above. Recording starts once the app is ready (see below).
+const historyStore = new HistoryStore(join(app.getPath('userData'), 'history.json'));
+const historyController = new HistoryController(sharedRegistry, historyStore);
+app.on('before-quit', () => historyController.flush());
+
 // Pen strokes aren't scoped to a window either — same reasoning as
 // `highlightStore`/`highlighterController` just above.
 const penStore = new PenStore(join(app.getPath('userData'), 'pen-strokes.json'));
@@ -146,6 +154,8 @@ function isOwnPdfViewerUrl(url: string): boolean {
 }
 
 void app.whenReady().then(() => {
+  historyController.attachTo(session.defaultSession);
+
   // Deny every site permission request (camera, mic, geolocation, ...) by
   // default. A future version should replace this with a per-origin
   // prompt; refusing everything is the safe default until that exists.
@@ -287,6 +297,7 @@ function launchWindow(
     commentController,
     penController,
     textBoxController,
+    historyController,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);
