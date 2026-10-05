@@ -70,6 +70,11 @@ body {
   color: var(--color-accent-text);
 }
 
+/* A recent page or PDF from the history, not a bookmark: its clock icon is quieter than a bookmark's accent star. */
+.address-bar__suggestion--history svg {
+  color: var(--color-address-placeholder);
+}
+
 .address-bar__suggestion--selected {
   background: var(--color-selection-bg);
 }

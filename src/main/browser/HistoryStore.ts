@@ -49,6 +49,42 @@ export class HistoryStore {
     return this.entries.find((entry) => entry.id === id);
   }
 
+  /**
+   * The most recent distinct routes of one type that pass a test, newest
+   * first — each route once, at its latest visit. Walks the list from the
+   * newest end without copying it, since a search bar calls this per keystroke.
+   * @param type Pages or PDFs.
+   * @param accepts Whether a visit counts.
+   * @param max How many routes to return at most.
+   */
+  public distinctRecent(
+    type: HistoryEntry['type'],
+    accepts: (entry: HistoryEntry) => boolean,
+    max: number,
+  ): HistoryEntry[] {
+    const seen = new Set<string>();
+    const found: HistoryEntry[] = [];
+    for (let index = this.entries.length - 1; index >= 0 && found.length < max; index -= 1) {
+      const entry = this.entries[index];
+      if (!entry || entry.type !== type || !accepts(entry)) {
+        continue;
+      }
+      // Windows paths are case-insensitive, so two spellings of one file are one route.
+      const key = type === 'pdf' ? entry.url.toLowerCase() : entry.url;
+      if (!seen.has(key)) {
+        seen.add(key);
+        found.push(entry);
+      }
+    }
+    return found;
+  }
+
+  /** @returns Whether a PDF at this path has ever been opened (the history has a record of it). */
+  public hasPdfPath(path: string): boolean {
+    const wanted = path.toLowerCase();
+    return this.entries.some((entry) => entry.type === 'pdf' && entry.url.toLowerCase() === wanted);
+  }
+
   /** Records one visit, dropping the oldest if the history is full. */
   public add(entry: HistoryEntry): void {
     this.entries.push(entry);

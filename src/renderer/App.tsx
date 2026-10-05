@@ -92,6 +92,7 @@ export function App() {
     toggleBookmark,
     addPdfBookmark,
     openPdfBookmark,
+    openPdfPath,
     beginTabPreview,
     endTabPreview,
     enterSplitView,
@@ -338,6 +339,7 @@ export function App() {
                 onToggleBookmark={handleTogglePdfBookmark}
                 pdfBookmarks={pdfBookmarks}
                 onOpenBookmark={openPdfBookmark}
+                onOpenPdfPath={openPdfPath}
                 onOpen={openPdfFile}
                 onGoToPage={goToPdfPage}
                 onExport={exportPdfFile}

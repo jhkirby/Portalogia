@@ -198,6 +198,9 @@ export function useTabs() {
   const addPdfBookmark = useCallback((id: string, name: string) => {
     void window.northstar.addPdfBookmark(id, name).then(logIfFailed);
   }, []);
+  const openPdfPath = useCallback((id: string, path: string) => {
+    window.northstar.openPdfPath(id, path);
+  }, []);
   const openPdfBookmark = useCallback((id: string, bookmarkId: string) => {
     window.northstar.openPdfBookmark(id, bookmarkId);
   }, []);
@@ -328,6 +331,7 @@ export function useTabs() {
     toggleBookmark,
     addPdfBookmark,
     openPdfBookmark,
+    openPdfPath,
     beginTabPreview,
     endTabPreview,
 

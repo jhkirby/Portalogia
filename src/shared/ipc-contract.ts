@@ -38,6 +38,10 @@ export const IpcChannel = {
   HistoryEntries: 'history:entries',
   /** History page → main: delete one visit. */
   HistoryDelete: 'history:delete',
+  /** Chrome → main: the most recent distinct pages (or PDFs) from the history matching a search, for the search bars' dropdowns. */
+  HistorySearch: 'history:search',
+  /** Chrome → main: open a PDF from the history (picked from the PDF search's dropdown) in this tab. */
+  PdfOpenPath: 'pdf:open-path',
   /** History page → main: copy one visit's stored URL (or PDF path) to the clipboard. */
   HistoryCopy: 'history:copy',
   /** Main → history page: the bookmark names the table's Bookmark column looks routes up in. */
@@ -177,6 +181,8 @@ export interface AddressSuggestionItem {
   readonly id: string;
   readonly title: string;
   readonly url: string;
+  /** What the row is, which picks its icon: a bookmark (the default), or a recent visit from the history. */
+  readonly kind?: 'bookmark' | 'history' | undefined;
 }
 
 /**
@@ -338,6 +344,16 @@ export interface NorthstarApi {
   setHistoryQuery(id: string, query: string): void;
   /** Clears the browsing history within a range (the History toolbar's "Clear History"). */
   clearHistory(range: HistoryClearRange): Promise<IpcResult<BrowserState>>;
+  /**
+   * The most recent distinct pages (`'url'`) or PDFs (`'pdf'`) from the
+   * history whose route contains `query` — what the address bar and the PDF
+   * search show after the bookmarks that match. Pages are those that loaded
+   * (2xx), so a redirect hop or an error page never appears; PDFs are those
+   * whose file still exists.
+   */
+  searchHistory(type: HistoryEntry['type'], query: string): Promise<IpcResult<readonly HistorySuggestion[]>>;
+  /** Opens a PDF the history has seen in a PDF tab. Fire-and-forget. */
+  openPdfPath(id: string, path: string): void;
   /** Shows the open dialog for a PDF tab; the chosen file is delivered to that tab's page by main. */
   openPdfFile(id: string): Promise<IpcResult<null>>;
   /** Renames a PDF tab's file on disk (same folder). Fails unless the name ends in `.pdf` and doesn't already exist. */
@@ -758,6 +774,13 @@ export interface HistoryEntry {
   readonly url: string;
   /** The HTTP status code (a redirect hop records its own 3xx); `0` for a PDF, which has none. */
   readonly status: number;
+}
+
+/** One match for a search bar's dropdown from the history: a page's host (or a PDF's file name) and the route to go to. */
+export interface HistorySuggestion {
+  readonly title: string;
+  /** A page's URL, or a PDF's path on disk. */
+  readonly url: string;
 }
 
 /**

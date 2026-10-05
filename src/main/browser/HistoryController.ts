@@ -4,8 +4,16 @@
 // Last Modified: 2026-10-05
 
 import { randomUUID } from 'node:crypto';
+import { stat } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { clipboard, ipcMain, type Session, type WebContents } from 'electron';
-import { IpcChannel, type HistoryBookmarkIndex, type HistoryClearRange } from '@shared/ipc-contract';
+import {
+  IpcChannel,
+  type HistoryBookmarkIndex,
+  type HistoryClearRange,
+  type HistoryEntry,
+  type HistorySuggestion,
+} from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 import { historyDeleteRequestSchema } from '@shared/ipc-schemas';
 import type { HistoryStore } from './HistoryStore';
@@ -21,6 +29,12 @@ const MAX_URL_LENGTH = 2048;
 const PUSH_DEBOUNCE_MS = 400;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
+
+/** The most routes a search considers; the chrome shows at most 10 rows after the bookmarks, and asks for extra since some are bookmarked already. */
+const MAX_SEARCH_RESULTS = 20;
+
+/** How many PDF paths are checked for existence before giving up on finding enough. */
+const MAX_PDF_EXISTENCE_CHECKS = 60;
 
 /**
  * Owns the browsing history's cross-process wiring — one instance shared by
@@ -125,6 +139,50 @@ export class HistoryController {
       }
     }
     return { urls, pdfs };
+  }
+
+  /**
+   * The most recent distinct pages or PDFs whose route contains the query —
+   * what the address bar and the PDF search list after the bookmarks. A page
+   * counts only if it loaded (2xx): a redirect hop's destination is its own
+   * entry, and an error page isn't somewhere to suggest going. A PDF counts
+   * only if its file is still there, so a suggestion never opens to an error.
+   * @param type Pages or PDFs.
+   * @param query The typed text; empty returns nothing.
+   * @returns Up to `MAX_SEARCH_RESULTS` matches, newest first.
+   */
+  public async search(type: HistoryEntry['type'], query: string): Promise<HistorySuggestion[]> {
+    const needle = query.trim().toLowerCase();
+    if (!needle) {
+      return [];
+    }
+    const matches = (entry: HistoryEntry): boolean => entry.url.toLowerCase().includes(needle);
+
+    if (type === 'url') {
+      return this.store
+        .distinctRecent('url', (entry) => entry.status >= 200 && entry.status < 300 && matches(entry), MAX_SEARCH_RESULTS)
+        .map((entry) => ({ title: HistoryController.hostOf(entry.url), url: entry.url }));
+    }
+
+    const candidates = this.store.distinctRecent('pdf', matches, MAX_PDF_EXISTENCE_CHECKS);
+    const exists = await Promise.all(candidates.map((entry) => stat(entry.url).then(() => true, () => false)));
+    return candidates
+      .filter((_entry, index) => exists[index])
+      .slice(0, MAX_SEARCH_RESULTS)
+      .map((entry) => ({ title: basename(entry.url), url: entry.url }));
+  }
+
+  /** @returns Whether a PDF at this path is one the history has seen — the only paths a search suggestion can ask to open. */
+  public hasPdfAccess(path: string): boolean {
+    return this.store.hasPdfPath(path);
+  }
+
+  private static hostOf(url: string): string {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return url;
+    }
   }
 
   /** Writes any pending save now — call on quit. */

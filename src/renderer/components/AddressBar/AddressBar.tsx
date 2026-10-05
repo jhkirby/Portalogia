@@ -1,12 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-05
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import type { AddressSuggestionItem } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
+import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 import { pageLabel } from '../../lib/pageLabel';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
@@ -29,8 +31,8 @@ interface AddressBarProps {
   readonly onToggleBookmark: () => void;
 }
 
-/** How many bookmark suggestions to show at once. */
-const MAX_SUGGESTIONS = 8;
+/** The most suggestions the dropdown shows at once, bookmarks and recent pages together. */
+const MAX_SUGGESTIONS = 10;
 
 /** Vertical gap, in CSS pixels, between the address bar's own bottom edge and the suggestions overlay below it. */
 const DROPDOWN_GAP_PX = 6;
@@ -44,7 +46,8 @@ const DROPDOWN_GAP_PX = 6;
  * the current draft would navigate or search, so it reads as one
  * "search-or-go" box the way other browsers' omniboxes do.
  *
- * While focused with a non-empty draft that matches at least one bookmark,
+ * While focused with a non-empty draft that matches a bookmark or a recently
+ * reached page (bookmarks first, then the most recent pages, ten at most),
  * also shows those matches as a dropdown below the field — Up/Down moves
  * the highlight, Enter (or a click) navigates to the highlighted one
  * instead of submitting the typed text. That dropdown isn't rendered here
@@ -88,16 +91,23 @@ export function AddressBar({
   useEffect(() => window.northstar.onFocusAddressBar(() => inputRef.current?.focus()), []);
 
   const query = draft.trim().toLowerCase();
-  const suggestions = useMemo(() => {
+  const recentPages = useHistorySuggestions('url', draft, isFocused);
+  // The bookmarks that match come first, newest bookmark first; then the pages most recently reached that
+  // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`.
+  const suggestions = useMemo((): readonly AddressSuggestionItem[] => {
     if (!query) {
       return [];
     }
-    return bookmarks
-      .filter(
-        (bookmark) => bookmark.title.toLowerCase().includes(query) || bookmark.url.toLowerCase().includes(query),
-      )
-      .slice(0, MAX_SUGGESTIONS);
-  }, [bookmarks, query]);
+    const bookmarkRows = [...bookmarks]
+      .reverse()
+      .filter((bookmark) => bookmark.title.toLowerCase().includes(query) || bookmark.url.toLowerCase().includes(query))
+      .map((bookmark): AddressSuggestionItem => ({ id: bookmark.id, title: bookmark.title, url: bookmark.url, kind: 'bookmark' }));
+    const bookmarkedUrls = new Set(bookmarkRows.map((row) => row.url));
+    const recentRows = recentPages
+      .filter((page) => !bookmarkedUrls.has(page.url))
+      .map((page): AddressSuggestionItem => ({ id: `history:${page.url}`, title: page.title, url: page.url, kind: 'history' }));
+    return [...bookmarkRows, ...recentRows].slice(0, MAX_SUGGESTIONS);
+  }, [bookmarks, query, recentPages]);
 
   const isDropdownOpen = isFocused && suggestions.length > 0;
   const clampedIndex = suggestions.length === 0 ? 0 : Math.min(selectedIndex, suggestions.length - 1);
@@ -134,7 +144,7 @@ export function AddressBar({
     window.northstar.syncAddressSuggestions({
       open: true,
       rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
-      suggestions: suggestions.map((bookmark) => ({ id: bookmark.id, title: bookmark.title, url: bookmark.url })),
+      suggestions,
       selectedIndex: clampedIndex,
     });
   }, [isDropdownOpen, dropdownRect, suggestions, clampedIndex]);
@@ -155,9 +165,9 @@ export function AddressBar({
     inputRef.current?.blur();
   };
 
-  const selectBookmark = (bookmark: BookmarkState): void => {
-    onNavigate(bookmark.url);
-    setDraft(bookmark.url);
+  const selectSuggestion = (suggestion: AddressSuggestionItem): void => {
+    onNavigate(suggestion.url);
+    setDraft(suggestion.url);
     closeDropdown();
   };
 
@@ -170,10 +180,10 @@ export function AddressBar({
     return window.northstar.onAddressSuggestionSelected((index) => {
       const target = suggestions[index];
       if (target) {
-        selectBookmark(target);
+        selectSuggestion(target);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `selectBookmark` closes over stable setters (`onNavigate` is effectively fixed per mounted tab — see this component's own `key` in App.tsx) and would otherwise force a re-subscribe on every render for no benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `selectSuggestion` closes over stable setters (`onNavigate` is effectively fixed per mounted tab — see this component's own `key` in App.tsx) and would otherwise force a re-subscribe on every render for no benefit.
   }, [suggestions]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
@@ -201,7 +211,7 @@ export function AddressBar({
       event.preventDefault();
       const target = suggestions[clampedIndex];
       if (target) {
-        selectBookmark(target);
+        selectSuggestion(target);
       }
     }
   };

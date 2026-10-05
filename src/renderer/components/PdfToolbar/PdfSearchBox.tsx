@@ -1,21 +1,25 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import type { AddressSuggestionItem } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
+import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 
 interface PdfSearchBoxProps {
   /** The bookmarked PDFs to search — matched against each one's name and path. */
   readonly bookmarks: readonly BookmarkState[];
   /** Opens the bookmarked PDF in this tab. */
   readonly onOpen: (bookmarkId: string) => void;
+  /** Opens a PDF from the history, by its path, in this tab. */
+  readonly onOpenPath: (path: string) => void;
 }
 
-/** How many matches to show at once. */
-const MAX_SUGGESTIONS = 8;
+/** The most matches the dropdown shows at once, bookmarks and recently opened PDFs together. */
+const MAX_SUGGESTIONS = 10;
 
 /** Vertical gap, in CSS pixels, between the box's own bottom edge and the suggestions overlay below it. */
 const DROPDOWN_GAP_PX = 6;
@@ -23,8 +27,9 @@ const DROPDOWN_GAP_PX = 6;
 /**
  * The search box an empty PDF tab shows in place of a file name — the
  * counterpart of the address bar for bookmarked PDFs. While focused with a
- * non-empty draft it lists the bookmarks whose name or path match, Up/Down
- * moves the highlight, and Enter (or a click) opens the highlighted one.
+ * non-empty draft it lists the bookmarks whose name or path match, then the
+ * most recently opened PDFs that match (ten at most), Up/Down moves the
+ * highlight, and Enter (or a click) opens the highlighted one.
  *
  * The list is drawn by the same dedicated overlay view the address bar's
  * dropdown uses (`SuggestionsOverlay`), for the same reason — it has to sit
@@ -33,7 +38,7 @@ const DROPDOWN_GAP_PX = 6;
  * `syncAddressSuggestions`. Only one of the two is ever mounted at a time
  * (the toolbar shows one or the other per tab), so they never contend for it.
  */
-export function PdfSearchBox({ bookmarks, onOpen }: PdfSearchBoxProps) {
+export function PdfSearchBox({ bookmarks, onOpen, onOpenPath }: PdfSearchBoxProps) {
   const [draft, setDraft] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -46,17 +51,34 @@ export function PdfSearchBox({ bookmarks, onOpen }: PdfSearchBoxProps) {
   useEffect(() => window.northstar.onFocusAddressBar(() => inputRef.current?.focus()), []);
 
   const query = draft.trim().toLowerCase();
-  const suggestions = useMemo(() => {
+  const recentPdfs = useHistorySuggestions('pdf', draft, isFocused);
+  // The bookmarked PDFs that match come first, newest bookmark first; then the PDFs most recently opened that
+  // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`.
+  const suggestions = useMemo((): readonly AddressSuggestionItem[] => {
     if (!query) {
       return [];
     }
-    return bookmarks
+    const bookmarkRows = [...bookmarks]
+      .reverse()
       .filter(
         (bookmark) =>
           bookmark.title.toLowerCase().includes(query) || (bookmark.path ?? '').toLowerCase().includes(query),
       )
-      .slice(0, MAX_SUGGESTIONS);
-  }, [bookmarks, query]);
+      .map(
+        (bookmark): AddressSuggestionItem => ({
+          id: bookmark.id,
+          title: bookmark.title,
+          url: bookmark.path ?? bookmark.url,
+          kind: 'bookmark',
+        }),
+      );
+    // Paths compare without regard to case, as on Windows.
+    const bookmarkedPaths = new Set(bookmarkRows.map((row) => row.url.toLowerCase()));
+    const recentRows = recentPdfs
+      .filter((pdf) => !bookmarkedPaths.has(pdf.url.toLowerCase()))
+      .map((pdf): AddressSuggestionItem => ({ id: `history:${pdf.url}`, title: pdf.title, url: pdf.url, kind: 'history' }));
+    return [...bookmarkRows, ...recentRows].slice(0, MAX_SUGGESTIONS);
+  }, [bookmarks, query, recentPdfs]);
 
   const isDropdownOpen = isFocused && suggestions.length > 0;
   const clampedIndex = suggestions.length === 0 ? 0 : Math.min(selectedIndex, suggestions.length - 1);
@@ -87,11 +109,7 @@ export function PdfSearchBox({ bookmarks, onOpen }: PdfSearchBoxProps) {
     window.northstar.syncAddressSuggestions({
       open: true,
       rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
-      suggestions: suggestions.map((bookmark) => ({
-        id: bookmark.id,
-        title: bookmark.title,
-        url: bookmark.path ?? bookmark.url,
-      })),
+      suggestions,
       selectedIndex: clampedIndex,
     });
   }, [isDropdownOpen, dropdownRect, suggestions, clampedIndex]);
@@ -109,8 +127,12 @@ export function PdfSearchBox({ bookmarks, onOpen }: PdfSearchBoxProps) {
     inputRef.current?.blur();
   };
 
-  const openBookmark = (bookmark: BookmarkState): void => {
-    onOpen(bookmark.id);
+  const openSuggestion = (suggestion: AddressSuggestionItem): void => {
+    if (suggestion.kind === 'history') {
+      onOpenPath(suggestion.url);
+    } else {
+      onOpen(suggestion.id);
+    }
     setDraft('');
     closeDropdown();
   };
@@ -120,10 +142,10 @@ export function PdfSearchBox({ bookmarks, onOpen }: PdfSearchBoxProps) {
     return window.northstar.onAddressSuggestionSelected((index) => {
       const target = suggestions[index];
       if (target) {
-        openBookmark(target);
+        openSuggestion(target);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `openBookmark` closes over stable setters and a callback fixed per mounted tab; re-subscribing on every render would buy nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `openSuggestion` closes over stable setters and a callback fixed per mounted tab; re-subscribing on every render would buy nothing.
   }, [suggestions]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
@@ -145,7 +167,7 @@ export function PdfSearchBox({ bookmarks, onOpen }: PdfSearchBoxProps) {
       event.preventDefault();
       const target = suggestions[clampedIndex];
       if (target) {
-        openBookmark(target);
+        openSuggestion(target);
       }
     }
   };

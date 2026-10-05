@@ -35,6 +35,8 @@ import {
   type ExportMenuAction,
   type ExportMenuSyncPayload,
   type HistoryClearRange,
+  type HistoryEntry,
+  type HistorySuggestion,
   type PdfOpenResult,
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
@@ -739,6 +741,25 @@ export class TabManager {
       }
     }
     return this.getState();
+  }
+
+  /** The most recent distinct pages or PDFs from the history matching a search — see `HistoryController.search`. */
+  public searchHistory(type: HistoryEntry['type'], query: string): Promise<HistorySuggestion[]> {
+    return this.historyController.search(type, query);
+  }
+
+  /**
+   * Opens, in a PDF tab, a PDF the history has seen — picked from the PDF
+   * search's dropdown. Only paths the history already holds are accepted, so
+   * this can't be turned into a way to open an arbitrary file.
+   * @param id The PDF tab.
+   * @param path The file's path on disk.
+   */
+  public async openPdfFromHistory(id: string, path: string): Promise<void> {
+    if (this.states.get(id)?.kind !== 'pdf' || !this.historyController.hasPdfAccess(path)) {
+      return;
+    }
+    await this.loadPdfFromPath(id, path);
   }
 
   /**

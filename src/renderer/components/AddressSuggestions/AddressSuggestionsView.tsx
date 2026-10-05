@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import type { AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
-import { BookmarkStarIcon } from '../icons';
+import { BookmarkStarIcon, HistoryIcon } from '../icons';
 
 /**
  * The whole of `suggestions.html`'s page — the address bar's bookmark-
@@ -56,7 +56,7 @@ export function AddressSuggestionsView() {
           aria-selected={index === payload.selectedIndex}
           className={`address-bar__suggestion${
             index === payload.selectedIndex ? ' address-bar__suggestion--selected' : ''
-          }`}
+          }${item.kind === 'history' ? ' address-bar__suggestion--history' : ''}`}
           onMouseDown={(event) => {
             // Not the row's own default action (text-drag-selecting the
             // title/URL) — this is what lets the address bar's input stay
@@ -68,7 +68,7 @@ export function AddressSuggestionsView() {
             window.northstarSuggestions.select(index);
           }}
         >
-          {!isMenu && <BookmarkStarIcon filled size={13} />}
+          {!isMenu && (item.kind === 'history' ? <HistoryIcon size={13} /> : <BookmarkStarIcon filled size={13} />)}
           <span className="address-bar__suggestion-title">{item.title}</span>
           {!isMenu && <span className="address-bar__suggestion-url">{item.url}</span>}
         </li>

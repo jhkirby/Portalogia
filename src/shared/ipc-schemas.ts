@@ -149,6 +149,16 @@ export const historyQueryRequestSchema = z.object({
   query: z.string().max(500),
 });
 
+export const historySearchRequestSchema = z.object({
+  type: z.enum(['url', 'pdf']),
+  query: z.string().max(500),
+});
+
+export const pdfOpenPathRequestSchema = z.object({
+  id: z.string().min(1),
+  path: z.string().min(1).max(4096),
+});
+
 export const pdfOpenBookmarkRequestSchema = z.object({
   id: z.string().min(1),
   bookmarkId: z.string().min(1),
@@ -316,6 +326,7 @@ export const addressSuggestionsSyncRequestSchema = z.object({
       id: z.string(),
       title: z.string(),
       url: z.string(),
+      kind: z.enum(['bookmark', 'history']).optional(),
     }),
   ),
   selectedIndex: z.number().int().nonnegative(),

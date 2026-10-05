@@ -5,11 +5,13 @@
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
-import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-contract';
+import { IpcChannel, type ExportPdfResult, type HistorySuggestion, type IpcResult } from '@shared/ipc-contract';
 import {
   addBookmarkRequestSchema,
   addPdfBookmarkRequestSchema,
   historyClearRequestSchema,
+  historySearchRequestSchema,
+  pdfOpenPathRequestSchema,
   historyQueryRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
@@ -324,6 +326,35 @@ export function registerTabIpc(
   handle(IpcChannel.HistoryClear, historyClearRequestSchema, (request, event) =>
     resolveTabManager(event).clearHistory(request),
   );
+
+  // Answered only to a chrome window (`resolveTabManager` throws for a tab's own page).
+  ipcMain.handle(
+    IpcChannel.HistorySearch,
+    async (event, rawRequest: unknown): Promise<IpcResult<readonly HistorySuggestion[]>> => {
+      const parsed = historySearchRequestSchema.safeParse(rawRequest);
+      if (!parsed.success) {
+        return { ok: false, code: 'invalid-request', message: parsed.error.message };
+      }
+      try {
+        return { ok: true, data: await resolveTabManager(event).searchHistory(parsed.data.type, parsed.data.query) };
+      } catch (error) {
+        return toErrorResult(error);
+      }
+    },
+  );
+
+  ipcMain.on(IpcChannel.PdfOpenPath, (event, rawRequest: unknown) => {
+    const parsed = pdfOpenPathRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event);
+    } catch {
+      return; // Not from a chrome window: ignored.
+    }
+    void resolveTabManagerForTab(parsed.data.id)?.openPdfFromHistory(parsed.data.id, parsed.data.path);
+  });
 
   ipcMain.on(IpcChannel.HistorySetQuery, (event, rawRequest: unknown) => {
     const parsed = historyQueryRequestSchema.safeParse(rawRequest);

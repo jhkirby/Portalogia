@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-05
 
 import { useState } from 'react';
 import type { BookmarkState, PdfTabState } from '@shared/tab-state';
@@ -22,6 +22,8 @@ interface PdfToolbarProps {
   readonly pdfBookmarks: readonly BookmarkState[];
   /** Opens a bookmarked PDF in the tab. */
   readonly onOpenBookmark: (id: string, bookmarkId: string) => void;
+  /** Opens a PDF from the history, by path, in the tab. */
+  readonly onOpenPdfPath: (id: string, path: string) => void;
   readonly onOpen: (id: string) => void;
   readonly onGoToPage: (id: string, page: number) => void;
   /** Saves a copy of the open file with its crops, drawings, text boxes and highlights applied. */
@@ -44,6 +46,7 @@ export function PdfToolbar({
   onToggleBookmark,
   pdfBookmarks,
   onOpenBookmark,
+  onOpenPdfPath,
   onOpen,
   onGoToPage,
   onExport,
@@ -149,7 +152,11 @@ export function PdfToolbar({
       )}
       {/* Before a file is open there's nothing to rename, so the slot is a search over the bookmarked PDFs instead. */}
       {fileName === null ? (
-        <PdfSearchBox bookmarks={pdfBookmarks} onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)} />
+        <PdfSearchBox
+          bookmarks={pdfBookmarks}
+          onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)}
+          onOpenPath={(path) => onOpenPdfPath(tab.id, path)}
+        />
       ) : (
         <input
           type="text"
