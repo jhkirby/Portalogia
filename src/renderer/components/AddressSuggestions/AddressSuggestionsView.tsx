@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-05
 
 import { useEffect, useState } from 'react';
 import type { AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
@@ -9,7 +9,8 @@ import { BookmarkStarIcon } from '../icons';
 
 /**
  * The whole of `suggestions.html`'s page — the address bar's bookmark-
- * suggestions dropdown, rendered here instead of in the chrome's own DOM
+ * suggestions dropdown (or, in its `'menu'` variant, a plain option list: the
+ * History toolbar's unit dropdown), rendered here instead of in the chrome's own DOM
  * so it can sit visually above the active tab's live `WebContentsView`
  * without that view ever needing to be hidden (see `SuggestionsOverlay`
  * on the main-process side for why a chrome-drawn dropdown can't do that).
@@ -44,8 +45,10 @@ export function AddressSuggestionsView() {
     return null;
   }
 
+  const isMenu = payload.variant === 'menu';
+
   return (
-    <ul className="address-bar__suggestions" role="listbox">
+    <ul className={`address-bar__suggestions${isMenu ? ' address-bar__suggestions--menu' : ''}`} role="listbox">
       {payload.suggestions.map((item, index) => (
         <li
           key={item.id}
@@ -65,9 +68,9 @@ export function AddressSuggestionsView() {
             window.northstarSuggestions.select(index);
           }}
         >
-          <BookmarkStarIcon filled size={13} />
+          {!isMenu && <BookmarkStarIcon filled size={13} />}
           <span className="address-bar__suggestion-title">{item.title}</span>
-          <span className="address-bar__suggestion-url">{item.url}</span>
+          {!isMenu && <span className="address-bar__suggestion-url">{item.url}</span>}
         </li>
       ))}
     </ul>

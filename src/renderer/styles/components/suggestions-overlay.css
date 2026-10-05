@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-24 */
+   Last Modified: 2026-10-05 */
 
 /* ── SUGGESTIONS OVERLAY ──────────────────────────────────────────────── */
 /* The address bar's suggestions dropdown's whole page (`suggestions.html`)
@@ -94,4 +94,22 @@ body {
 
   font-size: var(--size-font-sm);
   color: var(--color-address-placeholder);
+}
+
+/* The "menu" variant: plain option rows, no icon or URL, highlighted in the
+   app's accent color (whatever the color picker has chosen) rather than the
+   neutral selection grey — it's a dropdown, so the highlight reads as the
+   current choice. */
+.address-bar__suggestions--menu .address-bar__suggestion {
+  max-width: none;
+}
+
+.address-bar__suggestions--menu .address-bar__suggestion-title {
+  max-width: none;
+}
+
+.address-bar__suggestions--menu .address-bar__suggestion:hover,
+.address-bar__suggestions--menu .address-bar__suggestion--selected {
+  background: rgb(var(--color-accent-rgb));
+  color: #ffffff;
 }

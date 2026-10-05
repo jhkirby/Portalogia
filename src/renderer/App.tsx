@@ -9,6 +9,7 @@ import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
+import { HistoryToolbar } from './components/HistoryToolbar';
 import { PdfToolbar } from './components/PdfToolbar';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
@@ -343,7 +344,9 @@ export function App() {
                 onClose={closePdfFile}
                 onRename={renamePdfFile}
               />
-            ) : activeTab?.kind === 'terminal' || activeTab?.kind === 'history' ? (
+            ) : activeTab?.kind === 'history' ? (
+              <HistoryToolbar key={activeTab.id} tab={activeTab} />
+            ) : activeTab?.kind === 'terminal' ? (
               // Empty on purpose — occupies the same flex space
               // NavControls + AddressBar would, so PageActions stays
               // right-aligned, without showing the tab's title text.
@@ -395,6 +398,8 @@ export function App() {
               canExportDocuments={browserTab !== null && !isHome}
               showExportMenu={activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
               showCommentTool={!isAppPage}
+              showLaserPointer={activeTab?.kind !== 'history'}
+              showZoom={activeTab?.kind !== 'history'}
               showTextTool={!isAppPage}
               showPen={!isAppPage}
               showHighlighter={!isAppPage}

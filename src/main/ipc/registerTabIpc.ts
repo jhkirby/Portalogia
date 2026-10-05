@@ -9,6 +9,8 @@ import { IpcChannel, type ExportPdfResult, type IpcResult } from '@shared/ipc-co
 import {
   addBookmarkRequestSchema,
   addPdfBookmarkRequestSchema,
+  historyClearRequestSchema,
+  historyQueryRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
   colorPickerSyncRequestSchema,
@@ -316,6 +318,24 @@ export function registerTabIpc(
   handle(IpcChannel.BookmarksToggle, tabIdRequestSchema, (request, event) =>
     resolveTabManager(event).toggleBookmark(request.id),
   );
+
+  // Clearing history is the chrome's action (its toolbar's button); `resolveTabManager` only resolves for a
+  // chrome window's own sender, so a tab's page can't send it.
+  handle(IpcChannel.HistoryClear, historyClearRequestSchema, (request, event) =>
+    resolveTabManager(event).clearHistory(request),
+  );
+
+  ipcMain.on(IpcChannel.HistorySetQuery, (event, rawRequest: unknown) => {
+    const parsed = historyQueryRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).setHistoryQuery(parsed.data.id, parsed.data.query);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
 
   handle(IpcChannel.BookmarksAddPdf, addPdfBookmarkRequestSchema, (request, event) =>
     resolveTabManager(event).addPdfBookmark(request.id, request.name),

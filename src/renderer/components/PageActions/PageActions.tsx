@@ -40,6 +40,10 @@ interface PageActionsProps {
   readonly showCommentTool: boolean;
   /** Whether the text box tool is shown — hidden on a terminal tab, like the comment tool. */
   readonly showTextTool: boolean;
+  /** Whether the laser pointer is shown — hidden on a History tab. */
+  readonly showLaserPointer: boolean;
+  /** Whether the zoom control is shown — hidden on a History tab, which doesn't zoom. */
+  readonly showZoom: boolean;
   /** Whether the pen is shown — hidden on a terminal tab, which has no document to draw on. */
   readonly showPen: boolean;
   /** Whether the highlighter is shown — hidden on a terminal tab. */
@@ -115,6 +119,8 @@ export function PageActions({
   showExportMenu,
   showCommentTool,
   showTextTool,
+  showLaserPointer,
+  showZoom,
   showPen,
   showHighlighter,
   showRevert,
@@ -135,19 +141,25 @@ export function PageActions({
   onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
+  // With none of the tool buttons showing (a History tab), the divider that closes their group would sit alone at the left edge.
+  const showAnyTool =
+    showLaserPointer || showPen || showHighlighter || showCommentTool || showTextTool || showCrop || showRevert;
+
   return (
     <div className="page-actions">
-      <button
-        type="button"
-        className="page-actions__button chrome-tooltip"
-        onClick={onToggleLaserPointer}
-        disabled={!canExportPdf}
-        aria-pressed={laserPointerActive}
-        aria-label={laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'}
-        data-tooltip={`${laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'} (${formatShortcut('I')})`}
-      >
-        <LaserPointerIcon />
-      </button>
+      {showLaserPointer && (
+        <button
+          type="button"
+          className="page-actions__button chrome-tooltip"
+          onClick={onToggleLaserPointer}
+          disabled={!canExportPdf}
+          aria-pressed={laserPointerActive}
+          aria-label={laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'}
+          data-tooltip={`${laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'} (${formatShortcut('I')})`}
+        >
+          <LaserPointerIcon />
+        </button>
+      )}
       {showPen && (
         <button
           type="button"
@@ -225,7 +237,7 @@ export function PageActions({
           <RevertIcon />
         </button>
       )}
-      <span className="page-actions__divider" role="separator" aria-hidden="true" />
+      {showAnyTool && <span className="page-actions__divider" role="separator" aria-hidden="true" />}
       <button
         type="button"
         className="page-actions__button page-actions__button--pdf chrome-tooltip"
@@ -264,8 +276,18 @@ export function PageActions({
         ⌕
       </button>
       <span className="page-actions__divider" role="separator" aria-hidden="true" />
-      <ZoomControl percent={zoomPercent} canZoom={canZoom} onZoomOut={onZoomOut} onZoomIn={onZoomIn} onSetZoom={onSetZoom} />
-      <span className="page-actions__divider" role="separator" aria-hidden="true" />
+      {showZoom && (
+        <>
+          <ZoomControl
+            percent={zoomPercent}
+            canZoom={canZoom}
+            onZoomOut={onZoomOut}
+            onZoomIn={onZoomIn}
+            onSetZoom={onSetZoom}
+          />
+          <span className="page-actions__divider" role="separator" aria-hidden="true" />
+        </>
+      )}
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

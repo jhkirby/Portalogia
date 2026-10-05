@@ -144,6 +144,11 @@ export const historyClearRequestSchema = z.union([
     .refine((range) => range.amount <= HISTORY_UNIT_LIMITS[range.unit], { message: 'amount out of range' }),
 ]);
 
+export const historyQueryRequestSchema = z.object({
+  id: z.string().min(1),
+  query: z.string().max(500),
+});
+
 export const pdfOpenBookmarkRequestSchema = z.object({
   id: z.string().min(1),
   bookmarkId: z.string().min(1),
@@ -296,6 +301,8 @@ export const terminalResizeRequestSchema = z.object({
 export type TerminalResizeRequest = z.infer<typeof terminalResizeRequestSchema>;
 
 export const addressSuggestionsSyncRequestSchema = z.object({
+  // Without this the schema would strip it: the overlay would never learn it's drawing a menu.
+  variant: z.enum(['bookmarks', 'menu']).optional(),
   open: z.boolean(),
   rect: z
     .object({

@@ -34,6 +34,7 @@ import {
   type ColorPickerSyncPayload,
   type ExportMenuAction,
   type ExportMenuSyncPayload,
+  type HistoryClearRange,
   type PdfOpenResult,
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
@@ -126,6 +127,8 @@ export class TabManager {
   private readonly workspaces: Map<string, WorkspaceState>;
   private readonly lastActiveTabIdByWorkspace = new Map<string, string>();
   private readonly closedTabs: ClosedTab[] = [];
+  /** The search text each History tab's table is filtered by — typed in the chrome's toolbar, so kept here to hand to a page that loads after it was typed. */
+  private readonly historyQueries = new Map<string, string>();
   private activeTabId: string | null = null;
   private activeWorkspaceId: string;
   private splitView: SplitViewState | null = null;
@@ -694,10 +697,10 @@ export class TabManager {
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     this.wireSharedInputHandling(id, view.webContents);
-    // A fresh page has never been sent the history or its zoom, and `activateTab`'s own pushes land before it has loaded.
+    // A fresh page has never been sent the history or its search text. (It's never zoomed either: see `isZoomable`.)
     view.webContents.on('did-finish-load', () => {
-      this.applyZoom(id);
       this.historyController.pushTo(id);
+      view.webContents.send(IpcChannel.HistoryQuery, this.historyQueries.get(id) ?? '');
     });
 
     this.views.set(id, view);
@@ -716,6 +719,35 @@ export class TabManager {
       void view.webContents.loadFile(join(__dirname, '../renderer/history.html'), { query: { id } });
     }
 
+    return this.getState();
+  }
+
+  /**
+   * Sets the search text a History tab's table filters by. The box is in the
+   * chrome's toolbar and the table in the tab's own page, so it travels
+   * through here.
+   * @param id The History tab. A no-op if it isn't one.
+   * @param query The text to filter by; empty shows everything.
+   * @returns The full browser state (unchanged).
+   */
+  public setHistoryQuery(id: string, query: string): BrowserState {
+    if (this.states.get(id)?.kind === 'history') {
+      this.historyQueries.set(id, query);
+      const view = this.views.get(id);
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.send(IpcChannel.HistoryQuery, query);
+      }
+    }
+    return this.getState();
+  }
+
+  /**
+   * Clears the browsing history within a range — the toolbar's "Clear History".
+   * @param range The last N of a unit, or everything (already validated).
+   * @returns The full browser state (unchanged; open History tabs are re-sent the list).
+   */
+  public clearHistory(range: HistoryClearRange): BrowserState {
+    this.historyController.clear(range);
     return this.getState();
   }
 
@@ -1232,6 +1264,7 @@ export class TabManager {
       this.registry.mountOwners.delete(memberId);
       this.registry.zoomPercentByTabId.delete(memberId);
       this.highlighter.disposeTab(memberId);
+      this.historyQueries.delete(memberId);
       this.commentController.disposeTab(memberId);
       this.textBoxController.disposeTab(memberId);
       this.penController.disposeTab(memberId);
@@ -1278,6 +1311,7 @@ export class TabManager {
     this.registry.mountOwners.delete(id);
     this.registry.zoomPercentByTabId.delete(id);
     this.highlighter.disposeTab(id);
+    this.historyQueries.delete(id);
     this.commentController.disposeTab(id);
     this.textBoxController.disposeTab(id);
     this.penController.disposeTab(id);
@@ -2655,8 +2689,8 @@ export class TabManager {
    * tab views' own key handling, a direct IPC call — can turn on a tool its
    * button shows as disabled.
    *
-   * Every tool needs an active tab. Beyond the laser pointer, none can mark a
-   * terminal, a History tab, or a PDF tab with no file open, and the crop tool only exists
+   * Every tool needs an active tab, and none works on a History tab. Beyond the
+   * laser pointer, none can mark a terminal or a PDF tab with no file open, and the crop tool only exists
    * for a PDF.
    * @param tool Which tool is being switched on.
    * @returns Whether it may be.
@@ -2667,7 +2701,7 @@ export class TabManager {
       return false;
     }
     if (tool === 'laser') {
-      return true;
+      return active.kind !== 'history';
     }
     if (active.kind === 'terminal' || active.kind === 'history' || (active.kind === 'pdf' && active.fileName === null)) {
       return false;
@@ -3206,7 +3240,7 @@ export class TabManager {
 
   /** Resets the active tab's own content back to its native 100% zoom. */
   public resetZoom(): BrowserState {
-    if (this.activeTabId) {
+    if (this.activeTabId && this.isZoomable(this.activeTabId)) {
       this.setZoomPercent(this.activeTabId, ZOOM_PERCENT_DEFAULT);
     }
     return this.getState();
@@ -3222,7 +3256,7 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public setZoom(percent: number): BrowserState {
-    if (this.activeTabId) {
+    if (this.activeTabId && this.isZoomable(this.activeTabId)) {
       this.setZoomPercent(this.activeTabId, clampZoomPercent(percent));
     }
     return this.getState();
@@ -3240,6 +3274,9 @@ export class TabManager {
   public wheelZoom(sender: WebContents, direction: 1 | -1): void {
     for (const [id, view] of this.views) {
       if (view.webContents === sender) {
+        if (!this.isZoomable(id)) {
+          return;
+        }
         const current = this.registry.zoomPercentByTabId.get(id) ?? ZOOM_PERCENT_DEFAULT;
         this.setZoomPercent(id, clampZoomPercent(current + direction * ZOOM_PERCENT_WHEEL_STEP));
         return;
@@ -3250,8 +3287,13 @@ export class TabManager {
   /**
    * @param deltaPercent `±ZOOM_PERCENT_STEP`.
    */
+  /** Whether a tab can be zoomed: every kind but the History tab, whose page is a fixed-size table with no zoom control. */
+  private isZoomable(id: string): boolean {
+    return this.states.get(id)?.kind !== 'history';
+  }
+
   private adjustZoom(deltaPercent: number): void {
-    if (!this.activeTabId) {
+    if (!this.activeTabId || !this.isZoomable(this.activeTabId)) {
       return;
     }
     const current = this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT;
@@ -3605,6 +3647,9 @@ export class TabManager {
    * too.
    */
   public requestFocusZoom(): void {
+    if (this.activeTabId && !this.isZoomable(this.activeTabId)) {
+      return;
+    }
     this.window.webContents.focus();
     this.window.webContents.send(IpcChannel.UiFocusZoom);
   }

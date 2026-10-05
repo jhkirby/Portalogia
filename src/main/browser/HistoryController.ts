@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { ipcMain, type Session, type WebContents } from 'electron';
 import { IpcChannel, type HistoryClearRange } from '@shared/ipc-contract';
-import { historyClearRequestSchema, historyDeleteRequestSchema } from '@shared/ipc-schemas';
+import { historyDeleteRequestSchema } from '@shared/ipc-schemas';
 import type { HistoryStore } from './HistoryStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 
@@ -34,8 +34,8 @@ const MS_PER_HOUR = 60 * 60 * 1000;
  *   skipped: only the contents of a browser tab's own view count.
  * - **Serves** the list to every open History tab, pushed whenever it
  *   changes (debounced, so a page load's burst of requests is one push).
- * - **Obeys** the History page's delete and clear requests — but only from a
- *   History tab's own view, and with the clear range re-validated here.
+ * - **Obeys** deletes from the History page (only from a History tab's own
+ *   view) and clears from the chrome's toolbar (see `clear`).
  */
 export class HistoryController {
   private pushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,15 +51,6 @@ export class HistoryController {
     ipcMain.on(IpcChannel.HistoryDelete, (event, rawRequest: unknown) => {
       const parsed = historyDeleteRequestSchema.safeParse(rawRequest);
       if (parsed.success && this.isHistoryView(event.sender) && this.store.remove(parsed.data.id)) {
-        this.pushToAll(true);
-      }
-    });
-    ipcMain.on(IpcChannel.HistoryClear, (event, rawRequest: unknown) => {
-      const parsed = historyClearRequestSchema.safeParse(rawRequest);
-      if (!parsed.success || !this.isHistoryView(event.sender)) {
-        return;
-      }
-      if (this.store.removeSince(HistoryController.cutoffFor(parsed.data, Date.now())) > 0) {
         this.pushToAll(true);
       }
     });
@@ -79,6 +70,18 @@ export class HistoryController {
     ses.webRequest.onBeforeRedirect(filter, (details) => {
       this.record(details.resourceType, details.webContentsId, details.url, details.statusCode, details.timestamp);
     });
+  }
+
+  /**
+   * Deletes the visits within a range. Called for the toolbar's "Clear
+   * History", whose request `registerTabIpc` has already validated and
+   * confirmed came from the chrome rather than a page.
+   * @param range The last N of a unit, or everything.
+   */
+  public clear(range: HistoryClearRange): void {
+    if (this.store.removeSince(HistoryController.cutoffFor(range, Date.now())) > 0) {
+      this.pushToAll(true);
+    }
   }
 
   /** Sends the current list to one History tab — call once its page has loaded, since a fresh page has never been sent anything. */

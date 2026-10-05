@@ -38,8 +38,12 @@ export const IpcChannel = {
   HistoryEntries: 'history:entries',
   /** History page → main: delete one visit. */
   HistoryDelete: 'history:delete',
-  /** History page → main: clear the visits within a time range (or all of them). */
+  /** Chrome → main: clear the visits within a time range (or all of them). */
   HistoryClear: 'history:clear',
+  /** Chrome → main: the History toolbar's search text for a History tab. */
+  HistorySetQuery: 'history:set-query',
+  /** Main → history page: the search text to filter the table by. */
+  HistoryQuery: 'history:query',
   PdfOpenFile: 'pdf:open-file',
   PdfRename: 'pdf:rename',
   /** PDF page → main: the marks drawn on the open document, to persist. */
@@ -182,6 +186,8 @@ export interface AddressSuggestionItem {
  * overlay view's bounds, since both live in the same window.
  */
 export interface AddressSuggestionsSyncPayload {
+  /** `'menu'` draws plain option rows in the accent color (the History toolbar's unit dropdown) instead of bookmark rows; the default is bookmarks. */
+  readonly variant?: 'bookmarks' | 'menu' | undefined;
   readonly open: boolean;
   readonly rect: { readonly top: number; readonly left: number; readonly width: number } | null;
   readonly suggestions: readonly AddressSuggestionItem[];
@@ -324,6 +330,10 @@ export interface NorthstarApi {
   createPdfTab(): Promise<IpcResult<BrowserState>>;
   /** Opens a new History tab (the toolbar's history button, Ctrl+Shift+H, or File > New History Tab). */
   createHistoryTab(): Promise<IpcResult<BrowserState>>;
+  /** Sets the search text a History tab's table filters by — typed in the toolbar, shown in the tab's page. Fire-and-forget. */
+  setHistoryQuery(id: string, query: string): void;
+  /** Clears the browsing history within a range (the History toolbar's "Clear History"). */
+  clearHistory(range: HistoryClearRange): Promise<IpcResult<BrowserState>>;
   /** Shows the open dialog for a PDF tab; the chosen file is delivered to that tab's page by main. */
   openPdfFile(id: string): Promise<IpcResult<null>>;
   /** Renames a PDF tab's file on disk (same folder). Fails unless the name ends in `.pdf` and doesn't already exist. */
@@ -753,6 +763,6 @@ export interface NorthstarHistoryApi {
   onEntries(listener: (entries: readonly HistoryEntry[]) => void): () => void;
   /** Deletes one visit. Fire-and-forget. */
   deleteEntry(id: string): void;
-  /** Clears the visits within a range. Fire-and-forget. */
-  clear(range: HistoryClearRange): void;
+  /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
+  onQuery(listener: (query: string) => void): () => void;
 }
