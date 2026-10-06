@@ -189,7 +189,12 @@ void app.whenReady().then(() => {
   // default. A future version should replace this with a per-origin
   // prompt; refusing everything is the safe default until that exists.
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
-    callback(permission === 'pointerLock' && isOwnPdfViewerUrl(details.requestingUrl));
+    // Fullscreen is what a video's fullscreen button asks for; granted to web pages only.
+    const isWebPage = /^https?:/i.test(details.requestingUrl);
+    callback(
+      (permission === 'pointerLock' && isOwnPdfViewerUrl(details.requestingUrl)) ||
+        (permission === 'fullscreen' && isWebPage),
+    );
   });
 
   protocol.handle(NORTHSTAR_SCHEME, (request) => {

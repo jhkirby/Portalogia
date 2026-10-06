@@ -183,6 +183,10 @@ export class TabManager {
   private boundsAnimationToken = 0;
   /** Set for the duration of an in-flight bounds animation (see `animateBoundsInset`) — lets `updateBounds` defer to the animation's own frames instead of fighting them with a one-off instant jump, e.g. from the native 'resize' event `setFullScreen` fires when Focus Mode toggles. */
   private isAnimatingBounds = false;
+  /** The tab whose page is fullscreen (see `setHtmlFullScreen`), if any. */
+  private htmlFullScreenTabId: string | null = null;
+  /** Whether the window was already OS-fullscreen (Focus Mode) when a page went fullscreen, so leaving doesn't pull it out. */
+  private windowWasFullScreen = false;
   private readonly terminals: TerminalManager;
   private readonly suggestionsOverlay: SuggestionsOverlay;
   private readonly tooltipOverlay: TooltipOverlay;
@@ -2755,6 +2759,37 @@ export class TabManager {
     return this.getState();
   }
 
+  /**
+   * Gives a tab's own fullscreen request (a video's fullscreen button) the
+   * whole window, or takes it back. The window goes OS-fullscreen unless Focus
+   * Mode already has it there, and is only taken out again if this put it in.
+   * @param tabId The tab whose page entered or left fullscreen.
+   * @param entering Whether it entered.
+   */
+  private setHtmlFullScreen(tabId: string, entering: boolean): void {
+    if (entering) {
+      if (this.htmlFullScreenTabId !== null || this.activeTabId !== tabId || this.window.isDestroyed()) {
+        return;
+      }
+      this.htmlFullScreenTabId = tabId;
+      this.windowWasFullScreen = this.window.isFullScreen();
+      if (!this.windowWasFullScreen) {
+        this.window.setFullScreen(true);
+      }
+    } else {
+      if (this.htmlFullScreenTabId !== tabId) {
+        return;
+      }
+      this.htmlFullScreenTabId = null;
+      if (!this.windowWasFullScreen && !this.window.isDestroyed()) {
+        this.window.setFullScreen(false);
+      }
+    }
+    if (!this.window.isDestroyed()) {
+      this.applyBounds(this.targetLeftInset(), this.targetTopInset());
+    }
+  }
+
   /** Toggles Focus Mode to whichever state it isn't currently in. */
   public toggleFocusMode(): BrowserState {
     return this.setFocusMode(!this.focusMode);
@@ -4091,6 +4126,12 @@ export class TabManager {
    * @param top Vertical inset to clear, in CSS pixels.
    */
   private applyBounds(left: number, top: number): void {
+    if (this.htmlFullScreenTabId !== null && this.htmlFullScreenTabId === this.activeTabId) {
+      this.findOverlay.hide(true);
+      const [width = 0, height = 0] = this.window.getContentSize();
+      this.views.get(this.htmlFullScreenTabId)?.setBounds({ x: 0, y: 0, width, height });
+      return;
+    }
     const main = this.computeMainBounds(left, top);
     this.laserPointerOverlay.setActive(this.laserPointerActive && this.activeTabId !== null, main);
     this.syncFindOverlay();
@@ -4218,6 +4259,13 @@ export class TabManager {
     // actually is (a no-op if it was never zoomed) so it survives clicking
     // a link or typing a new address, not just page reloads.
     wc.on('did-finish-load', () => this.applyZoom(id));
+
+    // A page's own fullscreen (a video's fullscreen button) only fills this
+    // tab's view, which is inset below the chrome — so the window goes
+    // fullscreen and the view takes all of it, until the page leaves again.
+    wc.on('enter-html-full-screen', () => this.setHtmlFullScreen(id, true));
+    wc.on('leave-html-full-screen', () => this.setHtmlFullScreen(id, false));
+    wc.once('destroyed', () => this.setHtmlFullScreen(id, false));
 
     wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       // -3 is ERR_ABORTED, which fires on ordinary cancelled/redirected
