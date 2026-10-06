@@ -22,7 +22,8 @@
   flex: 1;
   min-width: 0;
   padding: 0 var(--size-spacing-sm);
-  gap: 2px;
+  /* No gap: neighbouring tabs share one border, drawn by overlapping their 1px edges (see `.tab-bar__tab + .tab-bar__tab`). */
+  gap: 0;
 }
 
 /* Deliberately no `overflow: hidden` here (only `.tab-bar__title` clips
@@ -64,6 +65,11 @@
   -webkit-app-region: no-drag;
 }
 
+/* The tab after another sits 1px over it, so the two edges are one line instead of two lines with a gap between. */
+.tab-bar__tab + .tab-bar__tab {
+  margin-left: -1px;
+}
+
 /* Every tab, the active one included, takes the same hover highlight (the
    close button's own hover circle uses a distinct color, so it stays visible
    against it). `--active` is declared after, so its resting look is the
@@ -77,6 +83,10 @@
    borders (the sidebar edge, the toolbar's bottom line), so it follows the theme. */
 .tab-bar__tab:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging):not(:hover) {
   border-color: var(--color-chrome-border);
+  /* Above its neighbours, so the shared edge stays drawn even where the next tab's background (the active tab's, or a
+     hovered one's) would otherwise paint over it. */
+  position: relative;
+  z-index: 1;
 }
 
 .tab-bar__tab--active {
