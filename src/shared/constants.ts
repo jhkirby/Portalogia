@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 /**
  * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
@@ -200,6 +200,18 @@ export const COLOR_PICKER_PANEL_WIDTH_PX = 224;
  */
 export const EXPORT_MENU_WIDTH_PX = 112;
 export const EXPORT_MENU_HEIGHT_PX = 74;
+/** A Markdown tab's export menu has a third row (PDF, .md, .txt): 3 x 32px rows plus the same padding and border. */
+export const EXPORT_MENU_MARKDOWN_HEIGHT_PX = 106;
+
+/**
+ * The name of the function a Markdown tab's own page defines on `window`
+ * for `TabManager.exportMarkdown` to call (via `executeJavaScript`, in the
+ * page's own world) right before `printToPDF()`. Called with `true` it
+ * switches the page to its print layout and resolves once that's drawn;
+ * with `false` it goes back to the screen layout — same idea as
+ * `TERMINAL_PREPARE_PRINT_GLOBAL`.
+ */
+export const MARKDOWN_PRINT_GLOBAL = '__northstarMarkdownPrint';
 export const COLOR_PICKER_PANEL_HEIGHT_PX = 330;
 
 /**

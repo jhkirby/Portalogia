@@ -1,11 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
-import type { PdfAnnotations } from '@shared/ipc-schemas';
+import type { MarkdownAnnotations, PdfAnnotations } from '@shared/ipc-schemas';
 import type { BrowserState } from '@shared/tab-state';
 
 /**
@@ -35,6 +35,7 @@ export const IpcChannel = {
   TabsCreateTerminal: 'tabs:create-terminal',
   TabsCreatePdf: 'tabs:create-pdf',
   TabsCreateHistory: 'tabs:create-history',
+  TabsCreateMarkdown: 'tabs:create-markdown',
   /** Chrome → main: open or close this window's find bar. */
   FindSet: 'find:set',
   /** Main → tab page (browser, PDF or terminal): search, step, jump to an occurrence, or clear the highlights. */
@@ -101,6 +102,54 @@ export const IpcChannel = {
   PdfGoToPage: 'pdf:go-to-page',
   /** Main → PDF page: scroll to this 1-based page. */
   PdfScrollToPage: 'pdf:scroll-to-page',
+  /** Chrome → main: pick a Markdown file to open in this tab. */
+  MarkdownOpenFile: 'markdown:open-file',
+  /** Chrome → main: pick where to create a new Markdown note, and open it in this tab. */
+  MarkdownNewFile: 'markdown:new-file',
+  /** Chrome → main: close the tab's open note (the tab stays, empty). */
+  MarkdownCloseFile: 'markdown:close-file',
+  /** Chrome → main: rename the tab's note on disk. */
+  MarkdownRename: 'markdown:rename',
+  /** Chrome → main: switch the tab between its rendered view and its source editor. */
+  MarkdownSetMode: 'markdown:set-mode',
+  /** Chrome → main: step the tab back or forward through the notes it followed links through. */
+  MarkdownNavigateHistory: 'markdown:navigate-history',
+  /** Chrome → main: save a copy of the tab's note as a PDF, `.md` or `.txt`. */
+  MarkdownExport: 'markdown:export',
+  /** Chrome → main: open a bookmarked note in this tab (picked from the toolbar's Markdown search). */
+  MarkdownOpenBookmark: 'markdown:open-bookmark',
+  /** Chrome → main: open a note the history has seen in this tab. */
+  MarkdownOpenPath: 'markdown:open-path',
+  /** Main → Markdown page: the note just opened (or re-read after it changed on disk). */
+  MarkdownFile: 'markdown:file',
+  /** Main → Markdown page: the open note was closed; show the empty page. */
+  MarkdownClosed: 'markdown:closed',
+  /** Main → Markdown page: whether to show the rendered note or its source. */
+  MarkdownMode: 'markdown:mode',
+  /** Main → Markdown page: a formatting shortcut (bold, italic, link, LaTeX block, code block) pressed while editing. */
+  MarkdownFormat: 'markdown:format',
+  /** Markdown page → main: the note's source after an edit, to write to disk. */
+  MarkdownSave: 'markdown:save',
+  /** Markdown page → main: the marks drawn on the open note, to persist. */
+  MarkdownSaveAnnotations: 'markdown:save-annotations',
+  /** Main → Markdown page: remove every mark (Revert Annotations). */
+  MarkdownClear: 'markdown:clear',
+  /** Main → Markdown page: Ctrl+Z while a mark-making tool is on. */
+  MarkdownUndo: 'markdown:undo',
+  /** Main → Markdown page: Ctrl+Y while a mark-making tool is on. */
+  MarkdownRedo: 'markdown:redo',
+  /** Markdown page → main: follow a link (a `[[wikilink]]` or a relative path) to another note. */
+  MarkdownOpenLink: 'markdown:open-link',
+  /** Markdown page → main: which `[[wikilinks]]` name a note that exists. */
+  MarkdownResolveLinks: 'markdown:resolve-links',
+  /** Markdown page → main: the notes that link to the open one. */
+  MarkdownBacklinks: 'markdown:backlinks',
+  /** Markdown page → main: the names of the notes in the open one's vault, for completing `[[`. */
+  MarkdownListNotes: 'markdown:list-notes',
+  /** Markdown page → main: an image beside the note, as a data URL. */
+  MarkdownReadImage: 'markdown:read-image',
+  /** Markdown page → main: run one of the note's fenced code blocks. */
+  MarkdownRunCode: 'markdown:run-code',
   ZoomWheel: 'zoom:wheel',
   TabsRevertPage: 'tabs:revert-page',
   TerminalInput: 'terminal:input',
@@ -122,6 +171,8 @@ export const IpcChannel = {
   BookmarksToggle: 'bookmarks:toggle',
   /** Chrome → main: bookmark the tab's open PDF under a chosen name (the bookmark popup's Save). */
   BookmarksAddPdf: 'bookmarks:add-pdf',
+  /** Chrome → main: bookmark the tab's open note under a chosen name (the bookmark popup's Save). */
+  BookmarksAddMarkdown: 'bookmarks:add-markdown',
   TabsBeginTabPreview: 'tabs:begin-tab-preview',
   TabsEndTabPreview: 'tabs:end-tab-preview',
   AddressSuggestionsSync: 'address-suggestions:sync',
@@ -267,8 +318,8 @@ export interface ColorPickerSyncPayload {
   readonly recentColors: readonly RGB[];
 }
 
-/** What a row in the export dropdown does: save the page as a PDF, or save its HTML/CSS/JS files. */
-export type ExportMenuAction = 'pdf' | 'documents';
+/** What a row in the export dropdown does: save the page as a PDF, save its HTML/CSS/JS files, or (Markdown tabs) save the note as `.md` or `.txt`. */
+export type ExportMenuAction = 'pdf' | 'documents' | 'markdown' | 'text';
 
 /**
  * What `ExportMenu` pushes to its dedicated overlay `WebContentsView` on
@@ -281,6 +332,8 @@ export interface ExportMenuSyncPayload {
   readonly rect: { readonly top: number; readonly left: number } | null;
   /** False for a terminal tab, whose page is our own UI rather than content worth saving — the documents row is disabled. */
   readonly canExportDocuments: boolean;
+  /** True on a Markdown tab: the menu then lists PDF, `.md` and `.txt` instead of PDF and HTML/CSS/JS. */
+  readonly markdown: boolean;
 }
 
 /**
@@ -402,6 +455,27 @@ export interface NorthstarApi {
   /** Scrolls the tab's PDF to a 1-based page (clamped to the document). */
   goToPdfPage(id: string, page: number): Promise<IpcResult<null>>;
 
+  /** Opens a new Markdown tab (the toolbar's MD button, Ctrl+Shift+M, or File > New Markdown Tab). */
+  createMarkdownTab(): Promise<IpcResult<BrowserState>>;
+  /** Shows the open dialog for a Markdown tab; the chosen note is delivered to that tab's page by main. */
+  openMarkdownFile(id: string): Promise<IpcResult<null>>;
+  /** Asks where to create a new, empty note and opens it in the tab. */
+  newMarkdownFile(id: string): Promise<IpcResult<null>>;
+  /** Closes the tab's open note, leaving the tab empty. */
+  closeMarkdownFile(id: string): Promise<IpcResult<null>>;
+  /** Renames a Markdown tab's note on disk (same folder). Fails unless the name ends in `.md` or `.markdown` and doesn't already exist. */
+  renameMarkdownFile(id: string, name: string): Promise<IpcResult<null>>;
+  /** Switches a Markdown tab between its rendered view and its source editor. */
+  setMarkdownMode(id: string, mode: 'view' | 'edit'): Promise<IpcResult<null>>;
+  /** Steps a Markdown tab back (`-1`) or forward (`1`) through the notes it followed links through. */
+  navigateMarkdownHistory(id: string, direction: 1 | -1): Promise<IpcResult<null>>;
+  /** Saves a copy of the tab's note as a PDF, a `.md` file or a `.txt` file (asks where in a native dialog). */
+  exportMarkdown(id: string, format: 'pdf' | 'md' | 'txt'): Promise<IpcResult<null>>;
+  /** Opens a bookmarked note in a Markdown tab (picked from the toolbar's Markdown search). Fire-and-forget. */
+  openMarkdownBookmark(id: string, bookmarkId: string): void;
+  /** Opens a note the history has seen in a Markdown tab. Fire-and-forget. */
+  openMarkdownPath(id: string, path: string): void;
+
   createWorkspace(name?: string): Promise<IpcResult<BrowserState>>;
   /**
    * Creates a new workspace containing exactly this one tab, moved there as
@@ -448,6 +522,8 @@ export interface NorthstarApi {
   addPdfBookmark(id: string, name: string): Promise<IpcResult<BrowserState>>;
   /** Opens a bookmarked PDF in a PDF tab (picked from the toolbar's PDF search). Fire-and-forget. */
   openPdfBookmark(id: string, bookmarkId: string): void;
+  /** Bookmarks a Markdown tab's open note by its path on disk, under `name` — also the name its tab shows. */
+  addMarkdownBookmark(id: string, name: string): Promise<IpcResult<BrowserState>>;
 
   /**
    * Captures the active browser tab's current frame and hides its native
@@ -826,6 +902,112 @@ export interface NorthstarPdfApi {
   onZoom(listener: (percent: number) => void): () => void;
 }
 
+/** A Markdown note delivered to a Markdown tab's page: its file name, its source and the marks previously saved for it. */
+export interface MarkdownFileData {
+  readonly name: string;
+  /** The note's source text. */
+  readonly content: string;
+  /** The marks previously saved for this note. */
+  readonly annotations: MarkdownAnnotations;
+  /**
+   * Which note-opening this is. The page sends it back with every save, so
+   * main can refuse an edit that belongs to a note the tab has since left.
+   */
+  readonly generation: number;
+  /** A heading in the note to scroll to once it's drawn (`[[Note#Heading]]`), or `''`. */
+  readonly anchor: string;
+  /**
+   * Why it arrived: `'open'` (a different note — start fresh at the top),
+   * `'reload'` (the same note changed on disk — keep the place) or
+   * `'created'` (a new, empty note — go straight to writing in it).
+   */
+  readonly reason: 'open' | 'reload' | 'created';
+}
+
+/** A formatting command for the editor: what the keyboard shortcuts and the right-click menu both ask for. */
+export type MarkdownFormatAction = 'bold' | 'italic' | 'link' | 'latex' | 'code';
+
+/** Which annotation tool the window has on for a Markdown tab. The tools are mutually exclusive in main. */
+export type MarkdownTool = 'none' | 'pen' | 'comment' | 'highlighter';
+
+/** The active annotation tool plus the accent color to mark with. */
+export interface MarkdownToolState {
+  readonly tool: MarkdownTool;
+  readonly color: RGB;
+}
+
+/** A note that links to the open one: its name, and the path from the open note's folder that opens it. */
+export interface MarkdownBacklink {
+  readonly name: string;
+  readonly target: string;
+}
+
+/** What running one of a note's code blocks came to. */
+export interface MarkdownRunResult {
+  /** `false` when it could not be started or the user declined; `error` says why. */
+  readonly ran: boolean;
+  readonly error: string | null;
+  readonly stdout: string;
+  readonly stderr: string;
+  /** The process's exit code, or `null` if it was stopped before exiting. */
+  readonly exitCode: number | null;
+  readonly timedOut: boolean;
+  /** Whether output past the cap was dropped. */
+  readonly truncated: boolean;
+  readonly durationMs: number;
+}
+
+/**
+ * The narrower API surface exposed to a Markdown tab's own `WebContentsView`
+ * (`src/preload/markdown.ts`, `markdown.html`). See `TabManager.createMarkdownTab`.
+ * Every request a page makes is about its own tab only: main knows which
+ * file that is, so the page never names a path to read, write or run.
+ */
+export interface NorthstarMarkdownApi {
+  /** Subscribes to find-bar commands for this tab's note. */
+  onFind(listener: (command: FindCommand) => void): () => void;
+  /** Reports the result of the latest find command. Fire-and-forget. */
+  reportFind(result: FindResult): void;
+  /** Subscribes to notes opened in this tab. */
+  onFile(listener: (file: MarkdownFileData) => void): () => void;
+  /** Subscribes to the open note being closed from the toolbar. */
+  onClose(listener: () => void): () => void;
+  /** Subscribes to the view/edit mode; called immediately with the latest value if one already arrived. */
+  onMode(listener: (mode: 'view' | 'edit') => void): () => void;
+  /** Subscribes to formatting shortcuts pressed while the editor is showing (main owns the keys, since Ctrl+B and Ctrl+I are also the app's own). */
+  onFormat(listener: (action: MarkdownFormatAction) => void): () => void;
+  /** Writes the note's source to disk after an edit, under the `generation` the note arrived with. Fire-and-forget. */
+  save(content: string, generation: number): void;
+  /** Reports the marks currently on the open note so main can persist them, under the `generation` the note arrived with. Fire-and-forget. */
+  saveAnnotations(annotations: MarkdownAnnotations, generation: number): void;
+  /** Subscribes to undo (Ctrl+Z) of the page's marks. */
+  onUndo(listener: () => void): () => void;
+  /** Subscribes to redo (Ctrl+Y) of the page's marks. */
+  onRedo(listener: () => void): () => void;
+  /** Subscribes to "remove every mark" (Revert Annotations). */
+  onClear(listener: () => void): () => void;
+  /** Subscribes to the annotation tool in use; called immediately with the latest value if one already arrived. */
+  onTool(listener: (state: MarkdownToolState) => void): () => void;
+  /**
+   * Follows a link: a `[[wikilink]]` (`kind` `'wiki'`, `target` the text
+   * inside the brackets) or an ordinary link (`'link'`). A note opens in this
+   * tab, or a new one with `newTab`; a web address opens as a browser tab.
+   */
+  openLink(kind: 'wiki' | 'link', target: string, newTab: boolean): Promise<void>;
+  /** For each `[[wikilink]]` name, whether a note by that name exists. */
+  resolveLinks(names: readonly string[]): Promise<Readonly<Record<string, boolean>>>;
+  /** The notes in the same folder tree that link to the open one. */
+  getBacklinks(): Promise<readonly MarkdownBacklink[]>;
+  /** The names of the notes in the open one's vault (no extension), for completing `[[`. */
+  listNotes(): Promise<readonly string[]>;
+  /** An image beside the note as a `data:` URL, or `null` if it can't be read. */
+  readImage(src: string): Promise<string | null>;
+  /** Runs the note's `index`th fenced code block (asking the user first, once per note). */
+  runCode(index: number): Promise<MarkdownRunResult>;
+  /** Subscribes to this tab's zoom, as a whole percent (100 = actual size) — applied by the page itself, like the PDF viewer's. */
+  onZoom(listener: (percent: number) => void): () => void;
+}
+
 /**
  * One access in the browsing history: a page reached in a browser tab (when
  * its request was made, the route requested, and the status code it came
@@ -835,11 +1017,11 @@ export interface HistoryEntry {
   readonly id: string;
   /** Milliseconds since the epoch. */
   readonly timestamp: number;
-  /** `'url'` for a page, `'pdf'` for a file on disk. */
-  readonly type: 'url' | 'pdf';
-  /** The route requested — a page's URL, or a PDF's path on disk. */
+  /** `'url'` for a page, `'pdf'` or `'markdown'` for a file on disk. */
+  readonly type: 'url' | 'pdf' | 'markdown';
+  /** The route requested — a page's URL, or a PDF's or note's path on disk. */
   readonly url: string;
-  /** The HTTP status code (a redirect hop records its own 3xx); `0` for a PDF, which has none. */
+  /** The HTTP status code (a redirect hop records its own 3xx); `0` for a file, which has none. */
   readonly status: number;
 }
 
@@ -852,8 +1034,8 @@ export interface HistorySuggestion {
 
 /**
  * The names of the bookmarks, for the table's Bookmark column to look each
- * route up in: pages by exact URL, PDFs by lower-cased path (Windows paths
- * are case-insensitive, and the page can't tell the platform).
+ * route up in: pages by exact URL, PDFs and notes by lower-cased path
+ * (Windows paths are case-insensitive, and the page can't tell the platform).
  */
 export interface HistoryBookmarkIndex {
   readonly urls: Readonly<Record<string, string>>;

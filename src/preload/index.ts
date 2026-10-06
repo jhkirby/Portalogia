@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -64,6 +64,16 @@ const api: NorthstarApi = {
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
   goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),
+  createMarkdownTab: () => invoke(IpcChannel.TabsCreateMarkdown),
+  openMarkdownFile: (id) => invoke(IpcChannel.MarkdownOpenFile, { id }),
+  newMarkdownFile: (id) => invoke(IpcChannel.MarkdownNewFile, { id }),
+  closeMarkdownFile: (id) => invoke(IpcChannel.MarkdownCloseFile, { id }),
+  renameMarkdownFile: (id, name) => invoke(IpcChannel.MarkdownRename, { id, name }),
+  setMarkdownMode: (id, mode) => invoke(IpcChannel.MarkdownSetMode, { id, mode }),
+  navigateMarkdownHistory: (id, direction) => invoke(IpcChannel.MarkdownNavigateHistory, { id, direction }),
+  exportMarkdown: (id, format) => invoke(IpcChannel.MarkdownExport, { id, format }),
+  openMarkdownBookmark: (id, bookmarkId) => ipcRenderer.send(IpcChannel.MarkdownOpenBookmark, { id, bookmarkId }),
+  openMarkdownPath: (id, path) => ipcRenderer.send(IpcChannel.MarkdownOpenPath, { id, path }),
   revertPage: (id) => invoke(IpcChannel.TabsRevertPage, { id }),
 
   createWorkspace: (name) => invoke(IpcChannel.WorkspacesCreate, { name }),
@@ -81,6 +91,7 @@ const api: NorthstarApi = {
   toggleBookmark: (id) => invoke(IpcChannel.BookmarksToggle, { id }),
   addPdfBookmark: (id, name) => invoke(IpcChannel.BookmarksAddPdf, { id, name }),
   openPdfBookmark: (id, bookmarkId) => ipcRenderer.send(IpcChannel.PdfOpenBookmark, { id, bookmarkId }),
+  addMarkdownBookmark: (id, name) => invoke(IpcChannel.BookmarksAddMarkdown, { id, name }),
   beginTabPreview: (id) => invoke(IpcChannel.TabsBeginTabPreview, { id }),
   endTabPreview: (id) => invoke(IpcChannel.TabsEndTabPreview, { id }),
   syncAddressSuggestions: (payload) => ipcRenderer.send(IpcChannel.AddressSuggestionsSync, payload),
@@ -189,3 +200,24 @@ const api: NorthstarApi = {
 };
 
 contextBridge.exposeInMainWorld('northstar', api satisfies NorthstarApi);
+
+// Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
+// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. Repeated in each
+// preload that needs it: two entries can't share a module (see the note on `tabZoom.ts`'s imports).
+const EditableFocus = 'ui:editable-focus';
+const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
+let editableReported = false;
+function reportEditableFocus(): void {
+  const element = document.activeElement;
+  const editable =
+    element instanceof HTMLTextAreaElement ||
+    (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||
+    (element instanceof HTMLElement && element.isContentEditable);
+  if (editable !== editableReported) {
+    editableReported = editable;
+    ipcRenderer.send(EditableFocus, editable);
+  }
+}
+window.addEventListener('focusin', reportEditableFocus, true);
+// `focusout` fires before the next element has focus, so look once focus has settled.
+window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);

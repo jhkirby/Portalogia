@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -41,7 +41,8 @@ const MAX_PDF_EXISTENCE_CHECKS = 60;
  * every window's `TabManager`, since a History tab (like any tab) can move
  * between windows. It does three things:
  *
- * - **Records** every PDF opened in a PDF tab (`recordPdfAccess`), and every main-frame request a *browser* tab makes, with the
+ * - **Records** every PDF opened in a PDF tab (`recordPdfAccess`), every note opened in a Markdown tab
+ *   (`recordMarkdownAccess`), and every main-frame request a *browser* tab makes, with the
  *   status code it came back with, by listening on the session's web
  *   requests (`attachTo`). A redirect hop is recorded too, under its own
  *   3xx — the history is of routes requested, not just where they ended up.
@@ -132,7 +133,8 @@ export class HistoryController {
     const urls: Record<string, string> = {};
     const pdfs: Record<string, string> = {};
     for (const bookmark of this.listBookmarks()) {
-      if (bookmark.kind === 'pdf' && bookmark.path) {
+      // Files of either kind go in one table: the page only looks a path up, and a path is one or the other.
+      if ((bookmark.kind === 'pdf' || bookmark.kind === 'markdown') && bookmark.path) {
         pdfs[bookmark.path.toLowerCase()] = bookmark.title;
       } else if (bookmark.kind === 'page') {
         urls[bookmark.url] = bookmark.title;
@@ -164,7 +166,7 @@ export class HistoryController {
         .map((entry) => ({ title: HistoryController.hostOf(entry.url), url: entry.url }));
     }
 
-    const candidates = this.store.distinctRecent('pdf', matches, MAX_PDF_EXISTENCE_CHECKS);
+    const candidates = this.store.distinctRecent(type, matches, MAX_PDF_EXISTENCE_CHECKS);
     const exists = await Promise.all(candidates.map((entry) => stat(entry.url).then(() => true, () => false)));
     return candidates
       .filter((_entry, index) => exists[index])
@@ -175,6 +177,11 @@ export class HistoryController {
   /** @returns Whether a PDF at this path is one the history has seen — the only paths a search suggestion can ask to open. */
   public hasPdfAccess(path: string): boolean {
     return this.store.hasPdfPath(path);
+  }
+
+  /** @returns Whether a Markdown note at this path is one the history has seen — the only paths a search suggestion can ask to open. */
+  public hasMarkdownAccess(path: string): boolean {
+    return this.store.hasFilePath('markdown', path);
   }
 
   private static hostOf(url: string): string {
@@ -245,6 +252,17 @@ export class HistoryController {
    */
   public recordPdfAccess(path: string): void {
     this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'pdf', url: path, status: 0 });
+    this.pushToAll();
+  }
+
+  /**
+   * Records a note opened in a Markdown tab — however it was picked (the open
+   * dialog, a link, the bookmark search). Like a PDF, it has a path where a
+   * page has a URL and no status code.
+   * @param path The file's path on disk.
+   */
+  public recordMarkdownAccess(path: string): void {
+    this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'markdown', url: path, status: 0 });
     this.pushToAll();
   }
 

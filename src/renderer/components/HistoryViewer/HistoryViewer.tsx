@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HistoryBookmarkIndex, HistoryEntry } from '@shared/ipc-contract';
@@ -39,7 +39,7 @@ function statusClass(status: number): string {
 
 /** The name of the bookmark a route is saved under, or `null` if it isn't bookmarked. */
 function bookmarkNameFor(entry: HistoryEntry, bookmarks: HistoryBookmarkIndex): string | null {
-  return (entry.type === 'pdf' ? bookmarks.pdfs[entry.url.toLowerCase()] : bookmarks.urls[entry.url]) ?? null;
+  return (entry.type === 'url' ? bookmarks.urls[entry.url] : bookmarks.pdfs[entry.url.toLowerCase()]) ?? null;
 }
 
 function CopyIcon() {
@@ -152,12 +152,14 @@ export function HistoryViewer() {
             <tbody>
               {shown.map((entry) => {
                 const bookmarkName = bookmarkNameFor(entry, bookmarks);
-                const routeKind = entry.type === 'pdf' ? 'path' : 'URL';
+                const routeKind = entry.type === 'url' ? 'URL' : 'path';
                 const isCopied = copiedId === entry.id;
                 return (
                   <tr key={entry.id} className="history__row">
                     <td className="history__cell history__cell--time">{DATE_TIME_FORMAT.format(entry.timestamp)}</td>
-                    <td className="history__cell history__cell--type">{entry.type === 'pdf' ? 'PDF' : 'URL'}</td>
+                    <td className="history__cell history__cell--type">
+                      {entry.type === 'pdf' ? 'PDF' : entry.type === 'markdown' ? 'MD' : 'URL'}
+                    </td>
                     <td
                       className={`history__cell history__cell--bookmark${
                         bookmarkName === null ? ' history__cell--muted' : ''
@@ -172,10 +174,10 @@ export function HistoryViewer() {
                     {/* A file on disk has no HTTP status. */}
                     <td
                       className={`history__cell history__cell--status ${
-                        entry.type === 'pdf' ? 'history__cell--muted' : statusClass(entry.status)
+                        entry.type !== 'url' ? 'history__cell--muted' : statusClass(entry.status)
                       }`}
                     >
-                      {entry.type === 'pdf' ? '—' : entry.status}
+                      {entry.type !== 'url' ? '—' : entry.status}
                     </td>
                     <td className="history__cell history__cell--actions">
                       <div className="history__actions">

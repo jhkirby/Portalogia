@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { TabState, WorkspaceState } from '@shared/tab-state';
@@ -35,6 +35,8 @@ function TabKindMark({ tab }: { readonly tab: TabState }) {
         '>_'
       ) : tab.kind === 'pdf' ? (
         'PDF'
+      ) : tab.kind === 'markdown' ? (
+        'MD'
       ) : tab.kind === 'history' ? (
         <HistoryIcon size={13} />
       ) : (

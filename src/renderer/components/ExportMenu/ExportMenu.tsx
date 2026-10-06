@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-01
+// Last Modified: 2026-10-06
 
 import { useEffect, useRef, useState } from 'react';
 import { ExportIcon } from '../icons';
@@ -14,6 +14,8 @@ interface ExportMenuProps {
   readonly canExport: boolean;
   /** Whether the active tab has web documents to save — false for a terminal tab. */
   readonly canExportDocuments: boolean;
+  /** Whether the active tab is a Markdown note, whose menu lists PDF, `.md` and `.txt`. */
+  readonly markdown: boolean;
 }
 
 /**
@@ -22,13 +24,13 @@ interface ExportMenuProps {
  * paint over the live page; this component owns the open state, measures
  * where the menu goes, and syncs both down — same split as `ColorPicker`.
  */
-export function ExportMenu({ canExport, canExportDocuments }: ExportMenuProps) {
+export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      window.northstar.syncExportMenu({ open: false, rect: null, canExportDocuments });
+      window.northstar.syncExportMenu({ open: false, rect: null, canExportDocuments, markdown });
       return;
     }
     const updateSync = (): void => {
@@ -40,16 +42,17 @@ export function ExportMenu({ canExport, canExportDocuments }: ExportMenuProps) {
         open: true,
         rect: { top: rect.bottom + DROPDOWN_GAP_PX, left: Math.max(8, rect.left) },
         canExportDocuments,
+        markdown,
       });
     };
     updateSync();
     window.addEventListener('resize', updateSync);
     return () => window.removeEventListener('resize', updateSync);
-  }, [isOpen, canExportDocuments]);
+  }, [isOpen, canExportDocuments, markdown]);
 
   // Belt-and-suspenders close on unmount, same as `ColorPicker`.
   useEffect(
-    () => () => window.northstar.syncExportMenu({ open: false, rect: null, canExportDocuments: false }),
+    () => () => window.northstar.syncExportMenu({ open: false, rect: null, canExportDocuments: false, markdown: false }),
     [],
   );
 

@@ -1,0 +1,433 @@
+// Project: Northstar
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-10-06
+
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import type { MarkdownBacklink } from '@shared/ipc-contract';
+import { splitWikiTarget } from '@shared/markdown/parser';
+
+/** The files a note can be: `.md` and `.markdown`. */
+export const MARKDOWN_EXTENSION_PATTERN = /\.(md|markdown)$/i;
+
+/** Past this a note is not opened: it is text, so this is generous, and it bounds what is read into memory and sent to the page. */
+export const MAX_NOTE_BYTES = 20 * 1024 * 1024;
+
+/** The largest picture read for a note, as it travels to the page base64-encoded. */
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+/** Folders a scan of a note's folder tree never goes into. */
+const SKIPPED_DIRECTORIES = new Set(['node_modules', '.git', '.obsidian', '.trash']);
+
+/** A scan stops here, so opening a note in a huge folder (a home directory) can't stall on listing it. */
+const MAX_SCAN_FILES = 5000;
+const MAX_SCAN_DEPTH = 10;
+
+/** How far up from a note to look for the `.obsidian` folder that marks a vault's top. */
+const MAX_VAULT_LOOKUP_LEVELS = 10;
+
+/** How long a scan of a vault is reused — resolving a note's every link would otherwise rescan the folder per link. */
+const SCAN_CACHE_MS = 4000;
+
+/** The most notes a backlink search reads, and the most of each it reads. */
+const MAX_BACKLINK_FILES = 3000;
+const MAX_BACKLINK_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_BACKLINKS = 200;
+const BACKLINK_READ_CONCURRENCY = 16;
+
+const IMAGE_MIME_TYPES: Readonly<Record<string, string>> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
+};
+
+/** Windows paths are case-insensitive, so two spellings of one file must match. */
+export function samePath(a: string, b: string): boolean {
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+/** Whether `path` names a note by its extension. */
+export function isMarkdownPath(path: string): boolean {
+  return MARKDOWN_EXTENSION_PATTERN.test(path);
+}
+
+/**
+ * Whether a link's target is a plain file path this app may read: not a web
+ * address or other scheme, and not a network share (reading `\\host\share`
+ * makes Windows send the user's credentials to that host).
+ */
+function isLocalPathText(target: string): boolean {
+  if (target.startsWith('\\\\') || target.startsWith('//')) {
+    return false;
+  }
+  return !/^[a-z][a-z0-9+.-]+:/i.test(target) || /^[a-z]:[\\/]/i.test(target);
+}
+
+/** `decodeURIComponent` that gives the text back unchanged if it isn't validly encoded. */
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+/** A path with `/` separators, however the platform writes it — how a link is written. */
+function toLinkPath(path: string): string {
+  return path.split(sep).join('/');
+}
+
+/** A note's name with its extension taken off, for matching against `[[Name]]`. */
+function noteStem(path: string): string {
+  return basename(path).replace(MARKDOWN_EXTENSION_PATTERN, '');
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The folders to look for a note or picture by name, best first: the vault's
+ * own top, and — when the note isn't in a marked vault (a loose folder of
+ * notes) — the folder above it as a second chance, so `docs/guide/a.md` can
+ * still link to `docs/b.md`.
+ * @param notePath The note doing the looking.
+ */
+async function searchRoots(notePath: string): Promise<string[]> {
+  const root = await findVaultRoot(notePath);
+  const hasMarker = !samePath(root, dirname(notePath));
+  const parent = dirname(root);
+  return hasMarker || parent === root ? [root] : [root, parent];
+}
+
+/**
+ * The top of the vault a note belongs to: the nearest folder above it
+ * holding an `.obsidian` folder (so a real Obsidian vault resolves links the
+ * way Obsidian does), or else the note's own folder.
+ * @param notePath The note's path.
+ */
+export async function findVaultRoot(notePath: string): Promise<string> {
+  let directory = dirname(notePath);
+  for (let level = 0; level < MAX_VAULT_LOOKUP_LEVELS; level += 1) {
+    try {
+      if ((await stat(join(directory, '.obsidian'))).isDirectory()) {
+        return directory;
+      }
+    } catch {
+      // No marker here; keep climbing.
+    }
+    const parent = dirname(directory);
+    if (parent === directory) {
+      break;
+    }
+    directory = parent;
+  }
+  return dirname(notePath);
+}
+
+interface CachedScan {
+  readonly at: number;
+  readonly files: readonly string[];
+}
+const scanCache = new Map<string, CachedScan>();
+
+/**
+ * Every file under `root` (folders starting with `.`, and `node_modules`,
+ * left out), for finding a note or picture by name. Capped in count and depth,
+ * and reused for a few seconds.
+ * @param root The folder to scan.
+ */
+async function scanFiles(root: string): Promise<readonly string[]> {
+  const cached = scanCache.get(root);
+  if (cached && Date.now() - cached.at < SCAN_CACHE_MS) {
+    return cached.files;
+  }
+  const files: string[] = [];
+  const walk = async (directory: string, depth: number): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    // Files first so a shallow match is found before a deep folder eats the budget.
+    for (const entry of entries) {
+      if (files.length >= MAX_SCAN_FILES) {
+        return;
+      }
+      if (entry.isFile()) {
+        files.push(join(directory, entry.name));
+      }
+    }
+    if (depth >= MAX_SCAN_DEPTH) {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory() && !entry.name.startsWith('.') && !SKIPPED_DIRECTORIES.has(entry.name)) {
+        await walk(join(directory, entry.name), depth + 1);
+      }
+    }
+  };
+  await walk(root, 0);
+  scanCache.set(root, { at: Date.now(), files });
+  return files;
+}
+
+/** Every note under `root`. */
+async function scanNotes(root: string): Promise<string[]> {
+  return (await scanFiles(root)).filter(isMarkdownPath);
+}
+
+/** Forgets the cached scans — call after creating or renaming a note so the next lookup sees it. */
+export function forgetVaultScans(): void {
+  scanCache.clear();
+}
+
+/**
+ * Picks the best of several files that match a name: one beside the current
+ * note, else the one nearest the vault's top, else alphabetically first.
+ */
+function bestMatch(candidates: readonly string[], currentDirectory: string, root: string): string | null {
+  const ranked = [...candidates].sort((a, b) => {
+    const aBeside = samePath(dirname(a), currentDirectory) ? 0 : 1;
+    const bBeside = samePath(dirname(b), currentDirectory) ? 0 : 1;
+    if (aBeside !== bBeside) {
+      return aBeside - bBeside;
+    }
+    const aDepth = relative(root, a).split(sep).length;
+    const bDepth = relative(root, b).split(sep).length;
+    return aDepth !== bDepth ? aDepth - bDepth : a.localeCompare(b);
+  });
+  return ranked[0] ?? null;
+}
+
+/**
+ * The note a `[[wikilink]]` names, found the way Obsidian finds it: by name
+ * anywhere in the vault (a `folder/Note` target must match the end of the
+ * note's path), preferring one in the same folder as the note that links.
+ * @param currentPath The note holding the link.
+ * @param target The text inside the brackets (heading and alias allowed).
+ * @returns The note's path, or `null` if no note has that name.
+ */
+export async function resolveWikiTarget(currentPath: string, target: string): Promise<string | null> {
+  const { name } = splitWikiTarget(target);
+  const wanted = name.replace(MARKDOWN_EXTENSION_PATTERN, '').replace(/\\/g, '/').toLowerCase();
+  if (wanted === '') {
+    // `[[#Heading]]` links within the note itself.
+    return currentPath;
+  }
+  for (const root of await searchRoots(currentPath)) {
+    const matches = (await scanNotes(root)).filter((note) => {
+      const path = toLinkPath(relative(root, note)).replace(MARKDOWN_EXTENSION_PATTERN, '').toLowerCase();
+      return wanted.includes('/') ? path === wanted || path.endsWith(`/${wanted}`) : path.split('/').pop() === wanted;
+    });
+    const best = bestMatch(matches, dirname(currentPath), root);
+    if (best !== null) {
+      return best;
+    }
+  }
+  return null;
+}
+
+/**
+ * The note an ordinary Markdown link points at, if it points at a note that
+ * exists: relative to the note holding the link (or absolute), with any
+ * `#heading` dropped.
+ * @param currentPath The note holding the link.
+ * @param target The link's address.
+ */
+export async function resolveLinkTarget(currentPath: string, target: string): Promise<string | null> {
+  const withoutFragment = target.split('#')[0] ?? '';
+  if (withoutFragment === '' || !isLocalPathText(withoutFragment)) {
+    return null;
+  }
+  for (const text of new Set([withoutFragment, safeDecode(withoutFragment)])) {
+    const path = isAbsolute(text) ? text : resolve(dirname(currentPath), text);
+    if (isMarkdownPath(path) && (await isFile(path))) {
+      return path;
+    }
+  }
+  return null;
+}
+
+/**
+ * Which of a note's `[[wikilinks]]` name a note that exists.
+ * @param currentPath The note holding the links.
+ * @param names The text inside each link's brackets.
+ */
+export async function resolveWikiLinks(
+  currentPath: string,
+  names: readonly string[],
+): Promise<Record<string, boolean>> {
+  const result: Record<string, boolean> = {};
+  for (const name of new Set(names)) {
+    result[name] = (await resolveWikiTarget(currentPath, name)) !== null;
+  }
+  return result;
+}
+
+/**
+ * The names of the notes in a note's vault (file names without the extension,
+ * a name shared by notes in different folders listed with its folder), for
+ * completing `[[` as it is typed.
+ * @param currentPath The note being edited.
+ */
+export async function listNoteNames(currentPath: string): Promise<string[]> {
+  const root = await findVaultRoot(currentPath);
+  const notes = (await scanNotes(root)).filter((note) => !samePath(note, currentPath));
+  const stems = notes.map((note) => noteStem(note));
+  const duplicated = new Set(stems.filter((stem, index) => stems.indexOf(stem) !== index).map((stem) => stem.toLowerCase()));
+  return notes
+    .map((note) => {
+      const stem = noteStem(note);
+      return duplicated.has(stem.toLowerCase())
+        ? toLinkPath(relative(root, note)).replace(MARKDOWN_EXTENSION_PATTERN, '')
+        : stem;
+    })
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The notes in a note's vault that link to it, by `[[wikilink]]` or by an
+ * ordinary relative link.
+ * @param currentPath The note to find links to.
+ * @returns Up to `MAX_BACKLINKS`, each with the path from `currentPath`'s folder that opens it.
+ */
+export async function findBacklinks(currentPath: string): Promise<MarkdownBacklink[]> {
+  const root = await findVaultRoot(currentPath);
+  const notes = (await scanNotes(root)).filter((note) => !samePath(note, currentPath)).slice(0, MAX_BACKLINK_FILES);
+  const stem = noteStem(currentPath).toLowerCase();
+  const pathFromRoot = toLinkPath(relative(root, currentPath)).replace(MARKDOWN_EXTENSION_PATTERN, '').toLowerCase();
+  const found: MarkdownBacklink[] = [];
+
+  const links = (note: string, text: string): boolean => {
+    for (const match of text.matchAll(/\[\[([^[\]\n]+?)\]\]/g)) {
+      const { name } = splitWikiTarget(match[1] ?? '');
+      const wanted = name.replace(MARKDOWN_EXTENSION_PATTERN, '').replace(/\\/g, '/').toLowerCase();
+      if (wanted === stem || (wanted.includes('/') && (wanted === pathFromRoot || pathFromRoot.endsWith(`/${wanted}`)))) {
+        return true;
+      }
+    }
+    for (const match of text.matchAll(/\]\(([^)\s]+\.(?:md|markdown))(?:#[^)\s]*)?\)/gi)) {
+      const text2 = match[1] ?? '';
+      if (!isLocalPathText(text2)) {
+        continue;
+      }
+      for (const candidate of new Set([text2, safeDecode(text2)])) {
+        if (samePath(isAbsolute(candidate) ? candidate : resolve(dirname(note), candidate), currentPath)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (found.length < MAX_BACKLINKS) {
+      const index = next;
+      next += 1;
+      const note = notes[index];
+      if (note === undefined) {
+        return;
+      }
+      try {
+        if ((await stat(note)).size > MAX_BACKLINK_FILE_BYTES) {
+          continue;
+        }
+        if (links(note, await readFile(note, 'utf-8'))) {
+          found.push({ name: noteStem(note), target: toLinkPath(relative(dirname(currentPath), note)) });
+        }
+      } catch {
+        // Unreadable: it can't be said to link here.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: BACKLINK_READ_CONCURRENCY }, worker));
+  return found.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * A picture a note shows, as a `data:` URL: an `![[embed]]` name found
+ * anywhere in the vault, or an ordinary image path relative to the note.
+ * Only picture file types are read, and only up to a size cap.
+ * @param currentPath The note showing the picture.
+ * @param src The embed's name or the image's path.
+ * @returns The data URL, or `null` if it can't be read.
+ */
+export async function readImageDataUrl(currentPath: string, src: string): Promise<string | null> {
+  if (!isLocalPathText(src)) {
+    return null;
+  }
+  const withoutFragment = src.split('#')[0] ?? '';
+  let found: string | null = null;
+  for (const text of new Set([withoutFragment, safeDecode(withoutFragment)])) {
+    const path = isAbsolute(text) ? text : resolve(dirname(currentPath), text);
+    if (extname(path).toLowerCase() in IMAGE_MIME_TYPES && (await isFile(path))) {
+      found = path;
+      break;
+    }
+  }
+  if (found === null) {
+    // `![[name.png]]` names a file anywhere in the vault.
+    const wanted = basename(safeDecode(withoutFragment)).toLowerCase();
+    if (!(extname(wanted) in IMAGE_MIME_TYPES)) {
+      return null;
+    }
+    for (const root of await searchRoots(currentPath)) {
+      const matches = (await scanFiles(root)).filter((file) => basename(file).toLowerCase() === wanted);
+      found = bestMatch(matches, dirname(currentPath), root);
+      if (found !== null) {
+        break;
+      }
+    }
+  }
+  if (found === null) {
+    return null;
+  }
+  try {
+    if ((await stat(found)).size > MAX_IMAGE_BYTES) {
+      return null;
+    }
+    const mime = IMAGE_MIME_TYPES[extname(found).toLowerCase()] ?? 'application/octet-stream';
+    return `data:${mime};base64,${(await readFile(found)).toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A file name a note can be created or renamed to, from what a person typed
+ * or a `[[link]]` names: the last path segment only (so a name can never
+ * climb out of the folder it goes in), no characters Windows forbids, and a
+ * `.md` extension if it has none.
+ * @param name The proposed name.
+ * @returns The safe file name, or `null` if nothing usable is left.
+ */
+export function toNoteFileName(name: string): string | null {
+  const segment = name.replace(/\\/g, '/').split('/').pop() ?? '';
+  const cleaned = segment
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what a file name must not have.
+    .replace(/[<>:"|?*\u0000-\u001f]/g, '')
+    .trim()
+    .replace(/[. ]+$/, '');
+  if (cleaned === '' || cleaned === '.' || cleaned === '..') {
+    return null;
+  }
+  // Windows treats these names as devices, whatever extension they have.
+  if (/^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(cleaned)) {
+    return null;
+  }
+  const withExtension = MARKDOWN_EXTENSION_PATTERN.test(cleaned) ? cleaned : `${cleaned}.md`;
+  return withExtension.length > 255 ? null : withExtension;
+}

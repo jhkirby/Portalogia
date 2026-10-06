@@ -1,0 +1,229 @@
+// Project: Northstar
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-10-06
+
+import { contextBridge, ipcRenderer } from 'electron';
+import type { MarkdownAnnotations } from '@shared/ipc-schemas';
+import type {
+  FindCommand,
+  FindResult,
+  MarkdownBacklink,
+  MarkdownFormatAction,
+  MarkdownFileData,
+  MarkdownRunResult,
+  MarkdownToolState,
+  NorthstarMarkdownApi,
+} from '@shared/ipc-contract';
+import type { RGB } from '@shared/color';
+
+// Channel names inlined as literals — see `terminal.ts` for why a sandboxed
+// preload can't share the `IpcChannel` runtime object.
+const MarkdownFile = 'markdown:file';
+const MarkdownClosed = 'markdown:closed';
+const MarkdownMode = 'markdown:mode';
+const MarkdownFormat = 'markdown:format';
+const MarkdownSave = 'markdown:save';
+const MarkdownSaveAnnotations = 'markdown:save-annotations';
+const MarkdownClear = 'markdown:clear';
+const MarkdownUndo = 'markdown:undo';
+const MarkdownRedo = 'markdown:redo';
+const MarkdownOpenLink = 'markdown:open-link';
+const MarkdownResolveLinks = 'markdown:resolve-links';
+const MarkdownBacklinks = 'markdown:backlinks';
+const MarkdownListNotes = 'markdown:list-notes';
+const MarkdownReadImage = 'markdown:read-image';
+const MarkdownRunCode = 'markdown:run-code';
+const FindCommandChannel = 'find:command';
+const FindResultChannel = 'find:result';
+// Same strings `PenController` / `CommentController` / `HighlighterController` (main) send on.
+const PenState = 'pen:state';
+const CommentToolState = 'comment-tool:state';
+const HighlighterState = 'highlighter:state';
+const ZoomApply = 'zoom:apply';
+const ZoomWheel = 'zoom:wheel';
+
+// main created this page with `?id=<tab id>`; it's echoed back so main knows which tab a request is from.
+const tabId = new URLSearchParams(window.location.search).get('id') ?? '';
+
+/** Main pushes Chromium zoom *levels* (powers of 1.2) for browser/terminal frames; this page wants the percent. */
+const percentFromLevel = (level: number): number => Math.round(100 * Math.pow(1.2, level));
+
+let latestPercent: number | null = null;
+const zoomListeners = new Set<(percent: number) => void>();
+ipcRenderer.on(ZoomApply, (_event, level: number) => {
+  latestPercent = percentFromLevel(level);
+  zoomListeners.forEach((listener) => listener(latestPercent as number));
+});
+
+// Ctrl+wheel zoom — same behavior as `pdf.ts`; main steps the tab's zoom and pushes it back through `ZoomApply` above.
+window.addEventListener(
+  'wheel',
+  (event) => {
+    if (!event.ctrlKey || event.deltaY === 0) {
+      return;
+    }
+    event.preventDefault();
+    ipcRenderer.send(ZoomWheel, { direction: event.deltaY < 0 ? 1 : -1 });
+  },
+  { passive: false, capture: true },
+);
+
+const findListeners = new Set<(command: FindCommand) => void>();
+ipcRenderer.on(FindCommandChannel, (_event, command: FindCommand) => findListeners.forEach((listener) => listener(command)));
+
+const fileListeners = new Set<(file: MarkdownFileData) => void>();
+ipcRenderer.on(MarkdownFile, (_event, file: MarkdownFileData) => fileListeners.forEach((listener) => listener(file)));
+
+const closeListeners = new Set<() => void>();
+ipcRenderer.on(MarkdownClosed, () => closeListeners.forEach((listener) => listener()));
+
+let latestMode: 'view' | 'edit' | null = null;
+const modeListeners = new Set<(mode: 'view' | 'edit') => void>();
+ipcRenderer.on(MarkdownMode, (_event, mode: 'view' | 'edit') => {
+  latestMode = mode;
+  modeListeners.forEach((listener) => listener(mode));
+});
+
+let penOn = false;
+let commentOn = false;
+let highlighterOn = false;
+let toolColor: RGB = { r: 26, g: 115, b: 232 };
+let toolReceived = false;
+const toolListeners = new Set<(state: MarkdownToolState) => void>();
+const currentTool = (): MarkdownToolState => ({
+  tool: penOn ? 'pen' : commentOn ? 'comment' : highlighterOn ? 'highlighter' : 'none',
+  color: toolColor,
+});
+const notifyTool = (): void => {
+  toolReceived = true;
+  toolListeners.forEach((listener) => listener(currentTool()));
+};
+ipcRenderer.on(PenState, (_event, payload: { active: boolean; color: RGB }) => {
+  penOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+ipcRenderer.on(HighlighterState, (_event, payload: { active: boolean; color: RGB }) => {
+  highlighterOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+ipcRenderer.on(CommentToolState, (_event, payload: { active: boolean; color: RGB }) => {
+  commentOn = payload.active;
+  toolColor = payload.color;
+  notifyTool();
+});
+
+const formatListeners = new Set<(action: MarkdownFormatAction) => void>();
+ipcRenderer.on(MarkdownFormat, (_event, action: MarkdownFormatAction) => formatListeners.forEach((listener) => listener(action)));
+
+const clearListeners = new Set<() => void>();
+ipcRenderer.on(MarkdownClear, () => clearListeners.forEach((listener) => listener()));
+const undoListeners = new Set<() => void>();
+const redoListeners = new Set<() => void>();
+ipcRenderer.on(MarkdownUndo, () => undoListeners.forEach((listener) => listener()));
+ipcRenderer.on(MarkdownRedo, () => redoListeners.forEach((listener) => listener()));
+
+/** Subscribes `listener` to one of the sets above, and hands back the way to unsubscribe. */
+function subscribe<T>(listeners: Set<T>, listener: T): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** What a run comes back as if main couldn't answer at all (the page was refused, or the handler failed). */
+const RUN_FAILED: MarkdownRunResult = {
+  ran: false,
+  error: 'The code could not be run.',
+  stdout: '',
+  stderr: '',
+  exitCode: null,
+  timedOut: false,
+  truncated: false,
+  durationMs: 0,
+};
+
+const api: NorthstarMarkdownApi = {
+  onFind: (listener) => subscribe(findListeners, listener),
+  reportFind: (result: FindResult) => {
+    ipcRenderer.send(FindResultChannel, result);
+  },
+  onFile: (listener) => subscribe(fileListeners, listener),
+  onClose: (listener) => subscribe(closeListeners, listener),
+  onMode: (listener) => {
+    if (latestMode !== null) {
+      listener(latestMode);
+    }
+    return subscribe(modeListeners, listener);
+  },
+  onFormat: (listener) => subscribe(formatListeners, listener),
+  save: (content: string, generation: number) => {
+    ipcRenderer.send(MarkdownSave, { id: tabId, content, generation });
+  },
+  saveAnnotations: (annotations: MarkdownAnnotations, generation: number) => {
+    ipcRenderer.send(MarkdownSaveAnnotations, { id: tabId, annotations, generation });
+  },
+  onUndo: (listener) => subscribe(undoListeners, listener),
+  onRedo: (listener) => subscribe(redoListeners, listener),
+  onClear: (listener) => subscribe(clearListeners, listener),
+  onTool: (listener) => {
+    if (toolReceived) {
+      listener(currentTool());
+    }
+    return subscribe(toolListeners, listener);
+  },
+  openLink: async (kind, target, newTab) => {
+    await ipcRenderer.invoke(MarkdownOpenLink, { id: tabId, kind, target, newTab });
+  },
+  resolveLinks: async (names) => {
+    const result = (await ipcRenderer.invoke(MarkdownResolveLinks, { id: tabId, names })) as Record<string, boolean> | null;
+    return result ?? {};
+  },
+  getBacklinks: async () => {
+    const result = (await ipcRenderer.invoke(MarkdownBacklinks, { id: tabId })) as MarkdownBacklink[] | null;
+    return result ?? [];
+  },
+  listNotes: async () => {
+    const result = (await ipcRenderer.invoke(MarkdownListNotes, { id: tabId })) as string[] | null;
+    return result ?? [];
+  },
+  readImage: async (src) => {
+    const result = (await ipcRenderer.invoke(MarkdownReadImage, { id: tabId, src })) as string | null;
+    return result ?? null;
+  },
+  runCode: async (index) => {
+    const result = (await ipcRenderer.invoke(MarkdownRunCode, { id: tabId, index })) as MarkdownRunResult | null;
+    return result ?? RUN_FAILED;
+  },
+  onZoom: (listener) => {
+    if (latestPercent !== null) {
+      listener(latestPercent);
+    }
+    return subscribe(zoomListeners, listener);
+  },
+};
+
+contextBridge.exposeInMainWorld('northstarMarkdown', api satisfies NorthstarMarkdownApi);
+
+// Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
+// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. Repeated in each
+// preload that needs it: two entries can't share a module (see the note on `tabZoom.ts`'s imports).
+const EditableFocus = 'ui:editable-focus';
+const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
+let editableReported = false;
+function reportEditableFocus(): void {
+  const element = document.activeElement;
+  const editable =
+    element instanceof HTMLTextAreaElement ||
+    (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||
+    (element instanceof HTMLElement && element.isContentEditable);
+  if (editable !== editableReported) {
+    editableReported = editable;
+    ipcRenderer.send(EditableFocus, editable);
+  }
+}
+window.addEventListener('focusin', reportEditableFocus, true);
+// `focusout` fires before the next element has focus, so look once focus has settled.
+window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);

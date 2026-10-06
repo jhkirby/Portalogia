@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
@@ -166,6 +166,39 @@ export function useTabs() {
     return result.ok ? null : result.message;
   }, []);
 
+  const createMarkdownTab = useCallback(() => {
+    void window.northstar.createMarkdownTab().then(logIfFailed);
+  }, []);
+  const openMarkdownFile = useCallback((id: string) => {
+    void window.northstar.openMarkdownFile(id).then(logIfFailed);
+  }, []);
+  const newMarkdownFile = useCallback((id: string) => {
+    void window.northstar.newMarkdownFile(id).then(logIfFailed);
+  }, []);
+  const closeMarkdownFile = useCallback((id: string) => {
+    void window.northstar.closeMarkdownFile(id).then(logIfFailed);
+  }, []);
+  /** Resolves to an error message to show the user, or `null` on success. */
+  const renameMarkdownFile = useCallback(async (id: string, name: string): Promise<string | null> => {
+    const result = await window.northstar.renameMarkdownFile(id, name);
+    return result.ok ? null : result.message;
+  }, []);
+  const setMarkdownMode = useCallback((id: string, mode: 'view' | 'edit') => {
+    void window.northstar.setMarkdownMode(id, mode).then(logIfFailed);
+  }, []);
+  const navigateMarkdownHistory = useCallback((id: string, direction: 1 | -1) => {
+    void window.northstar.navigateMarkdownHistory(id, direction).then(logIfFailed);
+  }, []);
+  const addMarkdownBookmark = useCallback((id: string, name: string) => {
+    void window.northstar.addMarkdownBookmark(id, name).then(logIfFailed);
+  }, []);
+  const openMarkdownPath = useCallback((id: string, path: string) => {
+    window.northstar.openMarkdownPath(id, path);
+  }, []);
+  const openMarkdownBookmark = useCallback((id: string, bookmarkId: string) => {
+    window.northstar.openMarkdownBookmark(id, bookmarkId);
+  }, []);
+
   const createTerminalTab = useCallback(() => {
     void window.northstar.createTerminalTab().then(logIfFailed);
   }, []);
@@ -325,6 +358,16 @@ export function useTabs() {
     openPdfFile,
     goToPdfPage,
     renamePdfFile,
+    createMarkdownTab,
+    openMarkdownFile,
+    newMarkdownFile,
+    closeMarkdownFile,
+    renameMarkdownFile,
+    setMarkdownMode,
+    navigateMarkdownHistory,
+    addMarkdownBookmark,
+    openMarkdownPath,
+    openMarkdownBookmark,
     revertPage,
 
     createWorkspace,

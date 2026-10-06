@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -14,7 +14,7 @@ const historyFileSchema = z.array(
     id: z.string().min(1).max(64),
     timestamp: z.number().finite(),
     // Absent in files written before PDF accesses were recorded: those are all pages.
-    type: z.enum(['url', 'pdf']).default('url'),
+    type: z.enum(['url', 'pdf', 'markdown']).default('url'),
     url: z.string().min(1).max(4096),
     status: z.number().int().min(0).max(999),
   }),
@@ -70,7 +70,7 @@ export class HistoryStore {
         continue;
       }
       // Windows paths are case-insensitive, so two spellings of one file are one route.
-      const key = type === 'pdf' ? entry.url.toLowerCase() : entry.url;
+      const key = type === 'url' ? entry.url : entry.url.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
         found.push(entry);
@@ -81,8 +81,13 @@ export class HistoryStore {
 
   /** @returns Whether a PDF at this path has ever been opened (the history has a record of it). */
   public hasPdfPath(path: string): boolean {
+    return this.hasFilePath('pdf', path);
+  }
+
+  /** @returns Whether a file of this type (a PDF or a Markdown note) at this path has ever been opened. */
+  public hasFilePath(type: 'pdf' | 'markdown', path: string): boolean {
     const wanted = path.toLowerCase();
-    return this.entries.some((entry) => entry.type === 'pdf' && entry.url.toLowerCase() === wanted);
+    return this.entries.some((entry) => entry.type === type && entry.url.toLowerCase() === wanted);
   }
 
   /** Records one visit, dropping the oldest if the history is full. */

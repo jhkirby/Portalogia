@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -73,6 +73,34 @@ export function buildMenu(
           click: () => getTabManager()?.createPdfTab(),
         },
         {
+          label: 'New Markdown Tab',
+          accelerator: 'CmdOrCtrl+Shift+M',
+          click: () => getTabManager()?.createMarkdownTab(),
+        },
+        {
+          // Does nothing unless the active tab is a Markdown note.
+          label: 'Toggle Note View/Edit',
+          accelerator: 'CmdOrCtrl+Shift+G',
+          click: () => {
+            const id = getActiveTabId();
+            if (id) {
+              getTabManager()?.toggleMarkdownMode(id);
+            }
+          },
+        },
+        {
+          // The toolbar's Close button: does nothing unless the active tab is a PDF or Markdown tab with a file open.
+          label: 'Close Open PDF or Note',
+          accelerator: 'CmdOrCtrl+Shift+C',
+          click: () => {
+            const id = getActiveTabId();
+            if (id) {
+              getTabManager()?.closePdfFile(id);
+              getTabManager()?.closeMarkdownFile(id);
+            }
+          },
+        },
+        {
           label: 'New History Tab',
           accelerator: 'CmdOrCtrl+Shift+H',
           click: () => getTabManager()?.createHistoryTab(),
@@ -84,7 +112,9 @@ export function buildMenu(
           click: () => {
             const id = getActiveTabId();
             if (id) {
+              // The same shortcut opens a note on a Markdown tab (each ignores the other's kind).
               void getTabManager()?.openPdfFile(id);
+              void getTabManager()?.openMarkdownFile(id);
             }
           },
         },
@@ -356,11 +386,15 @@ export function buildMenu(
         {
           label: 'Next Tab',
           accelerator: 'CmdOrCtrl+Right',
+          // Display only: Ctrl+Left/Right also jumps a word in a text box, so `TabManager`'s own key handling
+          // (which can tell when the caret is in one) does the switching instead of the menu.
+          registerAccelerator: false,
           click: () => getTabManager()?.cycleTab(1),
         },
         {
           label: 'Previous Tab',
           accelerator: 'CmdOrCtrl+Left',
+          registerAccelerator: false,
           click: () => getTabManager()?.cycleTab(-1),
         },
         {

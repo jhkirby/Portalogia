@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
@@ -433,6 +433,10 @@ function Tab({
       ) : tab.kind === 'pdf' ? (
         <span className="tab-bar__terminal-icon" aria-hidden="true">
           PDF
+        </span>
+      ) : tab.kind === 'markdown' ? (
+        <span className="tab-bar__terminal-icon" aria-hidden="true">
+          MD
         </span>
       ) : tab.kind === 'history' ? (
         <span className="tab-bar__terminal-icon tab-bar__history-icon" aria-hidden="true">

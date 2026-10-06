@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -179,7 +179,7 @@ export const historyQueryRequestSchema = z.object({
 });
 
 export const historySearchRequestSchema = z.object({
-  type: z.enum(['url', 'pdf']),
+  type: z.enum(['url', 'pdf', 'markdown']),
   query: z.string().max(500),
 });
 
@@ -205,6 +205,115 @@ export const pdfPageInfoRequestSchema = z.object({
 });
 
 export type PdfRenameRequest = z.infer<typeof pdfRenameRequestSchema>;
+
+// ── Markdown tabs ─────────────────────────────────────────────────────────
+
+/** A Markdown tab's new file name; must end in `.md` or `.markdown` with something before it. */
+export const markdownRenameRequestSchema = z.object({
+  id: z.string().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(4)
+    .max(255)
+    .regex(/.\.(md|markdown)$/i),
+});
+
+/** Largest note a page may send back to be saved — a note is text; this is generous and still bounded. */
+export const MARKDOWN_MAX_CONTENT_CHARS = 20_000_000;
+
+export const markdownSaveRequestSchema = z.object({
+  id: z.string().min(1),
+  content: z.string().max(MARKDOWN_MAX_CONTENT_CHARS),
+  generation: z.number().int().min(0),
+});
+
+const emAcrossSchema = z.number().min(-1000).max(1000);
+const emDownSchema = z.number().min(0).max(1_000_000);
+
+/**
+ * Everything drawn on one Markdown note in this app (never written into the
+ * note). Strokes and comment pins sit in `em`s — `x` from the note column's
+ * center, `y` from its top — so they follow the text across window widths and
+ * zoom levels; a highlight is a character range of the rendered text, with
+ * the words it covered so it can be found again after the note is edited.
+ */
+export const markdownAnnotationsSchema = z.object({
+  strokes: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        points: z.array(z.object({ x: emAcrossSchema, y: emDownSchema })).min(2).max(5000),
+      }),
+    )
+    .max(5000),
+  comments: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        x: emAcrossSchema,
+        y: emDownSchema,
+        text: z.string().max(5000),
+      }),
+    )
+    .max(2000),
+  highlights: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        start: z.number().int().min(0).max(100_000_000),
+        end: z.number().int().min(0).max(100_000_000),
+        quote: z.string().max(5000),
+      }),
+    )
+    .max(10000),
+});
+export type MarkdownAnnotations = z.infer<typeof markdownAnnotationsSchema>;
+
+export const markdownSaveAnnotationsRequestSchema = z.object({
+  id: z.string().min(1),
+  annotations: markdownAnnotationsSchema,
+  generation: z.number().int().min(0),
+});
+
+export const markdownModeRequestSchema = z.object({
+  id: z.string().min(1),
+  mode: z.enum(['view', 'edit']),
+});
+
+/** A link clicked in a note: a `[[wikilink]]` (its text inside the brackets) or an ordinary link's target. */
+export const markdownOpenLinkRequestSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['wiki', 'link']),
+  target: z.string().min(1).max(2048),
+  newTab: z.boolean(),
+});
+
+export const markdownResolveLinksRequestSchema = z.object({
+  id: z.string().min(1),
+  names: z.array(z.string().min(1).max(2048)).max(1000),
+});
+
+export const markdownReadImageRequestSchema = z.object({
+  id: z.string().min(1),
+  src: z.string().min(1).max(2048),
+});
+
+export const markdownRunCodeRequestSchema = z.object({
+  id: z.string().min(1),
+  /** Which fenced code block of the note, counting from 0 in reading order. */
+  index: z.number().int().min(0).max(100_000),
+});
+
+export const markdownExportRequestSchema = z.object({
+  id: z.string().min(1),
+  format: z.enum(['pdf', 'md', 'txt']),
+});
+
+export const markdownNavigateHistoryRequestSchema = z.object({
+  id: z.string().min(1),
+  direction: z.union([z.literal(1), z.literal(-1)]),
+});
 
 export const moveTabRequestSchema = z.object({
   id: z.string().min(1),
@@ -418,10 +527,12 @@ export const exportMenuSyncRequestSchema = z.object({
   open: z.boolean(),
   rect: z.object({ top: z.number(), left: z.number() }).nullable(),
   canExportDocuments: z.boolean(),
+  /** Defaulted so a sync from before Markdown tabs existed still parses. */
+  markdown: z.boolean().default(false),
 });
 
 export const exportMenuSelectRequestSchema = z.object({
-  action: z.enum(['pdf', 'documents']),
+  action: z.enum(['pdf', 'documents', 'markdown', 'text']),
 });
 
 export const themeSetRequestSchema = z.object({

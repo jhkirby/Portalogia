@@ -112,7 +112,7 @@ export function PdfToolbar({
         className="pdf-toolbar__button chrome-tooltip"
         onClick={() => onClose(tab.id)}
         disabled={fileName === null}
-        data-tooltip="Close the open PDF"
+        data-tooltip={`Close the open PDF (${formatShortcut('Shift+C')})`}
       >
         Close
       </button>

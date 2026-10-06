@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import type {
   NorthstarAddressSuggestionsApi,
@@ -10,6 +10,7 @@ import type {
   NorthstarExportMenuApi,
   NorthstarFindApi,
   NorthstarHistoryApi,
+  NorthstarMarkdownApi,
   NorthstarPdfApi,
   NorthstarTerminalApi,
   NorthstarTooltipApi,
@@ -31,6 +32,8 @@ declare global {
     readonly northstarExportMenu: NorthstarExportMenuApi;
     /** The bridge exposed by a PDF tab's own preload script (`src/preload/pdf.ts`). Only present in `pdf.html`'s page. */
     readonly northstarPdf: NorthstarPdfApi;
+    /** The bridge exposed by a Markdown tab's own preload script (`src/preload/markdown.ts`). Only present in `markdown.html`'s page. */
+    readonly northstarMarkdown: NorthstarMarkdownApi;
     /** The bridge exposed by a History tab's own preload script (`src/preload/history.ts`). Only present in `history.html`'s page. */
     readonly northstarHistory: NorthstarHistoryApi;
     /** The bridge exposed by the find bar's own preload script (`src/preload/find.ts`). Only present in `find.html`'s page. */

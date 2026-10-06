@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { AddressSuggestionItem } from '@shared/ipc-contract';
@@ -10,7 +10,9 @@ import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 
 interface PdfSearchBoxProps {
-  /** The bookmarked PDFs to search — matched against each one's name and path. */
+  /** Which files it searches: PDFs (the default) or Markdown notes — the same box, with its own history and wording. */
+  readonly kind?: 'pdf' | 'markdown';
+  /** The bookmarked files to search — matched against each one's name and path. */
   readonly bookmarks: readonly BookmarkState[];
   /** Opens the bookmarked PDF in this tab. */
   readonly onOpen: (bookmarkId: string) => void;
@@ -38,7 +40,7 @@ const DROPDOWN_GAP_PX = 6;
  * `syncAddressSuggestions`. Only one of the two is ever mounted at a time
  * (the toolbar shows one or the other per tab), so they never contend for it.
  */
-export function PdfSearchBox({ bookmarks, onOpen, onOpenPath }: PdfSearchBoxProps) {
+export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: PdfSearchBoxProps) {
   const [draft, setDraft] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -51,7 +53,7 @@ export function PdfSearchBox({ bookmarks, onOpen, onOpenPath }: PdfSearchBoxProp
   useEffect(() => window.northstar.onFocusAddressBar(() => inputRef.current?.focus()), []);
 
   const query = draft.trim().toLowerCase();
-  const recentPdfs = useHistorySuggestions('pdf', draft, isFocused);
+  const recentPdfs = useHistorySuggestions(kind, draft, isFocused);
   // The bookmarked PDFs that match come first, newest bookmark first; then the PDFs most recently opened that
   // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`.
   const suggestions = useMemo((): readonly AddressSuggestionItem[] => {
@@ -173,7 +175,8 @@ export function PdfSearchBox({ bookmarks, onOpen, onOpenPath }: PdfSearchBoxProp
   };
 
   // Types itself in once, then its trailing dots loop — the same animation as the address bar's.
-  const placeholder = useAnimatedPlaceholder(draft === '', "Search PDF's");
+  const label = kind === 'pdf' ? "PDF's" : 'notes';
+  const placeholder = useAnimatedPlaceholder(draft === '', `Search ${label}`);
 
   return (
     <form
@@ -194,7 +197,7 @@ export function PdfSearchBox({ bookmarks, onOpen, onOpenPath }: PdfSearchBoxProp
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         onKeyDown={handleKeyDown}
-        aria-label="Search PDF's..."
+        aria-label={`Search ${label}...`}
         role="combobox"
         aria-expanded={isDropdownOpen}
         aria-autocomplete="list"

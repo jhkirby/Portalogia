@@ -205,3 +205,24 @@ const api: NorthstarPdfApi = {
 };
 
 contextBridge.exposeInMainWorld('northstarPdf', api satisfies NorthstarPdfApi);
+
+// Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
+// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. Repeated in each
+// preload that needs it: two entries can't share a module (see the note on `tabZoom.ts`'s imports).
+const EditableFocus = 'ui:editable-focus';
+const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
+let editableReported = false;
+function reportEditableFocus(): void {
+  const element = document.activeElement;
+  const editable =
+    element instanceof HTMLTextAreaElement ||
+    (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||
+    (element instanceof HTMLElement && element.isContentEditable);
+  if (editable !== editableReported) {
+    editableReported = editable;
+    ipcRenderer.send(EditableFocus, editable);
+  }
+}
+window.addEventListener('focusin', reportEditableFocus, true);
+// `focusout` fires before the next element has focus, so look once focus has settled.
+window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);

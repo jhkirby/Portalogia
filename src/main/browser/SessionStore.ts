@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -14,7 +14,8 @@ import { z } from 'zod';
  * for the current run.
  */
 const sessionTabSchema = z.object({
-  kind: z.enum(['browser', 'terminal', 'pdf', 'history']),
+  kind: z.enum(['browser', 'terminal', 'pdf', 'markdown', 'history']),
+  // A browser tab's address, or a Markdown tab's note path ('' once none is open).
   // Meaningless for a terminal tab — kept on every entry anyway rather
   // than splitting this into two schema variants, since restoring one is
   // already just "ignore this field."

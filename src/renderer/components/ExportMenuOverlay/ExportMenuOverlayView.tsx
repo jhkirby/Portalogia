@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-01
+// Last Modified: 2026-10-06
 
 import { useEffect, useRef, useState } from 'react';
 import type { ExportMenuSyncPayload } from '@shared/ipc-contract';
@@ -56,15 +56,36 @@ export function ExportMenuOverlayView() {
       >
         PDF
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="export-menu__item"
-        disabled={!payload.canExportDocuments}
-        onClick={() => window.northstarExportMenu.select('documents')}
-      >
-        HTML/CSS/JS
-      </button>
+      {payload.markdown ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            className="export-menu__item"
+            onClick={() => window.northstarExportMenu.select('markdown')}
+          >
+            Markdown
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="export-menu__item"
+            onClick={() => window.northstarExportMenu.select('text')}
+          >
+            Text
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          className="export-menu__item"
+          disabled={!payload.canExportDocuments}
+          onClick={() => window.northstarExportMenu.select('documents')}
+        >
+          HTML/CSS/JS
+        </button>
+      )}
     </div>
   );
 }

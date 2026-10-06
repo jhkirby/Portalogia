@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
@@ -16,7 +16,7 @@ import {
   type IpcMainEvent,
   type WebContents,
 } from 'electron';
-import { findResultRequestSchema } from '@shared/ipc-schemas';
+import { findResultRequestSchema, type MarkdownAnnotations } from '@shared/ipc-schemas';
 import {
   CHROME_HEIGHT_FOCUSED_PX,
   CHROME_HEIGHT_PX,
@@ -27,6 +27,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
   HOME_URL,
+  MARKDOWN_PRINT_GLOBAL,
   SIDEBAR_COLLAPSED_WIDTH_PX,
   SIDEBAR_TOGGLE_DURATION_MS,
   SIDEBAR_WIDTH_PX,
@@ -50,6 +51,10 @@ import {
   type HistoryClearRange,
   type HistoryEntry,
   type HistorySuggestion,
+  type MarkdownBacklink,
+  type MarkdownFormatAction,
+  type MarkdownFileData,
+  type MarkdownRunResult,
   type PdfOpenResult,
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
@@ -57,11 +62,30 @@ import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
 import { pdfAnnotationStore } from './PdfAnnotationStore';
 import { PdfCropExporter } from './PdfCropExporter';
+import { buildMarkdownCsp } from '@shared/markdown/csp';
+import { listCodeBlocks, splitWikiTarget } from '@shared/markdown/parser';
+import { markdownToPlainText } from '@shared/markdown/plainText';
+import { isRunnableLanguage, runCodeBlock } from './MarkdownCodeRunner';
+import { markdownAnnotationStore } from './MarkdownAnnotationStore';
+import { MarkdownDocuments } from './MarkdownDocuments';
+import {
+  MARKDOWN_EXTENSION_PATTERN,
+  findBacklinks,
+  isMarkdownPath,
+  listNoteNames,
+  readImageDataUrl,
+  resolveLinkTarget,
+  resolveWikiLinks,
+  resolveWikiTarget,
+  samePath,
+  toNoteFileName,
+} from './MarkdownVault';
 import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import type { TextBoxController } from './TextBoxController';
 import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
+import { hasEditableFocus } from './editableFocus';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -124,6 +148,24 @@ let relocatingLinkGroup = false;
 
 /** On-disk path of the file each PDF tab has open, by tab id. Module-level so it survives a tab moving between windows' managers. */
 const pdfFilePaths = new Map<string, string>();
+
+/** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
+const markdownDocuments = new MarkdownDocuments();
+
+/** Markdown tabs whose page has finished loading — a note sent before then would have nobody listening, so it waits for `did-finish-load`. */
+const markdownPagesReady = new Set<string>();
+
+/** Notes the user has agreed to run code from, until the app restarts (lower-cased on Windows). */
+const markdownTrustedNotes = new Set<string>();
+
+/** Markdown tabs with a code block running right now — one at a time per tab. */
+const markdownRunning = new Set<string>();
+
+/** Markdown tabs that have already shown a "could not save" box, so a failing disk isn't reported on every keystroke. */
+const markdownSaveErrorShown = new Set<string>();
+
+/** Removes a Markdown tab's content-security-policy header hook once the tab is gone. */
+const markdownCspRemovers = new Map<string, () => void>();
 
 /**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
@@ -357,6 +399,19 @@ export class TabManager {
       if (this.handleReorderGestureInput(event, input) || this.handleWindowShortcut(event, input)) {
         return;
       }
+      // Ctrl+Left/Right switches tabs — except in a text box (the address bar, a name field), where it moves the caret by a word.
+      if (
+        input.type === 'keyDown' &&
+        (input.control || input.meta) &&
+        !input.alt &&
+        !input.shift &&
+        (input.key === 'ArrowLeft' || input.key === 'ArrowRight') &&
+        !hasEditableFocus(this.window.webContents.id)
+      ) {
+        event.preventDefault();
+        this.cycleTab(input.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
       if (
         input.type === 'keyDown' &&
         !input.isAutoRepeat &&
@@ -433,9 +488,11 @@ export class TabManager {
           ? this.createTerminalTab(workspaceId)
           : tab.kind === 'pdf'
             ? this.createPdfTab(workspaceId)
-            : tab.kind === 'history'
-              ? this.createHistoryTab(workspaceId)
-              : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
+            : tab.kind === 'markdown'
+              ? this.createMarkdownTab(workspaceId, tab.url === '' ? undefined : tab.url)
+              : tab.kind === 'history'
+                ? this.createHistoryTab(workspaceId)
+                : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
       if (tab.active) {
         activeId = state.activeTabId;
       }
@@ -715,6 +772,664 @@ export class TabManager {
     }
 
     return this.getState();
+  }
+
+  // ── Markdown ─────────────────────────────────────────────────────────
+
+  /**
+   * Opens a new Markdown tab (the toolbar's MD button, Ctrl+Shift+M, or File >
+   * New Markdown Tab) and makes it active. Structured like `createPdfTab`: its
+   * own `WebContentsView` loading `markdown.html?id=` through its own narrow
+   * preload. No note is open at first — the toolbar offers New and Open and a
+   * search over the bookmarked notes — unless `notePath` is given.
+   *
+   * The page renders untrusted text, so on top of its own sanitizing the
+   * page's responses carry a strict content-security-policy (see
+   * `buildMarkdownCsp`) — here for the dev server, and as a `<meta>` in the
+   * packaged build's HTML.
+   * @param workspaceId Workspace to create it in; defaults to the active workspace.
+   * @param notePath A note to open in it (a link opened in a new tab, a restored session, a duplicate).
+   * @returns The full browser state after the tab is created.
+   */
+  public createMarkdownTab(workspaceId?: string, notePath?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: join(__dirname, '../preload/markdown.cjs'),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+      },
+    });
+
+    view.webContents.on('will-navigate', (event) => event.preventDefault());
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.wireSharedInputHandling(id, view.webContents);
+
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+    const isDev = !app.isPackaged && devServerUrl !== undefined;
+    const pagePrefix = isDev ? `${devServerUrl}/` : 'file://';
+    const csp = buildMarkdownCsp(isDev);
+    markdownCspRemovers.set(
+      id,
+      this.adBlocker.addHeadersInterceptor((details) =>
+        details.webContentsId === view.webContents.id && details.url.startsWith(pagePrefix)
+          ? { responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } }
+          : null,
+      ),
+    );
+
+    view.webContents.on('did-finish-load', () => {
+      markdownPagesReady.add(id);
+      this.applyZoom(id);
+      // A fresh page has a fresh preload that's never been told which annotation tool (if any) is on.
+      this.pushPenStateTo(id);
+      this.pushCommentToolStateTo(id);
+      this.pushHighlighterStateTo(id);
+      this.pushMarkdownModeTo(id);
+      // A note opened before the page was up (a restored tab) is delivered now.
+      this.pushMarkdownFile(id, 'open', '');
+      if (this.findOpen && id === this.activeTabId) {
+        this.runFind();
+      }
+      // An empty Markdown page lists the bookmarked notes; any that have since been moved or deleted are dropped first.
+      void this.refreshMarkdownBookmarks();
+    });
+    // Another program may have saved the note while this tab wasn't looking.
+    view.webContents.on('focus', () => void this.refreshMarkdownIfChanged(id));
+
+    this.views.set(id, view);
+    this.states.set(id, {
+      kind: 'markdown',
+      id,
+      title: 'Markdown',
+      fileName: null,
+      filePath: null,
+      mode: 'view',
+      canGoBack: false,
+      canGoForward: false,
+      workspaceId: workspaceId ?? this.activeWorkspaceId,
+    });
+    this.activateTab(id);
+
+    if (isDev) {
+      void view.webContents.loadURL(`${devServerUrl}/markdown.html?id=${id}`);
+    } else {
+      void view.webContents.loadFile(join(__dirname, '../renderer/markdown.html'), { query: { id } });
+    }
+    if (notePath) {
+      void this.loadMarkdownFromPath(id, notePath, 'reset');
+    }
+
+    return this.getState();
+  }
+
+  /**
+   * Lets the user pick a Markdown note from disk for a Markdown tab.
+   * Failures are reported in a native error box — this is also reached from a
+   * keyboard shortcut that has nowhere else to show them.
+   * @param id The Markdown tab. A no-op if it isn't one.
+   */
+  public async openMarkdownFile(id: string): Promise<void> {
+    if (this.states.get(id)?.kind !== 'markdown') {
+      return;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: 'Open note',
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    });
+    const [filePath] = filePaths;
+    if (canceled || !filePath) {
+      return;
+    }
+    await this.loadMarkdownFromPath(id, filePath, 'reset');
+  }
+
+  /**
+   * Asks where to create a new note, makes the (empty) file, and opens it in
+   * the tab ready to be written in. Picking a file that already exists opens
+   * it instead — nothing is overwritten.
+   * @param id The Markdown tab. A no-op if it isn't one.
+   */
+  public async newMarkdownFile(id: string): Promise<void> {
+    if (this.states.get(id)?.kind !== 'markdown') {
+      return;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const openPath = markdownDocuments.pathOf(id);
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      title: 'New note',
+      defaultPath: join(openPath ? dirname(openPath) : app.getPath('documents'), 'Untitled.md'),
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    });
+    if (canceled || !filePath) {
+      return;
+    }
+    await this.createMarkdownAt(id, isMarkdownPath(filePath) ? filePath : `${filePath}.md`, 'reset');
+  }
+
+  /**
+   * Creates a note at `path` (or finds it already there) and opens it in edit mode.
+   * @param id The Markdown tab.
+   * @param path Where the note goes.
+   * @param history Whether the tab's Back/Forward start over or this follows from the note it's on.
+   */
+  private async createMarkdownAt(id: string, path: string, history: 'reset' | 'push'): Promise<void> {
+    try {
+      const { note, created } = await markdownDocuments.create(id, path, history);
+      this.adoptMarkdownNote(id, path, note.name, created ? 'created' : 'open', created ? 'edit' : null, '');
+    } catch (error) {
+      dialog.showErrorBox('Could not create note', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Reads a note from disk into a Markdown tab. Failures are reported in a
+   * native error box, not thrown — see `openMarkdownFile`.
+   * @param id The Markdown tab. A no-op if it isn't one.
+   * @param path The note to open.
+   * @param history `'push'` when it was reached by a link (the note it came from becomes Back).
+   * @param anchor A heading to scroll to once drawn, or `''`.
+   * @returns Whether it opened.
+   */
+  private async loadMarkdownFromPath(
+    id: string,
+    path: string,
+    history: 'reset' | 'push',
+    anchor = '',
+  ): Promise<boolean> {
+    if (this.states.get(id)?.kind !== 'markdown') {
+      return false;
+    }
+    try {
+      const note = await markdownDocuments.open(id, path, history);
+      this.adoptMarkdownNote(id, path, note.name, 'open', history === 'push' ? null : 'view', anchor);
+      return true;
+    } catch (error) {
+      dialog.showErrorBox('Could not open note', error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  }
+
+  /**
+   * Makes a tab's state and page match the note `markdownDocuments` now holds
+   * for it: its title and file name, its history buttons, the mode, and the
+   * note itself sent to the page.
+   * @param mode The mode to show it in, or `null` to leave the tab's as it is.
+   */
+  private adoptMarkdownNote(
+    id: string,
+    path: string,
+    name: string,
+    reason: MarkdownFileData['reason'],
+    mode: 'view' | 'edit' | null,
+    anchor: string,
+  ): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'markdown') {
+      return;
+    }
+    this.historyController.recordMarkdownAccess(path);
+    this.states.set(id, {
+      ...current,
+      title: this.markdownTabTitle(path),
+      fileName: name,
+      filePath: path,
+      mode: mode ?? current.mode,
+      canGoBack: markdownDocuments.canGoBack(id),
+      canGoForward: markdownDocuments.canGoForward(id),
+    });
+    this.releaseUnavailableTools();
+    this.emitState();
+    this.pushMarkdownModeTo(id);
+    this.pushMarkdownFile(id, reason, anchor);
+  }
+
+  /** Sends a tab's open note to its page — a no-op until the page has loaded (which then calls this itself) or while no note is open. */
+  private pushMarkdownFile(id: string, reason: MarkdownFileData['reason'], anchor: string): void {
+    const view = this.views.get(id);
+    const path = markdownDocuments.pathOf(id);
+    const content = markdownDocuments.contentOf(id);
+    const generation = markdownDocuments.generationOf(id);
+    if (!view || view.webContents.isDestroyed() || !markdownPagesReady.has(id) || !path || content === undefined || generation === undefined) {
+      return;
+    }
+    view.webContents.send(IpcChannel.MarkdownFile, {
+      name: basename(path),
+      content,
+      annotations: markdownAnnotationStore.get(path),
+      generation,
+      anchor,
+      reason,
+    } satisfies MarkdownFileData);
+  }
+
+  /** Tells a tab's page whether to show the rendered note or its source. */
+  private pushMarkdownModeTo(id: string): void {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind === 'markdown' && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.MarkdownMode, state.mode);
+    }
+  }
+
+  /**
+   * Closes a Markdown tab's open note: the tab stays but goes back to empty.
+   * The file on disk and its saved marks are untouched.
+   * @param id The Markdown tab. A no-op if it isn't one or has no note open.
+   */
+  public closeMarkdownFile(id: string): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'markdown' || !markdownDocuments.has(id)) {
+      return;
+    }
+    markdownDocuments.close(id);
+    this.states.set(id, {
+      ...current,
+      title: 'Markdown',
+      fileName: null,
+      filePath: null,
+      mode: 'view',
+      canGoBack: false,
+      canGoForward: false,
+    });
+    this.releaseUnavailableTools();
+    if (this.findOpen && !this.canFind(this.activeTabId)) {
+      this.closeFind();
+    }
+    this.emitState();
+    this.views.get(id)?.webContents.send(IpcChannel.MarkdownClosed);
+    // Back to the empty page: re-check the bookmarked notes before it lists them.
+    void this.refreshMarkdownBookmarks();
+  }
+
+  /**
+   * Renames a Markdown tab's note on disk (in its own folder) and retitles the tab.
+   * Its marks and bookmark follow it.
+   * @param id The Markdown tab.
+   * @param name The new file name, already validated to end in `.md` or `.markdown`.
+   * @throws If no note is open, the name has path separators, or the target exists.
+   */
+  public async renameMarkdownTab(id: string, name: string): Promise<void> {
+    const current = this.states.get(id);
+    if (current?.kind !== 'markdown' || !markdownDocuments.has(id)) {
+      throw new Error('Open a note before renaming it.');
+    }
+    const { oldPath, newPath } = await markdownDocuments.rename(id, name);
+    if (newPath !== oldPath) {
+      this.bookmarkStore.renameMarkdown(oldPath, newPath);
+      markdownAnnotationStore.move(oldPath, newPath);
+      this.historyController.pushBookmarksToAll();
+    }
+    this.states.set(id, { ...current, title: this.markdownTabTitle(newPath), fileName: name, filePath: newPath });
+    this.emitState();
+  }
+
+  /**
+   * Switches a Markdown tab between its rendered view and its source editor.
+   * Marking tools only work on the rendered note, so any that's on turns off.
+   * @param id The Markdown tab. A no-op if it isn't one or has no note open.
+   */
+  public setMarkdownMode(id: string, mode: 'view' | 'edit'): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'markdown' || current.fileName === null || current.mode === mode) {
+      return;
+    }
+    this.states.set(id, { ...current, mode });
+    this.pushMarkdownModeTo(id);
+    this.releaseUnavailableTools();
+    this.emitState();
+  }
+
+  /**
+   * Passes a formatting shortcut on to a Markdown tab's editor. Only while the
+   * tab is being edited: otherwise the key keeps the app's own meaning.
+   * @returns Whether it was handed on — `false` means the caller should do what the key normally does.
+   */
+  public formatMarkdown(id: string, action: MarkdownFormatAction): boolean {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind !== 'markdown' || state.mode !== 'edit' || !view || view.webContents.isDestroyed()) {
+      return false;
+    }
+    view.webContents.send(IpcChannel.MarkdownFormat, action);
+    return true;
+  }
+
+  /** Flips a Markdown tab between its rendered view and its source editor (Ctrl+Shift+G). A no-op on any other kind of tab, or with no note open. */
+  public toggleMarkdownMode(id: string): void {
+    const current = this.states.get(id);
+    if (current?.kind === 'markdown') {
+      this.setMarkdownMode(id, current.mode === 'edit' ? 'view' : 'edit');
+    }
+  }
+
+  /**
+   * Steps a Markdown tab back or forward through the notes it followed links through.
+   * @param id The Markdown tab.
+   * @param direction `-1` for Back, `1` for Forward.
+   */
+  public async navigateMarkdownHistory(id: string, direction: 1 | -1): Promise<void> {
+    if (this.states.get(id)?.kind !== 'markdown') {
+      return;
+    }
+    const note = await markdownDocuments.step(id, direction);
+    const path = markdownDocuments.pathOf(id);
+    if (note && path) {
+      this.adoptMarkdownNote(id, path, note.name, 'open', null, '');
+    }
+  }
+
+  /**
+   * Follows a link clicked in a note. A web address opens as a browser tab; a
+   * note opens in this tab (or a new Markdown tab); a `[[wikilink]]` to a
+   * note that doesn't exist yet creates it beside the current one, as
+   * Obsidian does.
+   * @param id The Markdown tab the click was in.
+   * @param kind `'wiki'` for the text of a `[[wikilink]]`, `'link'` for an ordinary link's address.
+   * @param target What the link says.
+   * @param newTab Open a note in a new Markdown tab instead of this one.
+   */
+  public async openMarkdownLink(id: string, kind: 'wiki' | 'link', target: string, newTab: boolean): Promise<void> {
+    const current = markdownDocuments.pathOf(id);
+    if (this.states.get(id)?.kind !== 'markdown' || !current) {
+      return;
+    }
+    if (kind === 'link' && /^https?:\/\//i.test(target)) {
+      if (isNavigableUrl(target)) {
+        this.createTab(target);
+      }
+      return;
+    }
+    const workspaceId = this.states.get(id)?.workspaceId;
+    const heading = kind === 'wiki' ? splitWikiTarget(target).heading : (target.split('#')[1] ?? '');
+    let path = kind === 'wiki' ? await resolveWikiTarget(current, target) : await resolveLinkTarget(current, target);
+    if (path === null && kind === 'wiki') {
+      // The note doesn't exist yet: following the link makes it, next to this one.
+      const fileName = toNoteFileName(splitWikiTarget(target).name);
+      if (fileName === null) {
+        return;
+      }
+      path = join(dirname(current), fileName);
+      if (newTab) {
+        this.createMarkdownTab(workspaceId, undefined);
+        const created = this.activeTabId;
+        if (created) {
+          await this.createMarkdownAt(created, path, 'reset');
+        }
+      } else {
+        await this.createMarkdownAt(id, path, 'push');
+      }
+      return;
+    }
+    if (path === null || samePath(path, current)) {
+      return;
+    }
+    if (newTab) {
+      this.createMarkdownTab(workspaceId, path);
+    } else {
+      await this.loadMarkdownFromPath(id, path, 'push', heading);
+    }
+  }
+
+  /** Which `[[wikilinks]]` of the tab's note name a note that exists — see `resolveWikiLinks`. */
+  public async resolveMarkdownLinks(id: string, names: readonly string[]): Promise<Record<string, boolean>> {
+    const path = markdownDocuments.pathOf(id);
+    return path ? resolveWikiLinks(path, names) : {};
+  }
+
+  /** The notes that link to the tab's note — see `findBacklinks`. */
+  public async markdownBacklinks(id: string): Promise<MarkdownBacklink[]> {
+    const path = markdownDocuments.pathOf(id);
+    return path ? findBacklinks(path) : [];
+  }
+
+  /** The names of the notes in the tab's note's vault — see `listNoteNames`. */
+  public async listMarkdownNotes(id: string): Promise<string[]> {
+    const path = markdownDocuments.pathOf(id);
+    return path ? listNoteNames(path) : [];
+  }
+
+  /** An image beside the tab's note as a data URL — see `readImageDataUrl`. */
+  public async readMarkdownImage(id: string, src: string): Promise<string | null> {
+    const path = markdownDocuments.pathOf(id);
+    return path ? readImageDataUrl(path, src) : null;
+  }
+
+  /**
+   * Runs one of the tab's note's code blocks. The page names a block by its
+   * number; the code that runs is read from the note main holds, never taken
+   * from the page. The first run for a note asks the user (native dialog,
+   * showing the code), and is then trusted until the app restarts.
+   * @param id The Markdown tab.
+   * @param index Which code block, counting from 0 in reading order.
+   */
+  public async runMarkdownCode(id: string, index: number): Promise<MarkdownRunResult> {
+    const path = markdownDocuments.pathOf(id);
+    const content = markdownDocuments.contentOf(id);
+    const refused = (error: string): MarkdownRunResult => ({
+      ran: false,
+      error,
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      timedOut: false,
+      truncated: false,
+      durationMs: 0,
+    });
+    if (this.states.get(id)?.kind !== 'markdown' || !path || content === undefined) {
+      return refused('No note is open.');
+    }
+    const block = listCodeBlocks(content)[index];
+    if (!block) {
+      return refused('That code block is no longer in the note.');
+    }
+    if (!isRunnableLanguage(block.language)) {
+      return runCodeBlock(block.language, block.code, dirname(path));
+    }
+    if (markdownRunning.has(id)) {
+      return refused('A block from this note is already running.');
+    }
+    const trustKey = process.platform === 'win32' ? path.toLowerCase() : path;
+    if (!markdownTrustedNotes.has(trustKey)) {
+      const window = (this.registry.mountOwners.get(id) ?? this).window;
+      const preview = block.code.length > 600 ? `${block.code.slice(0, 600)}\n…` : block.code;
+      const { response } = await dialog.showMessageBox(window, {
+        type: 'warning',
+        title: 'Run code',
+        message: `Run code from “${basename(path)}”?`,
+        detail:
+          `Code blocks run on your computer with your permissions: they can read and change your files and use the network. ` +
+          `Only run code from notes you trust. Code blocks from this note won't ask again until Northstar restarts.\n\n${preview}`,
+        buttons: ['Run', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (response !== 0) {
+        return refused('Canceled.');
+      }
+      markdownTrustedNotes.add(trustKey);
+    }
+    markdownRunning.add(id);
+    try {
+      return await runCodeBlock(block.language, block.code, dirname(path));
+    } finally {
+      markdownRunning.delete(id);
+    }
+  }
+
+  /**
+   * Writes the page's edit of the tab's note to disk.
+   * @param id The Markdown tab.
+   * @param content The note's source as the editor holds it.
+   * @param generation Which opening of a note the edit belongs to — an edit made to a note the tab has since left is dropped.
+   */
+  public saveMarkdown(id: string, content: string, generation: number): void {
+    markdownDocuments.save(id, content, generation).catch((error: unknown) => {
+      console.error('[markdown] save failed:', error);
+      // Said once per tab, not on every keystroke's failed retry.
+      if (!markdownSaveErrorShown.has(id)) {
+        markdownSaveErrorShown.add(id);
+        dialog.showErrorBox('Could not save note', error instanceof Error ? error.message : String(error));
+      }
+    });
+  }
+
+  /** Persists the marks the page drew on the tab's note. */
+  public saveMarkdownAnnotations(id: string, annotations: MarkdownAnnotations, generation: number): void {
+    const path = markdownDocuments.pathOf(id);
+    // Marks made on a note the tab has since left must not land on the one it's showing now.
+    if (path && markdownDocuments.generationOf(id) === generation) {
+      markdownAnnotationStore.set(path, annotations);
+    }
+  }
+
+  /** Whether `contents` is the page of Markdown tab `id` — the check that keeps one tab's page from acting as another. */
+  public ownsMarkdownContents(id: string, contents: WebContents): boolean {
+    return this.states.get(id)?.kind === 'markdown' && this.views.get(id)?.webContents === contents;
+  }
+
+  /**
+   * Re-reads the tab's note if the file changed on disk since this tab last
+   * had it, and shows the new version.
+   */
+  private async refreshMarkdownIfChanged(id: string): Promise<void> {
+    if ((await markdownDocuments.refreshIfChanged(id)) !== null) {
+      this.pushMarkdownFile(id, 'reload', '');
+    }
+  }
+
+  /**
+   * Saves a copy of a Markdown tab's note — as a PDF (what the page shows,
+   * marks included), the `.md` source, or plain text with the Markdown's
+   * markers stripped — to a location the user picks. The note itself is left alone.
+   * @param id The Markdown tab. A no-op if it isn't one or has no note open.
+   * @param format What to save.
+   * @returns The path written, or `null` if canceled or there was nothing to export.
+   */
+  public async exportMarkdown(id: string, format: 'pdf' | 'md' | 'txt'): Promise<string | null> {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    const sourcePath = markdownDocuments.pathOf(id);
+    const source = markdownDocuments.exportSourceOf(id);
+    if (state?.kind !== 'markdown' || !view || !sourcePath || source === undefined) {
+      return null;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const stem = sanitizeFileName(basename(sourcePath).replace(MARKDOWN_EXTENSION_PATTERN, ''));
+    const extension = format === 'md' ? 'md' : format;
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      title: format === 'pdf' ? 'Export to PDF' : format === 'md' ? 'Export Markdown' : 'Export text',
+      defaultPath: join(dirname(sourcePath), format === 'md' ? `${stem} - copy.md` : `${stem}.${extension}`),
+      filters: [
+        {
+          name: format === 'pdf' ? 'PDF Document' : format === 'md' ? 'Markdown' : 'Text',
+          extensions: [extension],
+        },
+      ],
+    });
+    if (canceled || !filePath) {
+      return null;
+    }
+    try {
+      if (format === 'pdf') {
+        await view.webContents.executeJavaScript(`window.${MARKDOWN_PRINT_GLOBAL}?.(true);`);
+        try {
+          await writeFile(filePath, await view.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true }));
+        } finally {
+          await view.webContents.executeJavaScript(`window.${MARKDOWN_PRINT_GLOBAL}?.(false);`).catch(() => undefined);
+        }
+      } else if (format === 'md') {
+        await writeFile(filePath, source, 'utf-8');
+      } else {
+        await writeFile(filePath, markdownToPlainText(source), 'utf-8');
+      }
+      return filePath;
+    } catch (error) {
+      dialog.showErrorBox('Could not export note', error instanceof Error ? error.message : String(error));
+      return null;
+    }
+  }
+
+  /**
+   * Opens, in a Markdown tab, a note the history has seen — picked from the
+   * Markdown search's dropdown. Only paths the history already holds are
+   * accepted, so this can't be turned into a way to open an arbitrary file.
+   * @param id The Markdown tab.
+   * @param path The note's path on disk.
+   */
+  public async openMarkdownFromHistory(id: string, path: string): Promise<void> {
+    if (this.states.get(id)?.kind !== 'markdown' || !this.historyController.hasMarkdownAccess(path)) {
+      return;
+    }
+    await this.loadMarkdownFromPath(id, path, 'reset');
+  }
+
+  /**
+   * Bookmarks a Markdown tab's open note under a name the user chose (the
+   * bookmark popup's Save). The tab then goes by that name too.
+   * @param id The Markdown tab. A no-op if it isn't one or has no note open.
+   * @param name What to call the bookmark.
+   * @returns The full browser state after the change.
+   */
+  public addMarkdownBookmark(id: string, name: string): BrowserState {
+    const path = this.states.get(id)?.kind === 'markdown' ? markdownDocuments.pathOf(id) : undefined;
+    if (!path) {
+      return this.getState();
+    }
+    this.bookmarkStore.addMarkdown(name, path);
+    this.historyController.pushBookmarksToAll();
+    this.syncFileTabTitles();
+    this.emitState();
+    return this.getState();
+  }
+
+  /** What a Markdown tab with this note open is titled: its bookmark's name if it has one, else the file's own name. */
+  private markdownTabTitle(path: string): string {
+    return this.bookmarkStore.findMarkdown(path)?.title ?? basename(path);
+  }
+
+  /** Drops every Markdown bookmark whose file no longer exists — run whenever an empty Markdown page loads or comes back (a new tab, a closed note). */
+  private async refreshMarkdownBookmarks(): Promise<void> {
+    const paths = this.bookmarkStore.listMarkdown().flatMap((bookmark) => (bookmark.path ? [bookmark.path] : []));
+    const missing = (
+      await Promise.all(paths.map(async (path) => ((await stat(path).then(() => true, () => false)) ? null : path)))
+    ).filter((path): path is string => path !== null);
+    if (this.bookmarkStore.removeMarkdownPaths(missing)) {
+      this.historyController.pushBookmarksToAll();
+      this.syncFileTabTitles();
+      this.emitState();
+    }
+  }
+
+  /**
+   * Opens a bookmarked note in a Markdown tab. If the file has gone missing
+   * since the list was shown, its bookmark is dropped instead.
+   * @param id The Markdown tab to open it in.
+   * @param bookmarkId The bookmark picked from the toolbar's search.
+   */
+  public async openMarkdownBookmark(id: string, bookmarkId: string): Promise<void> {
+    const bookmark = this.bookmarkStore.listMarkdown().find((candidate) => candidate.id === bookmarkId);
+    if (!bookmark?.path || this.states.get(id)?.kind !== 'markdown') {
+      return;
+    }
+    if (!(await stat(bookmark.path).then(() => true, () => false))) {
+      this.bookmarkStore.remove(bookmark.id);
+      this.historyController.pushBookmarksToAll();
+      this.syncFileTabTitles();
+      this.emitState();
+      return;
+    }
+    await this.loadMarkdownFromPath(id, bookmark.path, 'reset');
   }
 
   /**
@@ -1045,7 +1760,14 @@ export class TabManager {
     if (!id) {
       return;
     }
-    const run = action === 'pdf' ? this.exportToPdf(id) : this.exportDocuments(id);
+    const run =
+      action === 'pdf'
+        ? this.exportToPdf(id)
+        : action === 'markdown'
+          ? this.exportMarkdown(id, 'md')
+          : action === 'text'
+            ? this.exportMarkdown(id, 'txt')
+            : this.exportDocuments(id);
     run.catch((error: unknown) => console.error(`[export] ${action} failed:`, error));
   }
 
@@ -1392,6 +2114,12 @@ export class TabManager {
     this.commentController.disposeTab(id);
     this.textBoxController.disposeTab(id);
     this.penController.disposeTab(id);
+    markdownDocuments.close(id);
+    markdownPagesReady.delete(id);
+    markdownRunning.delete(id);
+    markdownSaveErrorShown.delete(id);
+    markdownCspRemovers.get(id)?.();
+    markdownCspRemovers.delete(id);
     this.unlinkTab(id);
 
     if (this.grabbedTabId === id) {
@@ -1607,6 +2335,13 @@ export class TabManager {
     if (shown?.kind === 'pdf' && shown.fileName === null) {
       void this.refreshPdfBookmarks();
     }
+    if (shown?.kind === 'markdown') {
+      if (shown.fileName === null) {
+        void this.refreshMarkdownBookmarks();
+      } else {
+        void this.refreshMarkdownIfChanged(id);
+      }
+    }
     this.pushHighlighterState();
     this.pushCommentToolState();
     this.pushTextToolState();
@@ -1723,6 +2458,10 @@ export class TabManager {
 
   /** Navigates a tab back one entry in its history, if possible. A no-op for a terminal tab; see `navigate`. */
   public goBack(id: string): BrowserState {
+    if (this.states.get(id)?.kind === 'markdown') {
+      void this.navigateMarkdownHistory(id, -1);
+      return this.getState();
+    }
     const history = this.states.get(id)?.kind === 'browser' ? this.views.get(id)?.webContents.navigationHistory : undefined;
     if (history?.canGoBack()) {
       history.goBack();
@@ -1732,6 +2471,10 @@ export class TabManager {
 
   /** Navigates a tab forward one entry in its history, if possible. A no-op for a terminal tab; see `navigate`. */
   public goForward(id: string): BrowserState {
+    if (this.states.get(id)?.kind === 'markdown') {
+      void this.navigateMarkdownHistory(id, 1);
+      return this.getState();
+    }
     const history = this.states.get(id)?.kind === 'browser' ? this.views.get(id)?.webContents.navigationHistory : undefined;
     if (history?.canGoForward()) {
       history.goForward();
@@ -1811,9 +2554,11 @@ export class TabManager {
         ? this.createTerminalTab(state.workspaceId)
         : state.kind === 'pdf'
           ? this.createPdfTab(state.workspaceId)
-          : state.kind === 'history'
-            ? this.createHistoryTab(state.workspaceId)
-            : this.createTab(state.url, state.workspaceId);
+          : state.kind === 'markdown'
+            ? this.createMarkdownTab(state.workspaceId, state.filePath ?? undefined)
+            : state.kind === 'history'
+              ? this.createHistoryTab(state.workspaceId)
+              : this.createTab(state.url, state.workspaceId);
     if (newState.activeTabId) {
       // `createTab`/`createTerminalTab` both append at the end of the
       // workspace's own tabs and activate it; this repositions it next to
@@ -1844,6 +2589,9 @@ export class TabManager {
   public async exportToPdf(id: string): Promise<string | null> {
     const view = this.views.get(id);
     const state = this.states.get(id);
+    if (state?.kind === 'markdown') {
+      return this.exportMarkdown(id, 'pdf');
+    }
     // Mirrors the toolbar's export menu: not offered on a PDF tab (see `exportPdfFile`) or the blank home page.
     if (
       !view ||
@@ -2546,7 +3294,7 @@ export class TabManager {
   public removeBookmark(id: string): BrowserState {
     this.bookmarkStore.remove(id);
     this.historyController.pushBookmarksToAll();
-    this.syncPdfTabTitles();
+    this.syncFileTabTitles();
     this.emitState();
     return this.getState();
   }
@@ -2560,6 +3308,10 @@ export class TabManager {
    * @returns The full browser state after the change.
    */
   public toggleBookmark(id: string): BrowserState {
+    // While a note is being edited Ctrl+B is Bold, as in any editor.
+    if (this.formatMarkdown(id, 'bold')) {
+      return this.getState();
+    }
     const state = this.states.get(id);
     if (state?.kind === 'pdf') {
       // A PDF is bookmarked by its path on disk, and only once a file is open.
@@ -2569,7 +3321,19 @@ export class TabManager {
       }
       this.bookmarkStore.togglePdf(path);
       this.historyController.pushBookmarksToAll();
-      this.syncPdfTabTitles();
+      this.syncFileTabTitles();
+      this.emitState();
+      return this.getState();
+    }
+    if (state?.kind === 'markdown') {
+      // A note is bookmarked by its path on disk, and only once one is open.
+      const path = markdownDocuments.pathOf(id);
+      if (!path) {
+        return this.getState();
+      }
+      this.bookmarkStore.toggleMarkdown(path);
+      this.historyController.pushBookmarksToAll();
+      this.syncFileTabTitles();
       this.emitState();
       return this.getState();
     }
@@ -2596,7 +3360,7 @@ export class TabManager {
     }
     this.bookmarkStore.addPdf(name, path);
     this.historyController.pushBookmarksToAll();
-    this.syncPdfTabTitles();
+    this.syncFileTabTitles();
     this.emitState();
     return this.getState();
   }
@@ -2606,13 +3370,13 @@ export class TabManager {
     return this.bookmarkStore.findPdf(path)?.title ?? basename(path);
   }
 
-  /** Re-titles every PDF tab from its file's bookmark (or lack of one) — call after bookmarks change. Doesn't emit; the caller does. */
-  private syncPdfTabTitles(): void {
+  /** Re-titles every PDF and Markdown tab from its file's bookmark (or lack of one) — call after bookmarks change. Doesn't emit; the caller does. */
+  private syncFileTabTitles(): void {
     for (const [id, state] of this.states) {
-      if (state.kind !== 'pdf' || !state.filePath) {
+      if ((state.kind !== 'pdf' && state.kind !== 'markdown') || !state.filePath) {
         continue;
       }
-      const title = this.pdfTabTitle(state.filePath);
+      const title = state.kind === 'pdf' ? this.pdfTabTitle(state.filePath) : this.markdownTabTitle(state.filePath);
       if (title !== state.title) {
         this.states.set(id, { ...state, title });
       }
@@ -2632,7 +3396,7 @@ export class TabManager {
     ).filter((path): path is string => path !== null);
     if (this.bookmarkStore.removePdfPaths(missing)) {
       this.historyController.pushBookmarksToAll();
-      this.syncPdfTabTitles();
+      this.syncFileTabTitles();
       this.emitState();
     }
   }
@@ -2651,7 +3415,7 @@ export class TabManager {
     if (!(await stat(bookmark.path).then(() => true, () => false))) {
       this.bookmarkStore.remove(bookmark.id);
       this.historyController.pushBookmarksToAll();
-      this.syncPdfTabTitles();
+      this.syncFileTabTitles();
       this.emitState();
       return;
     }
@@ -2839,9 +3603,10 @@ export class TabManager {
    * button shows as disabled.
    *
    * Every tool needs an active tab, and none works on a History tab. Beyond the
-   * laser pointer, none can mark a terminal, the blank home page, or a PDF tab
-   * with no file open, and the crop tool only exists
-   * for a PDF.
+   * laser pointer, none can mark a terminal, the blank home page, or a PDF or
+   * Markdown tab with no file open; the crop tool only exists for a PDF, the
+   * text box tool doesn't exist for a note, and a note's marks go on its
+   * rendered view, so none works while it's being edited.
    * @param tool Which tool is being switched on.
    * @returns Whether it may be.
    */
@@ -2857,6 +3622,7 @@ export class TabManager {
       active.kind === 'terminal' ||
       active.kind === 'history' ||
       (active.kind === 'pdf' && active.fileName === null) ||
+      (active.kind === 'markdown' && (active.fileName === null || active.mode === 'edit' || tool === 'text')) ||
       (active.kind === 'browser' && active.url === HOME_URL)
     ) {
       return false;
@@ -2925,6 +3691,10 @@ export class TabManager {
 
   /** Toggles the laser pointer to whichever state it isn't currently in. */
   public toggleLaserPointer(): BrowserState {
+    // While a note is being edited Ctrl+I is Italic, as in any editor.
+    if (this.activeTabId && this.formatMarkdown(this.activeTabId, 'italic')) {
+      return this.getState();
+    }
     return this.setLaserPointer(!this.laserPointerActive);
   }
 
@@ -3165,8 +3935,8 @@ export class TabManager {
 
   /**
    * Whether the find bar can search a tab: a browser tab's page, a terminal's
-   * buffer, or a PDF with a file open — not the History tab (its table has
-   * its own search box) and not an empty PDF tab.
+   * buffer, or a PDF or Markdown note that's open — not the History tab (its
+   * table has its own search box) and not an empty PDF or Markdown tab.
    * @param tabId The tab to ask about.
    */
   private canFind(tabId: string | null): boolean {
@@ -3174,7 +3944,11 @@ export class TabManager {
     if (!state) {
       return false;
     }
-    return state.kind === 'browser' || state.kind === 'terminal' || (state.kind === 'pdf' && state.fileName !== null);
+    return (
+      state.kind === 'browser' ||
+      state.kind === 'terminal' ||
+      ((state.kind === 'pdf' || state.kind === 'markdown') && state.fileName !== null)
+    );
   }
 
   /**
@@ -3445,7 +4219,10 @@ export class TabManager {
   public revertPage(id: string): BrowserState {
     // Nothing can have been marked on the blank home page or an empty PDF tab — the toolbar button is disabled there, and so is this.
     const target = this.states.get(id);
-    if ((target?.kind === 'browser' && target.url === HOME_URL) || (target?.kind === 'pdf' && target.fileName === null)) {
+    if (
+      (target?.kind === 'browser' && target.url === HOME_URL) ||
+      ((target?.kind === 'pdf' || target?.kind === 'markdown') && target.fileName === null)
+    ) {
       return this.getState();
     }
     if (this.states.get(id)?.kind === 'browser') {
@@ -3456,6 +4233,8 @@ export class TabManager {
     } else if (this.states.get(id)?.kind === 'pdf') {
       // The page clears its own marks and reports the empty set back, which removes them from the store too.
       this.views.get(id)?.webContents.send(IpcChannel.PdfClear);
+    } else if (this.states.get(id)?.kind === 'markdown') {
+      this.views.get(id)?.webContents.send(IpcChannel.MarkdownClear);
     }
     return this.getState();
   }
@@ -4249,7 +5028,8 @@ export class TabManager {
         .filter((state) => (this.registry.getLinkGroup(state.id)?.[0] ?? state.id) === state.id)
         .map((state) => ({
           kind: state.kind,
-          url: state.kind === 'browser' ? state.url : '',
+          // A note's tab comes back with the note it had open.
+          url: state.kind === 'browser' ? state.url : state.kind === 'markdown' ? (state.filePath ?? '') : '',
           workspaceId: state.workspaceId,
           active: (this.registry.getLinkGroup(state.id) ?? [state.id]).includes(this.activeTabId ?? ''),
         })),
@@ -4463,6 +5243,12 @@ export class TabManager {
         if (!cmdOrCtrl || input.alt) {
           return;
         }
+        // Ctrl+Left/Right still switches tabs from a terminal, as it always has (the menu used to do it).
+        if (!input.shift && (input.key === 'ArrowLeft' || input.key === 'ArrowRight')) {
+          event.preventDefault();
+          owner.cycleTab(input.key === 'ArrowRight' ? 1 : -1);
+          return;
+        }
         // Ctrl+` (no shell or readline binding uses backtick) hands OS
         // keyboard focus back to the chrome, so every other shortcut works
         // normally again. See this method's own doc comment for why
@@ -4629,6 +5415,35 @@ export class TabManager {
             event.preventDefault();
             owner.revertPage(id);
             return;
+          case 'u':
+            // Make a link (the editor's right-click menu has the same command); a no-op unless a note is being edited.
+            event.preventDefault();
+            owner.formatMarkdown(id, 'link');
+            return;
+          case 'l':
+            event.preventDefault();
+            owner.formatMarkdown(id, 'latex');
+            return;
+          case 'k':
+            event.preventDefault();
+            owner.formatMarkdown(id, 'code');
+            return;
+          case 'g':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+G` ("Toggle View/Edit"); a no-op off a Markdown tab.
+            event.preventDefault();
+            owner.toggleMarkdownMode(id);
+            return;
+          case 'c':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+C` ("Close Note or PDF"): the toolbar's Close button, on a PDF or Markdown tab.
+            event.preventDefault();
+            owner.closePdfFile(id);
+            owner.closeMarkdownFile(id);
+            return;
+          case 'm':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+M` ("New Markdown Tab").
+            event.preventDefault();
+            owner.createMarkdownTab();
+            return;
           case 'h':
             // Same as buildMenu.ts's `CmdOrCtrl+Shift+H` ("New History Tab").
             event.preventDefault();
@@ -4654,9 +5469,10 @@ export class TabManager {
 
       switch (key) {
         case 'o':
-          // Same as buildMenu.ts's `CmdOrCtrl+O` ("Open PDF"); a no-op on non-PDF tabs.
+          // Same as buildMenu.ts's `CmdOrCtrl+O` ("Open PDF"); each is a no-op on a tab of the other kind.
           event.preventDefault();
           void owner.openPdfFile(id);
+          void owner.openMarkdownFile(id);
           return;
         case 'w':
           event.preventDefault();
@@ -4691,7 +5507,13 @@ export class TabManager {
           // this app must never shadow. The two tools are mutually
           // exclusive (`setHighlighter`/`setPen`), so at most one branch
           // below ever actually runs.
-          if (owner.states.get(id)?.kind === 'pdf') {
+          if (owner.states.get(id)?.kind === 'markdown') {
+            // A note's page keeps its own history of marks; it undoes when told to.
+            if (owner.highlighterActive || owner.penActive) {
+              event.preventDefault();
+              owner.views.get(id)?.webContents.send(IpcChannel.MarkdownUndo);
+            }
+          } else if (owner.states.get(id)?.kind === 'pdf') {
             // A PDF page keeps its own history (marks and crops); it undoes when told to.
             if (owner.highlighterActive || owner.penActive || owner.cropActive) {
               event.preventDefault();
@@ -4706,7 +5528,12 @@ export class TabManager {
           }
           return;
         case 'y':
-          if (owner.states.get(id)?.kind === 'pdf') {
+          if (owner.states.get(id)?.kind === 'markdown') {
+            if (owner.highlighterActive || owner.penActive) {
+              event.preventDefault();
+              owner.views.get(id)?.webContents.send(IpcChannel.MarkdownRedo);
+            }
+          } else if (owner.states.get(id)?.kind === 'pdf') {
             if (owner.highlighterActive || owner.penActive || owner.cropActive) {
               event.preventDefault();
               owner.views.get(id)?.webContents.send(IpcChannel.PdfRedo);
@@ -4750,12 +5577,13 @@ export class TabManager {
           owner.requestFocusAddressBar();
           return;
         case 'arrowleft':
-          event.preventDefault();
-          owner.cycleTab(-1);
-          return;
         case 'arrowright':
+          // In a text box (a page's field, the note editor) the keys belong to the caret: a word jump.
+          if (hasEditableFocus(wc.id)) {
+            return;
+          }
           event.preventDefault();
-          owner.cycleTab(1);
+          owner.cycleTab(key === 'arrowright' ? 1 : -1);
           return;
         case 'arrowup':
           event.preventDefault();

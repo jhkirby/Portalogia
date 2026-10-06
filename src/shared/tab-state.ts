@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -66,8 +66,31 @@ export interface HistoryTabState {
   readonly workspaceId: string;
 }
 
-/** Everything the chrome UI needs to render one tab: browser, terminal, PDF or history. */
-export type TabState = BrowserTabState | TerminalTabState | PdfTabState | HistoryTabState;
+/**
+ * A Markdown note, viewed rendered or edited as source in its own
+ * `WebContentsView` (`markdown.html`) — see `TabManager.createMarkdownTab`
+ * and `MarkdownController`. No URL or favicon applies; `title` is the open
+ * file's name, or "Markdown" before one is opened.
+ */
+export interface MarkdownTabState {
+  readonly kind: 'markdown';
+  readonly id: string;
+  readonly title: string;
+  /** The open file's name (with its extension), or `null` before one is opened. Always editable in the chrome toolbar. */
+  readonly fileName: string | null;
+  /** The open file's full path on disk, or `null` before one is opened — what a Markdown bookmark saves. */
+  readonly filePath: string | null;
+  /** Whether the page shows the rendered note (`'view'`) or its source in an editor (`'edit'`). */
+  readonly mode: 'view' | 'edit';
+  /** Whether following a link has left an earlier note this tab can step back to. */
+  readonly canGoBack: boolean;
+  /** Whether stepping back has left a later note this tab can step forward to. */
+  readonly canGoForward: boolean;
+  readonly workspaceId: string;
+}
+
+/** Everything the chrome UI needs to render one tab: browser, terminal, PDF, Markdown or history. */
+export type TabState = BrowserTabState | TerminalTabState | PdfTabState | MarkdownTabState | HistoryTabState;
 
 /** A named, colored group that a tab belongs to (see `WorkspaceBar`). */
 export interface WorkspaceState {
@@ -80,17 +103,18 @@ export interface WorkspaceState {
 }
 
 /**
- * A saved page, or a saved PDF file on disk, persisted across restarts by the
- * main process. A PDF bookmark's `url` is the file's `file://` URL (never
- * navigable — a bookmark is only ever navigated to when `kind` is `'page'`)
- * and `path` is the file's location, which is what it's matched and reopened by.
+ * A saved page, or a saved PDF or Markdown file on disk, persisted across
+ * restarts by the main process. A file bookmark's `url` is the file's
+ * `file://` URL (never navigable — a bookmark is only ever navigated to when
+ * `kind` is `'page'`) and `path` is the file's location, which is what it's
+ * matched and reopened by.
  */
 export interface BookmarkState {
   readonly id: string;
   readonly title: string;
   readonly url: string;
-  readonly kind: 'page' | 'pdf';
-  /** The PDF's path on disk; `null` for a page. */
+  readonly kind: 'page' | 'pdf' | 'markdown';
+  /** The file's path on disk; `null` for a page. */
   readonly path: string | null;
 }
 

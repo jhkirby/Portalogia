@@ -1,13 +1,13 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-06
 
 import { useState, type KeyboardEvent } from 'react';
 
 interface BookmarkPopupProps {
-  /** `'pdf'` shows the file's path (read-only: it's where the file is, not something to retype) where a page shows its URL. */
-  readonly variant?: 'page' | 'pdf';
+  /** `'pdf'` and `'markdown'` show the file's path (read-only: it's where the file is, not something to retype) where a page shows its URL. */
+  readonly variant?: 'page' | 'pdf' | 'markdown';
   /** The active tab's URL when the popup opened — editable before saving. */
   readonly url: string;
   /** The active tab's title when the popup opened — editable before saving. */
@@ -42,7 +42,7 @@ export function BookmarkPopup({
   onSave,
   onClose,
 }: BookmarkPopupProps) {
-  const isPdf = variant === 'pdf';
+  const isPdf = variant !== 'page';
   const [name, setName] = useState(title);
   const [url, setUrl] = useState(initialUrl);
 

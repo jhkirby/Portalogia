@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-11 */
+   Last Modified: 2026-10-06 */
 
 :root {
   /* Also the titlebar's own height now that the tab strip and
@@ -49,4 +49,15 @@
 
   --size-font-sm: 12px;
   --size-font-md: 13px;
+}
+
+/* Markdown notes (`markdown.html`). */
+:root {
+  /* The note's text column — in `rem`, so it grows with zoom and the marks drawn in `em`s stay on the same words. */
+  --md-column-width: 46rem;
+  --md-editor-font-size: 0.9rem;
+  --md-font-ui: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --md-font-body: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --md-font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+  --md-panel-width: 15rem;
 }
