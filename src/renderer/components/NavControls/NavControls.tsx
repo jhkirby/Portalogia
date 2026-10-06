@@ -4,6 +4,7 @@
 // Last Modified: 2026-09-18
 
 import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
+import { ReloadIcon, StopIcon } from '../icons';
 
 interface NavControlsProps {
   /** Whether the active tab has back history. */
@@ -57,7 +58,7 @@ export function NavControls({
         aria-label={isLoading ? 'Stop' : 'Reload'}
         data-tooltip={isLoading ? 'Stop' : `Reload (${formatShortcut('R')})`}
       >
-        {isLoading ? '✕' : '⟳'}
+        {isLoading ? <StopIcon size={15} /> : <ReloadIcon size={15} />}
       </button>
       <button
         type="button"

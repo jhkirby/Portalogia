@@ -17,6 +17,7 @@ import {
   OpenInNewWindowIcon,
   PenIcon,
   RevertIcon,
+  SearchIcon,
   ShieldIcon,
   TextBoxIcon,
 } from '../icons';
@@ -316,7 +317,7 @@ export function PageActions({
         aria-label="Search tabs"
         data-tooltip={`Search tabs (${formatShortcut('K')})`}
       >
-        ⌕
+        <SearchIcon />
       </button>
       <button
         type="button"
