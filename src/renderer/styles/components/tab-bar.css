@@ -46,6 +46,12 @@
   gap: var(--size-spacing-xs);
 
   background: var(--color-tab-bg);
+  /* Always 1px (transparent unless the rule below colors it) so a tab never
+     changes size as it is hovered or selected. No bottom edge: the tab sits
+     flush on the toolbar. */
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-bottom: none;
   border-radius: var(--size-radius-sm) var(--size-radius-sm) 0 0;
 
   font-size: var(--size-font-md);
@@ -64,6 +70,13 @@
    non-hover one. */
 .tab-bar__tab:hover {
   background: var(--color-tab-hover-bg);
+}
+
+/* Outlined only while at rest: not the active tab, not part of a multi-selection,
+   not hovered, not being dragged. The same thin line color as the chrome's other
+   borders (the sidebar edge, the toolbar's bottom line), so it follows the theme. */
+.tab-bar__tab:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging):not(:hover) {
+  border-color: var(--color-chrome-border);
 }
 
 .tab-bar__tab--active {
@@ -94,28 +107,13 @@
   background: var(--color-tab-dragging-bg);
 }
 
-/* Drop-position indicator: one floating line at the boundary between two
-   tabs (or past the last tab, past the row's own edge), positioned via
-   `indicatorX` (TabBar.tsx) rather than drawn as either neighboring tab's
-   own edge — hovering the right half of one tab and the left half of the
-   next are the same boundary and must render identically, which drawing
-   it as a `box-shadow` on whichever tab happens to be underneath the
-   cursor can't guarantee. `.tab-bar`'s own `position: relative` is what
-   this anchors against; centered on the boundary point via `margin-left`
-   rather than `transform: translateX` so its pixel `left` (already an
-   integer from `getBoundingClientRect`) doesn't pick up a sub-pixel
-   offset that would blur it. */
-.tab-bar__drop-indicator {
-  position: absolute;
-  top: 6px;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-
-  background: var(--color-accent-text);
-  border-radius: 1px;
-
-  pointer-events: none;
+/* While a tab from another window is dragged over this strip, the slot it
+   would take is held open as an empty tab-sized gap (see `TabBar`). */
+.tab-bar__placeholder {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: var(--size-tab-max-width);
+  height: calc(var(--size-tab-bar-height) - 14px);
 }
 
 .tab-bar__favicon {

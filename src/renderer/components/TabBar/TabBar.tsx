@@ -7,6 +7,7 @@ import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent }
 import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
+import { previewTabOrder } from '../../lib/previewTabOrder';
 import { formatShortcut } from '../../lib/shortcuts';
 import { GlobeIcon, HistoryIcon } from '../icons';
 
@@ -107,13 +108,6 @@ export function TabBar({
   }
   const ghostTab = draggedId !== null && !draggedTab ? draggedTabRef.current : null;
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  // The floating drop-indicator line's x position, in pixels relative to
-  // `.tab-bar`'s own left edge (`tabBarRef`) — a single line shared by
-  // every tab rather than each one drawing its own edge highlight, so
-  // hovering the right half of one tab and the left half of its neighbor
-  // (the same boundary, reported by two different `Tab`s) visibly render
-  // as the exact same line instead of two different-looking edges.
-  const [indicatorX, setIndicatorX] = useState<number | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
 
   const endDrag = (): void => {
@@ -122,14 +116,6 @@ export function TabBar({
     draggedTabRef.current = null;
     setDraggedId(null);
     setDropTarget(null);
-    setIndicatorX(null);
-  };
-
-  const setIndicatorAtClientX = (edgeClientX: number): void => {
-    const barRect = tabBarRef.current?.getBoundingClientRect();
-    if (barRect) {
-      setIndicatorX(edgeClientX - barRect.left);
-    }
   };
 
   // Reads the dragged tab's id from `dataTransfer`, not the local
@@ -165,11 +151,6 @@ export function TabBar({
     const lastTab = tabs[tabs.length - 1];
     if (!overTab && lastTab) {
       setDropTarget({ id: lastTab.id, position: 'after' });
-      const lastTabEl = event.currentTarget.querySelector('.tab-bar__tab:last-of-type');
-      const lastTabRect = lastTabEl?.getBoundingClientRect();
-      if (lastTabRect) {
-        setIndicatorAtClientX(lastTabRect.right);
-      }
     }
   };
 
@@ -177,6 +158,30 @@ export function TabBar({
     event.preventDefault();
     handleDrop(event);
   };
+
+  // While a tab from this strip is dragged, the strip previews where a release
+  // would leave it: the dragged tab(s) sit in the target slot and the others
+  // make room. Done with CSS `order`, not by reordering the elements, because
+  // moving the dragged element in the DOM mid-drag cancels the native drag.
+  // Nothing is committed until the drop (`handleDrop` -> `onReorder`).
+  const draggedGroup =
+    draggedId === null ? [] : selectedTabIds.includes(draggedId) ? selectedTabIds.filter((id) => tabs.some((tab) => tab.id === id)) : [draggedId];
+  const displayIds = previewTabOrder(
+    tabs.map((tab) => tab.id),
+    draggedGroup,
+    dropTarget?.id ?? null,
+    dropTarget?.position ?? 'before',
+  );
+  const orderOf = (id: string): number => {
+    const index = displayIds.indexOf(id);
+    return index === -1 ? displayIds.length : index;
+  };
+  // A tab dragged in from another window has no element here to move, so the
+  // slot it would take is held open with a blank placeholder instead.
+  const foreignInsertAt =
+    draggedId === null && dropTarget !== null
+      ? tabs.findIndex((tab) => tab.id === dropTarget.id) + (dropTarget.position === 'after' ? 1 : 0)
+      : null;
 
   return (
     <div
@@ -193,6 +198,7 @@ export function TabBar({
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
           isGhost={tab === ghostTab}
+          order={foreignInsertAt !== null && orderOf(tab.id) >= foreignInsertAt ? orderOf(tab.id) + 1 : orderOf(tab.id)}
           isActive={tab.id === activeTabId}
           isSelected={selectedTabIds.includes(tab.id)}
           onToggleSelect={onToggleSelect}
@@ -214,9 +220,12 @@ export function TabBar({
               }),
             );
           }}
-          onDragOver={(position, edgeClientX) => {
+          onDragOver={(position) => {
+            // Over one of the dragged tabs' own slots: the preview is already right.
+            if (draggedGroup.includes(tab.id)) {
+              return;
+            }
             setDropTarget({ id: tab.id, position });
-            setIndicatorAtClientX(edgeClientX);
           }}
           onDragEnd={(accepted) => {
             if (tornOffRef.current) {
@@ -271,21 +280,21 @@ export function TabBar({
           }}
         />
       ))}
+      {foreignInsertAt !== null && (
+        <div className="tab-bar__placeholder" style={{ order: foreignInsertAt }} aria-hidden="true" />
+      )}
       {/* At the per-workspace limit the "+" goes away entirely (main enforces it too) and returns once a tab closes. */}
       {tabs.length < MAX_TABS_PER_WORKSPACE && (
         <button
           type="button"
           className="tab-bar__new chrome-tooltip"
+          style={{ order: displayIds.length + 2 }}
           aria-label="New tab"
           onClick={onNewTab}
           data-tooltip={`New tab (${formatShortcut('N')})`}
         >
           +
         </button>
-      )}
-      {/* One floating line shared by every tab — see `indicatorX`'s own doc comment for why this isn't drawn per-tab. */}
-      {indicatorX !== null && (
-        <div className="tab-bar__drop-indicator" style={{ left: indicatorX }} aria-hidden="true" />
       )}
     </div>
   );
@@ -305,8 +314,10 @@ interface TabProps {
   /** Whether this is the tab currently being dragged (mouse) or grabbed (Ctrl+Space) — either way, drives its in-place `--dragging` highlight. */
   readonly isDragging: boolean;
   readonly onDragStart: () => void;
-  /** Reports which half of this tab is being hovered and that half's edge, in client (viewport) coordinates — `TabBar` turns the latter into `indicatorX`, its one shared floating drop-indicator line's position. */
-  readonly onDragOver: (position: DropPosition, edgeClientX: number) => void;
+  /** Reports which half of this tab is being hovered; `TabBar` previews the dragged tab landing on that side. */
+  readonly onDragOver: (position: DropPosition) => void;
+  /** Where this tab sits in the strip's current (possibly previewed) order, as a CSS `order`. */
+  readonly order: number;
   /** `accepted`: the drag ended on a drop target (any `dropEffect` but `'none'`). */
   readonly onDragEnd: (accepted: boolean) => void;
   /** See `TabBarProps.onDragEndOutside` — forwarded straight through, this tab already has its own `id` in scope. */
@@ -334,6 +345,7 @@ function Tab({
   onDragEndOutside,
   onDragMove,
   isGhost,
+  order,
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
 
@@ -369,7 +381,7 @@ function Tab({
     event.dataTransfer.dropEffect = 'move';
     const rect = event.currentTarget.getBoundingClientRect();
     const isLeftHalf = event.clientX - rect.left < rect.width / 2;
-    onDragOver(isLeftHalf ? 'before' : 'after', isLeftHalf ? rect.left : rect.right);
+    onDragOver(isLeftHalf ? 'before' : 'after');
   };
 
   // `dropEffect` reflects whatever the drop target's own `dragover`
@@ -408,7 +420,7 @@ function Tab({
         }
       }}
       onKeyDown={handleKeyDown}
-      style={isGhost ? { position: 'absolute', opacity: 0, pointerEvents: 'none' } : undefined}
+      style={isGhost ? { position: 'absolute', opacity: 0, pointerEvents: 'none', order } : { order }}
       onDragStart={handleDragStart}
       onDrag={(event) => onDragMove(event.screenX, event.screenY, event.clientX, event.clientY)}
       onDragOver={handleDragOver}
