@@ -60,6 +60,7 @@ import type { BookmarkStore } from './BookmarkStore';
 import type { CommentController } from './CommentController';
 import type { TextBoxController } from './TextBoxController';
 import type { HistoryController } from './HistoryController';
+import type { AdBlocker } from '../adblock/AdBlocker';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -230,6 +231,8 @@ export class TabManager {
    * @param historyController The browsing history — recording, serving and
    *   clearing it — shared the same way, since a History tab can move
    *   between windows. See `HistoryController`'s own class doc comment.
+   * @param adBlocker The app-wide ad blocker; asked whether a page's popup
+   *   should be dropped.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -243,6 +246,7 @@ export class TabManager {
     private readonly penController: PenController,
     private readonly textBoxController: TextBoxController,
     private readonly historyController: HistoryController,
+    private readonly adBlocker: AdBlocker,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -4227,7 +4231,13 @@ export class TabManager {
 
     // Links that would open a new OS window (target="_blank", window.open)
     // become a new tab instead — this is a browser, not an app shell.
+    const contentsId = wc.id;
+    wc.once('destroyed', () => this.adBlocker.forget(contentsId));
     wc.setWindowOpenHandler(({ url }) => {
+      // Popups to ad hosts, and floods of them, are dropped rather than made tabs.
+      if (this.adBlocker.shouldBlockPopup(url, wc.getURL(), contentsId)) {
+        return { action: 'deny' };
+      }
       if (isNavigableUrl(url)) {
         this.createTab(url);
       }

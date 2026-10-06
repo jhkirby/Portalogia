@@ -4,7 +4,8 @@
 // Last Modified: 2026-09-11
 
 import { join } from 'node:path';
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import type { AdBlocker } from '../adblock/AdBlocker';
 
 /**
  * Chrome-window-only content-security-policy; tab content is exempt.
@@ -25,7 +26,7 @@ function buildChromeCsp(isDev: boolean): string {
  * `contentView` by `TabManager` — never in this window's own `webContents`.
  * @returns The created window.
  */
-export function createMainWindow(options: { showWhenReady?: boolean } = {}): BrowserWindow {
+export function createMainWindow(adBlocker: AdBlocker, options: { showWhenReady?: boolean } = {}): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -68,7 +69,7 @@ export function createMainWindow(options: { showWhenReady?: boolean } = {}): Bro
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  applyChromeContentSecurityPolicy(window);
+  applyChromeContentSecurityPolicy(window, adBlocker);
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
   if (!app.isPackaged && devServerUrl) {
@@ -88,30 +89,22 @@ export function createMainWindow(options: { showWhenReady?: boolean } = {}): Bro
 
 /**
  * Attaches a strict CSP to responses for the chrome window's own document,
- * identified by URL rather than applied session-wide — tabs share the same
- * default session and must be free to load whatever CSP (or none) the
- * sites they visit send.
+ * identified by URL and by which window it's for rather than applied
+ * session-wide - tabs share the same default session and must be free to
+ * load whatever CSP (or none) the sites they visit send. Registered with the
+ * ad blocker, which owns the session's single `onHeadersReceived` listener.
  * @param window The chrome window to protect.
+ * @param adBlocker Where to register the CSP.
  */
-function applyChromeContentSecurityPolicy(window: BrowserWindow): void {
+function applyChromeContentSecurityPolicy(window: BrowserWindow, adBlocker: AdBlocker): void {
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
-  const patterns = devServerUrl ? [`${devServerUrl}/*`] : ['file://*/*'];
-  session.defaultSession.webRequest.onHeadersReceived(
-    { urls: patterns },
-    (details, callback) => {
-      if (details.webContentsId !== window.webContents.id) {
-        // exactOptionalPropertyTypes rejects passing `undefined` through
-        // for an optional property — omit it entirely instead when there
-        // are no headers to forward.
-        callback(details.responseHeaders ? { responseHeaders: details.responseHeaders } : {});
-        return;
-      }
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [buildChromeCsp(devServerUrl !== undefined)],
-        },
-      });
-    },
-  );
+  const prefix = devServerUrl ? `${devServerUrl}/` : 'file://';
+  const csp = buildChromeCsp(devServerUrl !== undefined);
+  const remove = adBlocker.addHeadersInterceptor((details) => {
+    if (details.webContentsId !== window.webContents.id || !details.url.startsWith(prefix)) {
+      return null;
+    }
+    return { responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } };
+  });
+  window.once('closed', remove);
 }

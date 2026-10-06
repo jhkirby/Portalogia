@@ -6,6 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IpcChannel,
+  type AdBlockState,
   type ColorPickerColorChangedPayload,
   type IpcResult,
   type NorthstarApi,
@@ -150,6 +151,14 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.UiToggleTheme, handler);
   },
   setNativeTheme: (theme) => ipcRenderer.send(IpcChannel.ThemeSet, { theme }),
+  getAdBlockState: () => ipcRenderer.invoke(IpcChannel.AdBlockGetState),
+  onAdBlockState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: AdBlockState): void => listener(state);
+    ipcRenderer.on(IpcChannel.AdBlockState, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.AdBlockState, handler);
+  },
+  setAdBlockEnabled: (enabled) => ipcRenderer.send(IpcChannel.AdBlockSetEnabled, { enabled }),
+  setAdBlockSiteAllowed: (host, allowed) => ipcRenderer.send(IpcChannel.AdBlockSetSiteAllowed, { host, allowed }),
   setAccentColor: (rgb) => ipcRenderer.send(IpcChannel.AccentColorSet, rgb),
 
   minimizeWindow: () => ipcRenderer.send(IpcChannel.WindowMinimize),

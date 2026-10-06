@@ -4,6 +4,7 @@
 // Last Modified: 2026-10-05
 
 import { Menu, type MenuItemConstructorOptions } from 'electron';
+import type { AdBlocker } from '../adblock/AdBlocker';
 import type { TabManager } from '../browser/TabManager';
 
 /**
@@ -29,12 +30,14 @@ import type { TabManager } from '../browser/TabManager';
  *   twin of the frontmost window's active tab in a brand-new window, leaving
  *   that tab (and everything else about the frontmost window) untouched —
  *   see "Open Tab in New Window" below.
+ * @param adBlocker The app-wide ad blocker, for the View menu's on/off switch.
  */
 export function buildMenu(
   getTabManager: () => TabManager | null,
   getActiveTabId: () => string | null,
   onNewWindow: () => void,
   onOpenWorkspaceInNewWindow: () => void,
+  adBlocker: AdBlocker,
 ): void {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -247,6 +250,32 @@ export function buildMenu(
           label: 'Search Tabs…',
           accelerator: 'CmdOrCtrl+K',
           click: () => getTabManager()?.requestTabSearch(),
+        },
+        {
+          label: 'Ad Blocker',
+          type: 'checkbox',
+          checked: adBlocker.getState().enabled,
+          click: (item) => adBlocker.setEnabled(item.checked),
+        },
+        {
+          label: 'Toggle Ad Blocker for This Site',
+          accelerator: 'CmdOrCtrl+Shift+B',
+          click: () => {
+            const state = getTabManager()?.getState();
+            const tab = state?.tabs.find((candidate) => candidate.id === state.activeTabId);
+            if (tab?.kind !== 'browser') {
+              return;
+            }
+            let host = '';
+            try {
+              host = new URL(tab.url).hostname;
+            } catch {
+              return;
+            }
+            if (host) {
+              adBlocker.setSiteAllowed(host, !adBlocker.getState().allowedSites.includes(host));
+            }
+          },
         },
         {
           label: 'Find',

@@ -17,6 +17,7 @@ import {
   OpenInNewWindowIcon,
   PenIcon,
   RevertIcon,
+  ShieldIcon,
   TextBoxIcon,
 } from '../icons';
 import { ZoomControl } from '../ZoomControl';
@@ -70,6 +71,18 @@ interface PageActionsProps {
   /** Whether the crop tool is shown — PDF tabs only, the one document type it applies to. */
   readonly showCrop: boolean;
   readonly theme: Theme;
+  /** Whether the ad blocker button is shown — web pages only (not the home page, a PDF, a terminal or History). */
+  readonly showAdBlock: boolean;
+  /** Whether the ad blocker is blocking on the active page: on globally, and not turned off for this site. */
+  readonly adBlockActive: boolean;
+  /** Whether the ad blocker is switched off everywhere — the button then can't turn it on per site. */
+  readonly adBlockGloballyOff: boolean;
+  /** Requests, popups and elements blocked since the page began loading. */
+  readonly adBlockBlockedCount: number;
+  /** The active page's hostname, for the button's accessible label. */
+  readonly adBlockSite: string;
+  /** Turns blocking off or back on for the active page's site. */
+  readonly onToggleAdBlock: () => void;
   /** Opens a new PDF viewer tab. */
   readonly onOpenPdfViewer: () => void;
   readonly onNewTerminal: () => void;
@@ -119,6 +132,12 @@ export function PageActions({
   cropActive,
   showCrop,
   theme,
+  showAdBlock,
+  adBlockActive,
+  adBlockGloballyOff,
+  adBlockBlockedCount,
+  adBlockSite,
+  onToggleAdBlock,
   onOpenPdfViewer,
   canExportMenu,
   canExportDocuments,
@@ -295,6 +314,25 @@ export function PageActions({
       >
         <FindIcon />
       </button>
+      {showAdBlock && (
+        <button
+          type="button"
+          className="page-actions__button page-actions__button--adblock chrome-tooltip"
+          onClick={onToggleAdBlock}
+          disabled={adBlockGloballyOff}
+          aria-pressed={adBlockActive}
+          aria-label={adBlockActive ? `Turn off ad blocker for ${adBlockSite}` : `Turn on ad blocker for ${adBlockSite}`}
+          data-tooltip={
+            adBlockGloballyOff
+              ? 'Ad blocker is off (View menu)'
+              : adBlockActive
+                ? `${adBlockBlockedCount} ${adBlockBlockedCount === 1 ? 'ad' : 'ads'} blocked (${formatShortcut('Shift+B')})`
+                : `Ads allowed on this site (${formatShortcut('Shift+B')})`
+          }
+        >
+          <ShieldIcon />
+        </button>
+      )}
       <span className="page-actions__divider" role="separator" aria-hidden="true" />
       {showZoom && (
         <>

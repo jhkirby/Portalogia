@@ -8,6 +8,8 @@ import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron
 import { NORTHSTAR_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
 import { dropRegionsRequestSchema, tearOffTabEndRequestSchema, tearOffTabRequestSchema } from '@shared/ipc-schemas';
+import { AdBlocker } from './adblock/AdBlocker';
+import { AdBlockStore } from './adblock/AdBlockStore';
 import { BookmarkStore } from './browser/BookmarkStore';
 import { CommentController } from './browser/CommentController';
 import { CommentStore } from './browser/CommentStore';
@@ -23,6 +25,7 @@ import { PenStore } from './browser/PenStore';
 import { SessionStore } from './browser/SessionStore';
 import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
+import { registerAdBlockIpc } from './ipc/registerAdBlockIpc';
 import { registerAccentColorIpc } from './ipc/registerAccentColorIpc';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
@@ -113,6 +116,30 @@ const penController = new PenController(sharedRegistry, penStore);
 pdfAnnotationStore.init(join(app.getPath('userData'), 'pdf-annotations.json'));
 app.on('before-quit', () => pdfAnnotationStore.flush());
 
+// Ad blocking is app-wide too: every tab shares the default session it hooks into.
+const adBlockStore = new AdBlockStore(join(app.getPath('userData'), 'adblock.json'));
+app.on('before-quit', () => adBlockStore.flush());
+const adBlocker = new AdBlocker(
+  adBlockStore,
+  join(app.getPath('userData'), 'adblock-engine.bin'),
+  (contentsId) => {
+    for (const [tabId, view] of sharedRegistry.views) {
+      if (!view.webContents.isDestroyed() && view.webContents.id === contentsId) {
+        return tabId;
+      }
+    }
+    return undefined;
+  },
+  () => {
+    const state = adBlocker.getState();
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IpcChannel.AdBlockState, state);
+      }
+    }
+  },
+);
+
 // Every open terminal tab's own pty process — one instance shared the same
 // way `sharedRegistry` is, since a terminal tab can now move between
 // windows the same as a browser tab can (dragged into another window's tab
@@ -154,6 +181,8 @@ function isOwnPdfViewerUrl(url: string): boolean {
 }
 
 void app.whenReady().then(() => {
+  // First, so the headers hook the chrome's CSP registers through exists before any window does.
+  void adBlocker.start(session.defaultSession);
   historyController.attachTo(session.defaultSession);
 
   // Deny every site permission request (camera, mic, geolocation, ...) by
@@ -182,6 +211,7 @@ void app.whenReady().then(() => {
   registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
   registerThemeIpc();
+  registerAdBlockIpc(adBlocker);
   registerAccentColorIpc(() => {
     highlighterController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isHighlighterActive() ?? false);
     commentController.broadcastColor((tabId) => sharedRegistry.mountOwners.get(tabId)?.isCommentToolActive() ?? false);
@@ -199,6 +229,7 @@ void app.whenReady().then(() => {
     // whatever was already open elsewhere.
     () => launchWindow((tabManager) => tabManager.createWorkspace()),
     () => openWorkspaceInNewWindow(activeTabManager),
+    adBlocker,
   );
 
   launchWindow();
@@ -278,7 +309,7 @@ function launchWindow(
   position?: { x: number; y: number },
   options: { hidden?: boolean } = {},
 ): BrowserWindow {
-  const window = createMainWindow({ showWhenReady: !options.hidden });
+  const window = createMainWindow(adBlocker, { showWhenReady: !options.hidden });
   if (position) {
     window.setPosition(Math.round(position.x), Math.round(position.y));
   }
@@ -298,6 +329,7 @@ function launchWindow(
     penController,
     textBoxController,
     historyController,
+    adBlocker,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);
