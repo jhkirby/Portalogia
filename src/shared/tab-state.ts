@@ -118,6 +118,23 @@ export interface BookmarkState {
   readonly path: string | null;
 }
 
+/**
+ * A saved workspace image, as the chrome lists it: a workspace's name, color
+ * and icon, and how many tabs it would open — the tabs themselves stay in
+ * main (see `WorkspaceImageStore`). Opening one makes a new workspace with
+ * those tabs, in order.
+ */
+export interface WorkspaceImageState {
+  readonly id: string;
+  readonly name: string;
+  /** The workspace's icon color, as `#rrggbb`. */
+  readonly color: string;
+  /** Which `WorkspaceIconId` it draws. */
+  readonly icon: string;
+  /** How many tabs opening it creates. */
+  readonly tabCount: number;
+}
+
 /** The pair of tabs shown side by side when split view is active. */
 export interface SplitViewState {
   readonly primaryTabId: string;
@@ -131,6 +148,15 @@ export interface BrowserState {
   readonly workspaces: readonly WorkspaceState[];
   readonly activeWorkspaceId: string;
   readonly bookmarks: readonly BookmarkState[];
+  /** The saved workspace images, in the order they were saved. */
+  readonly workspaceImages: readonly WorkspaceImageState[];
+  /**
+   * For each workspace whose tabs are exactly those of a saved image (same
+   * kinds, addresses and files, in the same order), that image's id — what
+   * fills the sidebar's star. Adding, changing or reordering a tab takes a
+   * workspace out of it, so it can be saved as a different image.
+   */
+  readonly savedWorkspaceImages: Readonly<Record<string, string>>;
   readonly splitView: SplitViewState | null;
   readonly focusMode: boolean;
   /** Whether the workspace sidebar is currently shown (toggled via Ctrl+L). */

@@ -19,6 +19,7 @@ import { TabSearchPopup } from './components/TabSearchPopup';
 import { WorkspaceEditPopup } from './components/WorkspaceEditPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
+import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
@@ -54,6 +55,8 @@ export function App() {
     workspaceTabs,
     tabs,
     bookmarks,
+    workspaceImages,
+    savedWorkspaceImages,
     secondaryTab,
     focusMode,
     sidebarVisible,
@@ -100,6 +103,10 @@ export function App() {
     renameWorkspace,
     updateWorkspace,
     removeWorkspace,
+    saveWorkspaceImage,
+    openWorkspaceImage,
+    removeWorkspaceImage,
+    renameWorkspaceImage,
     openWorkspaceInNewWindow,
     addBookmark,
     removeBookmark,
@@ -137,6 +144,8 @@ export function App() {
   /** The tab-search popup's state while open: the active tab's last frame, shown blurred behind it. */
   const [tabSearch, setTabSearch] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
+  /** The workspace images popup while open: the still of the tab standing in behind it. */
+  const [imagesPopup, setImagesPopup] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   /** The workspace editor while open: which workspace, and the still of the tab standing in behind it. */
   const [workspaceEdit, setWorkspaceEdit] = useState<{ readonly workspaceId: string; readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const { theme, toggleTheme } = useTheme();
@@ -358,6 +367,40 @@ export function App() {
     }
     setTabSearch(null);
   };
+
+  // Opens like the tab search: the active tab's native view comes off the window and a blurred still of it stands in.
+  const openWorkspaceImages = (): void => {
+    // Pressed again while open — the button, or Ctrl+Shift+S — it closes, rather than ignoring the press.
+    if (imagesPopup) {
+      closeWorkspaceImages(null);
+      return;
+    }
+    const tabId = activeTabId;
+    if (!tabId) {
+      setImagesPopup({ tabId: null, previewImage: null });
+      return;
+    }
+    setImagesPopup({ tabId, previewImage: null });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setImagesPopup((current) => (current ? { tabId, previewImage } : current));
+    });
+  };
+
+  // Opening an image makes a new workspace, so the tab left behind is only put back if it is still the active one (main checks).
+  const closeWorkspaceImages = (openId: string | null): void => {
+    if (!imagesPopup) {
+      return;
+    }
+    if (openId) {
+      openWorkspaceImage(openId);
+    }
+    if (imagesPopup.tabId) {
+      endTabPreview(imagesPopup.tabId);
+    }
+    setImagesPopup(null);
+  };
+
+  useEffect(() => window.northstar.onOpenWorkspaceImages(openWorkspaceImages));
 
   // Like the bookmark popup, the editor covers whichever kind of tab is showing, so that tab's native view comes off
   // the window first and a still of its last frame stands in behind the popup.
@@ -581,6 +624,7 @@ export function App() {
             TabManager's `targetLeftInset`. */}
         <WorkspaceBar
           workspaces={workspaces}
+          savedImageIds={savedWorkspaceImages}
           activeWorkspaceId={activeWorkspaceId}
           sidebarVisible={sidebarVisible && !focusMode}
           focusMode={focusMode}
@@ -594,6 +638,9 @@ export function App() {
           onRemove={removeWorkspace}
           onDropTab={moveTabToWorkspace}
           onDropTabToNewWorkspace={createWorkspaceWithTab}
+          onSaveImage={saveWorkspaceImage}
+          onRemoveImage={removeWorkspaceImage}
+          onOpenImages={openWorkspaceImages}
           onToggleSidebar={toggleSidebar}
         />
         {/* Every tab, browser or terminal, renders below via the main
@@ -623,6 +670,16 @@ export function App() {
               previewImage={workspaceEdit.previewImage}
               onSave={handleSaveWorkspace}
               onClose={closeWorkspaceEditor}
+            />
+          )}
+          {imagesPopup && (
+            <WorkspaceImagesPopup
+              images={workspaceImages}
+              previewImage={imagesPopup.previewImage}
+              onOpen={(id) => closeWorkspaceImages(id)}
+              onRemove={removeWorkspaceImage}
+              onRename={renameWorkspaceImage}
+              onClose={() => closeWorkspaceImages(null)}
             />
           )}
           {tabSearch && (

@@ -85,6 +85,10 @@ const api: NorthstarApi = {
   renameWorkspace: (id, name) => invoke(IpcChannel.WorkspacesRename, { id, name }),
   updateWorkspace: (id, update) => invoke(IpcChannel.WorkspacesUpdate, { id, ...update }),
   removeWorkspace: (id) => invoke(IpcChannel.WorkspacesRemove, { id }),
+  saveWorkspaceImage: (workspaceId) => invoke(IpcChannel.WorkspaceImagesSave, { id: workspaceId }),
+  openWorkspaceImage: (id) => invoke(IpcChannel.WorkspaceImagesOpen, { id }),
+  removeWorkspaceImage: (id) => invoke(IpcChannel.WorkspaceImagesRemove, { id }),
+  renameWorkspaceImage: (id, name) => invoke(IpcChannel.WorkspaceImagesRename, { id, name }),
   openWorkspaceInNewWindow: () => ipcRenderer.send(IpcChannel.WorkspaceOpenInNewWindow),
 
   addBookmark: (title, url) => invoke(IpcChannel.BookmarksAdd, { title, url }),
@@ -148,6 +152,11 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.UiEditWorkspace, handler);
   },
 
+  onOpenWorkspaceImages: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.UiOpenWorkspaceImages, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiOpenWorkspaceImages, handler);
+  },
   onOpenTabSearch: (listener) => {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.UiOpenTabSearch, handler);

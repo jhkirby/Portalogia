@@ -4,6 +4,7 @@
 // Last Modified: 2026-10-06
 
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
@@ -60,6 +61,7 @@ import {
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
+import type { ImageTab, WorkspaceImageStore } from './WorkspaceImageStore';
 import { pdfAnnotationStore } from './PdfAnnotationStore';
 import { PdfCropExporter } from './PdfCropExporter';
 import { buildMarkdownCsp } from '@shared/markdown/csp';
@@ -296,6 +298,7 @@ export class TabManager {
     private readonly textBoxController: TextBoxController,
     private readonly historyController: HistoryController,
     private readonly adBlocker: AdBlocker,
+    private readonly workspaceImages: WorkspaceImageStore,
   ) {
     this.views = registry.views;
     this.states = registry.states;
@@ -2977,6 +2980,162 @@ export class TabManager {
   }
 
   /**
+   * A workspace's tabs as a workspace image keeps them, in tab-strip order: a
+   * page's address, a PDF's or note's file (or nothing, if none is open), or
+   * just the kind for a terminal or History tab.
+   * @param workspaceId The workspace.
+   * @returns The tabs, and the ids of the tabs they came from.
+   */
+  private imageTabsOf(workspaceId: string): { readonly tabs: ImageTab[]; readonly ids: string[] } {
+    const tabs: ImageTab[] = [];
+    const ids: string[] = [];
+    for (const id of this.listedTabIds(workspaceId)) {
+      const state = this.states.get(id);
+      if (!state) {
+        continue;
+      }
+      ids.push(id);
+      tabs.push(
+        state.kind === 'browser'
+          ? { kind: 'browser', value: state.url }
+          : state.kind === 'pdf' || state.kind === 'markdown'
+            ? { kind: state.kind, value: state.filePath ?? '' }
+            : { kind: state.kind, value: '' },
+      );
+    }
+    return { tabs, ids };
+  }
+
+  /** Which saved image (by id) each workspace currently matches exactly — see `BrowserState.savedWorkspaceImages`. */
+  private savedWorkspaceImages(): Record<string, string> {
+    const keyOf = (tabs: readonly ImageTab[]): string => JSON.stringify(tabs.map((tab) => [tab.kind, tab.value]));
+    const imageIdByKey = new Map<string, string>();
+    for (const image of this.workspaceImages.list()) {
+      const key = keyOf(image.tabs);
+      if (!imageIdByKey.has(key)) {
+        imageIdByKey.set(key, image.id);
+      }
+    }
+    const saved: Record<string, string> = {};
+    if (imageIdByKey.size === 0) {
+      return saved;
+    }
+    for (const workspaceId of this.workspaces.keys()) {
+      const imageId = imageIdByKey.get(keyOf(this.imageTabsOf(workspaceId).tabs));
+      if (imageId !== undefined) {
+        saved[workspaceId] = imageId;
+      }
+    }
+    return saved;
+  }
+
+  /**
+   * Saves a workspace as an image: its name, color, icon and its tabs in
+   * order (a page's address, a PDF's or note's file, or just the kind for a
+   * terminal or History tab) plus which was in front. A workspace whose tabs
+   * already match a saved image isn't saved again; one whose tabs have
+   * changed since is saved as a new, different image.
+   * @param workspaceId The workspace to save. A no-op if it doesn't exist.
+   * @returns The full browser state after the change.
+   */
+  public saveWorkspaceImage(workspaceId: string): BrowserState {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) {
+      return this.getState();
+    }
+    const { tabs, ids: savedIds } = this.imageTabsOf(workspaceId);
+    if (tabs.length === 0 || this.savedWorkspaceImages()[workspaceId] !== undefined) {
+      return this.getState();
+    }
+    this.workspaceImages.save({
+      name: workspace.name,
+      color: workspace.color,
+      icon: workspace.icon,
+      tabs,
+      activeIndex: Math.max(0, savedIds.indexOf(this.activeTabId ?? '')),
+    });
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
+   * Opens a saved workspace image as a brand-new workspace with its name,
+   * color and icon, and re-creates its tabs in their saved order: pages
+   * reload from their address, PDFs and notes reopen their files (if still
+   * there), terminals start a fresh shell. The tab that was in front when
+   * the image was saved is the one shown.
+   * @param imageId The image to open. A no-op if it doesn't exist or the workspace limit is reached.
+   * @returns The full browser state after the change.
+   */
+  public openWorkspaceImage(imageId: string): BrowserState {
+    const image = this.workspaceImages.get(imageId);
+    if (!image || this.workspaces.size >= MAX_WORKSPACES) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    this.workspaces.set(id, { id, name: image.name, color: image.color, icon: image.icon });
+    // Switched to by hand: `switchWorkspace` would open a home tab in the empty workspace first.
+    this.activeWorkspaceId = id;
+    this.selectedWorkspaceIds.clear();
+
+    const created: string[] = [];
+    for (const tab of image.tabs) {
+      if (tab.kind === 'browser') {
+        this.createTab(isNavigableUrl(tab.value) || tab.value === HOME_URL ? tab.value : undefined, id);
+      } else if (tab.kind === 'terminal') {
+        this.createTerminalTab(id);
+      } else if (tab.kind === 'history') {
+        this.createHistoryTab(id);
+      } else if (tab.kind === 'markdown') {
+        this.createMarkdownTab(id, tab.value !== '' && existsSync(tab.value) ? tab.value : undefined);
+      } else {
+        this.createPdfTab(id);
+        const pdfId = this.activeTabId;
+        if (tab.value !== '' && pdfId && existsSync(tab.value)) {
+          void this.loadPdfFromPath(pdfId, tab.value);
+        }
+      }
+      // Each creator makes its new tab the active one; a refused one (the workspace is full) leaves it unchanged.
+      const newest = this.activeTabId;
+      if (newest && this.states.get(newest)?.workspaceId === id && !created.includes(newest)) {
+        created.push(newest);
+      }
+    }
+
+    const shown = created[Math.min(image.activeIndex, created.length - 1)];
+    if (shown) {
+      this.activateTab(shown);
+    } else {
+      this.focusWorkspaceDefaultTab(id);
+    }
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
+   * Deletes a saved workspace image. Workspaces already opened from it are unaffected.
+   * @param imageId The image to delete.
+   * @returns The full browser state after the change.
+   */
+  public removeWorkspaceImage(imageId: string): BrowserState {
+    this.workspaceImages.remove(imageId);
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
+   * Renames a saved workspace image.
+   * @param imageId The image to rename.
+   * @param name The new name; a blank one is ignored.
+   * @returns The full browser state after the change.
+   */
+  public renameWorkspaceImage(imageId: string, name: string): BrowserState {
+    this.workspaceImages.rename(imageId, name);
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
    * Creates a new workspace containing exactly one tab — moved there as
    * its first (and only) tab — and switches to it: `WorkspaceBar`'s
    * drag-onto-"+ New workspace" gesture. Builds the workspace directly
@@ -4747,6 +4906,12 @@ export class TabManager {
 
   // ── Cross-window UI requests ─────────────────────────────────────────
 
+  /** Asks this window's chrome to open the workspace images popup (menu/accelerator-driven) — same hand-off as `requestTabSearch`. */
+  public requestWorkspaceImages(): void {
+    this.window.webContents.focus();
+    this.window.webContents.send(IpcChannel.UiOpenWorkspaceImages);
+  }
+
   /**
    * Asks this window's chrome to open the tab search overlay
    * (menu/accelerator-driven). Explicitly hands native OS keyboard focus
@@ -4854,6 +5019,8 @@ export class TabManager {
       workspaces: Array.from(this.workspaces.values()),
       activeWorkspaceId: this.activeWorkspaceId,
       bookmarks: this.bookmarkStore.list(),
+      workspaceImages: this.workspaceImages.listStates(),
+      savedWorkspaceImages: this.savedWorkspaceImages(),
       splitView: this.splitView,
       focusMode: this.focusMode,
       sidebarVisible: this.sidebarVisible,
@@ -5436,6 +5603,11 @@ export class TabManager {
           case 'r':
             event.preventDefault();
             owner.revertPage(id);
+            return;
+          case 's':
+            // Same as buildMenu.ts's `CmdOrCtrl+Shift+S` ("Workspace Images…").
+            event.preventDefault();
+            owner.requestWorkspaceImages();
             return;
           case 'u':
             // Make a link (the editor's right-click menu has the same command); a no-op unless a note is being edited.

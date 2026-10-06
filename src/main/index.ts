@@ -21,6 +21,7 @@ import { HistoryController } from './browser/HistoryController';
 import { HistoryStore } from './browser/HistoryStore';
 import { TextBoxStore } from './browser/TextBoxStore';
 import { trackEditableFocus } from './browser/editableFocus';
+import { WorkspaceImageStore } from './browser/WorkspaceImageStore';
 import { markdownAnnotationStore } from './browser/MarkdownAnnotationStore';
 import { pdfAnnotationStore } from './browser/PdfAnnotationStore';
 import { PenStore } from './browser/PenStore';
@@ -77,6 +78,8 @@ const bookmarkStore = new BookmarkStore(join(app.getPath('userData'), 'bookmarks
 // relaunch path below (macOS's "reopen from the dock") is the same
 // situation a plain restart is, just without the process itself exiting
 // first.
+// Saved workspace images, shared by every window like `bookmarkStore`.
+const workspaceImageStore = new WorkspaceImageStore(join(app.getPath('userData'), 'workspace-images.json'));
 const sessionStore = new SessionStore(join(app.getPath('userData'), 'session.json'));
 
 // The tabs, workspaces, and their native views — one set, shared by every
@@ -344,6 +347,7 @@ function launchWindow(
     textBoxController,
     historyController,
     adBlocker,
+    workspaceImageStore,
   );
 
   tabManagersByWindowId.set(window.id, tabManager);

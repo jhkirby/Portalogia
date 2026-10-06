@@ -445,3 +445,159 @@
 .sidebar--hidden .workspace-bar__new-label {
   display: none;
 }
+
+/* ── WORKSPACE IMAGES ─────────────────────────────────────────────────── */
+
+/* A workspace's icon turns into a star while it is hovered (or keyboard-focused): a click saves the workspace as
+   an image. The star takes the icon's own 16px square, so the name doesn't shift as the pointer moves down the list.
+   Left alone while a tab is being dragged over the pill — then it is a drop target. */
+.workspace-bar__star {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  cursor: pointer;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__glyph,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__glyph {
+  display: none;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__star,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__star {
+  display: flex;
+}
+
+.workspace-bar__glyph {
+  display: flex;
+}
+
+.workspace-bar__star:hover,
+.workspace-bar__star[aria-pressed='true'] {
+  color: var(--color-accent-text);
+}
+
+/* Anchored to the star's own left edge and growing rightward, so the tooltip stays inside the sidebar. It wraps
+   inside its box, rather than running out of it as the default one-line tooltip would at this width. */
+.workspace-bar__star::after {
+  left: 0;
+  max-width: 140px;
+  white-space: normal;
+  /* Opens downward (the default is up): the first workspace sits at the sidebar's very top, which would clip it.
+     It stays inside the 140px-wide sidebar column, so the tab's own view can't paint over it. */
+  top: 100%;
+  bottom: auto;
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+/* A saved workspace's filled star, hovered, is about to be unsaved: it spins a quarter turn (the star looks the
+   same every quarter) and dulls from the accent to grey, so the click reads as taking the star away. */
+.workspace-bar__star[aria-pressed='true']:hover {
+  color: var(--color-tab-text);
+}
+
+.workspace-bar__star[aria-pressed='true']:hover svg {
+  animation: workspace-star-unset 380ms ease-in-out;
+}
+
+@keyframes workspace-star-unset {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  45% {
+    transform: rotate(60deg) scale(0.7);
+  }
+
+  100% {
+    transform: rotate(90deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-bar__star[aria-pressed='true']:hover svg {
+    animation: none;
+  }
+}
+
+.sidebar--hidden .workspace-bar__star::after {
+  display: none;
+}
+
+/* "New workspace" and the images button share a row; collapsed, they stack. */
+.workspace-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  margin-top: var(--size-spacing-xs);
+  flex-shrink: 0;
+}
+
+.sidebar--hidden .workspace-bar__actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.workspace-bar__actions .workspace-bar__new {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  margin-top: 0;
+  /* The label needs every pixel it can get beside the images button. */
+  padding-right: 0;
+}
+
+.workspace-bar__images {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  box-sizing: border-box;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  cursor: pointer;
+}
+
+.workspace-bar__images:hover {
+  background: var(--color-button-hover-bg);
+  color: var(--color-tab-text-active);
+}
+
+/* Collapsed, it fills the narrow column like the button above it, its icon centered on the same line as the + (whose
+   8px icon sits 10px in, centered 14px from the edge) and the workspace icons: a 16px icon 6px in is centered there too. */
+.sidebar--hidden .workspace-bar__images {
+  width: 100%;
+  justify-content: flex-start;
+  padding-left: 6px;
+}
+
+/* The sidebar's right edge is this button's: its tooltip grows leftward, inside the sidebar. */
+.workspace-bar__images::after {
+  right: 0;
+  left: auto;
+  /* Two lines ("Workspace images" / the shortcut) — it opens upward, and with one workspace there is little room above. */
+  max-width: 168px;
+  white-space: normal;
+}
+
+.sidebar--hidden .workspace-bar__images::after {
+  display: none;
+}

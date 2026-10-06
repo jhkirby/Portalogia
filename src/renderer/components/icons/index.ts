@@ -14,3 +14,4 @@ export { PencilIcon } from './PencilIcon';
 export { RevertIcon } from './RevertIcon';
 export { TextBoxIcon } from './TextBoxIcon';
 export { ShieldIcon } from './ShieldIcon';
+export { WorkspaceImagesIcon } from './WorkspaceImagesIcon';
