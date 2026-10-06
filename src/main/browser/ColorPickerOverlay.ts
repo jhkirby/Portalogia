@@ -1,11 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-06
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
-import { COLOR_PICKER_PANEL_HEIGHT_PX, COLOR_PICKER_PANEL_WIDTH_PX } from '@shared/constants';
+import { COLOR_PICKER_PANEL_HEIGHT_PX, COLOR_PICKER_PANEL_WIDTH_PX, FIND_BAR_SLIDE_MS } from '@shared/constants';
 import { IpcChannel, type ColorPickerColorChangedPayload, type ColorPickerSyncPayload } from '@shared/ipc-contract';
 import { colorPickerColorChangeRequestSchema } from '@shared/ipc-schemas';
 
@@ -52,6 +52,13 @@ import { colorPickerColorChangeRequestSchema } from '@shared/ipc-schemas';
 export class ColorPickerOverlay {
   private readonly view: WebContentsView;
   private isMounted = false;
+  /** Where the dropdown sits once it has slid in (and while open). */
+  private target: { x: number; y: number } | null = null;
+  /** Drives the slide in from, and out to, the window's right edge — the same movement as the find bar's. */
+  private slideTimer: ReturnType<typeof setInterval> | null = null;
+  private isClosing = false;
+  /** The closed state to hand the page once it has slid out — sent then, not at once, or it would empty itself mid-slide. */
+  private closedPayload: ColorPickerSyncPayload | null = null;
   /** The active tab's view this instance is currently listening to for `'focus'` — see `watchActiveView`. `null` while closed or if there's no active tab at all. */
   private watchedTabView: WebContentsView | null = null;
   private readonly handleActiveViewFocused: () => void;
@@ -92,9 +99,10 @@ export class ColorPickerOverlay {
     this.view.webContents.on('will-navigate', (event) => event.preventDefault());
     this.view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-    // Matches `--size-radius-sm` (sizes.css), same reasoning as
-    // `SuggestionsOverlay.setBorderRadius`.
-    this.view.setBorderRadius(6);
+    // Transparent view + CSS-drawn rounded border (color-picker.css), rather than native
+    // `setBorderRadius`: the native clip cuts through a square CSS border and leaves its
+    // corners disconnected — same fix as `ExportMenuOverlay`.
+    this.view.setBackgroundColor('#00000000');
 
     // Scoped to this view's own webContents (`WebContents#ipc`, not the
     // global `ipcMain`) — same reasoning as `SuggestionsOverlay`'s own
@@ -142,28 +150,73 @@ export class ColorPickerOverlay {
    */
   public sync(payload: ColorPickerSyncPayload, activeTabView: WebContentsView | null): void {
     if (!payload.open || !payload.rect) {
-      this.view.webContents.send(IpcChannel.ColorPickerSync, payload);
+      // The page draws nothing once told it's closed, so it hears that only after it has slid out of sight.
+      this.closedPayload = payload;
       this.hide();
       this.watchActiveView(null);
       return;
     }
+    this.closedPayload = null;
+
+    const target = { x: Math.round(payload.rect.left), y: Math.round(payload.rect.top) };
+    this.target = target;
+    this.watchActiveView(activeTabView);
+    const bounds = { ...target, width: COLOR_PICKER_PANEL_WIDTH_PX, height: COLOR_PICKER_PANEL_HEIGHT_PX };
 
     if (!this.isMounted) {
       // No index given, so it lands at the end of the child-view stack —
       // i.e. on top — same as `SuggestionsOverlay`'s own `addChildView` call.
       this.window.contentView.addChildView(this.view);
       this.isMounted = true;
+      // Starts just past the window's right edge, which clips what is outside it, and slides in.
+      this.view.setBounds({ ...bounds, x: this.window.getContentBounds().width });
+      this.slideTo(target.x, false);
+    } else if (this.isClosing) {
+      // Reopened mid-close: reverse from wherever the slide had got to.
+      this.isClosing = false;
+      this.slideTo(target.x, false);
+    } else if (this.slideTimer !== null) {
+      // Mid-slide-in: aim at the new spot, so a resize doesn't leave it heading for a stale one.
+      this.slideTo(target.x, false);
+    } else {
+      this.view.setBounds(bounds);
     }
-    this.watchActiveView(activeTabView);
-
-    this.view.setBounds({
-      x: Math.round(payload.rect.left),
-      y: Math.round(payload.rect.top),
-      width: COLOR_PICKER_PANEL_WIDTH_PX,
-      height: COLOR_PICKER_PANEL_HEIGHT_PX,
-    });
 
     this.view.webContents.send(IpcChannel.ColorPickerSync, payload);
+  }
+
+  /** Moves the view's x toward `toX` over `FIND_BAR_SLIDE_MS`; unmounts it on arrival when `closing`. */
+  private slideTo(toX: number, closing: boolean): void {
+    this.stopSlide();
+    const fromX = this.view.getBounds().x;
+    const start = Date.now();
+    this.slideTimer = setInterval(() => {
+      if (this.view.webContents.isDestroyed() || !this.target) {
+        this.stopSlide();
+        return;
+      }
+      const t = Math.min(1, (Date.now() - start) / FIND_BAR_SLIDE_MS);
+      const eased = 1 - (1 - t) ** 3;
+      this.view.setBounds({
+        x: Math.round(fromX + (toX - fromX) * eased),
+        y: this.target.y,
+        width: COLOR_PICKER_PANEL_WIDTH_PX,
+        height: COLOR_PICKER_PANEL_HEIGHT_PX,
+      });
+      if (t >= 1) {
+        this.stopSlide();
+        if (closing) {
+          this.unmount();
+        }
+      }
+    }, 16);
+  }
+
+  private stopSlide(): void {
+    if (this.slideTimer !== null) {
+      clearInterval(this.slideTimer);
+      this.slideTimer = null;
+    }
   }
 
   /**
@@ -182,17 +235,50 @@ export class ColorPickerOverlay {
     view?.webContents.on('focus', this.handleActiveViewFocused);
   }
 
-  /** Unmounts the overlay's view, if currently shown. A no-op otherwise. */
-  private hide(): void {
+  /**
+   * Slides the dropdown out to the right, then unmounts its view — rather
+   * than shrinking it, so a closed dropdown can never swallow a click meant
+   * for the page beneath it.
+   * @param immediate Skip the slide, e.g. when the window is closing.
+   */
+  private hide(immediate = false): void {
+    if (!this.isMounted) {
+      this.flushClosedPayload();
+      return;
+    }
+    if (this.isClosing) {
+      return;
+    }
+    if (immediate || !this.target) {
+      this.unmount();
+      return;
+    }
+    this.isClosing = true;
+    this.slideTo(this.window.getContentBounds().width, true);
+  }
+
+  /** Takes the overlay's view off the window, if currently shown. A no-op otherwise. */
+  private unmount(): void {
+    this.stopSlide();
+    this.isClosing = false;
     if (this.isMounted) {
       this.window.contentView.removeChildView(this.view);
       this.isMounted = false;
     }
+    this.flushClosedPayload();
+  }
+
+  /** Tells the page it is closed, if a closed state is waiting — once, after it is out of view. */
+  private flushClosedPayload(): void {
+    if (this.closedPayload && !this.view.webContents.isDestroyed()) {
+      this.view.webContents.send(IpcChannel.ColorPickerSync, this.closedPayload);
+    }
+    this.closedPayload = null;
   }
 
   /** Removes the overlay's view for good — call this when the owning window closes. */
   public dispose(): void {
-    this.hide();
+    this.hide(true);
     this.watchActiveView(null);
   }
 }

@@ -8,8 +8,12 @@ import { COLOR_PICKER_PANEL_WIDTH_PX } from '@shared/constants';
 import { useAccentColor } from '../../hooks/useAccentColor';
 import { ColorDropletIcon } from '../icons';
 
-/** Vertical gap, in CSS pixels, between the button's own bottom edge and the dropdown below it — same value `AddressBar`'s own `DROPDOWN_GAP_PX` uses for its suggestions dropdown. */
-const DROPDOWN_GAP_PX = 6;
+/**
+ * Vertical gap, in CSS pixels, between the button's own bottom edge and the dropdown below it. The button sits a
+ * few pixels above the toolbar's own bottom edge, so this is wide enough to leave clear space under the toolbar
+ * as well — the dropdown's top border never touches it.
+ */
+const DROPDOWN_GAP_PX = 16;
 
 /**
  * The toolbar's accent-color picker button. The dropdown itself — the hue

@@ -12,8 +12,8 @@
    exactly that fixed size, so — same reasoning as
    `suggestions-overlay.css` — there's no `position: fixed`, no backdrop,
    and no box-shadow (it would just get clipped at the view's own tight
-   edge). Corner rounding is native too (`WebContentsView.setBorderRadius`
-   in `ColorPickerOverlay`'s constructor), not CSS `border-radius`. */
+   edge). Corners are CSS-rounded over a transparent view, so the border
+   stays connected around them (see `ColorPickerOverlay`'s constructor). */
 
 html,
 body {
@@ -46,6 +46,8 @@ body {
 
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
+  /* Drawn here over a transparent view, so the border curves round its corners. */
+  border-radius: var(--size-radius-sm);
 
   cursor: default;
 }
