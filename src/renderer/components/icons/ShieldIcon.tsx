@@ -6,10 +6,12 @@
 interface ShieldIconProps {
   /** Edge length in px — matches the other tool icons' default. */
   readonly size?: number;
+  /** Draws an x instead of the check: the blocker is off. */
+  readonly off?: boolean;
 }
 
-/** A shield with a check — `PageActions`' toolbar button for the ad blocker. */
-export function ShieldIcon({ size = 16 }: ShieldIconProps) {
+/** A shield with a check, or an x when the blocker is off — `PageActions`' toolbar button for the ad blocker. */
+export function ShieldIcon({ size = 16, off = false }: ShieldIconProps) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
       <path
@@ -19,7 +21,14 @@ export function ShieldIcon({ size = 16 }: ShieldIconProps) {
         strokeWidth="1.8"
         strokeLinejoin="round"
       />
-      <path d="m8.8 12.2 2.4 2.4 4-4.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={off ? 'm9.2 9.7 5.6 5.6m0-5.6-5.6 5.6' : 'm8.8 12.2 2.4 2.4 4-4.4'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

@@ -320,7 +320,8 @@ export function PageActions({
           className="page-actions__button page-actions__button--adblock chrome-tooltip"
           onClick={onToggleAdBlock}
           disabled={adBlockGloballyOff}
-          aria-pressed={adBlockActive}
+          // Lit while the blocker is *off* here, so the default (blocking) state stays quiet.
+          aria-pressed={!adBlockActive}
           aria-label={adBlockActive ? `Turn off ad blocker for ${adBlockSite}` : `Turn on ad blocker for ${adBlockSite}`}
           data-tooltip={
             adBlockGloballyOff
@@ -330,7 +331,7 @@ export function PageActions({
                 : `Ads allowed on this site (${formatShortcut('Shift+B')})`
           }
         >
-          <ShieldIcon />
+          <ShieldIcon off={!adBlockActive} />
         </button>
       )}
       <span className="page-actions__divider" role="separator" aria-hidden="true" />

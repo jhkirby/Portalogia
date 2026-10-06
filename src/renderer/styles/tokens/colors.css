@@ -55,6 +55,9 @@
 
   --color-button-hover-bg: #e4e6e7;
   --color-button-disabled-text: #b7b9bb;
+  --color-scrollbar-thumb: #c4c7ca;
+  --color-scrollbar-thumb-hover: #9aa0a6;
+  --color-scrollbar-thumb-active: #6f7479;
 
   --color-spinner-track: #d7d9db;
   --color-spinner-active: rgb(var(--color-accent-rgb));
@@ -96,6 +99,9 @@
 
   --color-button-hover-bg: #3c4043;
   --color-button-disabled-text: #5f6368;
+  --color-scrollbar-thumb: #4a4d51;
+  --color-scrollbar-thumb-hover: #6b6f74;
+  --color-scrollbar-thumb-active: #9a9ea3;
 
   --color-spinner-track: #5f6368;
   --color-spinner-active: rgb(var(--color-accent-rgb));

@@ -1,0 +1,48 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-06 */
+
+/* ── SCROLLBARS ───────────────────────────────────────────────────────── */
+/* The app's own pages (the chrome, History, the PDF viewer, the terminal and
+   the overlays) get a slim scrollbar that follows the light/dark theme,
+   instead of the browser's wide, light default. Only the `::-webkit-`
+   pseudo-elements are used: Chromium turns them off as soon as the standard
+   `scrollbar-width` or `scrollbar-color` is set, and those can't draw a
+   rounded thumb. A rule that wants no scrollbar at all (see
+   `.workspace-bar`) is more specific, so it still wins. */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Transparent, so the page's own background shows through instead of a track. */
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The transparent border inset makes the visible thumb thinner than its hit area. */
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  background-clip: padding-box;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+/* While it is held (click and drag): one more step in the same direction as hover - lighter in the dark theme, darker in the light. */
+::-webkit-scrollbar-thumb:active {
+  background: var(--color-scrollbar-thumb-active);
+  background-clip: padding-box;
+}
+
+/* No arrow buttons at the ends. */
+::-webkit-scrollbar-button {
+  display: none;
+}
