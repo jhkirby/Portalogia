@@ -14,6 +14,7 @@ import {
   historySearchRequestSchema,
   pdfOpenPathRequestSchema,
   historyQueryRequestSchema,
+  historySetRangeRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
   colorPickerSyncRequestSchema,
@@ -361,6 +362,18 @@ export function registerTabIpc(
       return; // Not from a chrome window: ignored.
     }
     void resolveTabManagerForTab(parsed.data.id)?.openPdfFromHistory(parsed.data.id, parsed.data.path);
+  });
+
+  ipcMain.on(IpcChannel.HistorySetRange, (event, rawRequest: unknown) => {
+    const parsed = historySetRangeRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).setHistoryRange(parsed.data.id, parsed.data.range);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
   });
 
   ipcMain.on(IpcChannel.HistorySetQuery, (event, rawRequest: unknown) => {

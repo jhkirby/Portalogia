@@ -4,13 +4,14 @@
 // Last Modified: 2026-10-05
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { HistoryBookmarkIndex, HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
+import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object. `HistoryController`
 // (main) sends and listens on the same strings.
 const HistoryEntries = 'history:entries';
 const HistoryQuery = 'history:query';
+const HistoryRange = 'history:range';
 const HistoryDelete = 'history:delete';
 const HistoryCopy = 'history:copy';
 const HistoryBookmarks = 'history:bookmarks';
@@ -40,6 +41,13 @@ ipcRenderer.on(HistoryQuery, (_event, query: string) => {
   queryListeners.forEach((listener) => listener(query));
 });
 
+let latestRange: HistoryClearRange | null = null;
+const rangeListeners = new Set<(range: HistoryClearRange) => void>();
+ipcRenderer.on(HistoryRange, (_event, range: HistoryClearRange) => {
+  latestRange = range;
+  rangeListeners.forEach((listener) => listener(range));
+});
+
 let latestBookmarks: HistoryBookmarkIndex | null = null;
 const bookmarkListeners = new Set<(index: HistoryBookmarkIndex) => void>();
 ipcRenderer.on(HistoryBookmarks, (_event, index: HistoryBookmarkIndex) => {
@@ -64,6 +72,15 @@ const api: NorthstarHistoryApi = {
     }
     return () => {
       queryListeners.delete(listener);
+    };
+  },
+  onRange: (listener) => {
+    rangeListeners.add(listener);
+    if (latestRange !== null) {
+      listener(latestRange);
+    }
+    return () => {
+      rangeListeners.delete(listener);
     };
   },
   onBookmarks: (listener) => {

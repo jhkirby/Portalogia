@@ -173,6 +173,11 @@ export const historyClearRequestSchema = z.union([
     .refine((range) => range.amount <= HISTORY_UNIT_LIMITS[range.unit], { message: 'amount out of range' }),
 ]);
 
+export const historySetRangeRequestSchema = z.object({
+  id: z.string().min(1),
+  range: historyClearRequestSchema,
+});
+
 export const historyQueryRequestSchema = z.object({
   id: z.string().min(1),
   query: z.string().max(500),

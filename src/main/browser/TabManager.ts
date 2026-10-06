@@ -192,6 +192,8 @@ export class TabManager {
   private readonly closedTabs: ClosedTab[] = [];
   /** The search text each History tab's table is filtered by — typed in the chrome's toolbar, so kept here to hand to a page that loads after it was typed. */
   private readonly historyQueries = new Map<string, string>();
+  /** The time range each History tab's table shows, by tab id (all time until its toolbar says otherwise). */
+  private readonly historyRanges = new Map<string, HistoryClearRange>();
   private activeTabId: string | null = null;
   private activeWorkspaceId: string;
   private splitView: SplitViewState | null = null;
@@ -1467,6 +1469,7 @@ export class TabManager {
     view.webContents.on('did-finish-load', () => {
       this.historyController.pushTo(id);
       view.webContents.send(IpcChannel.HistoryQuery, this.historyQueries.get(id) ?? '');
+      view.webContents.send(IpcChannel.HistoryRange, this.historyRanges.get(id) ?? { unit: 'all' });
     });
 
     this.views.set(id, view);
@@ -1505,6 +1508,23 @@ export class TabManager {
       }
     }
     return this.getState();
+  }
+
+  /**
+   * Sets the time range a History tab's table shows. The toolbar's number and
+   * unit say both this and what "Clear History" deletes, so the table always
+   * previews what a clear would remove.
+   * @param id The History tab. A no-op if it isn't one.
+   * @param range The last N of a unit, or all time.
+   */
+  public setHistoryRange(id: string, range: HistoryClearRange): void {
+    if (this.states.get(id)?.kind === 'history') {
+      this.historyRanges.set(id, range);
+      const view = this.views.get(id);
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.send(IpcChannel.HistoryRange, range);
+      }
+    }
   }
 
   /** The most recent distinct pages or PDFs from the history matching a search — see `HistoryController.search`. */
@@ -2064,6 +2084,7 @@ export class TabManager {
       this.registry.zoomPercentByTabId.delete(memberId);
       this.highlighter.disposeTab(memberId);
       this.historyQueries.delete(memberId);
+      this.historyRanges.delete(memberId);
       this.commentController.disposeTab(memberId);
       this.textBoxController.disposeTab(memberId);
       this.penController.disposeTab(memberId);
@@ -2111,6 +2132,7 @@ export class TabManager {
     this.registry.zoomPercentByTabId.delete(id);
     this.highlighter.disposeTab(id);
     this.historyQueries.delete(id);
+    this.historyRanges.delete(id);
     this.commentController.disposeTab(id);
     this.textBoxController.disposeTab(id);
     this.penController.disposeTab(id);

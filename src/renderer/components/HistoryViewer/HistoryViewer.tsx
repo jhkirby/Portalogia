@@ -4,7 +4,8 @@
 // Last Modified: 2026-10-06
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { HistoryBookmarkIndex, HistoryEntry } from '@shared/ipc-contract';
+import { historyCutoff } from '@shared/history';
+import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry } from '@shared/ipc-contract';
 
 /** The most rows drawn at once — thousands of rows would slow the page, and nobody reads past the newest few hundred; the search narrows the rest. */
 const MAX_ROWS = 500;
@@ -90,6 +91,7 @@ export function HistoryViewer() {
   const [entries, setEntries] = useState<readonly HistoryEntry[]>([]);
   const [bookmarks, setBookmarks] = useState<HistoryBookmarkIndex>(NO_BOOKMARKS);
   const [query, setQuery] = useState('');
+  const [range, setRange] = useState<HistoryClearRange>({ unit: 'all' });
   /** The row whose copy button is showing its checkmark. */
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copiedTimer = useRef<number | null>(null);
@@ -97,6 +99,7 @@ export function HistoryViewer() {
   useEffect(() => window.northstarHistory.onEntries(setEntries), []);
   useEffect(() => window.northstarHistory.onBookmarks(setBookmarks), []);
   useEffect(() => window.northstarHistory.onQuery(setQuery), []);
+  useEffect(() => window.northstarHistory.onRange(setRange), []);
   useEffect(
     () => () => {
       if (copiedTimer.current !== null) {
@@ -108,18 +111,22 @@ export function HistoryViewer() {
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    // The toolbar's number and unit: only visits inside them are shown (all time shows everything).
+    const cutoff = historyCutoff(range, Date.now());
+    const inRange = cutoff === null ? entries : entries.filter((entry) => entry.timestamp >= cutoff);
     if (!needle) {
-      return entries;
+      return inRange;
     }
-    return entries.filter(
+    return inRange.filter(
       (entry) =>
         entry.url.toLowerCase().includes(needle) ||
         entry.type.includes(needle) ||
         (entry.type === 'url' && String(entry.status).includes(needle)) ||
+        entry.method.toLowerCase().includes(needle) ||
         (bookmarkNameFor(entry, bookmarks) ?? '').toLowerCase().includes(needle) ||
         DATE_TIME_FORMAT.format(entry.timestamp).toLowerCase().includes(needle),
     );
-  }, [entries, bookmarks, query]);
+  }, [entries, bookmarks, query, range]);
   const shown = matches.slice(0, MAX_ROWS);
 
   const copy = (entry: HistoryEntry): void => {
@@ -141,10 +148,11 @@ export function HistoryViewer() {
           <table className="history__table">
             <thead>
               <tr>
-                <th className="history__th history__th--time">Date &amp; time</th>
+                <th className="history__th history__th--time">Date &amp; Time</th>
                 <th className="history__th history__th--type">Type</th>
                 <th className="history__th history__th--bookmark">Bookmark</th>
                 <th className="history__th">Route</th>
+                <th className="history__th history__th--method">Method</th>
                 <th className="history__th history__th--status">Status</th>
                 <th className="history__th history__th--actions" aria-label="Actions" />
               </tr>
@@ -171,7 +179,10 @@ export function HistoryViewer() {
                     <td className="history__cell history__cell--route" title={entry.url}>
                       {entry.url}
                     </td>
-                    {/* A file on disk has no HTTP status. */}
+                    {/* A file on disk has no HTTP method or status. */}
+                    <td className={`history__cell history__cell--method${entry.type === 'url' && entry.method !== '' ? '' : ' history__cell--muted'}`}>
+                      {entry.type === 'url' && entry.method !== '' ? entry.method : '—'}
+                    </td>
                     <td
                       className={`history__cell history__cell--status ${
                         entry.type !== 'url' ? 'history__cell--muted' : statusClass(entry.status)

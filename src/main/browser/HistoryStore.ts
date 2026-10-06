@@ -17,6 +17,8 @@ const historyFileSchema = z.array(
     type: z.enum(['url', 'pdf', 'markdown']).default('url'),
     url: z.string().min(1).max(4096),
     status: z.number().int().min(0).max(999),
+    // Absent in files written before request methods were recorded.
+    method: z.string().max(16).default(''),
   }),
 );
 

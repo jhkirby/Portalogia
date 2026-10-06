@@ -72,6 +72,10 @@ export const IpcChannel = {
   HistorySetQuery: 'history:set-query',
   /** Main → history page: the search text to filter the table by. */
   HistoryQuery: 'history:query',
+  /** Chrome → main: the time range (the toolbar's number and unit) a History tab's table shows. */
+  HistorySetRange: 'history:set-range',
+  /** Main → history page: the time range to show. */
+  HistoryRange: 'history:range',
   PdfOpenFile: 'pdf:open-file',
   PdfRename: 'pdf:rename',
   /** PDF page → main: the marks drawn on the open document, to persist. */
@@ -436,6 +440,8 @@ export interface NorthstarApi {
   setFind(enabled: boolean): Promise<IpcResult<BrowserState>>;
   /** Sets the search text a History tab's table filters by — typed in the toolbar, shown in the tab's page. Fire-and-forget. */
   setHistoryQuery(id: string, query: string): void;
+  /** Sets the time range a History tab's table shows — the toolbar's number and unit, which also say what "Clear History" deletes. Fire-and-forget. */
+  setHistoryRange(id: string, range: HistoryClearRange): void;
   /** Clears the browsing history within a range (the History toolbar's "Clear History"). */
   clearHistory(range: HistoryClearRange): Promise<IpcResult<BrowserState>>;
   /**
@@ -1023,6 +1029,8 @@ export interface HistoryEntry {
   readonly url: string;
   /** The HTTP status code (a redirect hop records its own 3xx); `0` for a file, which has none. */
   readonly status: number;
+  /** The request's HTTP method (`GET`, `POST`, …); `''` for a file, and for a visit recorded before methods were kept. */
+  readonly method: string;
 }
 
 /** One match for a search bar's dropdown from the history: a page's host (or a PDF's file name) and the route to go to. */
@@ -1062,6 +1070,8 @@ export interface NorthstarHistoryApi {
   onBookmarks(listener: (index: HistoryBookmarkIndex) => void): () => void;
   /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
   onQuery(listener: (query: string) => void): () => void;
+  /** Subscribes to the time range the table shows (the toolbar's number and unit); called immediately with the latest if one already arrived. */
+  onRange(listener: (range: HistoryClearRange) => void): () => void;
 }
 
 /** What a tab's page reports back about a search: how many matches, and which one is current. */

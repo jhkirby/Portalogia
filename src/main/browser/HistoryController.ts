@@ -14,6 +14,7 @@ import {
   type HistoryEntry,
   type HistorySuggestion,
 } from '@shared/ipc-contract';
+import { historyCutoff } from '@shared/history';
 import type { BookmarkState } from '@shared/tab-state';
 import { historyDeleteRequestSchema } from '@shared/ipc-schemas';
 import type { HistoryStore } from './HistoryStore';
@@ -28,7 +29,6 @@ const MAX_URL_LENGTH = 2048;
 /** How long to let a burst of visits settle before re-sending the list to open History tabs. */
 const PUSH_DEBOUNCE_MS = 400;
 
-const MS_PER_HOUR = 60 * 60 * 1000;
 
 /** The most routes a search considers; the chrome shows at most 10 rows after the bookmarks, and asks for extra since some are bookmarked already. */
 const MAX_SEARCH_RESULTS = 20;
@@ -90,10 +90,10 @@ export class HistoryController {
   public attachTo(ses: Session): void {
     const filter = { urls: RECORDED_URLS };
     ses.webRequest.onCompleted(filter, (details) => {
-      this.record(details.resourceType, details.webContentsId, details.url, details.statusCode, details.timestamp);
+      this.record(details.resourceType, details.webContentsId, details.url, details.method, details.statusCode, details.timestamp);
     });
     ses.webRequest.onBeforeRedirect(filter, (details) => {
-      this.record(details.resourceType, details.webContentsId, details.url, details.statusCode, details.timestamp);
+      this.record(details.resourceType, details.webContentsId, details.url, details.method, details.statusCode, details.timestamp);
     });
   }
 
@@ -206,21 +206,7 @@ export class HistoryController {
    * @returns The cutoff, or `null` for everything.
    */
   public static cutoffFor(range: HistoryClearRange, now: number): number | null {
-    switch (range.unit) {
-      case 'all':
-        return null;
-      case 'hours':
-        return now - range.amount * MS_PER_HOUR;
-      case 'days':
-        return now - range.amount * 24 * MS_PER_HOUR;
-      case 'weeks':
-        return now - range.amount * 7 * 24 * MS_PER_HOUR;
-      case 'months': {
-        const cutoff = new Date(now);
-        cutoff.setMonth(cutoff.getMonth() - range.amount);
-        return cutoff.getTime();
-      }
-    }
+    return historyCutoff(range, now);
   }
 
   /** `webContentsId` is absent for a request no page made (e.g. one the main process issued itself), which is never history. */
@@ -228,6 +214,7 @@ export class HistoryController {
     resourceType: string,
     webContentsId: number | undefined,
     url: string,
+    method: string,
     status: number,
     timestamp: number,
   ): void {
@@ -240,6 +227,7 @@ export class HistoryController {
       type: 'url',
       url: url.slice(0, MAX_URL_LENGTH),
       status,
+      method: method.toUpperCase().slice(0, 16),
     });
     this.pushToAll();
   }
@@ -251,7 +239,7 @@ export class HistoryController {
    * @param path The file's path on disk.
    */
   public recordPdfAccess(path: string): void {
-    this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'pdf', url: path, status: 0 });
+    this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'pdf', url: path, status: 0, method: '' });
     this.pushToAll();
   }
 
@@ -262,7 +250,7 @@ export class HistoryController {
    * @param path The file's path on disk.
    */
   public recordMarkdownAccess(path: string): void {
-    this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'markdown', url: path, status: 0 });
+    this.store.add({ id: randomUUID(), timestamp: Date.now(), type: 'markdown', url: path, status: 0, method: '' });
     this.pushToAll();
   }
 

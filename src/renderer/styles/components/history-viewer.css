@@ -79,6 +79,10 @@ body {
   width: 56px;
 }
 
+.history__th--method {
+  width: 84px;
+}
+
 .history__th--status {
   width: 72px;
 }
@@ -103,7 +107,8 @@ body {
 }
 
 .history__cell--time,
-.history__cell--type {
+.history__cell--type,
+.history__cell--method {
   color: var(--color-tab-text);
 }
 

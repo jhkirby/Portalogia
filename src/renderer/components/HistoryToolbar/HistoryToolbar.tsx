@@ -32,7 +32,7 @@ interface HistoryControls {
   readonly amountText: string;
 }
 
-const DEFAULT_CONTROLS: HistoryControls = { query: '', unit: 'hours', amountText: '1' };
+const DEFAULT_CONTROLS: HistoryControls = { query: '', unit: 'all', amountText: '1' };
 
 /** Per tab: the toolbar remounts on every tab switch (see its `key` in `App`), which would otherwise reset the inputs while the tab's table kept its filter. */
 const controlsByTab = new Map<string, HistoryControls>();
@@ -66,12 +66,20 @@ export function HistoryToolbar({ tab }: HistoryToolbarProps) {
     window.northstar.setHistoryQuery(tab.id, query);
   }, [tab.id, query]);
 
-  // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps here, as it does to the address bar on a browser tab.
-  useEffect(() => window.northstar.onFocusAddressBar(() => searchRef.current?.focus()), []);
-
   const limit = unit === 'all' ? 0 : HISTORY_UNIT_LIMITS[unit];
   const amount = Number.parseInt(amountText, 10);
   const canClear = unit === 'all' || (Number.isInteger(amount) && amount >= 1 && amount <= limit);
+  const range: HistoryClearRange = unit === 'all' || !canClear ? { unit: 'all' } : { unit, amount };
+
+  // The same number and unit also pick which visits the table shows (a half-typed number shows everything).
+  useEffect(() => {
+    window.northstar.setHistoryRange(tab.id, range);
+    // `range` is rebuilt every render; its parts are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.id, range.unit, 'amount' in range ? range.amount : 0]);
+
+  // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps here, as it does to the address bar on a browser tab.
+  useEffect(() => window.northstar.onFocusAddressBar(() => searchRef.current?.focus()), []);
 
   const changeUnit = (next: ClearUnit): void => {
     setUnit(next);
@@ -85,7 +93,6 @@ export function HistoryToolbar({ tab }: HistoryToolbarProps) {
     if (!canClear) {
       return;
     }
-    const range: HistoryClearRange = unit === 'all' ? { unit: 'all' } : { unit, amount };
     void window.northstar.clearHistory(range);
   };
 
