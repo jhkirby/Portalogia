@@ -15,6 +15,7 @@ import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
 import { TitlebarGrip } from './components/TitlebarGrip';
 import { TabSearchPopup } from './components/TabSearchPopup';
+import { WorkspaceEditPopup } from './components/WorkspaceEditPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
@@ -86,6 +87,7 @@ export function App() {
     createWorkspace,
     switchWorkspace,
     renameWorkspace,
+    updateWorkspace,
     removeWorkspace,
     openWorkspaceInNewWindow,
     addBookmark,
@@ -124,6 +126,8 @@ export function App() {
   /** The tab-search popup's state while open: the active tab's last frame, shown blurred behind it. */
   const [tabSearch, setTabSearch] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
+  /** The workspace editor while open: which workspace, and the still of the tab standing in behind it. */
+  const [workspaceEdit, setWorkspaceEdit] = useState<{ readonly workspaceId: string; readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const { theme, toggleTheme } = useTheme();
   const adBlock = useAdBlock();
 
@@ -322,6 +326,40 @@ export function App() {
     setTabSearch(null);
   };
 
+  // Like the bookmark popup, the editor covers whichever kind of tab is showing, so that tab's native view comes off
+  // the window first and a still of its last frame stands in behind the popup.
+  const openWorkspaceEditor = (workspaceId: string): void => {
+    if (workspaceEdit) {
+      return;
+    }
+    const tabId = activeTabId;
+    // Set at once, before the capture resolves, so a second press while it is in flight does not open another.
+    setWorkspaceEdit({ workspaceId, tabId, previewImage: null });
+    if (tabId) {
+      void beginTabPreview(tabId).then((previewImage) => {
+        setWorkspaceEdit((current) => (current ? { ...current, previewImage } : current));
+      });
+    }
+  };
+
+  const closeWorkspaceEditor = (): void => {
+    if (workspaceEdit?.tabId) {
+      endTabPreview(workspaceEdit.tabId);
+    }
+    setWorkspaceEdit(null);
+  };
+
+  const handleSaveWorkspace = (name: string, color: string, icon: string): void => {
+    if (workspaceEdit) {
+      updateWorkspace(workspaceEdit.workspaceId, { name, color, icon });
+    }
+    closeWorkspaceEditor();
+  };
+
+  // The keyboard command (Ctrl+Shift+E) is an Electron menu accelerator for the same reason Search Tabs is: a focused
+  // tab would swallow a renderer-level keydown. It always means the active workspace.
+  useEffect(() => window.northstar.onEditWorkspace(() => openWorkspaceEditor(activeWorkspaceId)));
+
   // The chrome window can lose OS focus to whatever tab's WebContentsView
   // the user last clicked into, so the "Search Tabs" keyboard shortcut is
   // an Electron menu accelerator (see buildMenu.ts) that reaches here via
@@ -490,6 +528,7 @@ export function App() {
           onSwitch={switchWorkspace}
           onCreate={() => createWorkspace()}
           onRename={renameWorkspace}
+          onEdit={openWorkspaceEditor}
           onRemove={removeWorkspace}
           onDropTab={moveTabToWorkspace}
           onDropTabToNewWorkspace={createWorkspaceWithTab}
@@ -512,6 +551,16 @@ export function App() {
               previewImage={bookmarkPopup.previewImage}
               onSave={handleSaveBookmark}
               onClose={handleCloseBookmarkPopup}
+            />
+          )}
+          {workspaceEdit && (
+            <WorkspaceEditPopup
+              // Keyed so reopening for another workspace starts from that one's values.
+              key={workspaceEdit.workspaceId}
+              workspace={workspaces.find((workspace) => workspace.id === workspaceEdit.workspaceId) ?? workspaces[0]!}
+              previewImage={workspaceEdit.previewImage}
+              onSave={handleSaveWorkspace}
+              onClose={closeWorkspaceEditor}
             />
           )}
           {tabSearch && (

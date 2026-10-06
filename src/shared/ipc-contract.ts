@@ -113,6 +113,7 @@ export const IpcChannel = {
   WorkspacesToggleSelect: 'workspaces:toggle-select',
   WorkspacesSelectRange: 'workspaces:select-range',
   WorkspacesRename: 'workspaces:rename',
+  WorkspacesUpdate: 'workspaces:update',
   WorkspacesRemove: 'workspaces:remove',
   WorkspaceOpenInNewWindow: 'workspaces:open-in-new-window',
   BookmarksAdd: 'bookmarks:add',
@@ -153,6 +154,7 @@ export const IpcChannel = {
   ZoomApply: 'zoom:apply',
   SidebarToggle: 'sidebar:toggle',
   UiOpenTabSearch: 'ui:open-tab-search',
+  UiEditWorkspace: 'ui:edit-workspace',
   UiFocusAddressBar: 'ui:focus-address-bar',
   UiFocusZoom: 'ui:focus-zoom',
   UiToggleTheme: 'ui:toggle-theme',
@@ -414,6 +416,8 @@ export interface NorthstarApi {
   /** Shift+click: selects every workspace between the active one and this one. */
   selectWorkspaceRange(id: string): Promise<IpcResult<BrowserState>>;
   renameWorkspace(id: string, name: string): Promise<IpcResult<BrowserState>>;
+  /** Changes a workspace's name, icon color and icon together — what the workspace editor's Save does. */
+  updateWorkspace(id: string, update: { name: string; color: string; icon: string }): Promise<IpcResult<BrowserState>>;
   removeWorkspace(id: string): Promise<IpcResult<BrowserState>>;
 
   /**
@@ -607,6 +611,9 @@ export interface NorthstarApi {
   resetZoom(): Promise<IpcResult<BrowserState>>;
   /** Sets the active tab's zoom to an exact percent (`ZoomPercentInput`, typing directly) — clamped to 25–200 on the main-process side regardless of what's passed. */
   setZoom(percent: number): Promise<IpcResult<BrowserState>>;
+
+  /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+E) to edit the active workspace. */
+  onEditWorkspace(listener: () => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request to open the tab search overlay. */
   onOpenTabSearch(listener: () => void): () => void;

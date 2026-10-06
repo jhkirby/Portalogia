@@ -186,6 +186,9 @@ export function useTabs() {
   const renameWorkspace = useCallback((id: string, name: string) => {
     void window.northstar.renameWorkspace(id, name).then(logIfFailed);
   }, []);
+  const updateWorkspace = useCallback((id: string, update: { name: string; color: string; icon: string }) => {
+    void window.northstar.updateWorkspace(id, update).then(logIfFailed);
+  }, []);
   const removeWorkspace = useCallback((id: string) => {
     void window.northstar.removeWorkspace(id).then(logIfFailed);
   }, []);
@@ -328,6 +331,7 @@ export function useTabs() {
     createWorkspaceWithTab,
     switchWorkspace,
     renameWorkspace,
+    updateWorkspace,
     removeWorkspace,
     openWorkspaceInNewWindow,
 

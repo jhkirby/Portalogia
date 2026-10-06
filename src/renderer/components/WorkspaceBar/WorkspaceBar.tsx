@@ -8,6 +8,8 @@ import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
 import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
+import { PencilIcon } from '../icons';
+import { WorkspaceIcon } from '../WorkspaceIcon';
 
 interface WorkspaceBarProps {
   readonly workspaces: readonly WorkspaceState[];
@@ -32,6 +34,8 @@ interface WorkspaceBarProps {
   readonly onSwitch: (id: string) => void;
   readonly onCreate: () => void;
   readonly onRename: (id: string, name: string) => void;
+  /** Opens the workspace editor (name, icon color, icon) for one workspace: its pencil button. */
+  readonly onEdit: (id: string) => void;
   readonly onRemove: (id: string) => void;
   /** Called when a tab dragged from `TabBar` is dropped onto a workspace pill — moves it into that workspace. Tab id first, same argument order as every other tab action (`moveTab`, `activateTab`, ...). */
   readonly onDropTab: (tabId: string, workspaceId: string) => void;
@@ -58,6 +62,7 @@ export function WorkspaceBar({
   onSwitch,
   onCreate,
   onRename,
+  onEdit,
   onRemove,
   onDropTab,
   onDropTabToNewWorkspace,
@@ -166,11 +171,9 @@ export function WorkspaceBar({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <span
-                  className="workspace-bar__dot"
-                  style={{ background: workspace.color }}
-                  aria-hidden="true"
-                />
+                <span className="workspace-bar__icon" aria-hidden="true">
+                  <WorkspaceIcon icon={workspace.icon} color={workspace.color} />
+                </span>
                 {isEditing ? (
                   <input
                     autoFocus
@@ -183,6 +186,20 @@ export function WorkspaceBar({
                   />
                 ) : (
                   <span className="workspace-bar__name">{workspace.name}</span>
+                )}
+                {!isEditing && (
+                  <button
+                    type="button"
+                    className="workspace-bar__edit chrome-tooltip"
+                    aria-label={`Edit ${workspace.name} workspace`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEdit(workspace.id);
+                    }}
+                    data-tooltip={isActive ? `Edit Workspace (${formatShortcut('Shift+E')})` : 'Edit Workspace'}
+                  >
+                    <PencilIcon size={12} />
+                  </button>
                 )}
                 {workspaces.length > 1 && !isEditing && (
                   <button

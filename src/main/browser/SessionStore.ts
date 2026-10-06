@@ -27,6 +27,8 @@ const sessionWorkspaceSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
   color: z.string(),
+  // Absent in files written before workspaces had icons: those are all plain dots.
+  icon: z.string().default('dot'),
 });
 
 const sessionFileSchema = z.object({

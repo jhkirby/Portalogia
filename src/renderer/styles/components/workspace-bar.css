@@ -238,11 +238,14 @@
   color: var(--color-tab-text-active);
 }
 
-.workspace-bar__dot {
-  width: 8px;
-  height: 8px;
+/* Holds the workspace icon (see `WorkspaceIcon`): a fixed square, so names line up whichever icon is chosen. */
+.workspace-bar__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  border-radius: 50%;
 }
 
 .workspace-bar__name {
@@ -270,6 +273,7 @@
   outline: none;
 }
 
+.workspace-bar__edit,
 .workspace-bar__remove {
   display: flex;
   align-items: center;
@@ -298,12 +302,31 @@
   pointer-events: none;
 }
 
+/* Unlike the remove button, the edit button takes no room at all until its
+   pill is hovered: with both reserving space, names got cut short at rest.
+   The negative margin cancels the pill's own flex gap on its side. */
+.workspace-bar__edit {
+  width: 0;
+  margin-left: calc(-1 * var(--size-spacing-sm));
+  overflow: hidden;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__edit,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__edit {
+  width: 18px;
+  margin-left: 0;
+  overflow: visible;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__edit,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__edit,
 .workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__remove,
 .workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__remove {
   opacity: 1;
   pointer-events: auto;
 }
 
+.workspace-bar__edit:hover,
 .workspace-bar__remove:hover {
   background: var(--color-close-hover-bg);
 }
@@ -316,6 +339,7 @@
    just render behind that view. Anchoring right and capping the width
    keeps the whole tooltip inside `--size-sidebar-width`, wrapping instead
    of overflowing if the text is too long for one line at that width. */
+.workspace-bar__edit::after,
 .workspace-bar__remove::after {
   right: 0;
   max-width: 150px;
@@ -327,6 +351,7 @@
    itself, so its own tooltip needs the same tighter cap to actually stay
    inside that, not the much roomier `--size-sidebar-width` this pill has
    when the sidebar is fully expanded. */
+.sidebar--hidden .workspace-bar__edit::after,
 .sidebar--hidden .workspace-bar__remove::after {
   max-width: calc(var(--size-sidebar-collapsed-width) - 2px);
 }
