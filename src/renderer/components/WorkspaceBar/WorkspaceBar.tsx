@@ -1,18 +1,20 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-06
 
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
 import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
-import { PencilIcon } from '../icons';
+import { BookmarkStarIcon, PencilIcon, WorkspaceImagesIcon } from '../icons';
 import { WorkspaceIcon } from '../WorkspaceIcon';
 
 interface WorkspaceBarProps {
   readonly workspaces: readonly WorkspaceState[];
+  /** For each workspace whose tabs match a saved image exactly, that image's id: it shows a filled star, and the star's click removes the image. */
+  readonly savedImageIds: Readonly<Record<string, string>>;
   readonly activeWorkspaceId: string;
   /** Whether the sidebar is shown or slid away (toggled via Ctrl+L) — stays mounted either way so the slide can animate. */
   readonly sidebarVisible: boolean;
@@ -41,6 +43,12 @@ interface WorkspaceBarProps {
   readonly onDropTab: (tabId: string, workspaceId: string) => void;
   /** Called when a tab dragged from `TabBar` is dropped onto the "+ New workspace" button — creates a new workspace with that tab as its first (and only) one. */
   readonly onDropTabToNewWorkspace: (tabId: string) => void;
+  /** Saves a workspace (its tabs in order) as a workspace image: the star its icon turns into while hovered. */
+  readonly onSaveImage: (id: string) => void;
+  /** Deletes a saved image: a click on a filled star. */
+  readonly onRemoveImage: (imageId: string) => void;
+  /** Opens the workspace images popup. */
+  readonly onOpenImages: () => void;
   /** Shows or hides the sidebar — `.sidebar__toggle`'s own click, the same Ctrl+L action. */
   readonly onToggleSidebar: () => void;
 }
@@ -53,6 +61,7 @@ interface WorkspaceBarProps {
  */
 export function WorkspaceBar({
   workspaces,
+  savedImageIds,
   activeWorkspaceId,
   sidebarVisible,
   focusMode,
@@ -66,6 +75,9 @@ export function WorkspaceBar({
   onRemove,
   onDropTab,
   onDropTabToNewWorkspace,
+  onSaveImage,
+  onRemoveImage,
+  onOpenImages,
   onToggleSidebar,
 }: WorkspaceBarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -84,6 +96,7 @@ export function WorkspaceBar({
     `${sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} (${formatShortcut('L')})`,
   );
   const newWorkspaceTooltip = useOverlayTooltip(`New workspace (${formatShortcut('Shift+N')})`);
+  const imagesTooltip = useOverlayTooltip(`Workspace images (${formatShortcut('Shift+S')})`);
 
   const startEditing = (workspace: WorkspaceState): void => {
     setEditingId(workspace.id);
@@ -171,8 +184,32 @@ export function WorkspaceBar({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <span className="workspace-bar__icon" aria-hidden="true">
-                  <WorkspaceIcon icon={workspace.icon} color={workspace.color} />
+                <span className="workspace-bar__icon">
+                  <span className="workspace-bar__glyph" aria-hidden="true">
+                    <WorkspaceIcon icon={workspace.icon} color={workspace.color} />
+                  </span>
+                  {/* The icon turns into this star while the workspace is hovered: a click saves the workspace as an image. */}
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      className="workspace-bar__star chrome-tooltip"
+                      aria-label={`Save ${workspace.name} as a workspace image`}
+                      aria-pressed={savedImageIds[workspace.id] !== undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const imageId = savedImageIds[workspace.id];
+                        if (imageId === undefined) {
+                          onSaveImage(workspace.id);
+                        } else {
+                          onRemoveImage(imageId);
+                        }
+                      }}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                      data-tooltip={savedImageIds[workspace.id] !== undefined ? 'Remove workspace image' : 'Save workspace image'}
+                    >
+                      <BookmarkStarIcon filled={savedImageIds[workspace.id] !== undefined} size={14} />
+                    </button>
+                  )}
                 </span>
                 {isEditing ? (
                   <input
@@ -219,6 +256,7 @@ export function WorkspaceBar({
             );
           })}
         </div>
+        <div className="workspace-bar__actions">
         {/* Gone entirely at the workspace limit (main refuses too), back once one is removed. */}
         {workspaces.length < MAX_WORKSPACES && (
           <button
@@ -253,6 +291,21 @@ export function WorkspaceBar({
             <span className="workspace-bar__new-label">New workspace</span>
           </button>
         )}
+        <button
+          type="button"
+          className="workspace-bar__images chrome-tooltip"
+          aria-label="Workspace images"
+          onClick={() => {
+            imagesTooltip.hide();
+            onOpenImages();
+          }}
+          data-tooltip={`Workspace images (${formatShortcut('Shift+S')})`}
+          onMouseEnter={sidebarVisible ? undefined : imagesTooltip.onMouseEnter}
+          onMouseLeave={sidebarVisible ? undefined : imagesTooltip.onMouseLeave}
+        >
+          <WorkspaceImagesIcon size={16} />
+        </button>
+        </div>
       </div>
       {/* Outside `.sidebar__inner` on purpose — see the wrapper's own
           comment above. Omitted entirely in Focus Mode rather than just

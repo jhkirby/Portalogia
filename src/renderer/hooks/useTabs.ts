@@ -14,6 +14,8 @@ const EMPTY_STATE: BrowserState = {
   workspaces: [],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   bookmarks: [],
+  workspaceImages: [],
+  savedWorkspaceImages: {},
   splitView: null,
   focusMode: false,
   sidebarVisible: true,
@@ -222,6 +224,18 @@ export function useTabs() {
   const updateWorkspace = useCallback((id: string, update: { name: string; color: string; icon: string }) => {
     void window.northstar.updateWorkspace(id, update).then(logIfFailed);
   }, []);
+  const saveWorkspaceImage = useCallback((workspaceId: string) => {
+    void window.northstar.saveWorkspaceImage(workspaceId).then(logIfFailed);
+  }, []);
+  const openWorkspaceImage = useCallback((id: string) => {
+    void window.northstar.openWorkspaceImage(id).then(logIfFailed);
+  }, []);
+  const removeWorkspaceImage = useCallback((id: string) => {
+    void window.northstar.removeWorkspaceImage(id).then(logIfFailed);
+  }, []);
+  const renameWorkspaceImage = useCallback((id: string, name: string) => {
+    void window.northstar.renameWorkspaceImage(id, name).then(logIfFailed);
+  }, []);
   const removeWorkspace = useCallback((id: string) => {
     void window.northstar.removeWorkspace(id).then(logIfFailed);
   }, []);
@@ -326,6 +340,8 @@ export function useTabs() {
     activeWorkspaceId: state.activeWorkspaceId,
     workspaceTabs,
     bookmarks: state.bookmarks,
+    workspaceImages: state.workspaceImages,
+    savedWorkspaceImages: state.savedWorkspaceImages,
     splitView: state.splitView,
     secondaryTab,
     focusMode: state.focusMode,
@@ -376,6 +392,10 @@ export function useTabs() {
     renameWorkspace,
     updateWorkspace,
     removeWorkspace,
+    saveWorkspaceImage,
+    openWorkspaceImage,
+    removeWorkspaceImage,
+    renameWorkspaceImage,
     openWorkspaceInNewWindow,
 
     addBookmark,

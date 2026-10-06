@@ -282,6 +282,11 @@ export function buildMenu(
           click: () => getTabManager()?.requestEditWorkspace(),
         },
         {
+          label: 'Workspace Images…',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => getTabManager()?.requestWorkspaceImages(),
+        },
+        {
           label: 'Search Tabs…',
           accelerator: 'CmdOrCtrl+K',
           click: () => getTabManager()?.requestTabSearch(),

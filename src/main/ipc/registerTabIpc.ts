@@ -15,6 +15,7 @@ import {
   pdfOpenPathRequestSchema,
   historyQueryRequestSchema,
   historySetRangeRequestSchema,
+  renameWorkspaceImageRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
   colorPickerSyncRequestSchema,
@@ -151,6 +152,18 @@ export function registerTabIpc(
   );
   handle(IpcChannel.WorkspacesRemove, workspaceIdRequestSchema, (request, event) =>
     resolveTabManager(event).removeWorkspace(request.id),
+  );
+  handle(IpcChannel.WorkspaceImagesSave, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).saveWorkspaceImage(request.id),
+  );
+  handle(IpcChannel.WorkspaceImagesOpen, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).openWorkspaceImage(request.id),
+  );
+  handle(IpcChannel.WorkspaceImagesRemove, workspaceIdRequestSchema, (request, event) =>
+    resolveTabManager(event).removeWorkspaceImage(request.id),
+  );
+  handle(IpcChannel.WorkspaceImagesRename, renameWorkspaceImageRequestSchema, (request, event) =>
+    resolveTabManager(event).renameWorkspaceImage(request.id, request.name),
   );
 
   handle(IpcChannel.BookmarksAdd, addBookmarkRequestSchema, (request, event) =>

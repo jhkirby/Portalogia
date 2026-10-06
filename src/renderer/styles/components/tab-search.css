@@ -91,6 +91,10 @@
   color: var(--color-address-placeholder);
 }
 
+.tab-search__empty--centered {
+  text-align: center;
+}
+
 .tab-search__result {
   display: flex;
   align-items: center;
@@ -141,4 +145,64 @@
 
   font-size: var(--size-font-sm);
   color: var(--color-address-placeholder);
+}
+
+/* The × on a workspace image's row: only while the row is hovered (or its button focused), like the sidebar's close buttons. */
+.tab-search__remove,
+.tab-search__rename {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  color: var(--color-tab-text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+
+  opacity: 0;
+}
+
+.tab-search__result:hover .tab-search__remove,
+.tab-search__result:hover .tab-search__rename,
+.tab-search__remove:focus-visible,
+.tab-search__rename:focus-visible {
+  opacity: 1;
+}
+
+.tab-search__remove:hover,
+.tab-search__rename:hover {
+  background: var(--color-close-hover-bg);
+}
+
+/* The pencil's glyph is smaller than the × and sits on the row's text, so it is drawn in the same color. */
+.tab-search__rename {
+  font-size: 12px;
+}
+
+/* A workspace image's name while it is being renamed: the title's own place and size, as a box. */
+.tab-search__rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--size-spacing-sm);
+  box-sizing: border-box;
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border-focus);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  color: var(--color-address-text);
+}
+
+.tab-search__rename-input:focus {
+  outline: none;
 }

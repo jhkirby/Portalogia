@@ -169,6 +169,14 @@ export const IpcChannel = {
   WorkspacesUpdate: 'workspaces:update',
   WorkspacesRemove: 'workspaces:remove',
   WorkspaceOpenInNewWindow: 'workspaces:open-in-new-window',
+  /** Chrome → main: save a workspace (its name, color, icon and tabs in order) as a workspace image. */
+  WorkspaceImagesSave: 'workspace-images:save',
+  /** Chrome → main: open a saved image as a new workspace with its tabs. */
+  WorkspaceImagesOpen: 'workspace-images:open',
+  /** Chrome → main: delete a saved image. */
+  WorkspaceImagesRemove: 'workspace-images:remove',
+  /** Chrome → main: rename a saved image. */
+  WorkspaceImagesRename: 'workspace-images:rename',
   BookmarksAdd: 'bookmarks:add',
   BookmarksRemove: 'bookmarks:remove',
   /** Chrome → main: bookmark the tab's page (or open PDF's file), or remove its bookmark. */
@@ -210,6 +218,7 @@ export const IpcChannel = {
   SidebarToggle: 'sidebar:toggle',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiEditWorkspace: 'ui:edit-workspace',
+  UiOpenWorkspaceImages: 'ui:open-workspace-images',
   UiFocusAddressBar: 'ui:focus-address-bar',
   UiFocusZoom: 'ui:focus-zoom',
   UiToggleTheme: 'ui:toggle-theme',
@@ -501,6 +510,14 @@ export interface NorthstarApi {
   /** Changes a workspace's name, icon color and icon together — what the workspace editor's Save does. */
   updateWorkspace(id: string, update: { name: string; color: string; icon: string }): Promise<IpcResult<BrowserState>>;
   removeWorkspace(id: string): Promise<IpcResult<BrowserState>>;
+  /** Saves a workspace — its name, color, icon and tabs in order — as a workspace image (the sidebar's star). Saving one that is already saved under that name updates it. */
+  saveWorkspaceImage(workspaceId: string): Promise<IpcResult<BrowserState>>;
+  /** Opens a saved image as a new workspace holding its tabs, in order. */
+  openWorkspaceImage(id: string): Promise<IpcResult<BrowserState>>;
+  /** Deletes a saved workspace image. */
+  removeWorkspaceImage(id: string): Promise<IpcResult<BrowserState>>;
+  /** Renames a saved workspace image (the pencil on its row in the images popup). */
+  renameWorkspaceImage(id: string, name: string): Promise<IpcResult<BrowserState>>;
 
   /**
    * Opens the active tab in a brand-new window (Ctrl+Shift+O, or the
@@ -698,6 +715,9 @@ export interface NorthstarApi {
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+E) to edit the active workspace. */
   onEditWorkspace(listener: () => void): () => void;
+
+  /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+S) to open the workspace images popup. */
+  onOpenWorkspaceImages(listener: () => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request to open the tab search overlay. */
   onOpenTabSearch(listener: () => void): () => void;
