@@ -5,7 +5,12 @@
 
 import { join } from 'node:path';
 import { app, type BrowserWindow, WebContentsView } from 'electron';
-import { FIND_BAR_HEIGHT_PX, FIND_BAR_MARGIN_PX, FIND_BAR_WIDTH_PX } from '@shared/constants';
+import {
+  FIND_BAR_HEIGHT_PX,
+  FIND_BAR_MARGIN_PX,
+  FIND_BAR_SLIDE_MS,
+  FIND_BAR_WIDTH_PX,
+} from '@shared/constants';
 import { IpcChannel, type FindBarState } from '@shared/ipc-contract';
 import {
   findGotoRequestSchema,
@@ -51,6 +56,9 @@ export class FindOverlay {
   private isMounted = false;
   private latestState: FindBarState | null = null;
   private isLoaded = false;
+  private isClosing = false;
+  private target: Rect | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * @param window The chrome window this overlay's view mounts into/out of.
@@ -125,16 +133,82 @@ export class FindOverlay {
       width: Math.round(width),
       height: FIND_BAR_HEIGHT_PX,
     };
+    this.target = bounds;
     if (!this.isMounted) {
       // No index: it lands at the end of the child-view stack, i.e. on top.
       this.window.contentView.addChildView(this.view);
       this.isMounted = true;
+      // Starts just past the area's right edge; the window clips what's outside it.
+      this.view.setBounds({ ...bounds, x: Math.round(main.x + main.width) });
+      this.animateTo(bounds.x, false);
+      return;
+    }
+    if (this.isClosing) {
+      // Reopened mid-close: reverse from wherever the slide had got to.
+      this.isClosing = false;
+      this.animateTo(bounds.x, false);
+      return;
+    }
+    if (this.timer) {
+      // Mid-slide-in: retarget, so a resize doesn't leave it aiming at stale bounds.
+      this.animateTo(bounds.x, false);
+      return;
     }
     this.view.setBounds(bounds);
   }
 
-  /** Unmounts the bar's view, if shown — rather than shrinking it, so a closed bar can never swallow a click meant for the page. */
-  public hide(): void {
+  /**
+   * Slides the bar out to the right, then unmounts its view — rather than
+   * shrinking it, so a closed bar can never swallow a click meant for the page.
+   * @param immediate Skip the slide, e.g. when the window is closing.
+   */
+  public hide(immediate = false): void {
+    if (!this.isMounted || this.isClosing) {
+      return;
+    }
+    if (immediate || !this.target) {
+      this.unmount();
+      return;
+    }
+    this.isClosing = true;
+    const current = this.view.getBounds();
+    this.animateTo(this.target.x + this.target.width + FIND_BAR_MARGIN_PX, true, current.x);
+  }
+
+  /** Animates the view's x toward `toX`; unmounts on arrival when `closing`. */
+  private animateTo(toX: number, closing: boolean, fromX = this.view.getBounds().x): void {
+    this.stopTimer();
+    const start = Date.now();
+    this.timer = setInterval(() => {
+      if (this.view.webContents.isDestroyed() || !this.target) {
+        this.stopTimer();
+        return;
+      }
+      const t = Math.min(1, (Date.now() - start) / FIND_BAR_SLIDE_MS);
+      const eased = 1 - (1 - t) ** 3;
+      this.view.setBounds({
+        ...this.target,
+        x: Math.round(fromX + (toX - fromX) * eased),
+      });
+      if (t >= 1) {
+        this.stopTimer();
+        if (closing) {
+          this.unmount();
+        }
+      }
+    }, 16);
+  }
+
+  private stopTimer(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  private unmount(): void {
+    this.stopTimer();
+    this.isClosing = false;
     if (this.isMounted) {
       this.window.contentView.removeChildView(this.view);
       this.isMounted = false;
@@ -166,11 +240,11 @@ export class FindOverlay {
 
   /** @returns Whether the bar is currently showing. */
   public get isShown(): boolean {
-    return this.isMounted;
+    return this.isMounted && !this.isClosing;
   }
 
   /** Removes the bar's view for good — call this when the owning window closes. */
   public dispose(): void {
-    this.hide();
+    this.hide(true);
   }
 }

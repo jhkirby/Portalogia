@@ -278,3 +278,5 @@ export const HISTORY_MAX_ENTRIES = 50_000;
 export const FIND_BAR_WIDTH_PX = 440;
 export const FIND_BAR_HEIGHT_PX = 44;
 export const FIND_BAR_MARGIN_PX = 12;
+/** How long the find bar's slide in from / out to the right edge takes. */
+export const FIND_BAR_SLIDE_MS = 160;
