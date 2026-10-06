@@ -171,6 +171,8 @@ export const IpcChannel = {
   WindowDragEnd: 'window:drag-end',
   WindowClose: 'window:close',
   WindowStateChanged: 'window:state-changed',
+  WindowGetState: 'window:get-state',
+  WindowGripHover: 'window:grip-hover',
 } as const;
 
 // Request validation schemas live in `@shared/ipc-schemas` (zod-based,
@@ -662,6 +664,10 @@ export interface NorthstarApi {
   closeWindow(): void;
   /** Subscribes to the window's maximized state changing; returns an unsubscribe function. */
   onWindowStateChanged(listener: (state: WindowState) => void): () => void;
+  /** Reads whether this window is maximized right now (the push channel above only fires on a change). */
+  getWindowState(): Promise<WindowState>;
+  /** Subscribes to main reporting whether the cursor is over the titlebar grip. Sent only while maximized, when the grip is an OS drag region and can't see its own hover. */
+  onGripHover(listener: (hovering: boolean) => void): () => void;
 }
 
 /**

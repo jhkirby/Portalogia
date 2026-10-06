@@ -24,6 +24,8 @@ const PREVIEW_HTML =
 interface ActiveDrag {
   readonly window: BrowserWindow;
   readonly grab: Point;
+  /** The window's size when the drag began; held fixed while it moves. */
+  readonly size: { readonly width: number; readonly height: number };
   readonly timer: NodeJS.Timeout;
   preview: BrowserWindow | null;
   zone: SnapZone | null;
@@ -56,10 +58,10 @@ export class WindowDragController {
     const cursor = screen.getCursorScreenPoint();
     this.restoreIfSnappedOrMaximized(window, cursor);
 
-    const [startX = 0, startY = 0] = window.getPosition();
+    const { x: startX, y: startY, width, height } = window.getBounds();
     const grab = { x: cursor.x - startX, y: cursor.y - startY };
     const timer = setInterval(() => this.tick(window.id), DRAG_INTERVAL_MS);
-    this.drags.set(window.id, { window, grab, timer, preview: null, zone: null });
+    this.drags.set(window.id, { window, grab, size: { width, height }, timer, preview: null, zone: null });
   }
 
   /**
@@ -97,7 +99,9 @@ export class WindowDragController {
       return;
     }
     const cursor = screen.getCursorScreenPoint();
-    drag.window.setPosition(cursor.x - drag.grab.x, cursor.y - drag.grab.y);
+    // `setBounds` with the size pinned, not `setPosition`: on a scaled display each
+    // `setPosition` rounds the size a pixel or two up, and the window grew as it was dragged.
+    drag.window.setBounds({ x: cursor.x - drag.grab.x, y: cursor.y - drag.grab.y, ...drag.size });
     this.updatePreview(drag, this.zoneAt(cursor));
   }
 
@@ -169,8 +173,11 @@ export class WindowDragController {
     const current = window.getBounds();
     let target: Rect | null = null;
     if (window.isMaximized()) {
-      window.unmaximize();
+      // Read before unmaximizing: right after `unmaximize()` the window has not
+      // finished changing state, and `getNormalBounds()` can still answer with
+      // the maximized rectangle, so the "restored" window came back full size.
       target = window.getNormalBounds();
+      window.unmaximize();
     } else {
       const before = this.beforeSnap.get(window.id);
       if (before) {

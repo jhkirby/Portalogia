@@ -34,6 +34,7 @@ import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
 import { TerminalManager } from './terminal/TerminalManager';
 import { createMainWindow } from './windows/MainWindow';
+import { GripHoverWatcher } from './windows/GripHoverWatcher';
 
 // Electron requires this to be set before `app.whenReady()`.
 app.setName('Northstar');
@@ -364,6 +365,7 @@ function launchWindow(
 
   // Drives WindowControls' maximize/restore icon — the frameless window has
   // no native titlebar to show that state itself (see MainWindow.ts).
+  new GripHoverWatcher(window);
   window.on('maximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: true }));
   window.on('unmaximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: false }));
   return window;

@@ -173,6 +173,12 @@ const api: NorthstarApi = {
   beginWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragStart),
   endWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragEnd),
   closeWindow: () => ipcRenderer.send(IpcChannel.WindowClose),
+  getWindowState: () => ipcRenderer.invoke(IpcChannel.WindowGetState),
+  onGripHover: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, hovering: boolean): void => listener(hovering);
+    ipcRenderer.on(IpcChannel.WindowGripHover, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.WindowGripHover, handler);
+  },
   onWindowStateChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: WindowState): void => {
       listener(state);

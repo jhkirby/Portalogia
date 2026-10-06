@@ -36,6 +36,10 @@ export function registerWindowIpc(): void {
     }
   });
 
+  ipcMain.handle(IpcChannel.WindowGetState, (event) => ({
+    isMaximized: BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false,
+  }));
+
   ipcMain.on(IpcChannel.WindowMinimize, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

@@ -133,13 +133,10 @@ body {
 }
 
 /* ── TITLEBAR ─────────────────────────────────────────────────────────── */
-/* The frameless window's only drag region (see MainWindow.ts's
-   `frame: false`), sharing its row with the tab strip rather than sitting
-   above it — `.tab-bar` opts itself out of dragging (see tab-bar.css), so
-   only the leftover space past the tabs and the "new tab" button stays
-   draggable, WindowControls included. That leftover space also carries
-   Windows' native double-click-to-maximize for a drag region, with no JS
-   needed. */
+/* The frameless window's top row, sharing it between the tab strip and
+   WindowControls. Not an OS drag region: the window is moved only by the
+   grip strip along its top edge (`TitlebarGrip`), so the empty space past the
+   tabs does nothing when pressed or double-clicked. */
 .titlebar {
   position: relative;
   display: flex;
@@ -154,8 +151,6 @@ body {
 
   background: var(--color-chrome-bg);
   border-bottom: 1px solid var(--color-chrome-border);
-
-  -webkit-app-region: drag;
 }
 
 /* The drag strip along the window's top edge (`TitlebarGrip`) — the height of
@@ -167,7 +162,9 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 8px;
+  /* 12px: 1.5x the strip's original 8px, so it is easier to hit. Still inside the
+     14px above the tabs (see `.tab-bar__tab`'s height), so the tabs are not moved. */
+  height: 12px;
   /* Above `.tab-bar`, which spans the whole titlebar height (this strip's rows
      included) and is positioned, so it would otherwise cover the strip and
      eat its mouse events. `.window-controls` sits one level higher still. */
@@ -175,6 +172,20 @@ body {
 
   cursor: grab;
   -webkit-app-region: no-drag;
+}
+
+/* Maximized (see `TitlebarGrip`): the OS drags the window by this strip, which is
+   what lets it come back to its normal size under the cursor, as in Chrome. An OS
+   drag region receives no mouse events, so `:hover` never matches and the cursor
+   stays the default arrow; main reports the hover instead (`GripHoverWatcher`),
+   which arrives as `--hover`. */
+.titlebar__grip--native {
+  cursor: default;
+  -webkit-app-region: drag;
+}
+
+.titlebar__grip--hover {
+  background: var(--color-grip-hover-bg);
 }
 
 .titlebar__grip:hover {

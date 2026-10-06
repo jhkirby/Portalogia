@@ -29,6 +29,14 @@ export const CHROME_HEIGHT_PX = 92;
 export const CHROME_HEIGHT_FOCUSED_PX = 0;
 
 /**
+ * Height, in CSS pixels, of the titlebar grip strip along the window's top
+ * edge. Must equal `.titlebar__grip`'s `height` in app.css; main uses it to
+ * tell when the cursor is over the grip while the window is maximized
+ * (`GripHoverWatcher`).
+ */
+export const TITLEBAR_GRIP_HEIGHT_PX = 12;
+
+/**
  * Width, in CSS pixels, of the workspace sidebar on the left edge of the
  * window. The main process uses this to shift each tab's WebContentsView
  * right by this much (and shrink its width to match) so it never sits
