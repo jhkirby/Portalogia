@@ -19,6 +19,13 @@ files:
 # archive (native `dlopen` needs a real file on disk), so keep it unpacked.
 asarUnpack:
   - node_modules/node-pty/**/*
+# The license requires every copy to carry its terms, and the bundled
+# dependencies' licenses require their notices too - so all three ship next
+# to the executable, beside electron-builder's own LICENSE.electron.txt.
+extraFiles:
+  - LICENSE
+  - PRIVACY.md
+  - THIRD_PARTY_NOTICES.txt
 win:
   target: nsis
 mac:
