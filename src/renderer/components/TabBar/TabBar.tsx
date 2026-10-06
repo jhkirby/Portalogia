@@ -8,7 +8,7 @@ import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import { formatShortcut } from '../../lib/shortcuts';
-import { HistoryIcon } from '../icons';
+import { GlobeIcon, HistoryIcon } from '../icons';
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
 // element following the cursor by default; over this chrome's mix of HTML
@@ -428,10 +428,10 @@ function Tab({
         </span>
       ) : tab.isLoading ? (
         <span className="tab-bar__spinner" aria-hidden="true" />
-      ) : tab.favicon ? (
-        <img className="tab-bar__favicon" src={tab.favicon} alt="" />
       ) : (
-        <span className="tab-bar__favicon-placeholder" aria-hidden="true" />
+        <span className="tab-bar__terminal-icon tab-bar__history-icon" aria-hidden="true">
+          <GlobeIcon size={13} />
+        </span>
       )}
       <span className="tab-bar__title" title={tab.title || undefined}>
         {label ?? (tab.title || 'New Tab')}

@@ -4,6 +4,7 @@ export { CommentIcon } from './CommentIcon';
 export { CropIcon } from './CropIcon';
 export { ExportIcon } from './ExportIcon';
 export { FindIcon } from './FindIcon';
+export { GlobeIcon } from './GlobeIcon';
 export { HighlighterIcon } from './HighlighterIcon';
 export { HistoryIcon } from './HistoryIcon';
 export { LaserPointerIcon } from './LaserPointerIcon';
