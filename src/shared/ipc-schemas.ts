@@ -419,3 +419,11 @@ export const themeSetRequestSchema = z.object({
   theme: z.enum(['light', 'dark']),
 });
 export type ThemeSetRequest = z.infer<typeof themeSetRequestSchema>;
+
+export const adBlockSetEnabledRequestSchema = z.object({ enabled: z.boolean() });
+
+export const adBlockSetSiteAllowedRequestSchema = z.object({
+  host: z.string().min(1).max(253),
+  allowed: z.boolean(),
+});
+export type AdBlockSetSiteAllowedRequest = z.infer<typeof adBlockSetSiteAllowedRequestSchema>;

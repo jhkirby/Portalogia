@@ -17,6 +17,7 @@ import { TitlebarGrip } from './components/TitlebarGrip';
 import { TabSearchPopup } from './components/TabSearchPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
+import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
 
@@ -124,6 +125,7 @@ export function App() {
   const [tabSearch, setTabSearch] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
   const { theme, toggleTheme } = useTheme();
+  const adBlock = useAdBlock();
 
   // Tells main a dragged tab was dropped on this window, as a backup to the
   // dragged tab's own `dragend` (which can go missing if the tab's element
@@ -207,6 +209,8 @@ export function App() {
   // A terminal or History tab is an app page, not a document: none of the page-marking tools apply to it.
   const isAppPage = activeTab?.kind === 'terminal' || activeTab?.kind === 'history';
   const isHome = browserTab?.url === HOME_URL;
+  const adBlockSite = hostOfUrl(browserTab?.url);
+  const adBlockSiteAllowed = adBlockSite !== null && adBlock.allowedSites.includes(adBlockSite);
   // PDF bookmarks are files, not pages: the address bar and tab labels only ever deal in the page ones.
   const pageBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'page'), [bookmarks]);
   const activeBookmark = useMemo(
@@ -428,6 +432,12 @@ export function App() {
               cropActive={cropActive}
               showCrop={activeTab?.kind === 'pdf'}
               theme={theme}
+              showAdBlock={adBlockSite !== null && !isHome}
+              adBlockActive={adBlock.enabled && !adBlockSiteAllowed}
+              adBlockGloballyOff={!adBlock.enabled}
+              adBlockBlockedCount={activeTabId ? (adBlock.blockedByTab[activeTabId] ?? 0) : 0}
+              adBlockSite={adBlockSite ?? ''}
+              onToggleAdBlock={() => adBlockSite && window.northstar.setAdBlockSiteAllowed(adBlockSite, !adBlockSiteAllowed)}
               onOpenPdfViewer={createPdfTab}
               canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
               canExportDocuments={browserTab !== null && !isHome}

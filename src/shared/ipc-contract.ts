@@ -157,6 +157,12 @@ export const IpcChannel = {
   UiFocusZoom: 'ui:focus-zoom',
   UiToggleTheme: 'ui:toggle-theme',
   ThemeSet: 'theme:set',
+  // Ad blocking. `AdBlockState` is pushed to every chrome window as it changes;
+  // the other three are the chrome's requests (see `registerAdBlockIpc`).
+  AdBlockState: 'adblock:state',
+  AdBlockGetState: 'adblock:get-state',
+  AdBlockSetEnabled: 'adblock:set-enabled',
+  AdBlockSetSiteAllowed: 'adblock:set-site-allowed',
   WindowMinimize: 'window:minimize',
   WindowToggleMaximize: 'window:toggle-maximize',
   WindowDragStart: 'window:drag-start',
@@ -296,6 +302,16 @@ export interface ColorPickerColorChangedPayload {
  * matches the chrome instead of drifting to whatever the OS prefers.
  */
 export type ThemePreference = 'light' | 'dark';
+
+/** What the chrome shows about the ad blocker — pushed from main whenever it changes. */
+export interface AdBlockState {
+  /** The global switch. */
+  readonly enabled: boolean;
+  /** Hostnames the user has turned blocking off for. */
+  readonly allowedSites: readonly string[];
+  /** Requests and page elements blocked since each tab's current page began loading, by tab id. */
+  readonly blockedByTab: Readonly<Record<string, number>>;
+}
 
 /**
  * The API surface exposed to the renderer via `contextBridge`. Preload
@@ -605,6 +621,15 @@ export interface NorthstarApi {
   onToggleTheme(listener: () => void): () => void;
   /** Reports the renderer's current theme so main can mirror it onto `nativeTheme.themeSource` — see `ThemePreference`. Fire-and-forget, same as `sendTerminalInput`. */
   setNativeTheme(theme: ThemePreference): void;
+
+  /** Reads the ad blocker's current state — the push channel only fires on change. */
+  getAdBlockState(): Promise<AdBlockState>;
+  /** Subscribes to ad blocker state changes (a toggle, or a tab's blocked count moving). */
+  onAdBlockState(listener: (state: AdBlockState) => void): () => void;
+  /** Turns the ad blocker on or off everywhere. Fire-and-forget. */
+  setAdBlockEnabled(enabled: boolean): void;
+  /** Turns blocking on or off for one site (its hostname). Fire-and-forget. */
+  setAdBlockSiteAllowed(host: string, allowed: boolean): void;
 
   /**
    * Reports `useAccentColor`'s current accent so main can style a tab's

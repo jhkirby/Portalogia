@@ -18,8 +18,11 @@
     "test:e2e": "playwright test tests/e2e"
   },
   "dependencies": {
+    "@ghostery/adblocker-electron": "^2.18.2",
+    "@ghostery/adblocker-electron-preload": "^2.18.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "cross-fetch": "^4.1.0",
     "node-pty": "^1.1.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289",
