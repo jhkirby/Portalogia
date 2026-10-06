@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
+import { isWorkspaceIconId } from './workspaceIcons';
 
 // Every ipcMain.handle validates its payload against one of these before
 // acting on it — the renderer is untrusted, even though it's our own code.
@@ -264,6 +265,14 @@ export const renameWorkspaceRequestSchema = z.object({
   name: z.string().min(1),
 });
 export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>;
+
+export const updateWorkspaceRequestSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(200),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  icon: z.string().refine(isWorkspaceIconId),
+});
+export type UpdateWorkspaceRequest = z.infer<typeof updateWorkspaceRequestSchema>;
 
 export const addBookmarkRequestSchema = z.object({
   title: z.string(),

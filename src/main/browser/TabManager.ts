@@ -38,6 +38,7 @@ import {
   ZOOM_PERCENT_WHEEL_STEP,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
+import { DEFAULT_WORKSPACE_ICON, isWorkspaceIconId } from '@shared/workspaceIcons';
 import {
   IpcChannel,
   type AddressSuggestionsSyncPayload,
@@ -267,6 +268,7 @@ export class TabManager {
         id: DEFAULT_WORKSPACE_ID,
         name: DEFAULT_WORKSPACE_NAME,
         color: WORKSPACE_COLORS[0],
+        icon: DEFAULT_WORKSPACE_ICON,
       });
     }
     // A transient default — whatever `main/index.ts` passes as this
@@ -417,6 +419,7 @@ export class TabManager {
         id: DEFAULT_WORKSPACE_ID,
         name: DEFAULT_WORKSPACE_NAME,
         color: WORKSPACE_COLORS[0]!,
+        icon: DEFAULT_WORKSPACE_ICON,
       });
     }
 
@@ -2196,6 +2199,7 @@ export class TabManager {
       id,
       name: name?.trim() || `Workspace ${this.workspaces.size + 1}`,
       color,
+      icon: DEFAULT_WORKSPACE_ICON,
     });
     const state = this.switchWorkspace(id);
     this.focusAddressBarPastTabLoad(state.activeTabId);
@@ -2225,6 +2229,7 @@ export class TabManager {
       id,
       name: `Workspace ${this.workspaces.size + 1}`,
       color,
+      icon: DEFAULT_WORKSPACE_ICON,
     });
     for (const memberId of this.registry.selectionContainingTab(tabId) ?? [tabId]) {
       this.moveTabToWorkspace(memberId, id);
@@ -2265,6 +2270,7 @@ export class TabManager {
       id,
       name: `Workspace ${this.workspaces.size + 1}`,
       color,
+      icon: DEFAULT_WORKSPACE_ICON,
     });
     // The source workspace keeps a fresh home tab if this was its last, rather
     // than being deleted: the tab is still mid-drag and has no window yet.
@@ -2424,6 +2430,34 @@ export class TabManager {
     this.workspaces.set(id, { ...workspace, name: trimmed });
     this.emitState();
     return this.getState();
+  }
+
+  /**
+   * Changes a workspace's name, icon color and icon in one step — the
+   * workspace editor's Save. A no-op if it doesn't exist or the name is blank.
+   * @param id The workspace to change.
+   * @param update The new name, `#rrggbb` color and icon id.
+   * @returns The full browser state after the change.
+   */
+  public updateWorkspace(id: string, update: { name: string; color: string; icon: string }): BrowserState {
+    const workspace = this.workspaces.get(id);
+    const name = update.name.trim();
+    if (!workspace || !name || !isWorkspaceIconId(update.icon)) {
+      return this.getState();
+    }
+    this.workspaces.set(id, { ...workspace, name, color: update.color, icon: update.icon });
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
+   * Asks this window's chrome to open the editor for its active workspace
+   * (menu/accelerator-driven, Ctrl+Shift+E). See `requestTabSearch` for why
+   * `webContents.focus()` has to happen here too.
+   */
+  public requestEditWorkspace(): void {
+    this.window.webContents.focus();
+    this.window.webContents.send(IpcChannel.UiEditWorkspace);
   }
 
   /**

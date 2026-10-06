@@ -73,7 +73,10 @@ export type TabState = BrowserTabState | TerminalTabState | PdfTabState | Histor
 export interface WorkspaceState {
   readonly id: string;
   readonly name: string;
+  /** The color of the workspace's icon in the sidebar, as `#rrggbb`. */
   readonly color: string;
+  /** Which `WorkspaceIconId` the sidebar draws for it. */
+  readonly icon: string;
 }
 
 /**

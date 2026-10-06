@@ -10,6 +10,7 @@ export { HistoryIcon } from './HistoryIcon';
 export { LaserPointerIcon } from './LaserPointerIcon';
 export { OpenInNewWindowIcon } from './OpenInNewWindowIcon';
 export { PenIcon } from './PenIcon';
+export { PencilIcon } from './PencilIcon';
 export { RevertIcon } from './RevertIcon';
 export { TextBoxIcon } from './TextBoxIcon';
 export { ShieldIcon } from './ShieldIcon';

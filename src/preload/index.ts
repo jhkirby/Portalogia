@@ -72,6 +72,7 @@ const api: NorthstarApi = {
   toggleWorkspaceSelection: (id) => invoke(IpcChannel.WorkspacesToggleSelect, { id }),
   selectWorkspaceRange: (id) => invoke(IpcChannel.WorkspacesSelectRange, { id }),
   renameWorkspace: (id, name) => invoke(IpcChannel.WorkspacesRename, { id, name }),
+  updateWorkspace: (id, update) => invoke(IpcChannel.WorkspacesUpdate, { id, ...update }),
   removeWorkspace: (id) => invoke(IpcChannel.WorkspacesRemove, { id }),
   openWorkspaceInNewWindow: () => ipcRenderer.send(IpcChannel.WorkspaceOpenInNewWindow),
 
@@ -128,6 +129,12 @@ const api: NorthstarApi = {
   zoomOut: () => invoke(IpcChannel.ZoomOut),
   resetZoom: () => invoke(IpcChannel.ZoomReset),
   setZoom: (percent) => invoke(IpcChannel.ZoomSet, { percent }),
+
+  onEditWorkspace: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.UiEditWorkspace, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiEditWorkspace, handler);
+  },
 
   onOpenTabSearch: (listener) => {
     const handler = (): void => listener();

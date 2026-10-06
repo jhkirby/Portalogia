@@ -247,6 +247,11 @@ export function buildMenu(
         { role: 'toggleDevTools' },
         { type: 'separator' },
         {
+          label: 'Edit Workspace…',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => getTabManager()?.requestEditWorkspace(),
+        },
+        {
           label: 'Search Tabs…',
           accelerator: 'CmdOrCtrl+K',
           click: () => getTabManager()?.requestTabSearch(),

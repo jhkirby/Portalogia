@@ -30,6 +30,7 @@ import {
   navigateRequestSchema,
   penRequestSchema,
   renameWorkspaceRequestSchema,
+  updateWorkspaceRequestSchema,
   splitEnterRequestSchema,
   textToolRequestSchema,
   cropRequestSchema,
@@ -140,6 +141,9 @@ export function registerTabIpc(
   );
   handle(IpcChannel.WorkspacesSwitch, workspaceIdRequestSchema, (request, event) =>
     resolveTabManager(event).switchWorkspace(request.id),
+  );
+  handle(IpcChannel.WorkspacesUpdate, updateWorkspaceRequestSchema, (request, event) =>
+    resolveTabManager(event).updateWorkspace(request.id, { name: request.name, color: request.color, icon: request.icon }),
   );
   handle(IpcChannel.WorkspacesRename, renameWorkspaceRequestSchema, (request, event) =>
     resolveTabManager(event).renameWorkspace(request.id, request.name),
