@@ -104,7 +104,7 @@ body {
 /* The "menu" variant: plain option rows, no icon or URL, highlighted in the
    app's accent color (whatever the color picker has chosen) rather than the
    neutral selection grey — it's a dropdown, so the highlight reads as the
-   current choice. */
+   current choice (or the keyboard's row). */
 .address-bar__suggestions--menu .address-bar__suggestion {
   max-width: none;
 }
@@ -113,8 +113,16 @@ body {
   max-width: none;
 }
 
-.address-bar__suggestions--menu .address-bar__suggestion:hover,
 .address-bar__suggestions--menu .address-bar__suggestion--selected {
   background: rgb(var(--color-accent-rgb));
   color: #ffffff;
+}
+
+/* Hover is the neutral grey every other dropdown uses (the base rule above),
+   never the accent: the accent marks the chosen row, and a hovered row that
+   is not chosen must not look chosen. The selected row stays accent under the
+   pointer. */
+.address-bar__suggestions--menu .address-bar__suggestion:hover:not(.address-bar__suggestion--selected) {
+  background: var(--color-button-hover-bg);
+  color: var(--color-tab-text-active);
 }

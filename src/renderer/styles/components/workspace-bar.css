@@ -52,11 +52,13 @@
    this to a true 0 when Focus Mode is what's actually collapsing it. */
 .sidebar--hidden {
   width: var(--size-sidebar-collapsed-width);
-  border-right-color: transparent;
 }
 
+/* Only Focus Mode drops the sidebar's right border: a collapsed rail keeps its
+   thin vertical line, so the edge between sidebar and page stays marked. */
 .sidebar--hidden.sidebar--focus-mode {
   width: 0;
+  border-right-color: transparent;
 }
 
 /* Everything that actually needs to disappear as the sidebar collapses —
@@ -344,6 +346,19 @@
   right: 0;
   max-width: 150px;
   white-space: normal;
+}
+
+/* Collapsed, the pill's room is the rail minus the toggle strip: its usual
+   side padding would push a 16px icon past that and clip it. Trimmed so the
+   whole icon, whatever its shape, sits inside and roughly centered. */
+.sidebar--hidden .workspace-bar__pill {
+  padding-left: 6px;
+  padding-right: 0;
+}
+
+.sidebar--hidden .workspace-bar__new {
+  padding-left: 10px;
+  padding-right: 0;
 }
 
 /* Same reasoning as `.sidebar--hidden .sidebar__toggle::after` above —

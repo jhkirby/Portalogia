@@ -58,7 +58,7 @@ export const SIDEBAR_WIDTH_PX = 180;
  * full immersion, no lingering rail — which is why this is a separate
  * constant from that 0 rather than the sidebar's only "off" state.
  */
-export const SIDEBAR_COLLAPSED_WIDTH_PX = 32;
+export const SIDEBAR_COLLAPSED_WIDTH_PX = 40;
 
 /**
  * How long the sidebar's show/hide slide takes, in milliseconds, when

@@ -28,7 +28,7 @@
   /* Must equal SIDEBAR_COLLAPSED_WIDTH_PX in src/shared/constants.ts —
      see its own comment there for why the sidebar collapses to this
      instead of straight to 0. */
-  --size-sidebar-collapsed-width: 32px;
+  --size-sidebar-collapsed-width: 40px;
   /* The sidebar's toggle strip along its right edge. Content (workspace pills,
      "New workspace") keeps clear of this much, so it never sits under the strip. */
   --size-sidebar-toggle-width: 10px;

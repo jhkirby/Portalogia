@@ -21,6 +21,9 @@ interface UnitSelectProps<T extends string> {
 /** Vertical gap, in CSS pixels, between the button's bottom edge and the list below it. */
 const LIST_GAP_PX = 4;
 
+/** How long after the list closes a row selection is still accepted: the press that selects it also blurs the button. */
+const SELECT_GRACE_MS = 400;
+
 const CLOSED = { open: false, rect: null, suggestions: [], selectedIndex: 0 } as const;
 
 /**
@@ -82,14 +85,27 @@ export function UnitSelect<T extends string>({ options, value, onChange, label }
     setIsOpen(false);
   };
 
-  // A row clicked in the overlay reports back by index. Re-subscribed as the options change so it resolves against the list actually shown.
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    return window.northstar.onAddressSuggestionSelected(choose);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `choose` only closes over `options` and a stable `onChange`; re-subscribing on every render would buy nothing.
-  }, [isOpen, options]);
+  // A row clicked in the overlay reports back by index. The press that lands there also moves OS focus off the
+  // button, so `onBlur` can close the list (and flip `isOpen`) before this message arrives; the subscription
+  // therefore outlives `isOpen`, and a message is accepted for a short grace period after closing. The address bar
+  // shares the channel, so a selection long after this list closed is not ours.
+  const chooseRef = useRef(choose);
+  chooseRef.current = choose;
+  const isOpenRef = useRef(isOpen);
+  const closedAtRef = useRef(0);
+  if (isOpenRef.current && !isOpen) {
+    closedAtRef.current = Date.now();
+  }
+  isOpenRef.current = isOpen;
+  useEffect(
+    () =>
+      window.northstar.onAddressSuggestionSelected((index) => {
+        if (isOpenRef.current || Date.now() - closedAtRef.current < SELECT_GRACE_MS) {
+          chooseRef.current(index);
+        }
+      }),
+    [],
+  );
 
   const open = (): void => {
     setActiveIndex(selectedIndex);
