@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { TabState, WorkspaceState } from '@shared/tab-state';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
-import { HistoryIcon } from '../icons';
+import { GlobeIcon, HistoryIcon } from '../icons';
+import { WorkspaceIcon } from '../WorkspaceIcon';
 
 interface TabSearchPopupProps {
   /** Every tab in every workspace — the search reaches tabs outside the current workspace too. */
@@ -26,18 +27,19 @@ function searchableText(tab: TabState, workspaceName: string): string {
   return `${tab.title} ${url} ${workspaceName}`.toLowerCase();
 }
 
-/** The little mark at the start of a row: a page's favicon, or a glyph for the kinds of tab that have none. */
+/** The little mark at the start of a row: the same per-kind symbol the tab strip uses (globe, `>_`, `PDF`, history clock). */
 function TabKindMark({ tab }: { readonly tab: TabState }) {
-  if (tab.kind === 'browser') {
-    return tab.favicon ? (
-      <img className="tab-search__favicon" src={tab.favicon} alt="" />
-    ) : (
-      <span className="tab-search__favicon-placeholder" aria-hidden="true" />
-    );
-  }
   return (
     <span className="tab-search__kind" aria-hidden="true">
-      {tab.kind === 'terminal' ? '>_' : tab.kind === 'pdf' ? 'PDF' : <HistoryIcon size={13} />}
+      {tab.kind === 'terminal' ? (
+        '>_'
+      ) : tab.kind === 'pdf' ? (
+        'PDF'
+      ) : tab.kind === 'history' ? (
+        <HistoryIcon size={13} />
+      ) : (
+        <GlobeIcon size={13} />
+      )}
     </span>
   );
 }
@@ -62,6 +64,8 @@ export function TabSearchPopup({ tabs, workspaces, previewImage, onSelect, onClo
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace.name])),
     [workspaces],
   );
+
+  const workspaceById = useMemo(() => new Map(workspaces.map((workspace) => [workspace.id, workspace])), [workspaces]);
 
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -145,7 +149,16 @@ export function TabSearchPopup({ tabs, workspaces, previewImage, onSelect, onClo
             >
               <TabKindMark tab={tab} />
               <span className="tab-search__title">{tab.title || 'New Tab'}</span>
-              <span className="tab-search__workspace">{workspaceNameById.get(tab.workspaceId)}</span>
+              <span className="tab-search__workspace">
+                {workspaceById.has(tab.workspaceId) && (
+                  <WorkspaceIcon
+                    icon={workspaceById.get(tab.workspaceId)?.icon ?? 'dot'}
+                    color={workspaceById.get(tab.workspaceId)?.color ?? 'currentColor'}
+                    size={14}
+                  />
+                )}
+                {workspaceNameById.get(tab.workspaceId)}
+              </span>
             </li>
           ))}
         </ul>

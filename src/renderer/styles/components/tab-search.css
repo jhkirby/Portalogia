@@ -106,28 +106,13 @@
   cursor: pointer;
 }
 
-/* The highlighted row is the app's accent color — whatever the color picker has chosen — like the History unit dropdown. */
+/* The highlighted row (keyboard or pointer) is the neutral hover grey the app's
+   other dropdowns use, not the accent color. */
 .tab-search__result--selected {
-  background: rgb(var(--color-accent-rgb));
-  color: #ffffff;
+  background: var(--color-button-hover-bg);
 }
 
-.tab-search__favicon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.tab-search__favicon-placeholder {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-
-  background: var(--color-chrome-border);
-  border-radius: 50%;
-}
-
-/* The glyph for a tab with no favicon: ">_", "PDF", or the history clock — one width, so titles line up. */
+/* The glyph for the kind of tab: the globe, ">_", "PDF" or the history clock — one width, so titles line up. */
 .tab-search__kind {
   display: flex;
   align-items: center;
@@ -149,13 +134,11 @@
 }
 
 .tab-search__workspace {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
   flex-shrink: 0;
 
   font-size: var(--size-font-sm);
   color: var(--color-address-placeholder);
-}
-
-.tab-search__result--selected .tab-search__kind,
-.tab-search__result--selected .tab-search__workspace {
-  color: rgba(255, 255, 255, 0.85);
 }

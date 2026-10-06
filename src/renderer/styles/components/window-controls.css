@@ -46,3 +46,15 @@
   background: #e81123;
   color: #ffffff;
 }
+
+/* These sit in the very top row, so (like `.tab-bar__close`) the tooltip opens
+   downward: there is no room above, and below is still chrome (the toolbar), not
+   the tab's native view. Anchored to the button's right edge, growing leftward,
+   because the buttons are flush against the window's right edge. */
+.window-controls__button::after {
+  top: 100%;
+  bottom: auto;
+  right: 0;
+  margin-top: 6px;
+  margin-bottom: 0;
+}

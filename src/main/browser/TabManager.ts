@@ -354,7 +354,7 @@ export class TabManager {
     // gesture isn't — it needs to check the active tab's kind, which a
     // static accelerator can't express.
     this.window.webContents.on('before-input-event', (event, input) => {
-      if (this.handleReorderGestureInput(event, input)) {
+      if (this.handleReorderGestureInput(event, input) || this.handleWindowShortcut(event, input)) {
         return;
       }
       if (
@@ -3830,6 +3830,37 @@ export class TabManager {
   }
 
   /**
+   * The Window menu's keyboard commands for this window: Ctrl+Alt+M minimizes it and
+   * Ctrl+Alt+Enter maximizes or restores it. Also handled here, on the tab's own input,
+   * because menu accelerators are unreliable while a tab's view holds the keyboard (see
+   * `wireSharedInputHandling`). Matched by physical key (`code`), since on Windows
+   * Ctrl+Alt is AltGr and can turn `key` into another character.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @returns Whether the key was one of them and was handled.
+   */
+  private handleWindowShortcut(event: Electron.Event, input: Electron.Input): boolean {
+    if (input.type !== 'keyDown' || input.isAutoRepeat || !(input.control || input.meta) || !input.alt || input.shift) {
+      return false;
+    }
+    if (input.code !== 'KeyM' && input.code !== 'Enter') {
+      return false;
+    }
+    event.preventDefault();
+    if (this.window.isDestroyed()) {
+      return true;
+    }
+    if (input.code === 'KeyM') {
+      this.window.minimize();
+    } else if (this.window.isMaximized()) {
+      this.window.unmaximize();
+    } else {
+      this.window.maximize();
+    }
+    return true;
+  }
+
+  /**
    * The Ctrl+Space keyboard-reorder gesture's input handling — grab,
    * nudge, release — shared between every tab's own `before-input-event`
    * (`wireEvents`) and the chrome window's own (wired in the constructor).
@@ -4398,6 +4429,13 @@ export class TabManager {
 
     wc.on('before-input-event', (event, input) => {
       const owner = owningManager();
+
+      // Window shortcuts (Ctrl+Alt+M, Ctrl+Alt+Enter), ahead of everything else: a terminal returns early
+      // on any Alt chord below, and a page could swallow them, so the Window menu's accelerators alone
+      // never fired while a tab had the keyboard.
+      if (owner.handleWindowShortcut(event, input)) {
+        return;
+      }
 
       if (this.states.get(id)?.kind === 'terminal') {
         if (input.type !== 'keyDown' || input.isAutoRepeat) {

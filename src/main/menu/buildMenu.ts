@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-05
 
-import { Menu, type MenuItemConstructorOptions } from 'electron';
+import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
 import type { TabManager } from '../browser/TabManager';
 
@@ -417,6 +417,8 @@ export function buildMenu(
       ],
     },
     {
+      // The three window-control buttons' own commands (see `WindowControls`), so
+      // each has a keyboard command as well as its button.
       // Not `role: 'windowMenu'` — its non-macOS default submenu appends a
       // built-in "Close" item (role: 'close') that calls `window.close()`
       // directly. Confirmed via real keyboard/mouse input: with focus on
@@ -425,10 +427,36 @@ export function buildMenu(
       // wins over "Close Tab" above and quits the whole app instead of
       // just closing a tab. Tab content itself was never affected, since
       // TabManager's `before-input-event` handler on each tab's webContents
-      // consumes Ctrl+W first. Kept to `minimize`/`zoom` only, neither of
-      // which carries a conflicting accelerator.
+      // consumes Ctrl+W first. So the items here are explicit, with their own
+      // accelerators, and "Close Window" is only reachable by Alt+F4, which
+      // Windows already handles for the window itself (`registerAccelerator:
+      // false` just shows the hint here and doesn't register a second handler).
       label: 'Window',
-      submenu: [{ role: 'minimize' }, { role: 'zoom' }],
+      submenu: [
+        {
+          label: 'Minimize',
+          accelerator: 'CmdOrCtrl+Alt+M',
+          click: () => BrowserWindow.getFocusedWindow()?.minimize(),
+        },
+        {
+          label: 'Maximize / Restore',
+          accelerator: 'CmdOrCtrl+Alt+Return',
+          click: () => {
+            const window = BrowserWindow.getFocusedWindow();
+            if (window?.isMaximized()) {
+              window.unmaximize();
+            } else {
+              window?.maximize();
+            }
+          },
+        },
+        {
+          label: 'Close Window',
+          accelerator: 'Alt+F4',
+          registerAccelerator: false,
+          click: () => BrowserWindow.getFocusedWindow()?.close(),
+        },
+      ],
     },
   ];
 
