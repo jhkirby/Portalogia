@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
@@ -20,6 +20,8 @@ import { TextBoxController } from './browser/TextBoxController';
 import { HistoryController } from './browser/HistoryController';
 import { HistoryStore } from './browser/HistoryStore';
 import { TextBoxStore } from './browser/TextBoxStore';
+import { trackEditableFocus } from './browser/editableFocus';
+import { markdownAnnotationStore } from './browser/MarkdownAnnotationStore';
 import { pdfAnnotationStore } from './browser/PdfAnnotationStore';
 import { PenStore } from './browser/PenStore';
 import { SessionStore } from './browser/SessionStore';
@@ -27,6 +29,7 @@ import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
 import { registerAdBlockIpc } from './ipc/registerAdBlockIpc';
 import { registerAccentColorIpc } from './ipc/registerAccentColorIpc';
+import { registerMarkdownIpc } from './ipc/registerMarkdownIpc';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
@@ -116,6 +119,9 @@ const penController = new PenController(sharedRegistry, penStore);
 // Marks drawn on PDFs live here, not in the PDFs — see `PdfAnnotationStore`.
 pdfAnnotationStore.init(join(app.getPath('userData'), 'pdf-annotations.json'));
 app.on('before-quit', () => pdfAnnotationStore.flush());
+// Marks drawn on Markdown notes live here, not in the notes — see `MarkdownAnnotationStore`.
+markdownAnnotationStore.init(join(app.getPath('userData'), 'markdown-annotations.json'));
+app.on('before-quit', () => markdownAnnotationStore.flush());
 
 // Ad blocking is app-wide too: every tab shares the default session it hooks into.
 const adBlockStore = new AdBlockStore(join(app.getPath('userData'), 'adblock.json'));
@@ -214,7 +220,9 @@ void app.whenReady().then(() => {
     });
   });
 
+  trackEditableFocus();
   registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
+  registerMarkdownIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
   registerThemeIpc();
   registerAdBlockIpc(adBlocker);

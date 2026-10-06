@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-06
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ const bookmarkFileSchema = z.array(
     title: z.string(),
     url: z.string().min(1),
     // Absent in files written before PDF bookmarks existed: those are all pages.
-    kind: z.enum(['page', 'pdf']).default('page'),
+    kind: z.enum(['page', 'pdf', 'markdown']).default('page'),
     path: z.string().min(1).nullable().default(null),
   }),
 );
@@ -98,6 +98,90 @@ export class BookmarkStore {
   /** @returns Every saved PDF bookmark, in the order they were added. */
   public listPdfs(): readonly BookmarkState[] {
     return this.bookmarks.filter((bookmark) => bookmark.kind === 'pdf');
+  }
+
+  /** @returns Every saved Markdown note bookmark, in the order they were added. */
+  public listMarkdown(): readonly BookmarkState[] {
+    return this.bookmarks.filter((bookmark) => bookmark.kind === 'markdown');
+  }
+
+  /** @returns The bookmark for the Markdown note at this path, if there is one. */
+  public findMarkdown(path: string): BookmarkState | undefined {
+    return this.bookmarks.find(
+      (bookmark) => bookmark.kind === 'markdown' && bookmark.path && samePath(bookmark.path, path),
+    );
+  }
+
+  /**
+   * Bookmarks a Markdown note by its path under a name. A no-op if that file is already bookmarked.
+   * @param title The name the bookmark (and the note's tab) goes by.
+   * @param path The file's path on disk.
+   * @returns The full bookmark list after the change.
+   */
+  public addMarkdown(title: string, path: string): readonly BookmarkState[] {
+    if (this.findMarkdown(path)) {
+      return this.bookmarks;
+    }
+    this.bookmarks = [
+      ...this.bookmarks,
+      { id: randomUUID(), title: title.trim() || basename(path), url: pathToFileURL(path).href, kind: 'markdown', path },
+    ];
+    this.persist();
+    return this.bookmarks;
+  }
+
+  /**
+   * Bookmarks a Markdown note under its file name, or removes the bookmark if it's already saved.
+   * @param path The file's path on disk.
+   * @returns The full bookmark list after the change.
+   */
+  public toggleMarkdown(path: string): readonly BookmarkState[] {
+    const existing = this.findMarkdown(path);
+    return existing ? this.remove(existing.id) : this.addMarkdown(basename(path), path);
+  }
+
+  /**
+   * Drops the Markdown bookmarks at these paths — the files are gone or moved.
+   * @param paths The paths found missing.
+   * @returns Whether any bookmark was removed.
+   */
+  public removeMarkdownPaths(paths: readonly string[]): boolean {
+    const before = this.bookmarks.length;
+    this.bookmarks = this.bookmarks.filter(
+      (bookmark) =>
+        !(bookmark.kind === 'markdown' && bookmark.path && paths.some((path) => samePath(path, bookmark.path as string))),
+    );
+    if (this.bookmarks.length === before) {
+      return false;
+    }
+    this.persist();
+    return true;
+  }
+
+  /**
+   * Follows a Markdown bookmark across an in-app rename, the way `renamePdf`
+   * does for a PDF: the bookmark's name follows the file's too, unless the
+   * user customized it.
+   * @param oldPath The path before the rename.
+   * @param newPath The path after it.
+   */
+  public renameMarkdown(oldPath: string, newPath: string): void {
+    const existing = this.findMarkdown(oldPath);
+    if (!existing) {
+      return;
+    }
+    const followsFileName = existing.title === basename(oldPath);
+    this.bookmarks = this.bookmarks.map((bookmark) =>
+      bookmark.id === existing.id
+        ? {
+            ...bookmark,
+            title: followsFileName ? basename(newPath) : bookmark.title,
+            path: newPath,
+            url: pathToFileURL(newPath).href,
+          }
+        : bookmark,
+    );
+    this.persist();
   }
 
   /** @returns Whether a PDF at this path is already bookmarked. */

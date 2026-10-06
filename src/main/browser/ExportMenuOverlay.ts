@@ -1,11 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-01
+// Last Modified: 2026-10-06
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
-import { EXPORT_MENU_HEIGHT_PX, EXPORT_MENU_WIDTH_PX } from '@shared/constants';
+import { EXPORT_MENU_HEIGHT_PX, EXPORT_MENU_MARKDOWN_HEIGHT_PX, EXPORT_MENU_WIDTH_PX } from '@shared/constants';
 import { IpcChannel, type ExportMenuAction, type ExportMenuSyncPayload } from '@shared/ipc-contract';
 import { exportMenuSelectRequestSchema } from '@shared/ipc-schemas';
 
@@ -13,7 +13,7 @@ import { exportMenuSelectRequestSchema } from '@shared/ipc-schemas';
  * Owns the toolbar export dropdown as its own small `WebContentsView`,
  * for the same reason as `ColorPickerOverlay`: a tab's view always paints
  * above chrome HTML, so a themed dropdown has to be its own view stacked
- * above it. Sized to the fixed `EXPORT_MENU_*` constants. While open it
+ * above it. Sized to the fixed `EXPORT_MENU_*` constants (taller on a Markdown tab, which lists three formats). While open it
  * also watches the active tab's `'focus'` event — a click on the live page
  * never reaches the chrome's DOM — and asks the chrome to close.
  */
@@ -99,7 +99,7 @@ export class ExportMenuOverlay {
       x: Math.round(payload.rect.left),
       y: Math.round(payload.rect.top),
       width: EXPORT_MENU_WIDTH_PX,
-      height: EXPORT_MENU_HEIGHT_PX,
+      height: payload.markdown ? EXPORT_MENU_MARKDOWN_HEIGHT_PX : EXPORT_MENU_HEIGHT_PX,
     });
 
     this.view.webContents.send(IpcChannel.ExportMenuSync, payload);

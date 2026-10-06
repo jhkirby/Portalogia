@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
@@ -10,6 +10,7 @@ import { BookmarkPopup } from './components/BookmarkPopup';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
 import { HistoryToolbar } from './components/HistoryToolbar';
+import { MarkdownToolbar } from './components/MarkdownToolbar';
 import { PdfToolbar } from './components/PdfToolbar';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
@@ -26,7 +27,7 @@ import { useTheme } from './hooks/useTheme';
 interface BookmarkPopupState {
   readonly tabId: string;
   /** What the popup saves: a page by its URL, or the tab's open PDF by its file path. */
-  readonly variant: 'page' | 'pdf';
+  readonly variant: 'page' | 'pdf' | 'markdown';
   readonly url: string;
   readonly title: string;
   readonly previewImage: string | null;
@@ -82,6 +83,16 @@ export function App() {
     openPdfFile,
     goToPdfPage,
     renamePdfFile,
+    createMarkdownTab,
+    openMarkdownFile,
+    newMarkdownFile,
+    closeMarkdownFile,
+    renameMarkdownFile,
+    setMarkdownMode,
+    navigateMarkdownHistory,
+    addMarkdownBookmark,
+    openMarkdownPath,
+    openMarkdownBookmark,
     createTerminalTab,
     revertPage,
     createWorkspace,
@@ -205,11 +216,11 @@ export function App() {
   ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
-  // Find searches a page, a terminal's buffer, or a PDF that has a file open — not the History tab (it has its own search) or an empty PDF.
+  // Find searches a page, a terminal's buffer, or a PDF or note that has a file open — not the History tab (it has its own search) or an empty PDF or note.
   const canFind =
     activeTab?.kind === 'browser' ||
     activeTab?.kind === 'terminal' ||
-    (activeTab?.kind === 'pdf' && activeTab.fileName !== null);
+    ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName !== null);
   // A terminal or History tab is an app page, not a document: none of the page-marking tools apply to it.
   const isAppPage = activeTab?.kind === 'terminal' || activeTab?.kind === 'history';
   const isHome = browserTab?.url === HOME_URL;
@@ -222,6 +233,11 @@ export function App() {
     [browserTab, pageBookmarks],
   );
   const pdfBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'pdf'), [bookmarks]);
+  const markdownBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'markdown'), [bookmarks]);
+  const markdownBookmarked =
+    activeTab?.kind === 'markdown' &&
+    activeTab.filePath !== null &&
+    bookmarks.some((bookmark) => bookmark.kind === 'markdown' && bookmark.path === activeTab.filePath);
   const pdfBookmarked =
     activeTab?.kind === 'pdf' &&
     activeTab.filePath !== null &&
@@ -271,11 +287,28 @@ export function App() {
     });
   };
 
+  // The same again for a note: the popup asks for the name, with the file's path where a page shows its URL.
+  const handleToggleMarkdownBookmark = (): void => {
+    if (activeTab?.kind !== 'markdown' || activeTab.filePath === null || activeTab.fileName === null) {
+      return;
+    }
+    if (markdownBookmarked) {
+      toggleBookmark(activeTab.id);
+      return;
+    }
+    const { id: tabId, filePath, fileName } = activeTab;
+    void beginTabPreview(tabId).then((previewImage) => {
+      setBookmarkPopup({ tabId, variant: 'markdown', url: filePath, title: fileName, previewImage });
+    });
+  };
+
   const handleSaveBookmark = (name: string, url: string): void => {
     if (!bookmarkPopup) {
       return;
     }
-    if (bookmarkPopup.variant === 'pdf') {
+    if (bookmarkPopup.variant === 'markdown') {
+      addMarkdownBookmark(bookmarkPopup.tabId, name);
+    } else if (bookmarkPopup.variant === 'pdf') {
       // The path isn't editable, so only the name travels: main knows which file the tab has open.
       addPdfBookmark(bookmarkPopup.tabId, name);
     } else {
@@ -421,6 +454,22 @@ export function App() {
                 onClose={closePdfFile}
                 onRename={renamePdfFile}
               />
+            ) : activeTab?.kind === 'markdown' ? (
+              <MarkdownToolbar
+                key={activeTab.id}
+                tab={activeTab}
+                isBookmarked={markdownBookmarked}
+                onToggleBookmark={handleToggleMarkdownBookmark}
+                markdownBookmarks={markdownBookmarks}
+                onOpenBookmark={openMarkdownBookmark}
+                onOpenPath={openMarkdownPath}
+                onNew={newMarkdownFile}
+                onOpen={openMarkdownFile}
+                onClose={closeMarkdownFile}
+                onSetMode={setMarkdownMode}
+                onNavigate={navigateMarkdownHistory}
+                onRename={renameMarkdownFile}
+              />
             ) : activeTab?.kind === 'history' ? (
               <HistoryToolbar key={activeTab.id} tab={activeTab} />
             ) : activeTab?.kind === 'terminal' ? (
@@ -456,8 +505,13 @@ export function App() {
             {secondaryTab && <SplitIndicator secondaryTab={secondaryTab} onExit={exitSplitView} />}
             <PageActions
               canActOnPage={browserTab !== null}
-              canAnnotate={browserTab !== null || activeTab?.kind === 'pdf'}
-              annotationToolsLocked={isHome || (activeTab?.kind === 'pdf' && activeTab.fileName === null)}
+              canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
+              // Marks go on the rendered note, so the editing view locks them too.
+              annotationToolsLocked={
+                isHome ||
+                ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName === null) ||
+                (activeTab?.kind === 'markdown' && activeTab.mode === 'edit')
+              }
               canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
@@ -477,13 +531,21 @@ export function App() {
               adBlockSite={adBlockSite ?? ''}
               onToggleAdBlock={() => adBlockSite && window.northstar.setAdBlockSiteAllowed(adBlockSite, !adBlockSiteAllowed)}
               onOpenPdfViewer={createPdfTab}
-              canExportMenu={activeTabId !== null && !isHome && activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
+              onOpenMarkdown={createMarkdownTab}
+              markdownExport={activeTab?.kind === 'markdown'}
+              canExportMenu={
+                activeTabId !== null &&
+                !isHome &&
+                activeTab?.kind !== 'pdf' &&
+                activeTab?.kind !== 'history' &&
+                !(activeTab?.kind === 'markdown' && activeTab.fileName === null)
+              }
               canExportDocuments={browserTab !== null && !isHome}
               showExportMenu={activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
               showCommentTool={!isAppPage}
               showLaserPointer={activeTab?.kind !== 'history'}
               showZoom={activeTab?.kind !== 'history'}
-              showTextTool={!isAppPage}
+              showTextTool={!isAppPage && activeTab?.kind !== 'markdown'}
               showPen={!isAppPage}
               showHighlighter={!isAppPage}
               showRevert={!isAppPage}

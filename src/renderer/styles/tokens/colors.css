@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-11 */
+   Last Modified: 2026-10-06 */
 
 /* `useTheme` sets `data-theme` on `<html>` before first paint (see its
    `useLayoutEffect`) reflecting either a stored choice or, on first ever
@@ -119,4 +119,51 @@
 
   --color-tooltip-bg: #5f6368;
   --color-tooltip-text: #ffffff;
+}
+
+/* ── MARKDOWN NOTES ───────────────────────────────────────────────────── */
+/* What the Markdown tab's page (`markdown.html`) draws a note with, beyond the chrome tokens above:
+   the callout families, code, and the syntax colours of code blocks and of the editor. Printing swaps
+   in the light values whatever the theme (see `markdown-viewer.css`), so a PDF is always dark on white. */
+:root[data-theme='light'] {
+  /* The blank page before a note is open: the same as a browser tab's blank home page (`homePage.ts`). */
+  --md-empty-bg: #ffffff;
+  --md-code-bg: #f3f4f6;
+  --md-code-color: #8a3b00;
+  --md-quote-border: #c4c7ca;
+  --md-math-color: #7a3fb0;
+  --md-callout-blue: 8, 109, 221;
+  --md-callout-cyan: 0, 150, 160;
+  --md-callout-green: 8, 150, 80;
+  --md-callout-orange: 224, 118, 0;
+  --md-callout-red: 216, 50, 60;
+  --md-callout-purple: 120, 82, 210;
+  --md-callout-gray: 110, 115, 120;
+  --md-syntax-keyword: #a626a4;
+  --md-syntax-string: #50a14f;
+  --md-syntax-number: #b76b01;
+  --md-syntax-function: #4078f2;
+  --md-syntax-type: #c18401;
+  --md-syntax-comment: #8a8d91;
+}
+
+:root[data-theme='dark'] {
+  --md-empty-bg: #202124;
+  --md-code-bg: #26272a;
+  --md-code-color: #f0a875;
+  --md-quote-border: #5f6368;
+  --md-math-color: #c7a0f5;
+  --md-callout-blue: 78, 160, 255;
+  --md-callout-cyan: 40, 200, 210;
+  --md-callout-green: 60, 200, 120;
+  --md-callout-orange: 255, 160, 60;
+  --md-callout-red: 255, 100, 110;
+  --md-callout-purple: 170, 135, 255;
+  --md-callout-gray: 160, 165, 170;
+  --md-syntax-keyword: #d19cf5;
+  --md-syntax-string: #98c379;
+  --md-syntax-number: #d19a66;
+  --md-syntax-function: #61afef;
+  --md-syntax-type: #e5c07b;
+  --md-syntax-comment: #7f848e;
 }

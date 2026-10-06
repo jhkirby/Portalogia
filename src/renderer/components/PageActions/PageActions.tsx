@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -85,6 +85,10 @@ interface PageActionsProps {
   readonly onToggleAdBlock: () => void;
   /** Opens a new PDF viewer tab. */
   readonly onOpenPdfViewer: () => void;
+  /** Opens a new Markdown tab. */
+  readonly onOpenMarkdown: () => void;
+  /** Whether the active tab is a Markdown note, whose export menu lists PDF, `.md` and `.txt`. */
+  readonly markdownExport: boolean;
   readonly onNewTerminal: () => void;
   /** Opens a new History tab. */
   readonly onOpenHistory: () => void;
@@ -139,6 +143,8 @@ export function PageActions({
   adBlockSite,
   onToggleAdBlock,
   onOpenPdfViewer,
+  onOpenMarkdown,
+  markdownExport,
   canExportMenu,
   canExportDocuments,
   showExportMenu,
@@ -275,7 +281,15 @@ export function PageActions({
       >
         PDF
       </button>
-      {showExportMenu && <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} />}
+      <button
+        type="button"
+        className="page-actions__button page-actions__button--pdf chrome-tooltip"
+        onClick={onOpenMarkdown}
+        aria-label="Open Markdown notes"
+        data-tooltip={`Open Markdown notes (${formatShortcut('Shift+M')})`}
+      >
+        MD
+      </button>
       <button
         type="button"
         className="page-actions__button chrome-tooltip"
@@ -285,6 +299,7 @@ export function PageActions({
       >
         {'>_'}
       </button>
+      {showExportMenu && <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} markdown={markdownExport} />}
       <button
         type="button"
         className="page-actions__button chrome-tooltip"

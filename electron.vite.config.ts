@@ -1,11 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-11
+// Last Modified: 2026-10-06
 
 import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import { buildMarkdownCsp } from './src/shared/markdown/csp';
 
 // Shared alias so main, preload, and renderer all import the IPC contract
 // and domain types from one place instead of duplicating them.
@@ -45,6 +46,7 @@ export default defineConfig({
           colorPicker: resolve(__dirname, 'src/preload/colorPicker.ts'),
           exportMenu: resolve(__dirname, 'src/preload/exportMenu.ts'),
           pdf: resolve(__dirname, 'src/preload/pdf.ts'),
+          markdown: resolve(__dirname, 'src/preload/markdown.ts'),
           history: resolve(__dirname, 'src/preload/history.ts'),
           find: resolve(__dirname, 'src/preload/find.ts'),
           tabZoom: resolve(__dirname, 'src/preload/tabZoom.ts'),
@@ -61,7 +63,22 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     resolve: { alias: sharedAlias },
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        // The packaged build serves pages from `file://`, where a response header isn't a sure thing — so the
+        // Markdown page, which renders untrusted text, carries its policy in the page itself. (The dev server
+        // gets it as a header from main, since its inline scripts can't live under the strict policy.)
+        name: 'markdown-page-csp',
+        apply: 'build',
+        transformIndexHtml(html, context) {
+          return context.filename.endsWith('markdown.html')
+            ? html.replace('<head>', `<head>
+    <meta http-equiv="Content-Security-Policy" content="${buildMarkdownCsp(false)}" />`)
+            : html;
+        },
+      },
+    ],
     build: {
       rollupOptions: {
         // `terminal`, `suggestions`, `tooltip`, `colorPicker`, and
@@ -79,6 +96,7 @@ export default defineConfig({
           colorPicker: resolve(__dirname, 'src/renderer/color-picker.html'),
           exportMenu: resolve(__dirname, 'src/renderer/export-menu.html'),
           pdf: resolve(__dirname, 'src/renderer/pdf.html'),
+          markdown: resolve(__dirname, 'src/renderer/markdown.html'),
           history: resolve(__dirname, 'src/renderer/history.html'),
           find: resolve(__dirname, 'src/renderer/find.html'),
           laserPointer: resolve(__dirname, 'src/renderer/laser-pointer.html'),
