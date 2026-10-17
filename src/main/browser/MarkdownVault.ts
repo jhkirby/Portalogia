@@ -406,6 +406,56 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
   }
 }
 
+/** How long a web picture may take to arrive before it's given up on. */
+const REMOTE_IMAGE_TIMEOUT_MS = 15_000;
+
+/**
+ * A web picture as a `data:` URL — fetched here rather than by the Markdown
+ * page, whose content-security-policy loads no web content at all: a note
+ * from anywhere must not be able to tell a server it was opened. The page
+ * only asks for a picture the user clicked to load.
+ *
+ * `https:` only (redirects included), no cookies, an `image/*` response only,
+ * and at most `MAX_IMAGE_BYTES` — read as a stream so an oversized reply is
+ * dropped without being held in memory.
+ * @param url The picture's address.
+ * @param fetchImpl The `fetch` to use, for tests.
+ * @returns The data URL, or `null` if it can't be fetched or isn't a picture.
+ */
+export async function fetchRemoteImageDataUrl(url: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  if (!/^https:\/\//i.test(url)) {
+    return null;
+  }
+  try {
+    const response = await fetchImpl(url, {
+      credentials: 'omit',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS),
+    });
+    if (!response.ok || !/^https:\/\//i.test(response.url || url) || !response.body) {
+      return null;
+    }
+    const mime = (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+    if (!/^image\/[a-z0-9.+-]+$/.test(mime)) {
+      return null;
+    }
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    const reader = response.body.getReader();
+    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+      total += next.value.byteLength;
+      if (total > MAX_IMAGE_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(next.value);
+    }
+    return `data:${mime};base64,${Buffer.concat(chunks).toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A file name a note can be created or renamed to, from what a person typed
  * or a `[[link]]` names: the last path segment only (so a name can never

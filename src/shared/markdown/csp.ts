@@ -10,8 +10,10 @@
  * and its page can run code blocks and write the note back. The page
  * sanitizes what it renders, and this is the second wall: nothing but the
  * app's own script runs, nothing can be fetched or connected to, and a
- * picture may only come from the page itself, `data:` (a note's own images,
- * read by main) or HTTPS.
+ * picture may only come from the page itself or `data:` — a note's own
+ * images, and web pictures the user clicked to load, are both read by main.
+ * No web address loads by itself (an `<img>` or a CSS `url()`), so opening a
+ * note can't tell anyone it was opened.
  *
  * The dev server's page needs inline script (React Fast Refresh's preamble)
  * and a websocket back to itself; the packaged build has neither.
@@ -24,7 +26,7 @@ export function buildMarkdownCsp(isDev: boolean): string {
     "default-src 'none'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data:",
     "font-src 'self' data:",
     connectSrc,
     "object-src 'none'",

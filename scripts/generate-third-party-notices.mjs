@@ -5,14 +5,9 @@
 
 /**
  * Writes THIRD_PARTY_NOTICES.txt: the license text of every production
- * dependency that ships inside the packaged app. MIT/BSD/Apache all require
- * their notices travel with redistributed copies, and MPL-2.0 additionally
- * requires telling recipients where the source is - so this is regenerated
- * before every `npm run dist` rather than maintained by hand.
- *
- * Electron's and Chromium's own notices aren't listed here: electron-builder
- * already copies LICENSE.electron.txt and LICENSES.chromium.html next to the
- * executable.
+ * dependency. MIT/BSD/Apache all require their notices travel with
+ * redistributed copies, and MPL-2.0 additionally requires telling recipients
+ * where the source is - so this is generated rather than maintained by hand.
  */
 
 import console from 'node:console';

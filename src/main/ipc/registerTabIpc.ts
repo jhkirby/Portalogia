@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-06
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -52,6 +52,7 @@ import {
 import type { BrowserState } from '@shared/tab-state';
 import { pdfAnnotationStore } from '../browser/PdfAnnotationStore';
 import type { TabManager } from '../browser/TabManager';
+import { isChromeSender } from './senderGuards';
 
 /**
  * Registers every `ipcMain.handle` channel, each validating its payload
@@ -69,20 +70,30 @@ import type { TabManager } from '../browser/TabManager';
  *   is actually interacting with, which since `tearOffTab` (main/index.ts)
  *   made more than one window possible at once, is no longer guaranteed
  *   to be the focused one (clicking into a background window's tab is a
- *   perfectly ordinary thing to do). Every channel here is invoked from
- *   the chrome's own top-level `webContents` — never a tab's own child
- *   `WebContentsView` — so `event.sender` always resolves unambiguously.
+ *   perfectly ordinary thing to do). It throws for anything but a window's
+ *   own chrome page — a tab's child `WebContentsView` is refused.
  * @param resolveTabManagerForTab Resolves whichever `TabManager` currently
- *   owns a specific tab id, for the two channels (`terminal:input`,
- *   `terminal:resize`) that come from a *different* webContents than the
- *   chrome's own: a terminal tab's own child `WebContentsView`. Scoping by
- *   the tab id it's already keyed on sidesteps needing `event.sender` to
- *   resolve correctly for a child view at all.
+ *   owns a specific tab id — for chrome channels that name a tab which may
+ *   have moved to another window, and for the page channels below, which
+ *   then check the sender really is that tab's own page.
+ * @param resolveTabForContents Resolves the tab whose own page sent a
+ *   message (and a manager owning it), for page channels that don't name a
+ *   tab (`zoom:wheel`, `pdf:save-annotations`).
+ *
+ * Every chrome channel goes through `resolveTabManager` (or `isChrome`),
+ * which refuses a tab's page; every page channel is checked against the
+ * sending tab's own `webContents`. A tab's page can never act as the chrome
+ * or as another tab — a terminal's shell in particular.
  */
 export function registerTabIpc(
   resolveTabManager: (event: { sender: Electron.WebContents }) => TabManager,
   resolveTabManagerForTab: (tabId: string) => TabManager | undefined,
+  resolveTabForContents: (contents: Electron.WebContents) => { tabId: string; manager: TabManager } | undefined,
 ): void {
+  /** The manager owning `tabId`, but only for a message from a chrome page — `undefined` for a tab's page. */
+  const chromeManagerForTab = (event: { sender: Electron.WebContents }, tabId: string): TabManager | undefined =>
+    isChromeSender(event) ? resolveTabManagerForTab(tabId) : undefined;
+
   handle(IpcChannel.TabsCreate, createTabRequestSchema, (request, event) =>
     resolveTabManager(event).createTabAndFocusAddressBar(request.url),
   );
@@ -234,22 +245,22 @@ export function registerTabIpc(
 
   handle(IpcChannel.CropSet, cropRequestSchema, (request, event) => resolveTabManager(event).setCrop(request.enabled));
 
-  ipcMain.handle(IpcChannel.PdfCloseFile, (_event, rawRequest: unknown): IpcResult<null> => {
+  ipcMain.handle(IpcChannel.PdfCloseFile, (event, rawRequest: unknown): IpcResult<null> => {
     const parsed = tabIdRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
-    resolveTabManagerForTab(parsed.data.id)?.closePdfFile(parsed.data.id);
+    chromeManagerForTab(event, parsed.data.id)?.closePdfFile(parsed.data.id);
     return { ok: true, data: null };
   });
 
-  ipcMain.handle(IpcChannel.PdfExport, async (_event, rawRequest: unknown): Promise<IpcResult<null>> => {
+  ipcMain.handle(IpcChannel.PdfExport, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
     const parsed = tabIdRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
     try {
-      await resolveTabManagerForTab(parsed.data.id)?.exportPdfFile(parsed.data.id);
+      await chromeManagerForTab(event, parsed.data.id)?.exportPdfFile(parsed.data.id);
       return { ok: true, data: null };
     } catch (error) {
       return toErrorResult(error);
@@ -323,13 +334,13 @@ export function registerTabIpc(
 
   // PDF toolbar actions come from the chrome but are routed by tab id, as
   // the tab may have been moved to another window's manager.
-  ipcMain.handle(IpcChannel.PdfOpenFile, async (_event, rawRequest: unknown): Promise<IpcResult<null>> => {
+  ipcMain.handle(IpcChannel.PdfOpenFile, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
     const parsed = tabIdRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
     try {
-      await resolveTabManagerForTab(parsed.data.id)?.openPdfFile(parsed.data.id);
+      await chromeManagerForTab(event, parsed.data.id)?.openPdfFile(parsed.data.id);
       return { ok: true, data: null };
     } catch (error) {
       return toErrorResult(error);
@@ -343,7 +354,7 @@ export function registerTabIpc(
   handle(IpcChannel.FindSet, findSetRequestSchema, (request, event) => resolveTabManager(event).setFind(request.enabled));
 
   // Clearing history is the chrome's action (its toolbar's button); `resolveTabManager` only resolves for a
-  // chrome window's own sender, so a tab's page can't send it.
+  // chrome window's own page (`chromeWindowOf`), so a tab's page can't send it.
   handle(IpcChannel.HistoryClear, historyClearRequestSchema, (request, event) =>
     resolveTabManager(event).clearHistory(request),
   );
@@ -366,15 +377,9 @@ export function registerTabIpc(
 
   ipcMain.on(IpcChannel.PdfOpenPath, (event, rawRequest: unknown) => {
     const parsed = pdfOpenPathRequestSchema.safeParse(rawRequest);
-    if (!parsed.success) {
-      return;
+    if (parsed.success) {
+      void chromeManagerForTab(event, parsed.data.id)?.openPdfFromHistory(parsed.data.id, parsed.data.path);
     }
-    try {
-      resolveTabManager(event);
-    } catch {
-      return; // Not from a chrome window: ignored.
-    }
-    void resolveTabManagerForTab(parsed.data.id)?.openPdfFromHistory(parsed.data.id, parsed.data.path);
   });
 
   ipcMain.on(IpcChannel.HistorySetRange, (event, rawRequest: unknown) => {
@@ -405,58 +410,68 @@ export function registerTabIpc(
     resolveTabManager(event).addPdfBookmark(request.id, request.name),
   );
 
-  // From the empty PDF page's bookmark list, routed by tab id like the toolbar actions above.
-  ipcMain.on(IpcChannel.PdfOpenBookmark, (_event, rawRequest: unknown) => {
+  // From the chrome's empty-PDF bookmark list, routed by tab id like the toolbar actions above.
+  ipcMain.on(IpcChannel.PdfOpenBookmark, (event, rawRequest: unknown) => {
     const parsed = pdfOpenBookmarkRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      void resolveTabManagerForTab(parsed.data.id)?.openPdfBookmark(parsed.data.id, parsed.data.bookmarkId);
+      void chromeManagerForTab(event, parsed.data.id)?.openPdfBookmark(parsed.data.id, parsed.data.bookmarkId);
     }
   });
 
   // Fire-and-forget from the PDF page after every edit; the store debounces the disk write.
-  ipcMain.on(IpcChannel.PdfSaveAnnotations, (_event, rawRequest: unknown) => {
+  // Only a PDF tab's own page, and only under the key of the file that tab has open —
+  // otherwise any page could overwrite the marks saved for any document.
+  ipcMain.on(IpcChannel.PdfSaveAnnotations, (event, rawRequest: unknown) => {
     const parsed = pdfSaveAnnotationsRequestSchema.safeParse(rawRequest);
-    if (parsed.success) {
+    const tab = resolveTabForContents(event.sender);
+    if (
+      parsed.success &&
+      tab?.manager.ownsPdfContents(tab.tabId, event.sender) &&
+      tab.manager.pdfKeyOf(tab.tabId) === parsed.data.key
+    ) {
       pdfAnnotationStore.set(parsed.data.key, parsed.data.annotations);
     }
   });
 
   // Fire-and-forget from the PDF page whenever the page in view changes.
-  ipcMain.on(IpcChannel.PdfPageInfo, (_event, rawRequest: unknown) => {
+  ipcMain.on(IpcChannel.PdfPageInfo, (event, rawRequest: unknown) => {
     const parsed = pdfPageInfoRequestSchema.safeParse(rawRequest);
-    if (parsed.success) {
-      resolveTabManagerForTab(parsed.data.id)?.setPdfPageInfo(parsed.data.id, parsed.data.page, parsed.data.pageCount);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      manager.setPdfPageInfo(parsed.data.id, parsed.data.page, parsed.data.pageCount);
     }
   });
 
-  ipcMain.handle(IpcChannel.PdfGoToPage, (_event, rawRequest: unknown): IpcResult<null> => {
+  ipcMain.handle(IpcChannel.PdfGoToPage, (event, rawRequest: unknown): IpcResult<null> => {
     const parsed = pdfGoToPageRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
-    resolveTabManagerForTab(parsed.data.id)?.goToPdfPage(parsed.data.id, parsed.data.page);
+    chromeManagerForTab(event, parsed.data.id)?.goToPdfPage(parsed.data.id, parsed.data.page);
     return { ok: true, data: null };
   });
 
-  ipcMain.handle(IpcChannel.PdfRename, async (_event, rawRequest: unknown): Promise<IpcResult<null>> => {
+  ipcMain.handle(IpcChannel.PdfRename, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
     const parsed = pdfRenameRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: 'File name must end in .pdf' };
     }
     try {
-      await resolveTabManagerForTab(parsed.data.id)?.renamePdfTab(parsed.data.id, parsed.data.name);
+      await chromeManagerForTab(event, parsed.data.id)?.renamePdfTab(parsed.data.id, parsed.data.name);
       return { ok: true, data: null };
     } catch (error) {
       return toErrorResult(error);
     }
   });
 
-  // Sent by a tab's own preload on Ctrl+wheel. Tab views are shared by every
-  // window's manager, so any one can resolve the sender to its tab.
+  // Sent by a tab's own preload on Ctrl+wheel; zooms the sending tab only.
   ipcMain.on(IpcChannel.ZoomWheel, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = zoomWheelRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabManager(event).wheelZoom(event.sender, parsed.data.direction);
+      resolveTabForContents(event.sender)?.manager.wheelZoom(event.sender, parsed.data.direction);
     }
   });
 
@@ -476,18 +491,26 @@ export function registerTabIpc(
   // not `invoke`) — keystroke latency matters more than a reply round-trip,
   // and there's nothing meaningful to reply with anyway. Sent from a
   // terminal tab's own child `WebContentsView`, not the chrome's top-level
-  // one — resolved by tab id (`resolveTabManagerForTab`) rather than
-  // `event.sender`, see this function's own doc comment for why.
-  ipcMain.on(IpcChannel.TerminalInput, (_event: IpcMainEvent, rawRequest: unknown) => {
+  // one — and accepted only from that view (`ownsTerminalContents`): input
+  // here runs as shell commands, so no other page may name this tab's id.
+  ipcMain.on(IpcChannel.TerminalInput, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = terminalInputRequestSchema.safeParse(rawRequest);
-    if (parsed.success) {
-      resolveTabManagerForTab(parsed.data.id)?.sendTerminalInput(parsed.data.id, parsed.data.data);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsTerminalContents(parsed.data.id, event.sender)) {
+      manager.sendTerminalInput(parsed.data.id, parsed.data.data);
     }
   });
-  ipcMain.on(IpcChannel.TerminalResize, (_event: IpcMainEvent, rawRequest: unknown) => {
+  ipcMain.on(IpcChannel.TerminalResize, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = terminalResizeRequestSchema.safeParse(rawRequest);
-    if (parsed.success) {
-      resolveTabManagerForTab(parsed.data.id)?.resizeTerminal(parsed.data.id, parsed.data.cols, parsed.data.rows);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsTerminalContents(parsed.data.id, event.sender)) {
+      manager.resizeTerminal(parsed.data.id, parsed.data.cols, parsed.data.rows);
     }
   });
 

@@ -11,8 +11,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "notices": "node scripts/generate-third-party-notices.mjs",
-    "dist": "npm run notices && electron-vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
     "start": "electron-vite preview",
+    "package:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/build.ps1",
+    "install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install.ps1",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.preload.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "test": "playwright test",
@@ -46,23 +47,6 @@
     "react-dom": "^19.0.0",
     "zod": "^3.24.1"
   },
-  "build": {
-    "appId": "com.joshuahkirby.northstar",
-    "productName": "Northstar",
-    "npmRebuild": false,
-    "directories": {
-      "buildResources": "resources"
-    },
-    "win": {
-      "icon": "resources/icon.ico"
-    },
-    "mac": {
-      "icon": "resources/icon.png"
-    },
-    "linux": {
-      "icon": "resources/icon.png"
-    }
-  },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@playwright/test": "^1.63.0",
@@ -71,9 +55,7 @@
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "cross-env": "^10.1.0",
-    "electron": "^33.3.1",
-    "electron-builder": "^25.1.8",
+    "electron": "^44.5.1",
     "electron-vite": "^5.0.0",
     "eslint": "^9.18.0",
     "eslint-plugin-react-hooks": "^5.1.0",

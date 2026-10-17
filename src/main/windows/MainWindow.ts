@@ -1,22 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-11
+// Last Modified: 2026-10-06
 
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
+import { buildAppPageCsp } from '@shared/csp';
 import type { AdBlocker } from '../adblock/AdBlocker';
-
-/**
- * Chrome-window-only content-security-policy; tab content is exempt.
- * In dev, Vite's client injects an inline bootstrap `<script>` to wire up
- * React Fast Refresh, so `script-src` needs `'unsafe-inline'` there; the
- * packaged production build has no inline scripts and stays strict.
- */
-function buildChromeCsp(isDev: boolean): string {
-  const scriptSrc = isDev ? "script-src 'self' 'unsafe-inline'; " : '';
-  return `default-src 'self'; ${scriptSrc}style-src 'self' 'unsafe-inline'; img-src 'self' data:`;
-}
 
 /**
  * Creates the app's single top-level window: a `BrowserWindow` that loads
@@ -33,12 +23,8 @@ export function createMainWindow(adBlocker: AdBlocker, options: { showWhenReady?
     minWidth: 640,
     minHeight: 480,
     show: false,
-    // Packaged Windows/macOS builds get their icon baked into the exe/app
-    // bundle by electron-builder (see the `build.win.icon`/`mac.icon`
-    // config in package.json, both pointing at this same file) — that
-    // config alone doesn't reach `npm run dev`, though, which is still
-    // just bare `electron.exe` and would otherwise show Electron's own
-    // default icon in the taskbar. Setting it explicitly here covers both.
+    // The app always runs as bare `electron.exe`, which would otherwise
+    // show Electron's own default icon in the taskbar.
     icon: join(__dirname, '../../resources/icon.ico'),
     // No native titlebar at all — `.titlebar` (App.tsx) is our own drag
     // region and window-control buttons, with no OS-drawn icon or title
@@ -88,8 +74,11 @@ export function createMainWindow(adBlocker: AdBlocker, options: { showWhenReady?
 }
 
 /**
- * Attaches a strict CSP to responses for the chrome window's own document,
- * identified by URL and by which window it's for rather than applied
+ * Attaches a strict CSP (`buildAppPageCsp`) to responses for the chrome
+ * window's own document — needed for the dev server, whose page has no CSP
+ * `<meta>`; the packaged build's pages carry it in the page itself (see
+ * `electron.vite.config.ts`), since a header isn't a sure thing for `file://`.
+ * The document is identified by URL and by which window it's for rather than applied
  * session-wide - tabs share the same default session and must be free to
  * load whatever CSP (or none) the sites they visit send. Registered with the
  * ad blocker, which owns the session's single `onHeadersReceived` listener.
@@ -99,7 +88,7 @@ export function createMainWindow(adBlocker: AdBlocker, options: { showWhenReady?
 function applyChromeContentSecurityPolicy(window: BrowserWindow, adBlocker: AdBlocker): void {
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
   const prefix = devServerUrl ? `${devServerUrl}/` : 'file://';
-  const csp = buildChromeCsp(devServerUrl !== undefined);
+  const csp = buildAppPageCsp(devServerUrl !== undefined);
   const remove = adBlocker.addHeadersInterceptor((details) => {
     if (details.webContentsId !== window.webContents.id || !details.url.startsWith(prefix)) {
       return null;

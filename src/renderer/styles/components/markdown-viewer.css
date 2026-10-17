@@ -228,6 +228,22 @@ body {
   background: var(--md-code-bg);
 }
 
+/* A web picture waiting for a click to load: its alt text in a chip, like a broken one, but clickable.
+   Loading it on sight would tell its server the note was opened. */
+.md-reader img.md-image--remote {
+  display: inline-block;
+  padding: 0.3em 0.6em;
+
+  background: var(--md-code-bg);
+  border: 1px dashed var(--color-tab-text);
+  border-radius: 4px;
+
+  color: var(--color-tab-text);
+  font-size: 0.85em;
+
+  cursor: pointer;
+}
+
 .md-reader img.md-image--broken {
   display: inline-block;
   padding: 0.3em 0.6em;

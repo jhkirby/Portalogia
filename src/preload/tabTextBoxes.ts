@@ -1,11 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-06
 
 import { ipcRenderer } from 'electron';
 import { buildRestoredAnchor, createLiveAnchor, ensureBaseStyle as ensureAnchorStyle } from './tabComments';
-import { isInteractiveTarget, toolInk } from './tabHighlighter';
+import { isInteractiveTarget, registerUiShadowRoot, toolInk } from './tabHighlighter';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — same reason
 // `tabComments.ts` hardcodes its own channel names: this module is folded
@@ -112,8 +112,10 @@ let currentColor: RgbColor = { r: 26, g: 115, b: 232 };
 const boxes = new Map<string, TextBox>();
 let drag: DragState | null = null;
 
+/** The host element the boxes hang off, in the page's DOM; the boxes themselves are inside `shadow`. */
 let root: HTMLElement | null = null;
-let baseStyleEl: HTMLStyleElement | null = null;
+/** A *closed* shadow root holding every box — the user's own text, kept out of the page scripts' reach (see `tabComments.ts`'s `shadow`). */
+let shadow: ShadowRoot | null = null;
 let cursorStyleEl: HTMLStyleElement | null = null;
 let repositionScheduled = false;
 
@@ -185,17 +187,6 @@ function buildBaseStyleText(): string {
   );
 }
 
-function ensureBaseStyle(): void {
-  if (!baseStyleEl) {
-    baseStyleEl = document.createElement('style');
-    baseStyleEl.setAttribute('data-northstar', 'text-tool-base');
-    baseStyleEl.textContent = buildBaseStyleText();
-  }
-  if (!baseStyleEl.isConnected) {
-    (document.head ?? document.documentElement).appendChild(baseStyleEl);
-  }
-}
-
 /** Cursor + blanket `user-select: none` while the tool is on, so a drop is a plain click and not misread as a text-selection drag. */
 function updateCursorStyle(): void {
   if (!cursorStyleEl) {
@@ -212,26 +203,34 @@ function updateCursorStyle(): void {
   }
 }
 
-function ensureRoot(): HTMLElement {
-  ensureBaseStyle();
+/**
+ * The shadow root to put the boxes in, creating its host on first use (with
+ * the box styles inside it) and re-attaching it if the page removed it.
+ * Never an element found by id, which the page could have planted.
+ */
+function ensureRoot(): ShadowRoot {
   // The anchor spans reuse the comment tool's class, whose rule lives in its style element.
   ensureAnchorStyle();
-  if (!root || !root.isConnected) {
-    root = document.getElementById(ROOT_ID);
-    if (!root) {
-      root = document.createElement('div');
-      root.id = ROOT_ID;
-      root.style.position = 'fixed';
-      root.style.top = '0';
-      root.style.left = '0';
-      root.style.width = '0';
-      root.style.height = '0';
-      root.style.pointerEvents = 'none';
-      root.style.zIndex = '2147483647';
-    }
+  if (!root || !shadow) {
+    root = document.createElement('div');
+    root.id = ROOT_ID;
+    root.style.position = 'fixed';
+    root.style.top = '0';
+    root.style.left = '0';
+    root.style.width = '0';
+    root.style.height = '0';
+    root.style.pointerEvents = 'none';
+    root.style.zIndex = '2147483647';
+    shadow = root.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = buildBaseStyleText();
+    shadow.appendChild(style);
+    registerUiShadowRoot(root, shadow);
+  }
+  if (!root.isConnected) {
     (document.body ?? document.documentElement).appendChild(root);
   }
-  return root;
+  return shadow;
 }
 
 // ── POSITIONING ──────────────────────────────────────────────────────
@@ -684,7 +683,7 @@ function setActive(nextActive: boolean, color: RgbColor): void {
   updateCursorStyle();
   if (wasActive && !active) {
     // Blurring runs `finishEditing` through the box's own `focusout`: text is kept, an empty box dropped.
-    const focused = document.activeElement;
+    const focused = shadow?.activeElement;
     if (focused instanceof HTMLElement && focused.closest(`.${BOX_CLASS}`)) {
       focused.blur();
     }
@@ -703,8 +702,9 @@ window.addEventListener('pagehide', () => {
   Array.from(boxes.values()).forEach(finishEditing);
 });
 
+/** Whether an event (as seen from outside the shadow root, retargeted to its host) came from a box. */
 function isOwnTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(`.${BOX_CLASS}`) !== null;
+  return root !== null && target === root;
 }
 
 // While the tool is on, a click is for dropping a box — never for following a

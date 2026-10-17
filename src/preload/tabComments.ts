@@ -1,13 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-06
 
 import { ipcRenderer } from 'electron';
 import {
   buildBodyTextIndex,
   isEditableTarget,
   isInteractiveTarget,
+  registerUiShadowRoot,
   resolveOffset,
   textAfter,
   textBefore,
@@ -80,7 +81,15 @@ let openId: string | null = null;
 /** Whichever of our own textareas currently has focus, if any — tracks where an Up/Down jump should step from, and gates it (a jump while actually typing would fight the caret). */
 let focusedId: string | null = null;
 
+/** The host element the comment UI hangs off, in the page's DOM; the UI itself is inside `shadow`. */
 let root: HTMLElement | null = null;
+/**
+ * A *closed* shadow root holding every dot, box and textarea — the user's
+ * own notes, which the page's scripts must not be able to read or rewrite.
+ * Events from inside reach page (and this file's document) listeners
+ * retargeted to `root`, so those use `uiElementAt` to see what was hit.
+ */
+let shadow: ShadowRoot | null = null;
 let baseStyleEl: HTMLStyleElement | null = null;
 let cursorStyleEl: HTMLStyleElement | null = null;
 let repositionScheduled = false;
@@ -150,22 +159,26 @@ function commentCursorCss(color: RgbColor): string {
  * custom property `createPin` sets per dot from that comment's own color —
  * a plain class rule can't reach into a specific element's own inline color.
  */
-function buildBaseStyleText(): string {
+function buildUiStyleText(): string {
   return (
     `.${DOT_CLASS} { position: fixed; width: 16px; height: 16px; margin: 0; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.45); cursor: pointer; z-index: 2147483647; transform: translate(-50%, -50%); pointer-events: auto; transition: box-shadow 120ms ease; } ` +
     `.${DOT_CLASS}:hover { box-shadow: 0 0 0 5px var(--ns-comment-glow, rgba(66,133,244,0.55)), 0 1px 4px rgba(0,0,0,0.45); } ` +
     `.${BOX_CLASS} { position: fixed; z-index: 2147483647; background: #fff; color: #1b1b1b; border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.3); padding: 6px; width: 220px; box-sizing: border-box; font: 13px/1.4 system-ui, -apple-system, sans-serif; pointer-events: auto; } ` +
-    `.${INPUT_CLASS} { display: block; width: 100%; box-sizing: border-box; border: none; outline: none; resize: none; background: transparent; color: inherit; font: inherit; min-height: 42px; } ` +
-    `.${ANCHOR_CLASS} { display: inline-block; width: 0; height: 0; overflow: hidden; line-height: 0; }`
+    `.${INPUT_CLASS} { display: block; width: 100%; box-sizing: border-box; border: none; outline: none; resize: none; background: transparent; color: inherit; font: inherit; min-height: 42px; }`
   );
 }
 
-/** Exported so `tabTextBoxes.ts` can reuse this file's point-anchor helpers, which rely on the `ANCHOR_CLASS` rule this inserts. */
+/**
+ * Exported so `tabTextBoxes.ts` can reuse this file's point-anchor helpers,
+ * which rely on the `ANCHOR_CLASS` rule this inserts. The anchors sit in the
+ * page's own text (they have to, to move with it), so their rule is the one
+ * that goes in the page's document; the UI's own rules live in its shadow root.
+ */
 export function ensureBaseStyle(): void {
   if (!baseStyleEl) {
     baseStyleEl = document.createElement('style');
     baseStyleEl.setAttribute('data-northstar', 'comment-tool-base');
-    baseStyleEl.textContent = buildBaseStyleText();
+    baseStyleEl.textContent = `.${ANCHOR_CLASS} { display: inline-block; width: 0; height: 0; overflow: hidden; line-height: 0; }`;
   }
   if (!baseStyleEl.isConnected) {
     (document.head ?? document.documentElement).appendChild(baseStyleEl);
@@ -188,27 +201,47 @@ function updateCursorStyle(): void {
   }
 }
 
-function ensureRoot(): HTMLElement {
+/**
+ * The shadow root to put the comment UI in, creating its host on first use
+ * and re-attaching it if the page removed it. Always this file's own host —
+ * never an element found by id, which the page could have planted to receive
+ * the user's notes.
+ */
+function ensureRoot(): ShadowRoot {
   ensureBaseStyle();
-  if (!root || !root.isConnected) {
-    root = document.getElementById(ROOT_ID);
-    if (!root) {
-      root = document.createElement('div');
-      root.id = ROOT_ID;
-      root.style.position = 'fixed';
-      root.style.top = '0';
-      root.style.left = '0';
-      root.style.width = '0';
-      root.style.height = '0';
-      // Descendants (the dot/box) still receive clicks despite this —
-      // `pointer-events: none` only stops the container itself, not
-      // children that don't repeat the declaration.
-      root.style.pointerEvents = 'none';
-      root.style.zIndex = '2147483647';
-    }
+  if (!root || !shadow) {
+    root = document.createElement('div');
+    root.id = ROOT_ID;
+    root.style.position = 'fixed';
+    root.style.top = '0';
+    root.style.left = '0';
+    root.style.width = '0';
+    root.style.height = '0';
+    // Descendants (the dot/box) still receive clicks despite this —
+    // `pointer-events: none` only stops the container itself, not
+    // children that don't repeat the declaration.
+    root.style.pointerEvents = 'none';
+    root.style.zIndex = '2147483647';
+    shadow = root.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = buildUiStyleText();
+    shadow.appendChild(style);
+    registerUiShadowRoot(root, shadow);
+  }
+  if (!root.isConnected) {
     (document.body ?? document.documentElement).appendChild(root);
   }
-  return root;
+  return shadow;
+}
+
+/** Whether an event (as seen from outside the shadow root) came from the comment UI. */
+function isOwnUiTarget(target: EventTarget | null): boolean {
+  return root !== null && target === root;
+}
+
+/** The comment-UI element a mouse event hit, or `null` if it hit the page — see `shadow`. */
+function uiElementAt(event: MouseEvent): Element | null {
+  return isOwnUiTarget(event.target) && shadow ? shadow.elementFromPoint(event.clientX, event.clientY) : null;
 }
 
 function styleAnchor(el: HTMLElement): void {
@@ -648,10 +681,11 @@ document.addEventListener(
 
 /** The dot currently under the mouse, via a fresh hit-test at the last known cursor position — see `lastMouseX`/`lastMouseY`'s own comment for why this, not `:hover`, is what's actually reliable here. */
 function hoveredDotId(): string | null {
-  if (lastMouseX < 0 || lastMouseY < 0) {
+  if (lastMouseX < 0 || lastMouseY < 0 || !shadow) {
     return null;
   }
-  const el = document.elementFromPoint(lastMouseX, lastMouseY);
+  // The shadow root's own hit-test: the document's would stop at the host.
+  const el = shadow.elementFromPoint(lastMouseX, lastMouseY);
   return el instanceof Element ? (el.closest(`.${DOT_CLASS}`)?.getAttribute('data-ncm-id') ?? null) : null;
 }
 
@@ -684,14 +718,10 @@ document.addEventListener(
 document.addEventListener(
   'mousedown',
   (event) => {
-    if (!active) {
+    if (!active || isOwnUiTarget(event.target)) {
       return;
     }
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(`.${DOT_CLASS}, .${BOX_CLASS}`)) {
-      return;
-    }
-    if (isInteractiveTarget(target)) {
+    if (isInteractiveTarget(event.target)) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
@@ -700,11 +730,7 @@ document.addEventListener(
 );
 
 function suppressClick(event: MouseEvent): void {
-  if (!active) {
-    return;
-  }
-  const target = event.target instanceof Element ? event.target : null;
-  if (target?.closest(`.${DOT_CLASS}, .${BOX_CLASS}`)) {
+  if (!active || isOwnUiTarget(event.target)) {
     return;
   }
   event.preventDefault();
@@ -716,11 +742,7 @@ document.addEventListener('auxclick', suppressClick, true);
 document.addEventListener(
   'click',
   (event) => {
-    if (!active) {
-      return;
-    }
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(`.${DOT_CLASS}, .${BOX_CLASS}`)) {
+    if (!active || isOwnUiTarget(event.target)) {
       return;
     }
     event.preventDefault();
@@ -741,8 +763,8 @@ document.addEventListener(
     if (active || !openId) {
       return;
     }
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(`.${DOT_CLASS}[data-ncm-id="${CSS.escape(openId)}"], .${BOX_CLASS}[data-ncm-id="${CSS.escape(openId)}"]`)) {
+    const hit = uiElementAt(event);
+    if (hit?.closest(`.${DOT_CLASS}[data-ncm-id="${CSS.escape(openId)}"], .${BOX_CLASS}[data-ncm-id="${CSS.escape(openId)}"]`)) {
       return;
     }
     openId = null;

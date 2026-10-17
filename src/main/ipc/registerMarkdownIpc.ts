@@ -13,6 +13,7 @@ import {
   markdownNavigateHistoryRequestSchema,
   markdownOpenLinkRequestSchema,
   markdownReadImageRequestSchema,
+  markdownReadRemoteImageRequestSchema,
   markdownRenameRequestSchema,
   markdownResolveLinksRequestSchema,
   markdownRunCodeRequestSchema,
@@ -126,6 +127,9 @@ export function registerMarkdownIpc(
   invokeFromPage(IpcChannel.MarkdownReadImage, markdownReadImageRequestSchema, (manager, request) =>
     manager.readMarkdownImage(request.id, request.src),
   );
+  invokeFromPage(IpcChannel.MarkdownReadRemoteImage, markdownReadRemoteImageRequestSchema, (manager, request) =>
+    manager.readMarkdownRemoteImage(request.id, request.url),
+  );
   invokeFromPage(IpcChannel.MarkdownRunCode, markdownRunCodeRequestSchema, (manager, request) =>
     manager.runMarkdownCode(request.id, request.index),
   );
@@ -146,16 +150,19 @@ export function registerMarkdownIpc(
     }
   }
 
-  /** Registers a chrome-originated `ipcMain.handle` that acts on the tab's owning manager and replies `null` on success. */
+  /** Registers a chrome-originated `ipcMain.handle` that acts on the tab's owning manager and replies `null` on success. A tab's page is refused. */
   function invokeForTab<T extends { readonly id: string }>(
     channel: string,
     schema: ZodType<T>,
     action: (manager: TabManager, request: T) => void | Promise<void>,
   ): void {
-    ipcMain.handle(channel, async (_event: IpcMainInvokeEvent, rawRequest: unknown): Promise<IpcResult<null>> => {
+    ipcMain.handle(channel, async (event: IpcMainInvokeEvent, rawRequest: unknown): Promise<IpcResult<null>> => {
       const parsed = schema.safeParse(rawRequest);
       if (!parsed.success) {
         return { ok: false, code: 'invalid-request', message: parsed.error.message };
+      }
+      if (!isChrome(event)) {
+        return { ok: false, code: 'forbidden', message: 'Only the browser window can do this.' };
       }
       try {
         const manager = resolveTabManagerForTab(parsed.data.id);

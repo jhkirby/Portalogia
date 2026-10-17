@@ -1,13 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-06
 
 import { ipcMain } from 'electron';
 import { rgbSchema } from '@shared/ipc-schemas';
 import { IpcChannel } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 import { setPageSelectionAccent } from '../browser/pageSelectionAccent';
+import { isChromeSender } from './senderGuards';
 
 /**
  * Mirrors the renderer's `useAccentColor` state into
@@ -25,9 +26,9 @@ import { setPageSelectionAccent } from '../browser/pageSelectionAccent';
  *   tab repaints immediately rather than only a future one picking it up.
  */
 export function registerAccentColorIpc(onAccentChanged: (rgb: RGB) => void): void {
-  ipcMain.on(IpcChannel.AccentColorSet, (_event, rawRequest: unknown) => {
+  ipcMain.on(IpcChannel.AccentColorSet, (event, rawRequest: unknown) => {
     const parsed = rgbSchema.safeParse(rawRequest);
-    if (parsed.success) {
+    if (parsed.success && isChromeSender(event)) {
       setPageSelectionAccent(parsed.data);
       onAccentChanged(parsed.data);
     }

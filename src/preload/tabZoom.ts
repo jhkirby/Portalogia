@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-06
 
 import { ipcRenderer, webFrame } from 'electron';
 // Folded into this same preload entry rather than given its own
@@ -9,7 +9,7 @@ import { ipcRenderer, webFrame } from 'electron';
 // `WebContentsView` (see `TabManager.createTab`), and a module imported by
 // two Rollup entries in the same build gets split into a shared chunk the
 // sandboxed CJS loader can't `require()` (see that file's own comment).
-import './tabHighlighter';
+import { deepActiveElement } from './tabHighlighter';
 import './tabComments';
 import './tabTextBoxes';
 import './tabFind';
@@ -60,7 +60,8 @@ const EditableFocus = 'ui:editable-focus';
 const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
 let editableReported = false;
 function reportEditableFocus(): void {
-  const element = document.activeElement;
+  // Looks into the comment/text-box tools' closed shadow roots, where typing a note is still typing.
+  const element = deepActiveElement();
   const editable =
     element instanceof HTMLTextAreaElement ||
     (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||

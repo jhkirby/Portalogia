@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-06
 
 import { ipcRenderer } from 'electron';
 
@@ -523,10 +523,35 @@ function applyStoredHighlight(highlight: HighlightRecord): void {
   }
 }
 
+/**
+ * The closed shadow roots the comment and text-box tools draw their UI in,
+ * by host element. The UI holds the user's own notes, so it lives where the
+ * page's scripts can't read it — which also hides it from
+ * `document.activeElement` (the page sees only the host), so focus checks
+ * look through here.
+ */
+const uiShadowRoots = new Map<Element, ShadowRoot>();
+
+/** Records a tool's closed UI shadow root, so focus inside it still counts as typing. */
+export function registerUiShadowRoot(host: Element, shadow: ShadowRoot): void {
+  uiShadowRoots.set(host, shadow);
+}
+
+/** `document.activeElement`, looking into this app's own closed UI shadow roots. */
+export function deepActiveElement(): Element | null {
+  const element = document.activeElement;
+  const shadow = element ? uiShadowRoots.get(element) : undefined;
+  return shadow?.activeElement ?? element;
+}
+
 /** Exported for `tabComments.ts`'s own arrow-key-jump gating — see that file for why it needs the same "is this an ordinary editable field" check. */
 export function isEditableTarget(el: Element | null): boolean {
   if (!el) {
     return false;
+  }
+  const shadow = uiShadowRoots.get(el);
+  if (shadow) {
+    return isEditableTarget(shadow.activeElement);
   }
   const tag = el.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement).isContentEditable;

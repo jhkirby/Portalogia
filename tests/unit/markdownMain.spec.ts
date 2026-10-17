@@ -10,6 +10,7 @@ import { test, expect } from '@playwright/test';
 import { allRunnableNames, runCodeBlock } from '../../src/main/browser/MarkdownCodeRunner';
 import { MarkdownDocuments } from '../../src/main/browser/MarkdownDocuments';
 import {
+  fetchRemoteImageDataUrl,
   findBacklinks,
   forgetVaultScans,
   listNoteNames,
@@ -87,7 +88,57 @@ test.describe('vault: finding notes', () => {
     expect(await readImageDataUrl(join(dir, 'sub', 'b.md'), 'pic.png')).toMatch(/^data:image\/png;base64,/);
     expect(await readImageDataUrl(join(dir, 'a.md'), 'notes.txt')).toBeNull();
     expect(await readImageDataUrl(join(dir, 'a.md'), '\\\\host\\share\\x.png')).toBeNull();
+    // A web address is never read as a local picture — only `fetchRemoteImageDataUrl`, on a click, fetches one.
+    expect(await readImageDataUrl(join(dir, 'a.md'), 'https://example.com/x.png')).toBeNull();
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+test.describe('fetchRemoteImageDataUrl', () => {
+  /** A stand-in `fetch` answering every request with `body` and `headers`, recording what it was asked. */
+  function fakeFetch(
+    body: Uint8Array | string,
+    init: { status?: number; headers?: Record<string, string>; finalUrl?: string } = {},
+  ): { fetchImpl: typeof fetch; calls: { url: string; init: RequestInit | undefined }[] } {
+    const calls: { url: string; init: RequestInit | undefined }[] = [];
+    const fetchImpl = (async (input: string | URL | Request, requestInit?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init: requestInit });
+      const response = new Response(body, { status: init.status ?? 200, headers: init.headers });
+      Object.defineProperty(response, 'url', { value: init.finalUrl ?? url });
+      return response;
+    }) as typeof fetch;
+    return { fetchImpl, calls };
+  }
+
+  test('an https picture comes back as a data URL, fetched without cookies', async () => {
+    const { fetchImpl, calls } = fakeFetch(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png; x=y' } });
+    expect(await fetchRemoteImageDataUrl('https://example.com/a.png', fetchImpl)).toBe('data:image/png;base64,AQID');
+    expect(calls[0]?.init?.credentials).toBe('omit');
+  });
+
+  test('anything but https is refused before any request is made', async () => {
+    const { fetchImpl, calls } = fakeFetch('x', { headers: { 'content-type': 'image/png' } });
+    for (const url of ['http://example.com/a.png', 'file:///C:/a.png', 'data:image/png;base64,AA==', 'javascript:alert(1)']) {
+      expect(await fetchRemoteImageDataUrl(url, fetchImpl)).toBeNull();
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a redirect away from https, a non-picture, an error status or an oversized body gives nothing', async () => {
+    const png = { 'content-type': 'image/png' };
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('x', { headers: png, finalUrl: 'http://a.test/x' }).fetchImpl)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('<script>', { headers: { 'content-type': 'text/html' } }).fetchImpl)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('x', { headers: png, status: 404 }).fetchImpl)).toBeNull();
+    const huge = new Uint8Array(15 * 1024 * 1024 + 1);
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch(huge, { headers: png }).fetchImpl)).toBeNull();
+  });
+
+  test('a failed request gives nothing rather than throwing', async () => {
+    const failing = (async () => {
+      throw new TypeError('network down');
+    }) as typeof fetch;
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', failing)).toBeNull();
   });
 });
 

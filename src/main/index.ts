@@ -34,6 +34,7 @@ import { registerMarkdownIpc } from './ipc/registerMarkdownIpc';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
+import { chromeWindowOf } from './ipc/senderGuards';
 import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
 import { TerminalManager } from './terminal/TerminalManager';
@@ -224,7 +225,7 @@ void app.whenReady().then(() => {
   });
 
   trackEditableFocus();
-  registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
+  registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab, resolveTabForContents);
   registerMarkdownIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
   registerThemeIpc();
@@ -276,19 +277,38 @@ app.on('window-all-closed', () => {
  * Resolves the `TabManager` owning whichever window actually sent a
  * request — see `registerTabIpc`'s own doc comment for why this has to be
  * `event.sender`-based rather than "whichever window is focused" (the old
- * behavior, back when only one window could ever exist). Throws rather
- * than returning `undefined` so every `registerTabIpc` handler's own
- * try/catch turns this into an ordinary `IpcResult` failure the same way
- * it already handles any other main-process error.
+ * behavior, back when only one window could ever exist). Only a window's
+ * own chrome page resolves (`chromeWindowOf`); a tab's page is refused, so
+ * it can't reach the chrome's channels. Throws rather than returning
+ * `undefined` so every `registerTabIpc` handler's own try/catch turns this
+ * into an ordinary `IpcResult` failure the same way it already handles any
+ * other main-process error.
  * @param event An IPC event carrying the sending `webContents`.
  */
 function resolveTabManagerForEvent(event: { sender: Electron.WebContents }): TabManager {
-  const window = BrowserWindow.fromWebContents(event.sender);
+  const window = chromeWindowOf(event.sender);
   const manager = window ? tabManagersByWindowId.get(window.id) : undefined;
   if (!manager) {
     throw new Error('No window is open for this request');
   }
   return manager;
+}
+
+/**
+ * Resolves the tab whose own page is `contents`, and a `TabManager` that
+ * owns it — for the channels a tab's page sends about itself (Ctrl+wheel
+ * zoom, a terminal's keystrokes, a PDF's marks), which must act on that
+ * tab and no other.
+ * @param contents The `event.sender` of the message.
+ */
+function resolveTabForContents(contents: Electron.WebContents): { tabId: string; manager: TabManager } | undefined {
+  for (const [tabId, view] of sharedRegistry.views) {
+    if (view.webContents === contents) {
+      const manager = resolveTabManagerForTab(tabId);
+      return manager ? { tabId, manager } : undefined;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -623,7 +643,7 @@ function registerTearOffIpc(): void {
     if (!parsed.success) {
       return;
     }
-    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+    const sourceWindow = chromeWindowOf(event.sender);
     const sourceManager = sourceWindow ? tabManagersByWindowId.get(sourceWindow.id) : undefined;
     if (!sourceWindow || !sourceManager) {
       return;
@@ -680,14 +700,14 @@ function registerTearOffIpc(): void {
   });
   ipcMain.on(IpcChannel.TabsDropRegions, (event, rawRequest: unknown) => {
     const parsed = dropRegionsRequestSchema.safeParse(rawRequest);
-    const sender = BrowserWindow.fromWebContents(event.sender);
+    const sender = chromeWindowOf(event.sender);
     if (parsed.success && sender) {
       tabManagersByWindowId.get(sender.id)?.setDropRegions(parsed.data.rects);
     }
   });
-  ipcMain.on(IpcChannel.TabsTearOffEnd, (_event, rawRequest: unknown) => {
+  ipcMain.on(IpcChannel.TabsTearOffEnd, (event, rawRequest: unknown) => {
     const parsed = tearOffTabEndRequestSchema.safeParse(rawRequest);
-    if (parsed.success) {
+    if (parsed.success && chromeWindowOf(event.sender)) {
       finishLiveTearOff(parsed.data.id);
     }
   });
@@ -731,7 +751,7 @@ function openWorkspaceInNewWindow(sourceManager: TabManager | null): void {
  */
 function registerOpenWorkspaceInNewWindowIpc(): void {
   ipcMain.on(IpcChannel.WorkspaceOpenInNewWindow, (event) => {
-    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+    const sourceWindow = chromeWindowOf(event.sender);
     const sourceManager = sourceWindow ? tabManagersByWindowId.get(sourceWindow.id) : undefined;
     openWorkspaceInNewWindow(sourceManager ?? null);
   });

@@ -152,6 +152,8 @@ export const IpcChannel = {
   MarkdownListNotes: 'markdown:list-notes',
   /** Markdown page → main: an image beside the note, as a data URL. */
   MarkdownReadImage: 'markdown:read-image',
+  /** Markdown page → main: fetch a web picture the user clicked to load (a note never loads one by itself). */
+  MarkdownReadRemoteImage: 'markdown:read-remote-image',
   /** Markdown page → main: run one of the note's fenced code blocks. */
   MarkdownRunCode: 'markdown:run-code',
   ZoomWheel: 'zoom:wheel',
@@ -1028,7 +1030,13 @@ export interface NorthstarMarkdownApi {
   listNotes(): Promise<readonly string[]>;
   /** An image beside the note as a `data:` URL, or `null` if it can't be read. */
   readImage(src: string): Promise<string | null>;
-  /** Runs the note's `index`th fenced code block (asking the user first, once per note). */
+  /**
+   * A web (`https:`) picture as a `data:` URL, or `null` if it can't be
+   * fetched. Only for a picture the user clicked to load: a note opened from
+   * anywhere must not be able to tell a server it was read.
+   */
+  readRemoteImage(url: string): Promise<string | null>;
+  /** Runs the note's `index`th fenced code block (asking the user first, once per block). */
   runCode(index: number): Promise<MarkdownRunResult>;
   /** Subscribes to this tab's zoom, as a whole percent (100 = actual size) — applied by the page itself, like the PDF viewer's. */
   onZoom(listener: (percent: number) => void): () => void;

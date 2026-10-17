@@ -181,13 +181,12 @@ export class AdBlocker {
   /**
    * Registers the page-side script that hides ad slots and runs scriptlets, and
    * the IPC it asks main through. The blocker's own `enableBlockingInSession`
-   * isn't used: it needs `registerPreloadScript` (Electron 35+), and it would
-   * claim `onHeadersReceived`, which this class owns.
+   * isn't used: it would claim `onHeadersReceived`, which this class owns.
    */
   private enableCosmeticFiltering(session: Session, blocker: ElectronBlocker): void {
     const preloadPath = createRequire(import.meta.url).resolve('@ghostery/adblocker-electron-preload');
-    if (!session.getPreloads().includes(preloadPath)) {
-      session.setPreloads([...session.getPreloads(), preloadPath]);
+    if (!session.getPreloadScripts().some((script) => script.filePath === preloadPath)) {
+      session.registerPreloadScript({ type: 'frame', filePath: preloadPath });
     }
     // Look the handlers up per call: `wrap` replaced them with ones that honor the switch and allowlist.
     ipcMain.handle('@ghostery/adblocker/inject-cosmetic-filters', (event, url: string, msg) =>

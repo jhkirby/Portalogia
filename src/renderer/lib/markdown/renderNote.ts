@@ -99,6 +99,21 @@ DOMPurify.addHook('uponSanitizeElement', (node) => {
   }
 });
 
+/** Where a web picture's address is kept instead of `src`, until the user clicks to load it — see `collectRemoteImages`. */
+export const REMOTE_SRC_ATTRIBUTE = 'data-md-remote-src';
+
+// A web picture would load the moment the HTML is put on the page — telling its server the note was opened.
+// Its address is set aside here, before the markup ever reaches a live document (the page's CSP blocks it anyway).
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node instanceof HTMLImageElement) {
+    const src = node.getAttribute('src') ?? '';
+    if (/^https?:\/\//i.test(src)) {
+      node.removeAttribute('src');
+      node.setAttribute(REMOTE_SRC_ATTRIBUTE, src);
+    }
+  }
+});
+
 /**
  * A note as HTML that is safe to put on the page: Markdown (with wikilinks,
  * math placeholders, highlights and highlighted code blocks) parsed, then

@@ -1,11 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-22
+// Last Modified: 2026-10-06
 
 import { ipcMain, nativeTheme } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
 import { themeSetRequestSchema } from '@shared/ipc-schemas';
+import { isChromeSender } from './senderGuards';
 
 /**
  * Mirrors the renderer's `useTheme` state onto Electron's own
@@ -20,9 +21,9 @@ import { themeSetRequestSchema } from '@shared/ipc-schemas';
  * Call this exactly once for the app's lifetime, same as `registerTabIpc`.
  */
 export function registerThemeIpc(): void {
-  ipcMain.on(IpcChannel.ThemeSet, (_event, rawRequest: unknown) => {
+  ipcMain.on(IpcChannel.ThemeSet, (event, rawRequest: unknown) => {
     const parsed = themeSetRequestSchema.safeParse(rawRequest);
-    if (parsed.success) {
+    if (parsed.success && isChromeSender(event)) {
       nativeTheme.themeSource = parsed.data.theme;
     }
   });

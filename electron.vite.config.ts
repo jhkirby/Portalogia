@@ -6,6 +6,7 @@
 import { resolve } from 'node:path';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import { buildAppPageCsp } from './src/shared/csp';
 import { buildMarkdownCsp } from './src/shared/markdown/csp';
 
 // Shared alias so main, preload, and renderer all import the IPC contract
@@ -66,16 +67,16 @@ export default defineConfig({
     plugins: [
       react(),
       {
-        // The packaged build serves pages from `file://`, where a response header isn't a sure thing — so the
-        // Markdown page, which renders untrusted text, carries its policy in the page itself. (The dev server
-        // gets it as a header from main, since its inline scripts can't live under the strict policy.)
-        name: 'markdown-page-csp',
+        // The packaged build serves pages from `file://`, where a response header isn't a sure thing — so every
+        // page carries its policy in the page itself: the Markdown page (untrusted text) its own strict one, the
+        // rest the app-page policy. (Under the dev server, whose inline scripts can't live under these policies,
+        // the chrome and Markdown pages get theirs as headers from main instead.)
+        name: 'page-csp',
         apply: 'build',
         transformIndexHtml(html, context) {
-          return context.filename.endsWith('markdown.html')
-            ? html.replace('<head>', `<head>
-    <meta http-equiv="Content-Security-Policy" content="${buildMarkdownCsp(false)}" />`)
-            : html;
+          const csp = context.filename.endsWith('markdown.html') ? buildMarkdownCsp(false) : buildAppPageCsp(false);
+          return html.replace('<head>', `<head>
+    <meta http-equiv="Content-Security-Policy" content="${csp}" />`);
         },
       },
     ],

@@ -1,11 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-22
+// Last Modified: 2026-10-06
 
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
 import { WindowDragController } from '../windows/WindowDragController';
+import { chromeWindowOf } from './senderGuards';
 
 /**
  * Registers the frameless window's own minimize/maximize/close controls
@@ -13,7 +14,8 @@ import { WindowDragController } from '../windows/WindowDragController';
  * channels, same as `terminal:input`, since there's nothing meaningful to
  * reply with. Each resolves its target window from the sending
  * `webContents` rather than a captured reference, so it stays correct if
- * more than one window is ever open.
+ * more than one window is ever open — and only from a window's own chrome
+ * page (`chromeWindowOf`), so a tab's page can't close or move its window.
  *
  * Call this exactly once for the app's lifetime, same as `registerTabIpc`.
  */
@@ -23,29 +25,29 @@ export function registerWindowIpc(): void {
   const dragController = new WindowDragController();
 
   ipcMain.on(IpcChannel.WindowDragStart, (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const window = chromeWindowOf(event.sender);
     if (window) {
       dragController.begin(window);
     }
   });
 
   ipcMain.on(IpcChannel.WindowDragEnd, (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const window = chromeWindowOf(event.sender);
     if (window) {
       dragController.end(window);
     }
   });
 
   ipcMain.handle(IpcChannel.WindowGetState, (event) => ({
-    isMaximized: BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false,
+    isMaximized: chromeWindowOf(event.sender)?.isMaximized() ?? false,
   }));
 
   ipcMain.on(IpcChannel.WindowMinimize, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize();
+    chromeWindowOf(event.sender)?.minimize();
   });
 
   ipcMain.on(IpcChannel.WindowToggleMaximize, (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const window = chromeWindowOf(event.sender);
     if (!window) {
       return;
     }
@@ -60,6 +62,6 @@ export function registerWindowIpc(): void {
   // would — the app quits once every window is closed (see `main/index.ts`'s
   // `window-all-closed` handler).
   ipcMain.on(IpcChannel.WindowClose, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.close();
+    chromeWindowOf(event.sender)?.close();
   });
 }

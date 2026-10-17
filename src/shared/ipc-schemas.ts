@@ -309,6 +309,14 @@ export const markdownReadImageRequestSchema = z.object({
   src: z.string().min(1).max(2048),
 });
 
+export const markdownReadRemoteImageRequestSchema = z.object({
+  id: z.string().min(1),
+  url: z
+    .string()
+    .max(2048)
+    .refine((value) => /^https:\/\//i.test(value), 'Only https: pictures are fetched'),
+});
+
 export const markdownRunCodeRequestSchema = z.object({
   id: z.string().min(1),
   /** Which fenced code block of the note, counting from 0 in reading order. */
@@ -461,8 +469,9 @@ export type TerminalInputRequest = z.infer<typeof terminalInputRequestSchema>;
 
 export const terminalResizeRequestSchema = z.object({
   id: z.string().min(1),
-  cols: z.number().int().positive(),
-  rows: z.number().int().positive(),
+  // Capped well past any real screen: an absurd grid size would make the pty allocate (or fail) needlessly.
+  cols: z.number().int().positive().max(2000),
+  rows: z.number().int().positive().max(1000),
 });
 export type TerminalResizeRequest = z.infer<typeof terminalResizeRequestSchema>;
 

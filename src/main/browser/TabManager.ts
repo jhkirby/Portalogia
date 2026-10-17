@@ -75,6 +75,7 @@ import {
   findBacklinks,
   isMarkdownPath,
   listNoteNames,
+  fetchRemoteImageDataUrl,
   readImageDataUrl,
   resolveLinkTarget,
   resolveWikiLinks,
@@ -151,14 +152,21 @@ let relocatingLinkGroup = false;
 /** On-disk path of the file each PDF tab has open, by tab id. Module-level so it survives a tab moving between windows' managers. */
 const pdfFilePaths = new Map<string, string>();
 
+/** The annotation key (SHA-256 of the bytes) of the file each PDF tab has open — the only key that tab's page may save marks under. */
+const pdfFileKeys = new Map<string, string>();
+
 /** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
 const markdownDocuments = new MarkdownDocuments();
 
 /** Markdown tabs whose page has finished loading — a note sent before then would have nobody listening, so it waits for `did-finish-load`. */
 const markdownPagesReady = new Set<string>();
 
-/** Notes the user has agreed to run code from, until the app restarts (lower-cased on Windows). */
-const markdownTrustedNotes = new Set<string>();
+/** Code blocks the user has agreed to run, until the app restarts — hashes of note path, language and code (see `runMarkdownCode`). */
+const markdownTrustedBlocks = new Set<string>();
+
+/** The most of a block's code the run prompt shows; a native dialog can't scroll. */
+const CODE_PREVIEW_MAX_CHARS = 1500;
+const CODE_PREVIEW_MAX_LINES = 30;
 
 /** Markdown tabs with a code block running right now — one at a time per tab. */
 const markdownRunning = new Set<string>();
@@ -1209,11 +1217,17 @@ export class TabManager {
     return path ? readImageDataUrl(path, src) : null;
   }
 
+  /** A web picture the user clicked to load in the tab's note, as a data URL — see `fetchRemoteImageDataUrl`. */
+  public async readMarkdownRemoteImage(id: string, url: string): Promise<string | null> {
+    return markdownDocuments.pathOf(id) ? fetchRemoteImageDataUrl(url) : null;
+  }
+
   /**
    * Runs one of the tab's note's code blocks. The page names a block by its
    * number; the code that runs is read from the note main holds, never taken
-   * from the page. The first run for a note asks the user (native dialog,
-   * showing the code), and is then trusted until the app restarts.
+   * from the page. The first run of each block asks the user (native dialog,
+   * showing the code), and that exact code is then trusted until the app
+   * restarts — a different block, or this one edited, asks again.
    * @param id The Markdown tab.
    * @param index Which code block, counting from 0 in reading order.
    */
@@ -1243,17 +1257,21 @@ export class TabManager {
     if (markdownRunning.has(id)) {
       return refused('A block from this note is already running.');
     }
-    const trustKey = process.platform === 'win32' ? path.toLowerCase() : path;
-    if (!markdownTrustedNotes.has(trustKey)) {
+    // Trust is for this exact code in this note: another block, or this one
+    // after the file changes on disk, asks again rather than riding on an
+    // earlier "Run".
+    const notePath = process.platform === 'win32' ? path.toLowerCase() : path;
+    const trustKey = createHash('sha256').update(`${notePath}\0${block.language}\0${block.code}`).digest('hex');
+    if (!markdownTrustedBlocks.has(trustKey)) {
       const window = (this.registry.mountOwners.get(id) ?? this).window;
-      const preview = block.code.length > 600 ? `${block.code.slice(0, 600)}\n…` : block.code;
       const { response } = await dialog.showMessageBox(window, {
         type: 'warning',
         title: 'Run code',
         message: `Run code from “${basename(path)}”?`,
         detail:
           `Code blocks run on your computer with your permissions: they can read and change your files and use the network. ` +
-          `Only run code from notes you trust. Code blocks from this note won't ask again until Northstar restarts.\n\n${preview}`,
+          `Only run code from notes you trust. This block won't ask again until Northstar restarts, unless its code changes.` +
+          `\n\n${codePreview(block.code)}`,
         buttons: ['Run', 'Cancel'],
         defaultId: 1,
         cancelId: 1,
@@ -1262,7 +1280,7 @@ export class TabManager {
       if (response !== 0) {
         return refused('Canceled.');
       }
-      markdownTrustedNotes.add(trustKey);
+      markdownTrustedBlocks.add(trustKey);
     }
     markdownRunning.add(id);
     try {
@@ -1301,6 +1319,21 @@ export class TabManager {
   /** Whether `contents` is the page of Markdown tab `id` — the check that keeps one tab's page from acting as another. */
   public ownsMarkdownContents(id: string, contents: WebContents): boolean {
     return this.states.get(id)?.kind === 'markdown' && this.views.get(id)?.webContents === contents;
+  }
+
+  /** Whether `contents` is the page of terminal tab `id` — the check that keeps any other page from typing into its shell. */
+  public ownsTerminalContents(id: string, contents: WebContents): boolean {
+    return this.states.get(id)?.kind === 'terminal' && this.views.get(id)?.webContents === contents;
+  }
+
+  /** Whether `contents` is the page of PDF tab `id`. */
+  public ownsPdfContents(id: string, contents: WebContents): boolean {
+    return this.states.get(id)?.kind === 'pdf' && this.views.get(id)?.webContents === contents;
+  }
+
+  /** The annotation key of the file PDF tab `id` has open, if any — see `pdfFileKeys`. */
+  public pdfKeyOf(id: string): string | undefined {
+    return pdfFileKeys.get(id);
   }
 
   /**
@@ -1607,7 +1640,9 @@ export class TabManager {
       dialog.showErrorBox('Could not open PDF', error instanceof Error ? error.message : String(error));
       return;
     }
+    const key = createHash('sha256').update(data).digest('hex');
     pdfFilePaths.set(id, filePath);
+    pdfFileKeys.set(id, key);
     this.historyController.recordPdfAccess(filePath);
 
     const current = this.states.get(id);
@@ -1621,7 +1656,6 @@ export class TabManager {
       this.emitState();
     }
     if (!view.webContents.isDestroyed()) {
-      const key = createHash('sha256').update(data).digest('hex');
       view.webContents.send(IpcChannel.PdfFile, {
         name: basename(filePath),
         data,
@@ -1642,6 +1676,7 @@ export class TabManager {
       return;
     }
     pdfFilePaths.delete(id);
+    pdfFileKeys.delete(id);
     this.states.set(id, { ...current, title: 'PDF', fileName: null, filePath: null, page: 1, pageCount: 0 });
     this.releaseUnavailableTools();
     if (this.findOpen && !this.canFind(this.activeTabId)) {
@@ -5822,6 +5857,26 @@ export class TabManager {
 function sanitizeFileName(title: string): string {
   const cleaned = title.replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
   return cleaned || 'page';
+}
+
+/**
+ * The code a run prompt shows. A long block is cut, and the cut is stated
+ * plainly — a quiet "…" let harmless-looking first lines stand in for code
+ * the person never saw.
+ * @param code The block's source.
+ */
+function codePreview(code: string): string {
+  const lines = code.split('\n');
+  let shown = lines.slice(0, CODE_PREVIEW_MAX_LINES).join('\n');
+  if (shown.length > CODE_PREVIEW_MAX_CHARS) {
+    shown = shown.slice(0, CODE_PREVIEW_MAX_CHARS);
+  }
+  if (shown.length === code.length) {
+    return code;
+  }
+  const hiddenLines = lines.length - shown.split('\n').length;
+  const rest = hiddenLines > 0 ? `${hiddenLines} more line${hiddenLines === 1 ? '' : 's'}` : 'the rest of this line';
+  return `${shown}\n\n⚠ Not shown: ${rest}. Read the whole block in the note before running it.`;
 }
 
 /**

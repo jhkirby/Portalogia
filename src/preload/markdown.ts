@@ -33,6 +33,7 @@ const MarkdownResolveLinks = 'markdown:resolve-links';
 const MarkdownBacklinks = 'markdown:backlinks';
 const MarkdownListNotes = 'markdown:list-notes';
 const MarkdownReadImage = 'markdown:read-image';
+const MarkdownReadRemoteImage = 'markdown:read-remote-image';
 const MarkdownRunCode = 'markdown:run-code';
 const FindCommandChannel = 'find:command';
 const FindResultChannel = 'find:result';
@@ -191,6 +192,10 @@ const api: NorthstarMarkdownApi = {
   },
   readImage: async (src) => {
     const result = (await ipcRenderer.invoke(MarkdownReadImage, { id: tabId, src })) as string | null;
+    return result ?? null;
+  },
+  readRemoteImage: async (url) => {
+    const result = (await ipcRenderer.invoke(MarkdownReadRemoteImage, { id: tabId, url })) as string | null;
     return result ?? null;
   },
   runCode: async (index) => {

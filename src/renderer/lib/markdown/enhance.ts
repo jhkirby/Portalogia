@@ -5,6 +5,7 @@
 
 import katex from 'katex';
 import { slugifyHeading } from '@shared/markdown/parser';
+import { REMOTE_SRC_ATTRIBUTE } from './renderNote';
 import { UI_ATTRIBUTE } from './textOffsets';
 
 /** One heading of a rendered note: what the outline panel lists and a `[[Note#Heading]]` link scrolls to. */
@@ -189,9 +190,28 @@ export function decorateTags(root: Element): void {
   }
 }
 
-/** Whether an image's `src` is one the page can load itself (a remote HTTPS picture or inline data), not a path main has to read. */
+/** Whether an image's `src` is one the page can load itself (inline data), not a path main has to read. */
 function isLoadableSource(src: string): boolean {
-  return /^(https:|data:image\/)/i.test(src);
+  return /^data:image\//i.test(src);
+}
+
+/**
+ * Marks the note's web pictures (set aside by `renderNote`) as waiting for a
+ * click to load — shown as their alt text until then.
+ * @returns Each picture with its address.
+ */
+export function collectRemoteImages(root: Element): { readonly image: HTMLImageElement; readonly url: string }[] {
+  const found: { image: HTMLImageElement; url: string }[] = [];
+  root.querySelectorAll<HTMLImageElement>(`img[${REMOTE_SRC_ATTRIBUTE}]`).forEach((image) => {
+    const url = image.getAttribute(REMOTE_SRC_ATTRIBUTE) ?? '';
+    image.classList.add('md-image--remote');
+    image.title = `Web picture, not loaded: ${url}\nClick to load it.`;
+    if (!image.alt) {
+      image.alt = 'Web picture';
+    }
+    found.push({ image, url });
+  });
+  return found;
 }
 
 /**

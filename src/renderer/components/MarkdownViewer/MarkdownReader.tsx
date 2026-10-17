@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { isRunnableName } from '@shared/markdown/runnable';
 import {
   collectLocalImages,
+  collectRemoteImages,
   collectWikiLinks,
   convertCallouts,
   decorateTags,
@@ -19,7 +20,7 @@ import {
   typesetMath,
   type OutlineEntry,
 } from '../../lib/markdown/enhance';
-import { renderNote } from '../../lib/markdown/renderNote';
+import { REMOTE_SRC_ATTRIBUTE, renderNote } from '../../lib/markdown/renderNote';
 import { UI_ATTRIBUTE } from '../../lib/markdown/textOffsets';
 import { CodeBlockControls, CodeOutput, type RunState } from './CodeBlockControls';
 
@@ -134,6 +135,13 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
         });
       }
     }
+    // Web pictures wait for a click (see `loadRemoteImage`), except ones already loaded for this note.
+    for (const { image, url } of collectRemoteImages(root)) {
+      const cached = imageCache.get(remoteImageKey(noteKey, url));
+      if (cached !== undefined) {
+        showRemoteImage(image, cached);
+      }
+    }
     const names = collectWikiLinks(root);
     if (names.length > 0) {
       void window.northstarMarkdown.resolveLinks(names).then((resolved) => {
@@ -174,8 +182,34 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
     setRuns((previous) => Object.fromEntries(Object.entries(previous).filter(([key]) => Number(key) !== index)));
   }, []);
 
+  /** Fetches a web picture the user clicked, through main — the page itself loads nothing from the web. */
+  const loadRemoteImage = (image: HTMLImageElement): void => {
+    const url = image.getAttribute(REMOTE_SRC_ATTRIBUTE) ?? '';
+    image.classList.add('md-image--loading');
+    void window.northstarMarkdown.readRemoteImage(url).then((dataUrl) => {
+      if (!image.isConnected) {
+        return;
+      }
+      image.classList.remove('md-image--loading');
+      if (dataUrl) {
+        imageCache.set(remoteImageKey(noteKey, url), dataUrl);
+        showRemoteImage(image, dataUrl);
+      } else {
+        image.classList.add('md-image--broken');
+      }
+    });
+  };
+
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>): void => {
     const target = event.target instanceof Element ? event.target : null;
+    const remoteImage = target?.closest<HTMLImageElement>('img.md-image--remote');
+    if (remoteImage) {
+      event.preventDefault();
+      if (!toolActive) {
+        loadRemoteImage(remoteImage);
+      }
+      return;
+    }
     const task = target?.closest<HTMLInputElement>('input.md-task');
     if (task) {
       // The re-render from the changed source redraws the box, so the click's own toggle is cancelled.
@@ -223,6 +257,18 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
       ))}
     </>
   );
+}
+
+/** `imageCache`'s key for a web picture — kept apart from a local picture that happens to have the same name. */
+function remoteImageKey(noteKey: string, url: string): string {
+  return `${noteKey}\nremote:${url}`;
+}
+
+/** Shows a loaded web picture in place of its click-to-load stand-in. */
+function showRemoteImage(image: HTMLImageElement, dataUrl: string): void {
+  image.classList.remove('md-image--remote', 'md-image--broken');
+  image.removeAttribute('title');
+  image.src = dataUrl;
 }
 
 interface CodeHostPortalsProps {
