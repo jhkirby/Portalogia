@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-11 */
+   Last Modified: 2026-10-18 */
 
 /* ── APP SHELL ────────────────────────────────────────────────────────── */
 
@@ -155,8 +155,9 @@ body {
 
 /* The drag strip along the window's top edge (`TitlebarGrip`) — the height of
    the extra space `--size-tab-bar-height` adds above the tabs. `no-drag` so it
-   receives mouse events (an OS drag region wouldn't), letting it show hover and
-   pressed colors and a grab cursor; main moves the window itself. */
+   receives mouse events (an OS drag region wouldn't), letting it show a pressed
+   color and a grab cursor; main moves the window itself. No hover color: it
+   read as a stray grey bar along the top of the window. */
 .titlebar__grip {
   position: absolute;
   top: 0;
@@ -176,24 +177,13 @@ body {
 
 /* Maximized (see `TitlebarGrip`): the OS drags the window by this strip, which is
    what lets it come back to its normal size under the cursor, as in Chrome. An OS
-   drag region receives no mouse events, so `:hover` never matches and the cursor
-   stays the default arrow; main reports the hover instead (`GripHoverWatcher`),
-   which arrives as `--hover`. */
+   drag region receives no mouse events, so the cursor stays the default arrow. */
 .titlebar__grip--native {
   cursor: default;
   -webkit-app-region: drag;
 }
 
-.titlebar__grip--hover {
-  background: var(--color-grip-hover-bg);
-}
-
-.titlebar__grip:hover {
-  background: var(--color-grip-hover-bg);
-}
-
-.titlebar__grip--dragging,
-.titlebar__grip--dragging:hover {
+.titlebar__grip--dragging {
   background: var(--color-grip-active-bg);
   cursor: grabbing;
 }

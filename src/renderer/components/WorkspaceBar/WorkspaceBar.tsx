@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
@@ -227,7 +227,7 @@ export function WorkspaceBar({
                 {!isEditing && (
                   <button
                     type="button"
-                    className="workspace-bar__edit chrome-tooltip"
+                    className="workspace-bar__edit hover-grow chrome-tooltip"
                     aria-label={`Edit ${workspace.name} workspace`}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -241,7 +241,7 @@ export function WorkspaceBar({
                 {workspaces.length > 1 && !isEditing && (
                   <button
                     type="button"
-                    className="workspace-bar__remove chrome-tooltip"
+                    className="workspace-bar__remove hover-grow chrome-tooltip"
                     aria-label={`Remove ${workspace.name} workspace`}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -261,7 +261,7 @@ export function WorkspaceBar({
         {workspaces.length < MAX_WORKSPACES && (
           <button
             type="button"
-            className={`workspace-bar__new chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
+            className={`workspace-bar__new hover-grow chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
             aria-label="New workspace"
             onClick={() => {
               newWorkspaceTooltip.hide();
@@ -293,7 +293,7 @@ export function WorkspaceBar({
         )}
         <button
           type="button"
-          className="workspace-bar__images chrome-tooltip"
+          className="workspace-bar__images hover-grow chrome-tooltip"
           aria-label="Workspace images"
           onClick={() => {
             imagesTooltip.hide();
@@ -315,7 +315,7 @@ export function WorkspaceBar({
       {!focusMode && (
         <button
           type="button"
-          className="sidebar__toggle chrome-tooltip"
+          className="sidebar__toggle hover-grow chrome-tooltip"
           onClick={(event) => {
             sidebarToggleTooltip.hide();
             onToggleSidebar();

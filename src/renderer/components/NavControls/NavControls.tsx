@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-18
+// Last Modified: 2026-10-17
 
 import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
 import { ReloadIcon, StopIcon } from '../icons';
@@ -33,7 +33,7 @@ export function NavControls({
     <div className="nav-controls">
       <button
         type="button"
-        className="nav-controls__button chrome-tooltip"
+        className="nav-controls__button hover-grow chrome-tooltip"
         onClick={onBack}
         disabled={!canGoBack}
         aria-label="Back"
@@ -43,7 +43,7 @@ export function NavControls({
       </button>
       <button
         type="button"
-        className="nav-controls__button chrome-tooltip"
+        className="nav-controls__button hover-grow chrome-tooltip"
         onClick={onForward}
         disabled={!canGoForward}
         aria-label="Forward"
@@ -53,7 +53,7 @@ export function NavControls({
       </button>
       <button
         type="button"
-        className="nav-controls__button chrome-tooltip"
+        className="nav-controls__button hover-grow chrome-tooltip"
         onClick={onReloadOrStop}
         aria-label={isLoading ? 'Stop' : 'Reload'}
         data-tooltip={isLoading ? 'Stop' : `Reload (${formatShortcut('R')})`}
@@ -62,7 +62,7 @@ export function NavControls({
       </button>
       <button
         type="button"
-        className="nav-controls__button chrome-tooltip"
+        className="nav-controls__button hover-grow chrome-tooltip"
         onClick={onHome}
         aria-label="Home"
         data-tooltip={`Home (${formatShortcut('H')})`}

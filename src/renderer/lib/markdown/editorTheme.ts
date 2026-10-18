@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { EditorView } from '@codemirror/view';
@@ -35,6 +35,18 @@ export const editorTheme = EditorView.theme({
     backgroundColor: 'rgba(var(--color-accent-rgb), 0.35)',
   },
   '.cm-activeLine': { backgroundColor: 'rgba(var(--color-accent-rgb), 0.06)' },
+  // The caret's line is only marked while there is a caret: an editor without focus shows none.
+  '&:not(.cm-focused) .cm-activeLine': { backgroundColor: 'transparent' },
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: 'var(--color-address-placeholder)',
+  },
+  '.cm-lineNumbers .cm-gutterElement': { padding: '0 0.9em 0 1.2em' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+  '&.cm-focused .cm-activeLineGutter': { color: 'var(--color-tab-text-active)' },
+  // Raw text reads like a code editor: from the left edge, beside its line numbers, rather than in the reading column.
+  '&.cm-raw .cm-content': { maxWidth: 'none', margin: '0', padding: '2rem 1.5rem 40vh 0' },
   '.cm-line': { padding: '0' },
   // The text-box look of the app's other inputs for the completion list.
   '.cm-tooltip': {

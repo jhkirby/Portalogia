@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
@@ -85,6 +85,7 @@ export function App() {
     createHistoryTab,
     openPdfFile,
     goToPdfPage,
+    setPdfPointerMode,
     renamePdfFile,
     createMarkdownTab,
     openMarkdownFile,
@@ -92,6 +93,7 @@ export function App() {
     closeMarkdownFile,
     renameMarkdownFile,
     setMarkdownMode,
+    setMarkdownDisplay,
     navigateMarkdownHistory,
     addMarkdownBookmark,
     openMarkdownPath,
@@ -181,6 +183,15 @@ export function App() {
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') {
+        return;
+      }
+      // Escape in a text box only takes the caret out of it (the preload does that); the next one reaches here.
+      const target = event.target;
+      if (
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLInputElement && target.type !== 'checkbox' && target.type !== 'radio') ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
         return;
       }
       if (focusMode) {
@@ -464,6 +475,7 @@ export function App() {
             <TitlebarGrip />
             <TabBar
               tabs={workspaceTabs}
+              workspaceId={activeWorkspaceId}
               bookmarks={pageBookmarks}
               activeTabId={activeTabId}
               selectedTabIds={selectedTabIds}
@@ -510,6 +522,7 @@ export function App() {
                 onOpen={openMarkdownFile}
                 onClose={closeMarkdownFile}
                 onSetMode={setMarkdownMode}
+                onSetDisplay={setMarkdownDisplay}
                 onNavigate={navigateMarkdownHistory}
                 onRename={renameMarkdownFile}
               />
@@ -549,11 +562,11 @@ export function App() {
             <PageActions
               canActOnPage={browserTab !== null}
               canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
-              // Marks go on the rendered note, so the editing view locks them too.
+              // Marks go on the formatted, read-only note, so editing or raw text locks them too.
               annotationToolsLocked={
                 isHome ||
                 ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName === null) ||
-                (activeTab?.kind === 'markdown' && activeTab.mode === 'edit')
+                (activeTab?.kind === 'markdown' && (activeTab.mode === 'edit' || activeTab.display === 'raw'))
               }
               canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
@@ -566,6 +579,14 @@ export function App() {
               penActive={penActive}
               cropActive={cropActive}
               showCrop={activeTab?.kind === 'pdf'}
+              showPointerModes={activeTab?.kind === 'pdf'}
+              pointerMode={activeTab?.kind === 'pdf' ? activeTab.pointerMode : 'pan'}
+              pointerModesLocked={activeTab?.kind === 'pdf' && activeTab.fileName === null}
+              onSetPointerMode={(mode) => {
+                if (activeTab?.kind === 'pdf') {
+                  setPdfPointerMode(activeTab.id, mode);
+                }
+              }}
               theme={theme}
               showAdBlock={adBlockSite !== null && !isHome}
               adBlockActive={adBlock.enabled && !adBlockSiteAllowed}

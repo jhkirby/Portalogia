@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -237,6 +237,9 @@ export function buildMenu(
         {
           label: 'Back',
           accelerator: 'Alt+Left',
+          // Display only, like Next Tab below: a text box edits with this key, so `TabManager` dispatches it
+          // (standing aside while the caret is in one) instead of the menu.
+          registerAccelerator: false,
           click: () => {
             const id = getActiveTabId();
             if (id) {
@@ -247,6 +250,7 @@ export function buildMenu(
         {
           label: 'Forward',
           accelerator: 'Alt+Right',
+          registerAccelerator: false,
           click: () => {
             const id = getActiveTabId();
             if (id) {
@@ -325,6 +329,9 @@ export function buildMenu(
         {
           label: 'Focus Address Bar',
           accelerator: 'CmdOrCtrl+/',
+          // Display only, like Next Tab below: the note editor binds this key, so `TabManager` dispatches it
+          // (standing aside while the caret is in one) instead of the menu.
+          registerAccelerator: false,
           click: () => getTabManager()?.requestFocusAddressBar(),
         },
         {
@@ -333,8 +340,24 @@ export function buildMenu(
           click: () => getTabManager()?.toggleFocusMode(),
         },
         {
+          label: 'PDF Pan Tool',
+          accelerator: 'CmdOrCtrl+1',
+          // Display only: on a web page the key is the page's; `TabManager` takes it only on a PDF tab.
+          registerAccelerator: false,
+          click: () => getTabManager()?.setActivePdfPointerMode('pan'),
+        },
+        {
+          label: 'PDF Select Tool',
+          accelerator: 'CmdOrCtrl+2',
+          registerAccelerator: false,
+          click: () => getTabManager()?.setActivePdfPointerMode('select'),
+        },
+        {
           label: 'Toggle Laser Pointer',
           accelerator: 'CmdOrCtrl+I',
+          // Display only, like Next Tab below: a web page's rich editor binds this key (italic), so `TabManager` dispatches it
+          // (standing aside while the caret is in one) instead of the menu.
+          registerAccelerator: false,
           click: () => getTabManager()?.toggleLaserPointer(),
         },
         {
@@ -405,11 +428,15 @@ export function buildMenu(
         {
           label: 'Next Workspace',
           accelerator: 'CmdOrCtrl+Down',
+          // Display only, like Next Tab below: a text box edits with this key, so `TabManager` dispatches it
+          // (standing aside while the caret is in one) instead of the menu.
+          registerAccelerator: false,
           click: () => getTabManager()?.cycleWorkspace(1),
         },
         {
           label: 'Previous Workspace',
           accelerator: 'CmdOrCtrl+Up',
+          registerAccelerator: false,
           click: () => getTabManager()?.cycleWorkspace(-1),
         },
         { type: 'separator' },

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useState, type KeyboardEvent } from 'react';
 
@@ -78,7 +78,7 @@ export function BookmarkPopup({
       >
         <div className="bookmark-popup__header">
           <h2 className="bookmark-popup__title">Add bookmark</h2>
-          <button type="button" className="bookmark-popup__close" onClick={onClose} aria-label="Cancel">
+          <button type="button" className="bookmark-popup__close hover-grow" onClick={onClose} aria-label="Cancel">
             ×
           </button>
         </div>
@@ -106,7 +106,7 @@ export function BookmarkPopup({
         </label>
 
         <div className="bookmark-popup__actions">
-          <button type="button" className="bookmark-popup__cancel" onClick={onClose}>
+          <button type="button" className="bookmark-popup__cancel hover-grow" onClick={onClose}>
             Cancel
           </button>
           <button type="button" className="bookmark-popup__save" onClick={handleSave} disabled={!canSave}>

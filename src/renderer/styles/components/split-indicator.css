@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-12 */
+   Last Modified: 2026-10-17 */
 
 /* ── SPLIT INDICATOR ──────────────────────────────────────────────────── */
 
@@ -61,8 +61,4 @@
   color: inherit;
 
   cursor: pointer;
-}
-
-.split-indicator__exit:hover {
-  background: var(--color-button-hover-bg);
 }

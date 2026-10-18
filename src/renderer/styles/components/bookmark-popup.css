@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-24 */
+   Last Modified: 2026-10-17 */
 
 /* ── BOOKMARK POPUP ───────────────────────────────────────────────────── */
 
@@ -97,10 +97,6 @@
   cursor: pointer;
 }
 
-.bookmark-popup__close:hover {
-  background: var(--color-button-hover-bg);
-}
-
 .bookmark-popup__field {
   display: flex;
   flex-direction: column;
@@ -155,10 +151,6 @@
   background: transparent;
   border: 1px solid var(--color-panel-border);
   color: var(--color-tab-text-active);
-}
-
-.bookmark-popup__cancel:hover {
-  background: var(--color-button-hover-bg);
 }
 
 .bookmark-popup__save {

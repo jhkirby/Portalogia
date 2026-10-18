@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -13,6 +13,7 @@ import {
   WebContentsView,
   dialog,
   ipcMain,
+  nativeTheme,
   screen,
   type IpcMainEvent,
   type WebContents,
@@ -60,7 +61,15 @@ import {
   type TooltipSyncPayload,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
-import type { BrowserState, BrowserTabState, SplitViewState, TabState, WorkspaceState } from '@shared/tab-state';
+import type {
+  BrowserState,
+  BrowserTabState,
+  MarkdownDisplay,
+  PdfPointerMode,
+  SplitViewState,
+  TabState,
+  WorkspaceState,
+} from '@shared/tab-state';
 import type { ImageTab, WorkspaceImageStore } from './WorkspaceImageStore';
 import { pdfAnnotationStore } from './PdfAnnotationStore';
 import { PdfCropExporter } from './PdfCropExporter';
@@ -88,7 +97,8 @@ import type { CommentController } from './CommentController';
 import type { TextBoxController } from './TextBoxController';
 import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
-import { hasEditableFocus } from './editableFocus';
+import { editableKindOf, hasEditableFocus } from './editableFocus';
+import { isTextEditingChord, type TextBoxContext } from './textEditingChords';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -103,6 +113,7 @@ import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
 import { TooltipOverlay } from './TooltipOverlay';
 import type { TerminalManager } from '../terminal/TerminalManager';
+import { cursorWarper } from '../platform/CursorWarper';
 
 interface Rect {
   readonly x: number;
@@ -119,6 +130,17 @@ interface ClosedTab {
   readonly url: string;
   readonly workspaceId: string;
 }
+
+/**
+ * The background each app-owned page paints itself (`--color-chrome-bg` or
+ * `--color-panel-bg` in colors.css), by theme. The view is given the same
+ * color natively, so the frames before the page's first paint aren't white.
+ */
+const APP_PAGE_BACKGROUNDS = {
+  pdf: { light: '#f1f3f4', dark: '#202124' },
+  history: { light: '#f1f3f4', dark: '#202124' },
+  markdown: { light: '#ffffff', dark: '#2d2e31' },
+} as const;
 
 /** How many closed tabs `restoreLastClosedTab` can reach back through. */
 const CLOSED_TAB_HISTORY_LIMIT = 20;
@@ -332,6 +354,8 @@ export class TabManager {
     // correct value before the window is ever shown.
     this.activeWorkspaceId = DEFAULT_WORKSPACE_ID;
 
+    nativeTheme.on('updated', this.repaintPageBackgrounds);
+
     this.unregisterFromRegistry = registry.registerWindow(window, () => {
       // A window mid-close is still registered until its `closed` event.
       if (window.isDestroyed()) {
@@ -412,17 +436,15 @@ export class TabManager {
       if (this.handleReorderGestureInput(event, input) || this.handleWindowShortcut(event, input)) {
         return;
       }
-      // Ctrl+Left/Right switches tabs — except in a text box (the address bar, a name field), where it moves the caret by a word.
+      // A text box in the chrome (the address bar, a name field) keeps every key it edits with; Escape leaves it.
       if (
         input.type === 'keyDown' &&
-        (input.control || input.meta) &&
-        !input.alt &&
-        !input.shift &&
-        (input.key === 'ArrowLeft' || input.key === 'ArrowRight') &&
-        !hasEditableFocus(this.window.webContents.id)
+        hasEditableFocus(this.window.webContents.id) &&
+        isTextEditingChord(input, { codeEditor: false, richText: false })
       ) {
-        event.preventDefault();
-        this.cycleTab(input.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
+      if (this.handleTextSensitiveShortcut(event, input)) {
         return;
       }
       if (
@@ -745,6 +767,7 @@ export class TabManager {
     // Trusted, app-owned content — same reasoning as `createTerminalTab`.
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.paintPageBackground(view, 'pdf');
     this.wireSharedInputHandling(id, view.webContents);
     // A fresh document starts at 100%; re-send whatever zoom this tab holds
     // (a restored/torn-off tab may already have one).
@@ -757,6 +780,7 @@ export class TabManager {
       this.pushTextToolStateTo(id);
       this.pushHighlighterStateTo(id);
       this.pushCropStateTo(id);
+      this.pushPdfPointerModeTo(id);
       if (this.findOpen && id === this.activeTabId) {
         this.runFind();
       }
@@ -773,6 +797,7 @@ export class TabManager {
       filePath: null,
       page: 1,
       pageCount: 0,
+      pointerMode: 'pan',
       workspaceId: workspaceId ?? this.activeWorkspaceId,
     });
     this.activateTab(id);
@@ -823,6 +848,7 @@ export class TabManager {
 
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.paintPageBackground(view, 'markdown');
     this.wireSharedInputHandling(id, view.webContents);
 
     const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
@@ -846,6 +872,7 @@ export class TabManager {
       this.pushCommentToolStateTo(id);
       this.pushHighlighterStateTo(id);
       this.pushMarkdownModeTo(id);
+      this.pushMarkdownDisplayTo(id);
       // A note opened before the page was up (a restored tab) is delivered now.
       this.pushMarkdownFile(id, 'open', '');
       if (this.findOpen && id === this.activeTabId) {
@@ -865,6 +892,7 @@ export class TabManager {
       fileName: null,
       filePath: null,
       mode: 'view',
+      display: 'formatted',
       canGoBack: false,
       canGoForward: false,
       workspaceId: workspaceId ?? this.activeWorkspaceId,
@@ -1022,10 +1050,20 @@ export class TabManager {
       generation,
       anchor,
       reason,
+      lineEnding: markdownDocuments.lineEndingOf(id) ?? '\n',
     } satisfies MarkdownFileData);
   }
 
-  /** Tells a tab's page whether to show the rendered note or its source. */
+  /** Tells a tab's page whether to show the note formatted or as raw text. */
+  private pushMarkdownDisplayTo(id: string): void {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind === 'markdown' && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.MarkdownDisplay, state.display);
+    }
+  }
+
+  /** Tells a tab's page whether the note is read-only (view) or editable (edit). */
   private pushMarkdownModeTo(id: string): void {
     const state = this.states.get(id);
     const view = this.views.get(id);
@@ -1051,9 +1089,12 @@ export class TabManager {
       fileName: null,
       filePath: null,
       mode: 'view',
+      display: 'formatted',
       canGoBack: false,
       canGoForward: false,
     });
+    this.pushMarkdownModeTo(id);
+    this.pushMarkdownDisplayTo(id);
     this.releaseUnavailableTools();
     if (this.findOpen && !this.canFind(this.activeTabId)) {
       this.closeFind();
@@ -1098,8 +1139,47 @@ export class TabManager {
     }
     this.states.set(id, { ...current, mode });
     this.pushMarkdownModeTo(id);
+    this.giveKeyboardToMarkdownEditor(id);
     this.releaseUnavailableTools();
     this.emitState();
+  }
+
+  /**
+   * Switches a Markdown tab between its formatted note and its raw text.
+   * Marking tools only work on the formatted, read-only note, so any that's on
+   * turns off when leaving it.
+   * @param id The Markdown tab. A no-op if it isn't one or has no note open.
+   * @param display The new display.
+   */
+  public setMarkdownDisplay(id: string, display: MarkdownDisplay): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'markdown' || current.fileName === null || current.display === display) {
+      return;
+    }
+    this.states.set(id, { ...current, display });
+    this.pushMarkdownDisplayTo(id);
+    this.giveKeyboardToMarkdownEditor(id);
+    this.releaseUnavailableTools();
+    this.emitState();
+  }
+
+  /**
+   * Moves the keyboard into a Markdown tab's page when its editor takes the
+   * caret. Switching to Edit (or between Raw and Formatted while editing)
+   * focuses the editor inside the page, which then draws a caret, but a click
+   * on the toolbar or a shortcut pressed in the chrome leaves the window's
+   * keyboard in the chrome. Keys would then reach the chrome's shortcuts, which
+   * can't see that caret: Ctrl+Left/Right would switch tabs instead of jumping
+   * a word.
+   * @param id The Markdown tab. A no-op unless it is being edited and is the tab on screen.
+   */
+  private giveKeyboardToMarkdownEditor(id: string): void {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind !== 'markdown' || state.mode !== 'edit' || id !== this.activeTabId || !view || view.webContents.isDestroyed()) {
+      return;
+    }
+    view.webContents.focus();
   }
 
   /**
@@ -1111,6 +1191,10 @@ export class TabManager {
     const state = this.states.get(id);
     const view = this.views.get(id);
     if (state?.kind !== 'markdown' || state.mode !== 'edit' || !view || view.webContents.isDestroyed()) {
+      return false;
+    }
+    // Only while the editor has the caret: after Escape (or a click into the chrome) the key is the app's again.
+    if (!view.webContents.isFocused() || !hasEditableFocus(view.webContents.id)) {
       return false;
     }
     view.webContents.send(IpcChannel.MarkdownFormat, action);
@@ -1500,6 +1584,7 @@ export class TabManager {
     // Trusted, app-owned content — same reasoning as `createTerminalTab`.
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.paintPageBackground(view, 'history');
     this.wireSharedInputHandling(id, view.webContents);
     // A fresh page has never been sent the history or its search text. (It's never zoomed either: see `isZoomable`.)
     view.webContents.on('did-finish-load', () => {
@@ -1662,7 +1747,34 @@ export class TabManager {
         key,
         annotations: pdfAnnotationStore.get(key),
       } satisfies PdfOpenResult);
+      // The grab tool's pointer helper takes a moment to start; have it ready before the first pan ends.
+      cursorWarper.prepare();
     }
+  }
+
+  /**
+   * Moves the real pointer to a point of a PDF page: a pan that reaches one
+   * edge of the view carries on from the opposite one (see `CursorWarper`).
+   * @param id The PDF tab.
+   * @param x The point, in the page's viewport CSS pixels.
+   * @param y The point, in the page's viewport CSS pixels.
+   */
+  public warpPdfPointer(id: string, x: number, y: number): void {
+    const view = this.views.get(id);
+    if (this.states.get(id)?.kind !== 'pdf' || !view || view.webContents.isDestroyed() || this.window.isDestroyed()) {
+      return;
+    }
+    const bounds = view.getBounds();
+    const content = this.window.getContentBounds();
+    const zoom = view.webContents.getZoomFactor();
+    // Kept inside the view: the page only ever means a point of itself.
+    const inside = (value: number, size: number): number => Math.min(Math.max(value * zoom, 0), Math.max(size - 1, 0));
+    const point = {
+      x: Math.round(content.x + bounds.x + inside(x, bounds.width)),
+      y: Math.round(content.y + bounds.y + inside(y, bounds.height)),
+    };
+    const physical = process.platform === 'win32' ? screen.dipToScreenPoint(point) : point;
+    cursorWarper.moveTo(physical.x, physical.y);
   }
 
   /**
@@ -1743,6 +1855,78 @@ export class TabManager {
   public goToPdfPage(id: string, page: number): void {
     if (this.states.get(id)?.kind === 'pdf') {
       this.views.get(id)?.webContents.send(IpcChannel.PdfScrollToPage, page);
+    }
+  }
+
+  /**
+   * Switches what a drag on a PDF tab's document does: pan it, or select its
+   * text (which is also when its links take clicks). The modes are the
+   * pointer's resting state, so picking one turns off whichever tool is on,
+   * the same way turning one tool on turns the others off.
+   * @param id The PDF tab. A no-op if it isn't one, or has no file open.
+   * @param mode The new pointer mode.
+   */
+  public setPdfPointerMode(id: string, mode: PdfPointerMode): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'pdf' || current.fileName === null) {
+      return;
+    }
+    this.turnOffPointerTools();
+    if (current.pointerMode !== mode) {
+      this.states.set(id, { ...current, pointerMode: mode });
+      this.pushPdfPointerModeTo(id);
+    }
+    this.emitState();
+  }
+
+  /** `setPdfPointerMode` for the active tab — the View menu's entries. */
+  public setActivePdfPointerMode(mode: PdfPointerMode): void {
+    if (this.activeTabId) {
+      this.setPdfPointerMode(this.activeTabId, mode);
+    }
+  }
+
+  /** Turns off every tool that takes the pointer over: the laser pointer, pen, highlighter, comments, text boxes and crop. */
+  private turnOffPointerTools(): void {
+    if (this.laserPointerActive) {
+      this.setLaserPointer(false);
+    }
+    if (this.penActive) {
+      this.setPen(false);
+    }
+    if (this.highlighterActive) {
+      this.setHighlighter(false);
+    }
+    if (this.commentToolActive) {
+      this.setCommentTool(false);
+    }
+    if (this.textToolActive) {
+      this.setTextTool(false);
+    }
+    if (this.cropActive) {
+      this.setCrop(false);
+    }
+  }
+
+  /** Tells a PDF tab's page its pointer mode. */
+  private pushPdfPointerModeTo(id: string): void {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind === 'pdf' && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.PdfPointerMode, state.pointerMode);
+    }
+  }
+
+  /**
+   * Opens a web link clicked in a PDF tab's document in a new tab. Only
+   * http(s) addresses are followed: a document is untrusted, and its other
+   * link kinds (`file:`, `javascript:`) aren't for a click to reach.
+   * @param id The PDF tab the click came from.
+   * @param url The link's address, as the document gives it.
+   */
+  public openPdfLink(id: string, url: string): void {
+    if (this.states.get(id)?.kind === 'pdf' && /^https?:\/\//i.test(url) && isNavigableUrl(url)) {
+      this.createTab(url);
     }
   }
 
@@ -1848,8 +2032,31 @@ export class TabManager {
     this.laserPointerOverlay.dispose();
     this.findOverlay.dispose();
     ipcMain.removeListener(IpcChannel.FindResult, this.onFindResult);
+    nativeTheme.removeListener('updated', this.repaintPageBackgrounds);
     this.unregisterFromRegistry();
   }
+
+  /**
+   * Gives an app-owned page's view its page's own background color, natively,
+   * so a new PDF, note or history tab is never a white frame (in dark mode)
+   * before its page first paints.
+   * @param view The tab's view.
+   * @param kind Which page it loads.
+   */
+  private paintPageBackground(view: WebContentsView, kind: keyof typeof APP_PAGE_BACKGROUNDS): void {
+    const colors = APP_PAGE_BACKGROUNDS[kind];
+    view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? colors.dark : colors.light);
+  }
+
+  /** Re-colors every app-owned page's native background after the theme changes. */
+  private readonly repaintPageBackgrounds = (): void => {
+    for (const [id, view] of this.views) {
+      const kind = this.states.get(id)?.kind;
+      if ((kind === 'pdf' || kind === 'markdown' || kind === 'history') && !view.webContents.isDestroyed()) {
+        this.paintPageBackground(view, kind);
+      }
+    }
+  };
 
   /**
    * Reorders a tab (the tab bar's drag-and-drop) by moving it to just
@@ -3838,7 +4045,9 @@ export class TabManager {
       active.kind === 'terminal' ||
       active.kind === 'history' ||
       (active.kind === 'pdf' && active.fileName === null) ||
-      (active.kind === 'markdown' && (active.fileName === null || active.mode === 'edit' || tool === 'text')) ||
+      // A note takes marks only as the formatted, read-only reader: not while editable, and not as raw text.
+      (active.kind === 'markdown' &&
+        (active.fileName === null || active.mode === 'edit' || active.display === 'raw' || tool === 'text')) ||
       (active.kind === 'browser' && active.url === HOME_URL)
     ) {
       return false;
@@ -4856,6 +5065,87 @@ export class TabManager {
   }
 
   /**
+   * The chrome's half of the shortcuts whose menu entries are display-only
+   * (see buildMenu.ts): Ctrl+←/→ (tabs), Ctrl+↑/↓ (workspaces), Alt+←/→
+   * (back/forward), Ctrl+/ (address bar), Ctrl+I (laser pointer), and a PDF's
+   * Pan and Select (Ctrl+1, Ctrl+2). A registered accelerator would take these even from a text box
+   * that edits with them, so they're dispatched here, after the text-box
+   * check, instead; a tab's own view handles them in `wireSharedInputHandling`.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @returns Whether the key was one of them and was handled.
+   */
+  private handleTextSensitiveShortcut(event: Electron.Event, input: Electron.Input): boolean {
+    if (input.type !== 'keyDown') {
+      return false;
+    }
+    const key = input.key.toLowerCase();
+    const cmdOrCtrl = input.control || input.meta;
+    if (input.alt && !cmdOrCtrl && !input.shift && (key === 'arrowleft' || key === 'arrowright')) {
+      event.preventDefault();
+      if (this.activeTabId) {
+        if (key === 'arrowleft') {
+          this.goBack(this.activeTabId);
+        } else {
+          this.goForward(this.activeTabId);
+        }
+      }
+      return true;
+    }
+    if (!cmdOrCtrl || input.alt || input.shift) {
+      return false;
+    }
+    switch (key) {
+      case 'arrowleft':
+      case 'arrowright':
+        event.preventDefault();
+        this.cycleTab(key === 'arrowright' ? 1 : -1);
+        return true;
+      case 'arrowup':
+      case 'arrowdown':
+        event.preventDefault();
+        this.cycleWorkspace(key === 'arrowdown' ? 1 : -1);
+        return true;
+      case '1':
+      case '2': {
+        const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
+        if (active?.kind !== 'pdf') {
+          return false;
+        }
+        event.preventDefault();
+        this.setPdfPointerMode(active.id, key === '1' ? 'pan' : 'select');
+        return true;
+      }
+      case '/':
+      case 'i':
+        event.preventDefault();
+        // A held key repeats; these are toggles, so only the first press counts.
+        if (!input.isAutoRepeat) {
+          if (key === '/') {
+            this.requestFocusAddressBar();
+          } else {
+            this.toggleLaserPointer();
+          }
+        }
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Which extra chords the text box with the caret in a tab's page binds for
+   * itself (see `isTextEditingChord`): a note's editor binds its own, and a web
+   * page's rich editor binds Ctrl+B/I/U.
+   * @param id The tab.
+   * @param wc The tab's own webContents.
+   */
+  private textBoxContextOf(id: string, wc: WebContents): TextBoxContext {
+    const kind = this.states.get(id)?.kind;
+    return { codeEditor: kind === 'markdown', richText: kind === 'browser' && editableKindOf(wc.id) === 'rich' };
+  }
+
+  /**
    * The Ctrl+Space keyboard-reorder gesture's input handling — grab,
    * nudge, release — shared between every tab's own `before-input-event`
    * (`wireEvents`) and the chrome window's own (wired in the constructor).
@@ -5531,6 +5821,12 @@ export class TabManager {
         return;
       }
 
+      // The caret is in a text box: every key it edits with stays with it, Escape included (which leaves the box),
+      // so no shortcut below can take one. Once out of the box, they all work again.
+      if (hasEditableFocus(wc.id) && isTextEditingChord(input, owner.textBoxContextOf(id, wc))) {
+        return;
+      }
+
       // No modifier, so it falls outside the `cmdOrCtrl`-gated switch below
       // — Escape exits Focus Mode if it's on, and/or turns off the laser
       // pointer/highlighter if either is on; a no-op (falls through
@@ -5807,12 +6103,23 @@ export class TabManager {
           return;
         case 'arrowleft':
         case 'arrowright':
-          // In a text box (a page's field, the note editor) the keys belong to the caret: a word jump.
-          if (hasEditableFocus(wc.id)) {
-            return;
-          }
+          // In a text box these were left to the caret (a word jump) by the check above.
           event.preventDefault();
           owner.cycleTab(key === 'arrowright' ? 1 : -1);
+          return;
+        case 'i':
+          // Same as buildMenu.ts's `CmdOrCtrl+I` ("Toggle Laser Pointer"), which is display-only so a text box can
+          // keep the key; in a note's editor it is Italic (see `toggleLaserPointer`).
+          event.preventDefault();
+          owner.toggleLaserPointer();
+          return;
+        case '1':
+        case '2':
+          // A PDF's Pan (Ctrl+1, Okular's Browse key) and Select (Ctrl+2); a web page keeps the keys.
+          if (owner.states.get(id)?.kind === 'pdf') {
+            event.preventDefault();
+            owner.setPdfPointerMode(id, key === '1' ? 'pan' : 'select');
+          }
           return;
         case 'arrowup':
           event.preventDefault();

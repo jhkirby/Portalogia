@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-05 */
+   Last Modified: 2026-10-17 */
 
 /* ── TAB SEARCH POPUP ─────────────────────────────────────────────────── */
 
@@ -177,9 +177,9 @@
   opacity: 1;
 }
 
-.tab-search__remove:hover,
-.tab-search__rename:hover {
-  background: var(--color-close-hover-bg);
+.tab-search__remove,
+.tab-search__rename {
+  --hover-grow-bg: var(--color-close-hover-bg);
 }
 
 /* The pencil's glyph is smaller than the × and sits on the row's text, so it is drawn in the same color. */

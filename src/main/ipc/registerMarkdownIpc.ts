@@ -1,13 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
 import { IpcChannel, type IpcResult } from '@shared/ipc-contract';
 import {
   addPdfBookmarkRequestSchema,
+  markdownDisplayRequestSchema,
   markdownExportRequestSchema,
   markdownModeRequestSchema,
   markdownNavigateHistoryRequestSchema,
@@ -63,6 +64,9 @@ export function registerMarkdownIpc(
   );
   invokeForTab(IpcChannel.MarkdownSetMode, markdownModeRequestSchema, (manager, request) =>
     manager.setMarkdownMode(request.id, request.mode),
+  );
+  invokeForTab(IpcChannel.MarkdownSetDisplay, markdownDisplayRequestSchema, (manager, request) =>
+    manager.setMarkdownDisplay(request.id, request.display),
   );
   invokeForTab(IpcChannel.MarkdownNavigateHistory, markdownNavigateHistoryRequestSchema, (manager, request) =>
     manager.navigateMarkdownHistory(request.id, request.direction),

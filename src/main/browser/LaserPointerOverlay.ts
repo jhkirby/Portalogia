@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-17
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
@@ -64,7 +64,9 @@ export class LaserPointerOverlay {
    *   native keyboard focus to a view with no input handling of its own at
    *   all, so Escape (or any other key) would otherwise reach neither the
    *   underlying tab's `wireSharedInputHandling` nor the chrome's own
-   *   belt-and-suspenders listener — it would just go nowhere.
+   *   belt-and-suspenders listener — it would just go nowhere. Ctrl+I (the
+   *   pointer's own toggle) calls it too.
+   * @param onWheel Called with each wheel tick over the overlay, to scroll the tab beneath.
    */
   public constructor(
     private readonly window: BrowserWindow,
@@ -103,6 +105,20 @@ export class LaserPointerOverlay {
         !input.alt &&
         !input.shift &&
         input.key === 'Escape'
+      ) {
+        event.preventDefault();
+        onEscape();
+        return;
+      }
+      // Ctrl+I's menu entry is display-only (see buildMenu.ts), so it no longer reaches past this view on its own:
+      // pressed here, it turns the pointer off, as it would anywhere else.
+      if (
+        input.type === 'keyDown' &&
+        !input.isAutoRepeat &&
+        (input.control || input.meta) &&
+        !input.alt &&
+        !input.shift &&
+        input.key.toLowerCase() === 'i'
       ) {
         event.preventDefault();
         onEscape();

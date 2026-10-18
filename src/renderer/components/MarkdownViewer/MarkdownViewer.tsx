@@ -1,15 +1,26 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { EditorState } from '@codemirror/state';
-import type { EditorView } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { MARKDOWN_PRINT_GLOBAL, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { MarkdownFileData, MarkdownFormatAction, MarkdownToolState } from '@shared/ipc-contract';
+import type { MarkdownDisplay } from '@shared/tab-state';
+import { slugifyHeading } from '@shared/markdown/parser';
 import { toggleTask } from '@shared/markdown/source';
-import type { OutlineEntry } from '../../lib/markdown/enhance';
+import {
+  countCharacters,
+  extractHeadings,
+  extractOutboundLinks,
+  fileByteSize,
+  wordIndexAt,
+  wordStarts,
+  type NoteHeading,
+  type NoteLink,
+} from '@shared/markdown/structure';
 import { applyLink, toggleWrap, wrapInBlock } from '../../lib/markdown/editorFormat';
 import { collectRenderedText, offsetOfPoint, rangeForOffsets, reanchorHighlight } from '../../lib/markdown/textOffsets';
 import { commentCursor, highlighterCursor, penCursor } from '../../lib/toolCursors';
@@ -23,6 +34,7 @@ import { MarkdownEditor } from './MarkdownEditor';
 import { EditorContextMenu, LinkPopup } from './MarkdownEditorMenus';
 import { MarkdownReader } from './MarkdownReader';
 import { MarkdownSidePanel } from './MarkdownSidePanel';
+import { MarkdownStatusBar } from './MarkdownStatusBar';
 import { useMarkdownFind } from './useMarkdownFind';
 
 /** Name registered with `CSS.highlights` for the user's highlights, painted by `markdown-viewer.css`. */
@@ -64,11 +76,16 @@ interface Size {
 }
 
 /**
- * The whole of `markdown.html`'s page: a note drawn (or its source in an
- * editor), a panel of its outline and backlinks, and the marks drawn on it.
- * The controls (New, Open, the view/edit switch, the file name, Export) live
- * in the chrome's main toolbar (`MarkdownToolbar`); main pushes notes, the
- * mode and the marking tool here.
+ * The whole of `markdown.html`'s page: a note, a panel of its outline and
+ * backlinks, and the marks drawn on it. The controls (New, Open, the
+ * View/Edit and Raw/Formatted switches, the file name, Export) live in the
+ * chrome's main toolbar (`MarkdownToolbar`); main pushes notes, the two
+ * switches and the marking tool here.
+ *
+ * The two switches pick what shows. View + Formatted is the reader: the note
+ * drawn in full (images, maths, runnable code), and the only place marks can
+ * be made. Every other pairing is the editor: raw text (read-only in View),
+ * or in Edit + Formatted the note formatted while being edited in place.
  *
  * The note's text lives here while it's being worked on: edits are saved to
  * main a moment after typing stops (and at once when leaving the editor, or
@@ -85,9 +102,13 @@ export function MarkdownViewer() {
   const [noteKey, setNoteKey] = useState('');
   const [anchor, setAnchor] = useState('');
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [display, setDisplay] = useState<MarkdownDisplay>('formatted');
   const [printing, setPrinting] = useState(false);
   const [tool, setTool] = useState<MarkdownToolState>({ tool: 'none', color: { r: 26, g: 115, b: 232 } });
-  const [outline, setOutline] = useState<readonly OutlineEntry[]>([]);
+  /** The editor's caret, as an offset into the note; `null` while the reader is showing (it has no caret). */
+  const [caret, setCaret] = useState<number | null>(null);
+  /** The note file's own line ending, so the status bar's byte count is the file's. */
+  const [lineEnding, setLineEnding] = useState<'\n' | '\r\n'>('\n');
   const [panelOpen, setPanelOpen] = useState(false);
   const [strokes, setStrokes] = useState<readonly NoteStroke[]>(NO_STROKES);
   const [comments, setComments] = useState<readonly NoteComment[]>([]);
@@ -113,6 +134,10 @@ export function MarkdownViewer() {
   const saveTimerRef = useRef<number | null>(null);
   const scrollRatioRef = useRef(0);
   const pressRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Printing always draws the reader, whichever view is showing.
+  const showReader = hasNote && ((mode === 'view' && display === 'formatted') || printing);
+  const showEditor = hasNote && !showReader;
 
   // The tool cursors are drawn in light or dark ink to match the theme.
   useEffect(() => {
@@ -187,7 +212,7 @@ export function MarkdownViewer() {
     const observer = new ResizeObserver(() => setContentSize({ width: el.offsetWidth, height: el.offsetHeight }));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasNote, mode]);
+  }, [showReader]);
 
   // ── Notes arriving, closing, and the mode ──
 
@@ -209,6 +234,7 @@ export function MarkdownViewer() {
       setSource(file.content);
       setNoteKey(String(file.generation));
       setAnchor(file.anchor);
+      setLineEnding(file.lineEnding);
       if (isNewNote) {
         savedEditorStateRef.current = null;
         scrollRatioRef.current = 0;
@@ -251,31 +277,43 @@ export function MarkdownViewer() {
         setHighlights(NO_HIGHLIGHTS);
         setComments([]);
         setOpenCommentId(null);
-        setOutline([]);
         setMarksLoadedFor(0);
       }),
     [flushSave],
   );
 
+  /** Notes how far down the note is scrolled, and writes any edit, before a switch changes what's showing. */
+  const beforeSwitch = useCallback((): void => {
+    const scroller = editorViewRef.current?.scrollDOM ?? scrollRef.current;
+    if (scroller && scroller.scrollHeight > 0) {
+      scrollRatioRef.current = scroller.scrollTop / scroller.scrollHeight;
+    }
+    flushSave();
+  }, [flushSave]);
+
   useEffect(
     () =>
       window.northstarMarkdown.onMode((next) => {
-        const scroller = editorViewRef.current?.scrollDOM ?? scrollRef.current;
-        if (scroller && scroller.scrollHeight > 0) {
-          scrollRatioRef.current = scroller.scrollTop / scroller.scrollHeight;
-        }
-        flushSave();
+        beforeSwitch();
         setMode(next);
       }),
-    [flushSave],
+    [beforeSwitch],
+  );
+  useEffect(
+    () =>
+      window.northstarMarkdown.onDisplay((next) => {
+        beforeSwitch();
+        setDisplay(next);
+      }),
+    [beforeSwitch],
   );
 
-  // Coming back to the rendered note lands where the editor was, and the other way round.
+  // Coming back to the reader lands where the editor was (the editor starts where the reader was itself).
   useLayoutEffect(() => {
-    if (mode === 'view' && scrollRef.current) {
+    if (showReader && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRatioRef.current * scrollRef.current.scrollHeight;
     }
-  }, [mode, hasNote]);
+  }, [showReader]);
 
   useEffect(() => window.northstarMarkdown.onTool(setTool), []);
 
@@ -311,6 +349,9 @@ export function MarkdownViewer() {
 
   const handleEditorView = useCallback((view: EditorView | null, finalState?: EditorState): void => {
     editorViewRef.current = view;
+    if (view === null) {
+      setCaret(null);
+    }
     if (view === null && finalState) {
       savedEditorStateRef.current = finalState;
     }
@@ -475,8 +516,6 @@ export function MarkdownViewer() {
 
   // ── Highlights: painted from stored text ranges, re-found if the words moved ──
 
-  const showReader = hasNote && (mode === 'view' || printing);
-
   useLayoutEffect(() => {
     const root = readerHostRef.current?.querySelector<HTMLElement>('.md-reader');
     if (!showReader || !root || highlights.length === 0) {
@@ -571,12 +610,129 @@ export function MarkdownViewer() {
     }
   };
 
-  const goToHeading = useCallback((id: string): void => {
-    document.getElementById(id)?.scrollIntoView({ block: 'start' });
-  }, []);
+  // ── The note's structure: what the side panel lists and the status bar counts, kept current with every edit ──
+
+  const structure = useMemo(() => {
+    const lineStarts = [0];
+    for (let at = source.indexOf('\n'); at !== -1; at = source.indexOf('\n', at + 1)) {
+      lineStarts.push(at + 1);
+    }
+    return {
+      headings: extractHeadings(source),
+      links: extractOutboundLinks(source),
+      wordStarts: wordStarts(source),
+      lineStarts,
+      characters: countCharacters(source),
+      bytes: fileByteSize(source, lineEnding),
+    };
+  }, [source, lineEnding]);
+
+  // Where the caret is, as the status bar shows it; nothing while the reader (which has no caret) is showing.
+  const caretAt = showEditor && caret !== null ? Math.min(caret, source.length) : null;
+  let caretLine: number | null = null;
+  if (caretAt !== null) {
+    let low = 0;
+    let high = structure.lineStarts.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (structure.lineStarts[middle]! <= caretAt) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    caretLine = low + 1;
+  }
+  const caretColumn = caretAt !== null && caretLine !== null ? caretAt - structure.lineStarts[caretLine - 1]! + 1 : null;
+  const caretWord = caretAt !== null ? wordIndexAt(structure.wordStarts, caretAt) : null;
+
+  /** Puts the editor's caret at an offset and scrolls it into view; the editor takes the keyboard when it can be edited. */
+  const jumpTo = useCallback(
+    (offset: number, y: 'center' | 'start' = 'center'): void => {
+      const view = editorViewRef.current;
+      if (!view) {
+        return;
+      }
+      const at = Math.max(0, Math.min(offset, view.state.doc.length));
+      view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y }) });
+      if (mode === 'edit') {
+        view.focus();
+      }
+    },
+    [mode],
+  );
+
+  const goToLine = useCallback(
+    (line: number): void => {
+      const view = editorViewRef.current;
+      if (view) {
+        jumpTo(view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines))).from);
+      }
+    },
+    [jumpTo],
+  );
+
+  const goToColumn = useCallback(
+    (column: number): void => {
+      const view = editorViewRef.current;
+      if (view) {
+        const line = view.state.doc.lineAt(view.state.selection.main.head);
+        jumpTo(line.from + Math.max(0, Math.min(column - 1, line.length)));
+      }
+    },
+    [jumpTo],
+  );
+
+  const goToWord = useCallback(
+    (word: number): void => {
+      const starts = structure.wordStarts;
+      if (starts.length > 0) {
+        jumpTo(starts[Math.max(1, Math.min(word, starts.length)) - 1]!);
+      }
+    },
+    [jumpTo, structure],
+  );
+
+  /** Brings a heading into view: in the reader by finding it among the drawn headings, in the editor by its line. */
+  const goToHeading = useCallback(
+    (heading: NoteHeading, index: number): void => {
+      if (!showReader) {
+        const view = editorViewRef.current;
+        if (view) {
+          jumpTo(view.state.doc.line(Math.min(heading.line, view.state.doc.lines)).from, 'start');
+        }
+        return;
+      }
+      // The same words can head more than one section: take the one with as many namesakes before it.
+      const slug = slugifyHeading(heading.text);
+      const namesakesBefore = structure.headings.slice(0, index).filter((h) => slugifyHeading(h.text) === slug).length;
+      const drawn = Array.from(readerHostRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6') ?? []).filter(
+        (element) => slugifyHeading(element.textContent ?? '') === slug,
+      );
+      (drawn[namesakesBefore] ?? drawn[0])?.scrollIntoView({ block: 'start' });
+    },
+    [showReader, jumpTo, structure],
+  );
+
+  /** Follows a link from the panel: a link to a heading of this note goes there; any other is opened as the reader would. */
+  const openOutboundLink = useCallback(
+    (link: NoteLink, newTab: boolean): void => {
+      if (link.target.startsWith('#')) {
+        const name = link.kind === 'link' ? decodeURIComponent(link.target.slice(1)) : link.target.slice(1);
+        const slug = slugifyHeading(name);
+        const index = structure.headings.findIndex((heading) => slugifyHeading(heading.text) === slug);
+        if (index !== -1) {
+          goToHeading(structure.headings[index]!, index);
+        }
+        return;
+      }
+      void window.northstarMarkdown.openLink(link.kind, link.target, newTab);
+    },
+    [goToHeading, structure],
+  );
 
   useMarkdownFind({
-    mode: printing ? 'view' : mode,
+    mode: showReader ? 'view' : 'edit',
     hasNote,
     readerHostRef,
     editorViewRef,
@@ -596,121 +752,152 @@ export function MarkdownViewer() {
   const toolOn = tool.tool !== 'none';
 
   return (
-    <div className="md-viewer" data-printing={printing ? 'true' : undefined} data-mode={mode}>
+    <div className="md-viewer" data-printing={printing ? 'true' : undefined} data-mode={mode} data-display={display}>
       <style>{`::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, 0.55); }`}</style>
       {!hasNote ? (
         <div className="md-viewer__empty" />
       ) : (
         <>
-          {mode === 'edit' && !printing && (
-            <div className="md-viewer__editor">
-              <MarkdownEditor
-                key={noteKey}
-                initialSource={source}
-                savedState={savedEditorStateRef.current}
-                onChange={handleEdit}
-                onView={handleEditorView}
-                listNotes={listNotes}
-                onContextMenu={(x, y) => setMenu({ x, y })}
-                initialScroll={scrollRatioRef.current}
-              />
-            </div>
-          )}
-          {showReader && (
-            <div
-              ref={scrollRef}
-              className="md-viewer__scroll"
-              data-tool={tool.tool}
-              style={toolCursor ? ({ '--md-tool-cursor': toolCursor } as CSSProperties) : undefined}
-              onPointerDown={handlePointerDown}
-              onPointerUp={handlePointerUp}
-            >
-              <div ref={contentRef} className="md-viewer__content">
-                <div ref={readerHostRef} className="md-viewer__reader-host">
-                  <MarkdownReader
-                    source={source}
-                    noteKey={noteKey}
-                    scrollRef={scrollRef}
-                    anchor={anchor}
-                    toolActive={toolOn}
-                    onRendered={(entries) => {
-                      setOutline(entries);
-                      setRenderVersion((version) => version + 1);
-                    }}
-                    onToggleTask={handleToggleTask}
-                  />
-                </div>
-                <MarkdownAnnotationLayer
-                  tool={tool.tool}
-                  color={tool.color}
-                  strokes={strokes}
-                  comments={comments}
-                  openCommentId={openCommentId}
-                  width={contentSize.width}
-                  height={contentSize.height}
-                  emPx={emPx}
-                  onAddStroke={(points: readonly NotePoint[]) =>
-                    setStrokes((previous) => [...previous, { id: crypto.randomUUID(), points }])
-                  }
-                  onRemoveStroke={(id) => setStrokes((previous) => previous.filter((s) => s.id !== id))}
-                  onAddComment={(point) => {
-                    const id = crypto.randomUUID();
-                    setComments((previous) => [...previous, { id, x: point.x, y: point.y, text: '', committed: false }]);
-                    return id;
+          {/* The note and its panel side by side, over the status bar. */}
+          <div className="md-viewer__body">
+            {showEditor && (
+              <div className="md-viewer__editor">
+                <MarkdownEditor
+                  key={noteKey}
+                  initialSource={source}
+                  savedState={savedEditorStateRef.current}
+                  onChange={handleEdit}
+                  onView={handleEditorView}
+                  listNotes={listNotes}
+                  // Read-only text has nothing to format.
+                  onContextMenu={(x, y) => {
+                    if (mode === 'edit') {
+                      setMenu({ x, y });
+                    }
                   }}
-                  onChangeComment={(id, text) =>
-                    setComments((previous) => previous.map((c) => (c.id === id ? { ...c, text } : c)))
-                  }
-                  onCommitComment={(id) =>
-                    setComments((previous) =>
-                      previous.flatMap((c) => (c.id !== id ? [c] : c.text.trim() === '' ? [] : [{ ...c, committed: true }])),
-                    )
-                  }
-                  onRemoveComment={(id) => {
-                    setComments((previous) => previous.filter((c) => c.id !== id));
-                    setOpenCommentId((current) => (current === id ? null : current));
-                  }}
-                  onToggleComment={(id) => setOpenCommentId((current) => (current === id ? null : id))}
+                  initialScroll={scrollRatioRef.current}
+                  readOnly={mode === 'view'}
+                  livePreview={display === 'formatted'}
+                  onSelection={setCaret}
                 />
               </div>
-            </div>
-          )}
-          {menu && mode === 'edit' && (
-            <EditorContextMenu x={menu.x} y={menu.y} onPick={(action) => runFormat(action, menu)} onClose={() => setMenu(null)} />
-          )}
-          {linkBox && mode === 'edit' && (
-            <LinkPopup
-              x={linkBox.x}
-              y={linkBox.y}
-              label={linkBox.label}
-              listNotes={listNotes}
-              onSubmit={(target) => {
-                const view = editorViewRef.current;
-                if (view) {
-                  applyLink(view, linkBox.from, linkBox.to, target);
-                }
-                setLinkBox(null);
-              }}
-              onCancel={() => {
-                setLinkBox(null);
-                editorViewRef.current?.focus();
-              }}
-            />
-          )}
-          {!printing && (
-            <>
-              <button
-                type="button"
-                className="md-viewer__panel-toggle"
-                aria-pressed={panelOpen}
-                aria-label={panelOpen ? 'Hide outline and backlinks' : 'Show outline and backlinks'}
-                title={panelOpen ? 'Hide outline and backlinks' : 'Show outline and backlinks'}
-                onClick={() => setPanelOpen((open) => !open)}
+            )}
+            {showReader && (
+              <div
+                ref={scrollRef}
+                className="md-viewer__scroll"
+                data-tool={tool.tool}
+                style={toolCursor ? ({ '--md-tool-cursor': toolCursor } as CSSProperties) : undefined}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
               >
-                ☰
-              </button>
-              {panelOpen && <MarkdownSidePanel outline={outline} noteKey={noteKey} onGoToHeading={goToHeading} />}
-            </>
+                <div ref={contentRef} className="md-viewer__content">
+                  <div ref={readerHostRef} className="md-viewer__reader-host">
+                    <MarkdownReader
+                      source={source}
+                      noteKey={noteKey}
+                      scrollRef={scrollRef}
+                      anchor={anchor}
+                      toolActive={toolOn}
+                      onRendered={() => setRenderVersion((version) => version + 1)}
+                      onToggleTask={handleToggleTask}
+                    />
+                  </div>
+                  <MarkdownAnnotationLayer
+                    tool={tool.tool}
+                    color={tool.color}
+                    strokes={strokes}
+                    comments={comments}
+                    openCommentId={openCommentId}
+                    width={contentSize.width}
+                    height={contentSize.height}
+                    emPx={emPx}
+                    onAddStroke={(points: readonly NotePoint[]) =>
+                      setStrokes((previous) => [...previous, { id: crypto.randomUUID(), points }])
+                    }
+                    onRemoveStroke={(id) => setStrokes((previous) => previous.filter((s) => s.id !== id))}
+                    onAddComment={(point) => {
+                      const id = crypto.randomUUID();
+                      setComments((previous) => [...previous, { id, x: point.x, y: point.y, text: '', committed: false }]);
+                      return id;
+                    }}
+                    onChangeComment={(id, text) =>
+                      setComments((previous) => previous.map((c) => (c.id === id ? { ...c, text } : c)))
+                    }
+                    onCommitComment={(id) =>
+                      setComments((previous) =>
+                        previous.flatMap((c) => (c.id !== id ? [c] : c.text.trim() === '' ? [] : [{ ...c, committed: true }])),
+                      )
+                    }
+                    onRemoveComment={(id) => {
+                      setComments((previous) => previous.filter((c) => c.id !== id));
+                      setOpenCommentId((current) => (current === id ? null : current));
+                    }}
+                    onToggleComment={(id) => setOpenCommentId((current) => (current === id ? null : id))}
+                  />
+                </div>
+              </div>
+            )}
+            {menu && mode === 'edit' && (
+              <EditorContextMenu x={menu.x} y={menu.y} onPick={(action) => runFormat(action, menu)} onClose={() => setMenu(null)} />
+            )}
+            {linkBox && mode === 'edit' && (
+              <LinkPopup
+                x={linkBox.x}
+                y={linkBox.y}
+                label={linkBox.label}
+                listNotes={listNotes}
+                onSubmit={(target) => {
+                  const view = editorViewRef.current;
+                  if (view) {
+                    applyLink(view, linkBox.from, linkBox.to, target);
+                  }
+                  setLinkBox(null);
+                }}
+                onCancel={() => {
+                  setLinkBox(null);
+                  editorViewRef.current?.focus();
+                }}
+              />
+            )}
+            {!printing && (
+              <>
+                <button
+                  type="button"
+                  className="md-viewer__panel-toggle hover-grow"
+                  aria-pressed={panelOpen}
+                  aria-label={panelOpen ? 'Hide outline and links' : 'Show outline and links'}
+                  title={panelOpen ? 'Hide outline and links' : 'Show outline and links'}
+                  onClick={() => setPanelOpen((open) => !open)}
+                >
+                  ☰
+                </button>
+                {panelOpen && (
+                  <MarkdownSidePanel
+                    headings={structure.headings}
+                    links={structure.links}
+                    noteKey={noteKey}
+                    onGoToHeading={goToHeading}
+                    onOpenLink={openOutboundLink}
+                  />
+                )}
+              </>
+            )}
+          </div>
+          {!printing && (
+            <MarkdownStatusBar
+              line={caretLine}
+              lineCount={structure.lineStarts.length}
+              column={caretColumn}
+              word={caretWord}
+              wordCount={structure.wordStarts.length}
+              characters={structure.characters}
+              links={structure.links.length}
+              bytes={structure.bytes}
+              onGoToLine={goToLine}
+              onGoToColumn={goToColumn}
+              onGoToWord={goToWord}
+            />
           )}
         </>
       )}

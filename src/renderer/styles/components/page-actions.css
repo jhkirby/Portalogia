@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-12 */
+   Last Modified: 2026-10-17 */
 
 /* ── PAGE ACTIONS ─────────────────────────────────────────────────────── */
 
@@ -51,16 +51,15 @@
   right: 0;
 }
 
-.page-actions__button:hover:not(:disabled) {
-  background: var(--color-button-hover-bg);
-}
-
 .page-actions__button:disabled {
   color: var(--color-button-disabled-text);
   cursor: default;
 }
 
 .page-actions__button[aria-pressed='true'] {
+  /* The pressed fill is the cue; a grey layer growing over it would hide it. */
+  --hover-grow-bg: transparent;
+
   background: var(--color-selection-bg);
   color: var(--color-accent-text);
 }

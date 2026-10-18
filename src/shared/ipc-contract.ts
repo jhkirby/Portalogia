@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
 import type { MarkdownAnnotations, PdfAnnotations } from '@shared/ipc-schemas';
-import type { BrowserState } from '@shared/tab-state';
+import type { BrowserState, MarkdownDisplay, PdfPointerMode } from '@shared/tab-state';
 
 /**
  * Every IPC channel name in the app, enumerated once. Both main and
@@ -106,6 +106,14 @@ export const IpcChannel = {
   PdfGoToPage: 'pdf:go-to-page',
   /** Main → PDF page: scroll to this 1-based page. */
   PdfScrollToPage: 'pdf:scroll-to-page',
+  /** Chrome → main: switch a PDF tab between panning and selecting. */
+  PdfSetPointerMode: 'pdf:set-pointer-mode',
+  /** Main → PDF page: the tab's pointer mode (`'pan'` or `'select'`). */
+  PdfPointerMode: 'pdf:pointer-mode',
+  /** PDF page → main: a web link in the document was clicked; open it in a new tab. */
+  PdfOpenLink: 'pdf:open-link',
+  /** PDF page → main: a looping pan ended; put the real pointer where the page's stand-in hand was. */
+  PdfWarpPointer: 'pdf:warp-pointer',
   /** Chrome → main: pick a Markdown file to open in this tab. */
   MarkdownOpenFile: 'markdown:open-file',
   /** Chrome → main: pick where to create a new Markdown note, and open it in this tab. */
@@ -114,8 +122,10 @@ export const IpcChannel = {
   MarkdownCloseFile: 'markdown:close-file',
   /** Chrome → main: rename the tab's note on disk. */
   MarkdownRename: 'markdown:rename',
-  /** Chrome → main: switch the tab between its rendered view and its source editor. */
+  /** Chrome → main: switch the tab between read-only (view) and editable (edit). */
   MarkdownSetMode: 'markdown:set-mode',
+  /** Chrome → main: switch the tab between its formatted note and its raw text. */
+  MarkdownSetDisplay: 'markdown:set-display',
   /** Chrome → main: step the tab back or forward through the notes it followed links through. */
   MarkdownNavigateHistory: 'markdown:navigate-history',
   /** Chrome → main: save a copy of the tab's note as a PDF, `.md` or `.txt`. */
@@ -128,8 +138,10 @@ export const IpcChannel = {
   MarkdownFile: 'markdown:file',
   /** Main → Markdown page: the open note was closed; show the empty page. */
   MarkdownClosed: 'markdown:closed',
-  /** Main → Markdown page: whether to show the rendered note or its source. */
+  /** Main → Markdown page: whether the note is read-only (view) or editable (edit). */
   MarkdownMode: 'markdown:mode',
+  /** Main → Markdown page: whether to show the note formatted or as raw text. */
+  MarkdownDisplay: 'markdown:display',
   /** Main → Markdown page: a formatting shortcut (bold, italic, link, LaTeX block, code block) pressed while editing. */
   MarkdownFormat: 'markdown:format',
   /** Markdown page → main: the note's source after an edit, to write to disk. */
@@ -238,7 +250,6 @@ export const IpcChannel = {
   WindowClose: 'window:close',
   WindowStateChanged: 'window:state-changed',
   WindowGetState: 'window:get-state',
-  WindowGripHover: 'window:grip-hover',
 } as const;
 
 // Request validation schemas live in `@shared/ipc-schemas` (zod-based,
@@ -471,6 +482,8 @@ export interface NorthstarApi {
   renamePdfFile(id: string, name: string): Promise<IpcResult<null>>;
   /** Scrolls the tab's PDF to a 1-based page (clamped to the document). */
   goToPdfPage(id: string, page: number): Promise<IpcResult<null>>;
+  /** Sets what a drag on a PDF tab's document does: pan it, or select its text (and click its links). */
+  setPdfPointerMode(id: string, mode: PdfPointerMode): Promise<IpcResult<null>>;
 
   /** Opens a new Markdown tab (the toolbar's MD button, Ctrl+Shift+M, or File > New Markdown Tab). */
   createMarkdownTab(): Promise<IpcResult<BrowserState>>;
@@ -482,8 +495,10 @@ export interface NorthstarApi {
   closeMarkdownFile(id: string): Promise<IpcResult<null>>;
   /** Renames a Markdown tab's note on disk (same folder). Fails unless the name ends in `.md` or `.markdown` and doesn't already exist. */
   renameMarkdownFile(id: string, name: string): Promise<IpcResult<null>>;
-  /** Switches a Markdown tab between its rendered view and its source editor. */
+  /** Switches a Markdown tab between read-only (view) and editable (edit). */
   setMarkdownMode(id: string, mode: 'view' | 'edit'): Promise<IpcResult<null>>;
+  /** Switches a Markdown tab between its formatted note and its raw text. */
+  setMarkdownDisplay(id: string, display: MarkdownDisplay): Promise<IpcResult<null>>;
   /** Steps a Markdown tab back (`-1`) or forward (`1`) through the notes it followed links through. */
   navigateMarkdownHistory(id: string, direction: 1 | -1): Promise<IpcResult<null>>;
   /** Saves a copy of the tab's note as a PDF, a `.md` file or a `.txt` file (asks where in a native dialog). */
@@ -770,8 +785,6 @@ export interface NorthstarApi {
   onWindowStateChanged(listener: (state: WindowState) => void): () => void;
   /** Reads whether this window is maximized right now (the push channel above only fires on a change). */
   getWindowState(): Promise<WindowState>;
-  /** Subscribes to main reporting whether the cursor is over the titlebar grip. Sent only while maximized, when the grip is an OS drag region and can't see its own hover. */
-  onGripHover(listener: (hovering: boolean) => void): () => void;
 }
 
 /**
@@ -920,6 +933,16 @@ export interface NorthstarPdfApi {
   reportPage(page: number, pageCount: number): void;
   /** Subscribes to requests to scroll to a 1-based page. */
   onScrollToPage(listener: (page: number) => void): () => void;
+  /** Subscribes to the tab's pointer mode; called immediately with the latest value if one already arrived. */
+  onPointerMode(listener: (mode: PdfPointerMode) => void): () => void;
+  /** Opens a web link from the document in a new tab. Fire-and-forget; main ignores anything but http(s). */
+  openLink(url: string): void;
+  /**
+   * Puts the real pointer at a point of this page (viewport CSS pixels): a pan
+   * that reaches one edge of the view wraps to the opposite one. Fire-and-forget;
+   * clamped to the page by main, and a no-op where the OS pointer can't be moved.
+   */
+  warpPointer(x: number, y: number): void;
   /**
    * Subscribes to this tab's zoom, as a whole percent (100 = actual size).
    * Called immediately with the latest value if one has already arrived —
@@ -944,6 +967,8 @@ export interface MarkdownFileData {
   readonly generation: number;
   /** A heading in the note to scroll to once it's drawn (`[[Note#Heading]]`), or `''`. */
   readonly anchor: string;
+  /** The line ending the file uses on disk, so the page can tell the file's size exactly. */
+  readonly lineEnding: '\n' | '\r\n';
   /**
    * Why it arrived: `'open'` (a different note — start fresh at the top),
    * `'reload'` (the same note changed on disk — keep the place) or
@@ -1002,6 +1027,8 @@ export interface NorthstarMarkdownApi {
   onClose(listener: () => void): () => void;
   /** Subscribes to the view/edit mode; called immediately with the latest value if one already arrived. */
   onMode(listener: (mode: 'view' | 'edit') => void): () => void;
+  /** Subscribes to the formatted/raw display; called immediately with the latest value if one already arrived. */
+  onDisplay(listener: (display: MarkdownDisplay) => void): () => void;
   /** Subscribes to formatting shortcuts pressed while the editor is showing (main owns the keys, since Ctrl+B and Ctrl+I are also the app's own). */
   onFormat(listener: (action: MarkdownFormatAction) => void): () => void;
   /** Writes the note's source to disk after an edit, under the `generation` the note arrived with. Fire-and-forget. */

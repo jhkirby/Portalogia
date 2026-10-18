@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -37,6 +37,9 @@ import {
   textToolRequestSchema,
   cropRequestSchema,
   pdfGoToPageRequestSchema,
+  pdfOpenLinkRequestSchema,
+  pdfPointerModeRequestSchema,
+  pdfWarpPointerRequestSchema,
   pdfOpenBookmarkRequestSchema,
   pdfPageInfoRequestSchema,
   pdfSaveAnnotationsRequestSchema,
@@ -442,6 +445,39 @@ export function registerTabIpc(
     const manager = resolveTabManagerForTab(parsed.data.id);
     if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
       manager.setPdfPageInfo(parsed.data.id, parsed.data.page, parsed.data.pageCount);
+    }
+  });
+
+  ipcMain.handle(IpcChannel.PdfSetPointerMode, (event, rawRequest: unknown): IpcResult<null> => {
+    const parsed = pdfPointerModeRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    chromeManagerForTab(event, parsed.data.id)?.setPdfPointerMode(parsed.data.id, parsed.data.mode);
+    return { ok: true, data: null };
+  });
+
+  // Fire-and-forget from the PDF page as a looping pan ends (see `CursorWarper`).
+  ipcMain.on(IpcChannel.PdfWarpPointer, (event, rawRequest: unknown) => {
+    const parsed = pdfWarpPointerRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      manager.warpPdfPointer(parsed.data.id, parsed.data.x, parsed.data.y);
+    }
+  });
+
+  // Fire-and-forget from the PDF page when one of the document's web links is clicked (Select mode).
+  ipcMain.on(IpcChannel.PdfOpenLink, (event, rawRequest: unknown) => {
+    const parsed = pdfOpenLinkRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      manager.openPdfLink(parsed.data.id, parsed.data.url);
     }
   });
 

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-17
 
 import { useEffect, useRef, useState } from 'react';
 import { COLOR_PICKER_PANEL_WIDTH_PX } from '@shared/constants';
@@ -139,7 +139,7 @@ export function ColorPicker() {
     <button
       ref={buttonRef}
       type="button"
-      className="page-actions__button chrome-tooltip"
+      className="page-actions__button hover-grow chrome-tooltip"
       onClick={() => setIsOpen((open) => !open)}
       aria-pressed={isOpen}
       aria-label="Accent color"

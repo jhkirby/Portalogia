@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-05 */
+   Last Modified: 2026-10-17 */
 
 /* ── FIND BAR ─────────────────────────────────────────────────────────── */
 /* `find.html`'s whole page — the find bar's own small `WebContentsView` (see
@@ -102,7 +102,6 @@ body {
 .find-bar__switch:hover,
 .find-bar__step:hover:not(:disabled),
 .find-bar__close:hover {
-  background: var(--color-button-hover-bg);
   color: var(--color-tab-text-active);
 }
 

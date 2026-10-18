@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-17
 
 import { useEffect, useRef, useState } from 'react';
 import type { RGB } from '@shared/color';
@@ -12,6 +12,8 @@ interface TrailPoint {
   readonly x: number;
   readonly y: number;
   readonly t: number;
+  /** Which press drew it: segments are only drawn between points of the same stroke, so a new press never joins the last one's tail. */
+  readonly stroke: number;
 }
 
 /** How long a trail point stays visible before it's dropped — the "tail fades over time" half of the streak. */
@@ -70,6 +72,7 @@ export function LaserPointerOverlayView() {
   const pointerRef = useRef<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const isDownRef = useRef(false);
   const trailRef = useRef<TrailPoint[]>([]);
+  const strokeRef = useRef(0);
 
   // Sizes the canvas's backing store to the window's actual device pixels
   // (so the drawing stays crisp on a high-DPI display) while its CSS size
@@ -107,7 +110,7 @@ export function LaserPointerOverlayView() {
     const handlePointerMove = (event: PointerEvent): void => {
       pointerRef.current = { x: event.clientX, y: event.clientY, visible: true };
       if (isDownRef.current) {
-        trailRef.current.push({ x: event.clientX, y: event.clientY, t: performance.now() });
+        trailRef.current.push({ x: event.clientX, y: event.clientY, t: performance.now(), stroke: strokeRef.current });
       }
     };
     const handlePointerDown = (event: PointerEvent): void => {
@@ -115,8 +118,9 @@ export function LaserPointerOverlayView() {
         return;
       }
       isDownRef.current = true;
+      strokeRef.current += 1;
       canvas.setPointerCapture(event.pointerId);
-      trailRef.current.push({ x: event.clientX, y: event.clientY, t: performance.now() });
+      trailRef.current.push({ x: event.clientX, y: event.clientY, t: performance.now(), stroke: strokeRef.current });
     };
     const handlePointerUp = (event: PointerEvent): void => {
       isDownRef.current = false;
@@ -169,6 +173,9 @@ export function LaserPointerOverlayView() {
       for (let i = 1; i < trail.length; i += 1) {
         const point = trail[i]!;
         const previous = trail[i - 1]!;
+        if (previous.stroke !== point.stroke) {
+          continue;
+        }
         const age = now - point.t;
         const fade = Math.max(0, 1 - age / TRAIL_MAX_AGE_MS);
         ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(fade * 0.85).toFixed(3)})`;

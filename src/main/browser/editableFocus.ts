@@ -1,15 +1,22 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { ipcMain } from 'electron';
 
 /** The channel every page's preload reports on (see `reportEditableFocus` in each preload). */
 export const EDITABLE_FOCUS_CHANNEL = 'ui:editable-focus';
 
-/** The `webContents` whose page has the keyboard in something you type into — a text box, a text area, an editor. */
-const editableIds = new Set<number>();
+/**
+ * What kind of thing to type into has the keyboard: `'plain'` for a text box
+ * or text area, `'rich'` for a `contenteditable` region (a web page's rich
+ * editor, which gives Ctrl+B/I/U meanings of its own).
+ */
+export type EditableKind = 'plain' | 'rich';
+
+/** The `webContents` whose page has the keyboard in something you type into, and what kind of thing it is. */
+const editableKinds = new Map<number, EditableKind>();
 
 /**
  * Starts tracking which pages have their caret in a text box. Shortcuts that
@@ -21,24 +28,31 @@ const editableIds = new Set<number>();
 export function trackEditableFocus(): void {
   ipcMain.on(EDITABLE_FOCUS_CHANNEL, (event, editable: unknown) => {
     const contents = event.sender;
-    if (editable === true) {
-      if (!editableIds.has(contents.id)) {
-        editableIds.add(contents.id);
+    // `true` is the plain report every preload sent before rich editors were told apart; it still means a text box.
+    const kind: EditableKind | null = editable === 'rich' ? 'rich' : editable === true || editable === 'plain' ? 'plain' : null;
+    if (kind !== null) {
+      if (!editableKinds.has(contents.id)) {
         // A page that goes away (or navigates) can't say its box lost focus, so that is assumed.
-        contents.once('destroyed', () => editableIds.delete(contents.id));
+        contents.once('destroyed', () => editableKinds.delete(contents.id));
         contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
           if (isMainFrame) {
-            editableIds.delete(contents.id);
+            editableKinds.delete(contents.id);
           }
         });
       }
+      editableKinds.set(contents.id, kind);
     } else {
-      editableIds.delete(contents.id);
+      editableKinds.delete(contents.id);
     }
   });
 }
 
 /** @returns Whether the page with this `webContents` id has the keyboard in a text box. */
 export function hasEditableFocus(webContentsId: number): boolean {
-  return editableIds.has(webContentsId);
+  return editableKinds.has(webContentsId);
+}
+
+/** @returns What kind of text box has the keyboard in the page with this `webContents` id, or `null` if none does. */
+export function editableKindOf(webContentsId: number): EditableKind | null {
+  return editableKinds.get(webContentsId) ?? null;
 }

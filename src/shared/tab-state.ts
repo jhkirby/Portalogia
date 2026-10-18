@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -51,8 +51,13 @@ export interface PdfTabState {
   readonly page: number;
   /** Pages in the open document, 0 before one is opened. */
   readonly pageCount: number;
+  /** What a drag on the document does: `'pan'` moves it (the default), `'select'` selects its text and lets its links be clicked. */
+  readonly pointerMode: PdfPointerMode;
   readonly workspaceId: string;
 }
+
+/** A PDF tab's pointer mode — see `PdfTabState.pointerMode`. */
+export type PdfPointerMode = 'pan' | 'select';
 
 /**
  * The browsing history: a table of the pages reached, rendered in its own
@@ -80,14 +85,23 @@ export interface MarkdownTabState {
   readonly fileName: string | null;
   /** The open file's full path on disk, or `null` before one is opened — what a Markdown bookmark saves. */
   readonly filePath: string | null;
-  /** Whether the page shows the rendered note (`'view'`) or its source in an editor (`'edit'`). */
+  /** Whether the note can be changed: `'view'` is read-only, `'edit'` is editable. */
   readonly mode: 'view' | 'edit';
+  /**
+   * How the note is shown: `'formatted'` draws it (headings, emphasis, links),
+   * `'raw'` shows its exact characters. Independent of `mode`: editing while
+   * formatted edits the drawn note in place.
+   */
+  readonly display: MarkdownDisplay;
   /** Whether following a link has left an earlier note this tab can step back to. */
   readonly canGoBack: boolean;
   /** Whether stepping back has left a later note this tab can step forward to. */
   readonly canGoForward: boolean;
   readonly workspaceId: string;
 }
+
+/** A Markdown tab's display — see `MarkdownTabState.display`. */
+export type MarkdownDisplay = 'formatted' | 'raw';
 
 /** Everything the chrome UI needs to render one tab: browser, terminal, PDF, Markdown or history. */
 export type TabState = BrowserTabState | TerminalTabState | PdfTabState | MarkdownTabState | HistoryTabState;

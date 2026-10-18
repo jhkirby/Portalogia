@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -65,12 +65,14 @@ const api: NorthstarApi = {
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
   goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),
+  setPdfPointerMode: (id, mode) => invoke(IpcChannel.PdfSetPointerMode, { id, mode }),
   createMarkdownTab: () => invoke(IpcChannel.TabsCreateMarkdown),
   openMarkdownFile: (id) => invoke(IpcChannel.MarkdownOpenFile, { id }),
   newMarkdownFile: (id) => invoke(IpcChannel.MarkdownNewFile, { id }),
   closeMarkdownFile: (id) => invoke(IpcChannel.MarkdownCloseFile, { id }),
   renameMarkdownFile: (id, name) => invoke(IpcChannel.MarkdownRename, { id, name }),
   setMarkdownMode: (id, mode) => invoke(IpcChannel.MarkdownSetMode, { id, mode }),
+  setMarkdownDisplay: (id, display) => invoke(IpcChannel.MarkdownSetDisplay, { id, display }),
   navigateMarkdownHistory: (id, direction) => invoke(IpcChannel.MarkdownNavigateHistory, { id, direction }),
   exportMarkdown: (id, format) => invoke(IpcChannel.MarkdownExport, { id, format }),
   openMarkdownBookmark: (id, bookmarkId) => ipcRenderer.send(IpcChannel.MarkdownOpenBookmark, { id, bookmarkId }),
@@ -195,11 +197,6 @@ const api: NorthstarApi = {
   endWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragEnd),
   closeWindow: () => ipcRenderer.send(IpcChannel.WindowClose),
   getWindowState: () => ipcRenderer.invoke(IpcChannel.WindowGetState),
-  onGripHover: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, hovering: boolean): void => listener(hovering);
-    ipcRenderer.on(IpcChannel.WindowGripHover, handler);
-    return () => ipcRenderer.removeListener(IpcChannel.WindowGripHover, handler);
-  },
   onWindowStateChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: WindowState): void => {
       listener(state);
@@ -212,17 +209,22 @@ const api: NorthstarApi = {
 contextBridge.exposeInMainWorld('northstar', api satisfies NorthstarApi);
 
 // Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
-// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. Repeated in each
+// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. A `contenteditable`
+// region is reported as 'rich': a web page's rich editor gives Ctrl+B/I/U meanings of its own. Repeated in each
 // preload that needs it: two entries can't share a module (see the note on `tabZoom.ts`'s imports).
 const EditableFocus = 'ui:editable-focus';
 const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
-let editableReported = false;
-function reportEditableFocus(): void {
-  const element = document.activeElement;
-  const editable =
+function isEditableElement(element: Element | null): element is HTMLElement {
+  return (
     element instanceof HTMLTextAreaElement ||
     (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||
-    (element instanceof HTMLElement && element.isContentEditable);
+    (element instanceof HTMLElement && element.isContentEditable)
+  );
+}
+let editableReported: 'plain' | 'rich' | false = false;
+function reportEditableFocus(): void {
+  const element = document.activeElement;
+  const editable = !isEditableElement(element) ? false : element.isContentEditable ? 'rich' : 'plain';
   if (editable !== editableReported) {
     editableReported = editable;
     ipcRenderer.send(EditableFocus, editable);
@@ -231,3 +233,25 @@ function reportEditableFocus(): void {
 window.addEventListener('focusin', reportEditableFocus, true);
 // `focusout` fires before the next element has focus, so look once focus has settled.
 window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
+
+// Escape takes the caret out of a text box, so the shortcuts that stand aside while one has it work again. Decided
+// once the page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a popup)
+// called `preventDefault`, and then the caret stays for the next press.
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
+      return;
+    }
+    const element = document.activeElement;
+    if (!isEditableElement(element)) {
+      return;
+    }
+    setTimeout(() => {
+      if (!event.defaultPrevented && document.activeElement === element) {
+        element.blur();
+      }
+    }, 0);
+  },
+  true,
+);

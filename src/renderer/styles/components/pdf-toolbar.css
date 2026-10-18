@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-04 */
+   Last Modified: 2026-10-17 */
 
 /* ── PDF TOOLBAR ──────────────────────────────────────────────────────── */
 /* The PDF tab's controls inside the chrome's main toolbar, in the slot a
@@ -97,10 +97,6 @@
   cursor: pointer;
 }
 
-.pdf-toolbar__button:hover:not(:disabled) {
-  background: var(--color-button-hover-bg);
-}
-
 .pdf-toolbar__button:disabled {
   opacity: 0.4;
   cursor: default;
@@ -136,10 +132,6 @@
    center it on the 20px star, pushing half of it off the window. */
 .pdf-toolbar__bookmark::after {
   left: 0;
-}
-
-.pdf-toolbar__bookmark:hover:not(:disabled) {
-  background: var(--color-button-hover-bg);
 }
 
 .pdf-toolbar__bookmark[aria-pressed='true'] {

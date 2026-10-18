@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-02
+// Last Modified: 2026-10-17
 
 import {
   useEffect,
@@ -35,6 +35,20 @@ export interface PageRect {
   readonly w: number;
   readonly h: number;
 }
+
+/**
+ * A link in the document: where it sits on its page, and where it goes —
+ * a web address, or a destination inside the document (pdf.js's `dest`, a
+ * name or an explicit array, resolved by the viewer when followed).
+ */
+export interface PageLink {
+  readonly rect: PageRect;
+  readonly url: string | null;
+  readonly dest: unknown;
+}
+
+/** pdf.js's `annotationType` for a link (`AnnotationType.LINK`). */
+const LINK_ANNOTATION_TYPE = 2;
 
 /** One highlight's rectangles on this page (a selection spanning pages is one highlight, id shared, with a piece per page). */
 export interface PageHighlight {
@@ -71,6 +85,8 @@ interface PdfPageProps {
   readonly onCropDragStart: (shift: boolean) => void;
   readonly onCropDrag: (rect: PageRect) => void;
   readonly onCropCommit: (crop: PageRect | null) => void;
+  /** A link on this page was clicked (they only take clicks in Select mode — see pdf-viewer.css). */
+  readonly onFollowLink: (link: PageLink) => void;
 }
 
 /**
@@ -81,7 +97,8 @@ interface PdfPageProps {
  * feels immediate and sharpens once `renderScale` catches up.
  *
  * Layers, bottom to top: the canvas; highlights; pdf.js's invisible text
- * layer (what makes text selectable); pen/comment marks; the crop box.
+ * layer (what makes text selectable); the document's links; pen/comment
+ * marks; the crop box.
  */
 export function PdfPage({
   doc,
@@ -102,11 +119,13 @@ export function PdfPage({
   onCropDragStart,
   onCropDrag,
   onCropCommit,
+  onFollowLink,
 }: PdfPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const [isNear, setIsNear] = useState(false);
+  const [links, setLinks] = useState<readonly PageLink[]>([]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -193,6 +212,50 @@ export function PdfPage({
     };
   }, [doc, pageNumber, isNear]);
 
+  // The page's links, read once it's near the view. Kept as fractions of the page, so zoom never re-reads them.
+  useEffect(() => {
+    if (!isNear) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const page = await doc.getPage(pageNumber);
+      const annotations: unknown[] = await page.getAnnotations({ intent: "display" });
+      if (cancelled) {
+        return;
+      }
+      const viewport = page.getViewport({ scale: 1 });
+      const found: PageLink[] = [];
+      for (const raw of annotations) {
+        const annotation = raw as { annotationType?: number; rect?: number[]; url?: unknown; dest?: unknown };
+        if (annotation.annotationType !== LINK_ANNOTATION_TYPE || !annotation.rect || annotation.rect.length !== 4) {
+          continue;
+        }
+        const url = typeof annotation.url === "string" ? annotation.url : null;
+        if (url === null && annotation.dest == null) {
+          continue;
+        }
+        const [left, bottom, right, top] = annotation.rect as [number, number, number, number];
+        const [x1, y1] = viewport.convertToViewportPoint(left, bottom) as [number, number];
+        const [x2, y2] = viewport.convertToViewportPoint(right, top) as [number, number];
+        found.push({
+          rect: {
+            x: Math.min(x1, x2) / viewport.width,
+            y: Math.min(y1, y2) / viewport.height,
+            w: Math.abs(x2 - x1) / viewport.width,
+            h: Math.abs(y2 - y1) / viewport.height,
+          },
+          url,
+          dest: annotation.dest ?? null,
+        });
+      }
+      setLinks(found);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, pageNumber, isNear]);
+
   // Pages scrolled far away free their bitmap, so a long document doesn't
   // hold every page's pixels at once.
   useEffect(() => {
@@ -261,6 +324,27 @@ export function PdfPage({
           )}
         </div>
         <div ref={textLayerRef} className="textLayer" style={textLayerStyle} />
+        <div className="pdf-link-layer">
+          {links.map((link, index) => (
+            <a
+              key={index}
+              className="pdf-link"
+              href={link.url ?? "#"}
+              title={link.url ?? undefined}
+              draggable={false}
+              style={{
+                left: `${link.rect.x * 100}%`,
+                top: `${link.rect.y * 100}%`,
+                width: `${link.rect.w * 100}%`,
+                height: `${link.rect.h * 100}%`,
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                onFollowLink(link);
+              }}
+            />
+          ))}
+        </div>
         <PdfAnnotationLayer {...annotations} />
         <PdfCropLayer
           editing={cropEditing}

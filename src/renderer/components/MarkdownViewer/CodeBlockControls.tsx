@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useState } from 'react';
 import type { MarkdownRunResult } from '@shared/ipc-contract';
@@ -37,13 +37,13 @@ export function CodeBlockControls({ language, code, runnable, running, onRun }: 
   return (
     <div className="md-code-controls">
       {language !== '' && <span className="md-code-controls__language">{language}</span>}
-      <button type="button" className="md-code-controls__button" onClick={copy}>
+      <button type="button" className="md-code-controls__button hover-grow" onClick={copy}>
         {copied ? 'Copied' : 'Copy'}
       </button>
       {runnable && (
         <button
           type="button"
-          className="md-code-controls__button md-code-controls__button--run"
+          className="md-code-controls__button hover-grow md-code-controls__button--run"
           onClick={onRun}
           disabled={running}
         >
@@ -68,7 +68,7 @@ export function CodeOutput({ state, onClear }: CodeOutputProps) {
   if (!result.ran) {
     return (
       <div className="md-code-output md-code-output--error">
-        <button type="button" className="md-code-output__clear" onClick={onClear} aria-label="Dismiss output">
+        <button type="button" className="md-code-output__clear hover-grow" onClick={onClear} aria-label="Dismiss output">
           ×
         </button>
         {result.error ?? 'The code could not be run.'}
@@ -81,7 +81,7 @@ export function CodeOutput({ state, onClear }: CodeOutputProps) {
     : `Exited with code ${result.exitCode ?? '?'} in ${result.durationMs} ms`;
   return (
     <div className={`md-code-output${failed ? ' md-code-output--failed' : ''}`}>
-      <button type="button" className="md-code-output__clear" onClick={onClear} aria-label="Dismiss output">
+      <button type="button" className="md-code-output__clear hover-grow" onClick={onClear} aria-label="Dismiss output">
         ×
       </button>
       {result.stdout !== '' && <pre className="md-code-output__text">{result.stdout}</pre>}

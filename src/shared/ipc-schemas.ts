@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -208,6 +208,22 @@ export const pdfGoToPageRequestSchema = z.object({
   page: z.number().int().min(1).max(1_000_000),
 });
 
+export const pdfPointerModeRequestSchema = z.object({
+  id: z.string().min(1),
+  mode: z.enum(['pan', 'select']),
+});
+
+export const pdfWarpPointerRequestSchema = z.object({
+  id: z.string().min(1),
+  x: z.number().finite().min(-100_000).max(100_000),
+  y: z.number().finite().min(-100_000).max(100_000),
+});
+
+export const pdfOpenLinkRequestSchema = z.object({
+  id: z.string().min(1),
+  url: z.string().min(1).max(8192),
+});
+
 export const pdfPageInfoRequestSchema = z.object({
   id: z.string().min(1),
   page: z.number().int().min(1).max(1_000_000),
@@ -289,6 +305,11 @@ export const markdownSaveAnnotationsRequestSchema = z.object({
 export const markdownModeRequestSchema = z.object({
   id: z.string().min(1),
   mode: z.enum(['view', 'edit']),
+});
+
+export const markdownDisplayRequestSchema = z.object({
+  id: z.string().min(1),
+  display: z.enum(['formatted', 'raw']),
 });
 
 /** A link clicked in a note: a `[[wikilink]]` (its text inside the brackets) or an ordinary link's target. */

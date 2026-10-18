@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { historyCutoff } from '@shared/history';
@@ -194,7 +194,7 @@ export function HistoryViewer() {
                       <div className="history__actions">
                         <button
                           type="button"
-                          className={`history__action-button history__copy${isCopied ? ' history__copy--done' : ''}`}
+                          className={`history__action-button hover-grow history__copy${isCopied ? ' history__copy--done' : ''}`}
                           aria-label={`Copy ${routeKind}`}
                           title={isCopied ? 'Copied' : `Copy ${routeKind}`}
                           onClick={() => copy(entry)}
@@ -203,7 +203,7 @@ export function HistoryViewer() {
                         </button>
                         <button
                           type="button"
-                          className="history__action-button history__delete"
+                          className="history__action-button hover-grow history__delete"
                           aria-label={`Delete ${entry.url} from history`}
                           title="Delete from history"
                           onClick={() => window.northstarHistory.deleteEntry(entry.id)}

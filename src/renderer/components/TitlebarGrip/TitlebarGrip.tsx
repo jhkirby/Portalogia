@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 import { useEffect, useState, type PointerEvent } from 'react';
 
@@ -11,8 +11,8 @@ import { useEffect, useState, type PointerEvent } from 'react';
  * titlebar.
  *
  * Normally an ordinary element (not an OS drag region, which can't react to
- * the mouse at all) so it can go lighter/darker on hover and while pressed and
- * show a grab cursor; the drag itself is carried out by the main process
+ * the mouse at all) so it can change color while pressed and show a grab
+ * cursor; the drag itself is carried out by the main process
  * (`registerWindowIpc`), which follows the cursor from `beginWindowDrag` until
  * `endWindowDrag`.
  *
@@ -21,14 +21,11 @@ import { useEffect, useState, type PointerEvent } from 'react';
  * button is held (the restore is ignored, so the drag did nothing), whereas the
  * OS's own title-bar drag does exactly what Chrome's does: pull the window
  * back to its normal size under the cursor and carry on moving it. Only the
- * grab cursor is lost, and only while maximized; the hover grey is kept, by main
- * watching the cursor for the page (`GripHoverWatcher`).
+ * grab cursor is lost, and only while maximized.
  */
 export function TitlebarGrip() {
   const [isDragging, setIsDragging] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  // Only reported by main, and only while maximized (see `GripHoverWatcher`).
-  const [isHoveredNative, setHoveredNative] = useState(false);
 
   // Main is the authority on the state: read it once, then follow its pushes.
   useEffect(() => {
@@ -39,11 +36,9 @@ export function TitlebarGrip() {
       }
     });
     const unsubscribe = window.northstar.onWindowStateChanged((state) => setIsMaximized(state.isMaximized));
-    const unsubscribeHover = window.northstar.onGripHover(setHoveredNative);
     return () => {
       cancelled = true;
       unsubscribe();
-      unsubscribeHover();
     };
   }, []);
 
@@ -67,7 +62,7 @@ export function TitlebarGrip() {
 
   return (
     <div
-      className={`titlebar__grip${isDragging ? ' titlebar__grip--dragging' : ''}${isMaximized ? ' titlebar__grip--native' : ''}${isMaximized && isHoveredNative ? ' titlebar__grip--hover' : ''}`}
+      className={`titlebar__grip${isDragging ? ' titlebar__grip--dragging' : ''}${isMaximized ? ' titlebar__grip--native' : ''}`}
       onPointerDown={isMaximized ? undefined : handlePointerDown}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}

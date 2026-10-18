@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
@@ -39,7 +39,6 @@ import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
 import { TerminalManager } from './terminal/TerminalManager';
 import { createMainWindow } from './windows/MainWindow';
-import { GripHoverWatcher } from './windows/GripHoverWatcher';
 
 // Electron requires this to be set before `app.whenReady()`.
 app.setName('Northstar');
@@ -174,23 +173,6 @@ const sharedTerminalManager = new TerminalManager(
   },
 );
 
-/**
- * Pointer lock is the one permission granted, and only to the app's own PDF
- * viewer page: it lets a grab-drag keep going past the screen edge (see
- * `PdfViewer`). A web page asking for it is still refused.
- * @param url The URL of the page making the request.
- */
-function isOwnPdfViewerUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const isOwnOrigin =
-      parsed.protocol === 'file:' || (!app.isPackaged && parsed.origin === new URL(process.env['ELECTRON_RENDERER_URL'] ?? 'about:blank').origin);
-    return isOwnOrigin && parsed.pathname.endsWith('/pdf.html');
-  } catch {
-    return false;
-  }
-}
-
 void app.whenReady().then(() => {
   // First, so the headers hook the chrome's CSP registers through exists before any window does.
   void adBlocker.start(session.defaultSession);
@@ -202,10 +184,7 @@ void app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
     // Fullscreen is what a video's fullscreen button asks for; granted to web pages only.
     const isWebPage = /^https?:/i.test(details.requestingUrl);
-    callback(
-      (permission === 'pointerLock' && isOwnPdfViewerUrl(details.requestingUrl)) ||
-        (permission === 'fullscreen' && isWebPage),
-    );
+    callback(permission === 'fullscreen' && isWebPage);
   });
 
   protocol.handle(NORTHSTAR_SCHEME, (request) => {
@@ -397,7 +376,6 @@ function launchWindow(
 
   // Drives WindowControls' maximize/restore icon — the frameless window has
   // no native titlebar to show that state itself (see MainWindow.ts).
-  new GripHoverWatcher(window);
   window.on('maximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: true }));
   window.on('unmaximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: false }));
   return window;

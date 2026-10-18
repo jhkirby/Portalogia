@@ -1,0 +1,5 @@
+# Local CodeQL artifacts: the database is rebuilt by run-analysis.ps1 and the
+# raw SARIF/CSV are summarized into security/reports/.
+databases/
+results/
+.codeql/

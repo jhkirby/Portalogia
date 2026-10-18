@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 /**
  * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
@@ -27,14 +27,6 @@ export const CHROME_HEIGHT_PX = 92;
  * `CHROME_HEIGHT_PX` must equal `--size-chrome-height`.
  */
 export const CHROME_HEIGHT_FOCUSED_PX = 0;
-
-/**
- * Height, in CSS pixels, of the titlebar grip strip along the window's top
- * edge. Must equal `.titlebar__grip`'s `height` in app.css; main uses it to
- * tell when the cursor is over the grip while the window is maximized
- * (`GripHoverWatcher`).
- */
-export const TITLEBAR_GRIP_HEIGHT_PX = 12;
 
 /**
  * Width, in CSS pixels, of the workspace sidebar on the left edge of the

@@ -1,0 +1,8 @@
+name: northstar/security-queries
+version: 0.1.0
+description: Project-specific CodeQL security queries for the Northstar Electron browser.
+library: false
+dependencies:
+  codeql/javascript-all: "*"
+extractor: javascript
+defaultSuiteFile: suites/northstar-security.qls

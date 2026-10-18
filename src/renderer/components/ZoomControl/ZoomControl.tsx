@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-17
 
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { ZOOM_PERCENT_MAX, ZOOM_PERCENT_MIN } from '@shared/constants';
@@ -106,7 +106,7 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
     <div className="zoom-control">
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onZoomOut}
         disabled={!canZoom}
         aria-label="Zoom out"
@@ -138,7 +138,7 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
       </div>
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onZoomIn}
         disabled={!canZoom}
         aria-label="Zoom in"

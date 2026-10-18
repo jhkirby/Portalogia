@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-05 */
+   Last Modified: 2026-10-17 */
 
 /* ── HISTORY TOOLBAR ──────────────────────────────────────────────────── */
 /* The History tab's controls inside the chrome's main toolbar, in the slot a
@@ -105,7 +105,6 @@
 }
 
 .history-toolbar__clear:hover:not(:disabled) {
-  background: var(--color-button-hover-bg);
   border-color: #d93025;
   color: #d93025;
 }

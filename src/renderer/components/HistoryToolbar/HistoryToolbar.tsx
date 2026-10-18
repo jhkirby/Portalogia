@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-17
 
 import { useEffect, useRef, useState } from 'react';
 import { HISTORY_UNIT_LIMITS, type HistoryUnit } from '@shared/constants';
@@ -132,7 +132,7 @@ export function HistoryToolbar({ tab }: HistoryToolbarProps) {
         onChange={(event) => setAmountText(event.target.value.replace(/\D/g, ''))}
       />
       <UnitSelect options={UNIT_OPTIONS} value={unit} onChange={changeUnit} label="Unit of time to clear" />
-      <button type="button" className="history-toolbar__clear" onClick={clear} disabled={!canClear}>
+      <button type="button" className="history-toolbar__clear hover-grow" onClick={clear} disabled={!canClear}>
         Clear History
       </button>
     </div>

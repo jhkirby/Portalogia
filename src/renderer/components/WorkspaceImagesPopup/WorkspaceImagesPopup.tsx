@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { WorkspaceImageState } from '@shared/tab-state';
@@ -174,7 +174,7 @@ export function WorkspaceImagesPopup({ images, previewImage, onOpen, onRemove, o
               <span className="tab-search__workspace">{image.tabCount === 1 ? '1 tab' : `${image.tabCount} tabs`}</span>
               <button
                 type="button"
-                className="tab-search__rename"
+                className="tab-search__rename hover-grow"
                 aria-label={`Rename ${image.name} workspace image`}
                 title="Rename workspace image"
                 onClick={(event) => {
@@ -187,7 +187,7 @@ export function WorkspaceImagesPopup({ images, previewImage, onOpen, onRemove, o
               </button>
               <button
                 type="button"
-                className="tab-search__remove"
+                className="tab-search__remove hover-grow"
                 aria-label={`Delete ${image.name} workspace image`}
                 title="Delete workspace image"
                 onClick={(event) => {

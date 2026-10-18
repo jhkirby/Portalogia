@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-11 */
+   Last Modified: 2026-10-17 */
 
 /* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
 
@@ -47,10 +47,6 @@
 
   color: var(--color-address-placeholder);
   cursor: pointer;
-}
-
-.address-bar__bookmark:hover:not(:disabled) {
-  background: var(--color-button-hover-bg);
 }
 
 .address-bar__bookmark[aria-pressed='true'] {

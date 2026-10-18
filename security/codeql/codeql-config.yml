@@ -1,0 +1,14 @@
+# Scope for `codeql database create --codescanning-config`: first-party code only.
+# node_modules is skipped by the extractor anyway; build output (out/, dist/,
+# release/) and tests are left out so results point at shipped source.
+name: northstar
+paths:
+  - src
+  - scripts
+  - electron.vite.config.ts
+paths-ignore:
+  - "**/node_modules"
+  - out
+  - dist
+  - release
+  - tests

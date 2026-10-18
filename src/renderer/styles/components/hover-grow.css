@@ -1,0 +1,57 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-17 */
+
+/* ── HOVER GROW ───────────────────────────────────────────────────────── */
+
+/* A button whose only hover cue is a filled shape. The fill is a layer of its own rather than the button's
+   `background`, so it can grow out from the centre on hover and shrink back on release; a background can only fade.
+   A component sets `--hover-grow-bg` when its fill isn't the default grey.
+
+   Loaded before the component stylesheets, so a button that is itself positioned (`absolute`, `fixed`) keeps its own
+   `position` — `relative` here is only the fallback that anchors the layer. */
+.hover-grow {
+  position: relative;
+  /* Its own stacking context, so the layer's `z-index: -1` lands above the button's background but below its
+     icon or label, rather than behind whatever the button sits on. */
+  isolation: isolate;
+}
+
+.hover-grow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+
+  background: var(--hover-grow-bg, var(--color-button-hover-bg));
+  border-radius: inherit;
+
+  opacity: 0;
+  transform: scale(0.4);
+  pointer-events: none;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity 140ms ease-out;
+}
+
+/* `isolation` confines a `.chrome-tooltip`'s own `::after` (z-index 10) to this button, where a later sibling would
+   paint over it. The tooltip only shows while the button is hovered, so lifting the hovered button to the tooltip's
+   old level keeps it on top as before. */
+.hover-grow:hover {
+  z-index: 10;
+}
+
+.hover-grow:hover:not(:disabled)::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .hover-grow::before {
+    transform: none;
+    transition: opacity 140ms ease-out;
+  }
+}

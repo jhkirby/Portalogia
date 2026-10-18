@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-06 */
+   Last Modified: 2026-10-17 */
 
 /* ── MARKDOWN VIEWER ──────────────────────────────────────────────────── */
 /* `markdown.html`'s whole page — a Markdown tab's own `WebContentsView` (see
@@ -29,7 +29,76 @@ body {
 .md-viewer {
   position: relative;
   display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+/* The note (reader or editor) and its side panel, side by side above the status bar. `min-height: 0` lets it shrink
+   below its content, so the note scrolls inside it instead of pushing the bar off the page. */
+.md-viewer__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Status bar: the caret's place and the note's size ── */
+
+.md-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--size-spacing-md) * 1.5);
+  height: 26px;
+  padding: 0 var(--size-spacing-md);
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+  border-top: 1px solid var(--color-chrome-border);
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  white-space: nowrap;
+}
+
+.md-status__item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.md-status__total {
+  color: var(--color-address-placeholder);
+}
+
+/* A number that can be typed over: plain text until the pointer is over it or the caret is in it, like the toolbar's
+   file name. */
+.md-status__field {
+  box-sizing: content-box;
+  height: 18px;
+  padding: 0 3px;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tab-text-active);
+  text-align: right;
+}
+
+.md-status__field:hover:not(:disabled) {
+  border-color: var(--color-chrome-border);
+}
+
+.md-status__field:focus {
+  border-color: var(--color-accent-text);
+  outline: none;
+}
+
+.md-status__field:disabled {
+  color: var(--color-address-placeholder);
 }
 
 /* ── Empty: a blank page until a note is opened from the toolbar ── */
@@ -422,10 +491,6 @@ pre.md-code:hover .md-code-controls,
   cursor: pointer;
 }
 
-.md-code-controls__button:hover:not(:disabled) {
-  background: var(--color-button-hover-bg);
-}
-
 .md-code-controls__button--run {
   border-color: var(--color-accent-text);
   color: var(--color-accent-text);
@@ -505,10 +570,6 @@ pre.md-code:hover .md-code-controls,
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
-}
-
-.md-code-output__clear:hover {
-  background: var(--color-button-hover-bg);
 }
 
 /* ── Callouts ── */
@@ -718,7 +779,10 @@ pre.md-code:hover .md-code-controls,
   cursor: pointer;
 }
 
-.md-viewer__panel-toggle:hover,
+.md-viewer__panel-toggle:hover {
+  color: var(--color-tab-text-active);
+}
+
 .md-viewer__panel-toggle[aria-pressed='true'] {
   background: var(--color-button-hover-bg);
   color: var(--color-tab-text-active);
@@ -731,7 +795,8 @@ pre.md-code:hover .md-code-controls,
   box-sizing: border-box;
   width: var(--md-panel-width);
   padding-top: 3rem;
-  overflow-y: auto;
+  /* The list below the tabs scrolls (`.md-panel__body`), so the tabs stay in reach. */
+  overflow: hidden;
 
   background: var(--color-chrome-bg);
   border-left: 1px solid var(--color-chrome-border);
@@ -756,10 +821,6 @@ pre.md-code:hover .md-code-controls,
   font: inherit;
   font-size: var(--size-font-sm);
   cursor: pointer;
-}
-
-.md-panel__tab:hover {
-  background: var(--color-button-hover-bg);
 }
 
 .md-panel__tab--active {
@@ -794,6 +855,30 @@ pre.md-code:hover .md-code-controls,
 
 .md-panel__item:hover {
   background: var(--color-button-hover-bg);
+}
+
+.md-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* An outbound link: what it reads as, and (when that's different) where it goes, smaller, beneath. */
+.md-panel__item--link {
+  display: flex;
+  flex-direction: column;
+}
+
+.md-panel__link-label,
+.md-panel__link-target {
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+}
+
+.md-panel__link-target {
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
 }
 
 .md-panel__empty {
@@ -854,6 +939,7 @@ pre.md-code:hover .md-code-controls,
 
   .md-viewer__panel-toggle,
   .md-panel,
+  .md-status,
   .md-code-controls,
   .md-code-output__clear,
   .md-viewer__editor {

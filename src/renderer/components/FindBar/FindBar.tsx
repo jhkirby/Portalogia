@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-17
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { DEFAULT_FIND_OPTIONS, MAX_FIND_MATCHES, type FindOptions } from '@shared/find';
@@ -25,7 +25,7 @@ function Switch({ label, title, pressed, onToggle, className }: SwitchProps) {
   return (
     <button
       type="button"
-      className={`find-bar__switch${className ? ` ${className}` : ''}`}
+      className={`find-bar__switch hover-grow${className ? ` ${className}` : ''}`}
       aria-pressed={pressed}
       aria-label={title}
       title={title}
@@ -206,7 +206,7 @@ export function FindBar() {
 
       <button
         type="button"
-        className="find-bar__step"
+        className="find-bar__step hover-grow"
         aria-label="Previous Match (Shift+Enter)"
         title="Previous Match (Shift+Enter)"
         disabled={!hasMatches}
@@ -217,7 +217,7 @@ export function FindBar() {
       </button>
       <button
         type="button"
-        className="find-bar__step"
+        className="find-bar__step hover-grow"
         aria-label="Next Match (Enter)"
         title="Next Match (Enter)"
         disabled={!hasMatches}
@@ -228,7 +228,7 @@ export function FindBar() {
       </button>
       <button
         type="button"
-        className="find-bar__close"
+        className="find-bar__close hover-grow"
         aria-label="Close (Escape)"
         title="Close (Escape)"
         onMouseDown={(event) => event.preventDefault()}

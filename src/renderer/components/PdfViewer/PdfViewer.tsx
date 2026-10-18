@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-18
 
 import {
   useCallback,
@@ -16,12 +16,14 @@ import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-d
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract';
+import type { PdfPointerMode } from '@shared/tab-state';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 import { commentCursor, highlighterCursor, penCursor, textCursor } from '../../lib/toolCursors';
-import { PdfPage, type PageHighlight, type PageRect } from './PdfPage';
+import { PdfPage, type PageHighlight, type PageLink, type PageRect } from './PdfPage';
 import { usePdfFind } from './usePdfFind';
 import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
+import { PAN_WRAP_TIMEOUT_MS, wrapTargetAt, type PanWrap } from './panWrap';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -99,12 +101,30 @@ interface PageSize {
 }
 
 /**
+ * Whether a press landed on the scroll area's own scroll bars rather than its
+ * content: those keep working as scroll bars in every mode, so a press there
+ * is never taken for a pan.
+ * @param el The scroll area.
+ * @param clientX The press's x, in viewport pixels.
+ * @param clientY The press's y, in viewport pixels.
+ * @returns `true` if the point is past the content box, over a scroll bar.
+ */
+function isOnScrollbar(el: HTMLElement, clientX: number, clientY: number): boolean {
+  const rect = el.getBoundingClientRect();
+  return clientX >= rect.left + el.clientLeft + el.clientWidth || clientY >= rect.top + el.clientTop + el.clientHeight;
+}
+
+/**
  * The whole of `pdf.html`'s page: just the document in a scroll area. The
- * controls (Open PDF, file name, page counter, Export) live in the chrome's main
- * toolbar (`PdfToolbar`); main pushes opened files here.
+ * controls (Open PDF, file name, the Pan/Select modes, page counter, Export)
+ * live in the chrome's main toolbar (`PdfToolbar`); main pushes opened files
+ * and the pointer mode here.
  *
- * The pointer works like Okular's Browse tool: press and drag anywhere on
- * the document to pan it (hand cursor), rather than selecting.
+ * In Pan mode (the default) the pointer works like Okular's Browse tool:
+ * press and drag anywhere on the document to move it (hand cursor); text
+ * can't be selected and links don't take clicks. In Select mode a drag
+ * selects text and links can be followed. The scroll bars work as scroll
+ * bars in both.
  *
  * Zoom is owned by main (the app toolbar, menu shortcuts and Ctrl+wheel all
  * go through `TabManager`) and arrives via `onZoom`; this page only applies
@@ -138,6 +158,14 @@ export function PdfViewer() {
   const [zoomPercent, setZoomPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [renderPercent, setRenderPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [isPanning, setIsPanning] = useState(false);
+  const [pointerMode, setPointerMode] = useState<PdfPointerMode>('pan');
+  useEffect(() => window.northstarPdf.onPointerMode(setPointerMode), []);
+  // Back in Pan mode, a selection made in Select mode would be left stranded where nothing can change it.
+  useEffect(() => {
+    if (pointerMode === 'pan') {
+      window.getSelection()?.removeAllRanges();
+    }
+  }, [pointerMode]);
 
   const [, setSchemeTick] = useState(0);
   // The tool cursors are drawn in light or dark ink to match the theme.
@@ -153,9 +181,11 @@ export function PdfViewer() {
   usePdfFind(doc, scrollRef);
   /** Where the current highlighter press began, to tell a click on a highlight from a drag. */
   const pressRef = useRef<{ x: number; y: number } | null>(null);
-  /** Present while the page is grabbed. `x`/`y` are the stand-in hand's position in the view, which wraps at its edges. */
-  const panRef = useRef<{ x: number; y: number; locked: boolean } | null>(null);
-  const grabHandRef = useRef<HTMLDivElement>(null);
+  /**
+   * Present while the page is grabbed. `x`/`y` are the pointer's last position (to scroll by how far it has gone
+   * since). `wrap` is set while the pointer is on its way to the opposite edge (see `wrapTargetAt`).
+   */
+  const panRef = useRef<{ x: number; y: number; wrap: PanWrap | null } | null>(null);
   /** The document point at the center of the view just before a zoom change, as fractions of the scrollable size. */
   const anchorRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -544,57 +574,23 @@ export function PdfViewer() {
     if (event.button === 0 && activeTool === 'highlighter') {
       pressRef.current = { x: event.clientX, y: event.clientY };
     }
-    // With a tool on, a press belongs to the tool (draw, select text, drop a comment), not to panning.
-    if (event.button !== 0 || !el || !doc || activeTool !== 'none') {
+    // With a tool on, a press belongs to the tool (draw, select text, drop a comment); in Select mode it selects;
+    // on a scroll bar it's the scroll bar's. Only otherwise does it pan.
+    if (
+      event.button !== 0 ||
+      !el ||
+      !doc ||
+      activeTool !== 'none' ||
+      pointerMode !== 'pan' ||
+      isOnScrollbar(el, event.clientX, event.clientY)
+    ) {
       return;
     }
-    const pointerId = event.pointerId;
-    panRef.current = { x: event.clientX, y: event.clientY, locked: false };
+    panRef.current = { x: event.clientX, y: event.clientY, wrap: null };
+    // Captured, so the drag keeps going once the pointer leaves the view.
+    el.setPointerCapture(event.pointerId);
     setIsPanning(true);
-    // Like Okular's grab tool, the drag never runs out of room: with the
-    // pointer locked, movement is unbounded, and a stand-in hand wraps from
-    // one edge of the view to the opposite one. If the lock is refused, fall
-    // back to an ordinary capped drag.
-    void el
-      .requestPointerLock()
-      .then(() => {
-        if (panRef.current) {
-          panRef.current.locked = true;
-          moveGrabHand();
-        }
-      })
-      .catch(() => {
-        if (panRef.current) {
-          el.setPointerCapture(pointerId);
-        }
-      });
   };
-
-  /** Puts the stand-in hand where the wrapped pointer is. */
-  const moveGrabHand = (): void => {
-    const pan = panRef.current;
-    const hand = grabHandRef.current;
-    if (!hand) {
-      return;
-    }
-    hand.style.display = pan?.locked ? 'block' : 'none';
-    if (pan) {
-      hand.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
-    }
-  };
-
-  // Esc (or anything else that releases the lock) ends the grab.
-  useEffect(() => {
-    const onLockChange = (): void => {
-      if (!document.pointerLockElement && panRef.current?.locked) {
-        panRef.current = null;
-        setIsPanning(false);
-        moveGrabHand();
-      }
-    };
-    document.addEventListener('pointerlockchange', onLockChange);
-    return () => document.removeEventListener('pointerlockchange', onLockChange);
-  }, []);
 
   /** The highlight under a viewport point, if any — a plain bounds check, since highlight layers don't take pointer events. */
   const highlightIdAt = (x: number, y: number): string | null => {
@@ -619,19 +615,64 @@ export function PdfViewer() {
     if (!pan || !el) {
       return;
     }
-    el.scrollLeft -= event.movementX;
-    el.scrollTop -= event.movementY;
-    if (pan.locked) {
-      // The real pointer is pinned in place, so track the stand-in hand by hand and wrap it at the view's edges.
-      const rect = el.getBoundingClientRect();
-      const wrap = (value: number, start: number, size: number): number => start + ((((value - start) % size) + size) % size);
-      pan.x = wrap(pan.x + event.movementX, rect.left, rect.width);
-      pan.y = wrap(pan.y + event.movementY, rect.top, rect.height);
-      moveGrabHand();
-    } else {
-      pan.x = event.clientX;
-      pan.y = event.clientY;
+    const rect = el.getBoundingClientRect();
+    if (pan.wrap) {
+      // The move that lands the pointer on the opposite edge is the wrap itself, not the hand moving the page.
+      const landedX = pan.wrap.x === null || Math.abs(event.clientX - pan.x) > rect.width / 2;
+      const landedY = pan.wrap.y === null || Math.abs(event.clientY - pan.y) > rect.height / 2;
+      if (landedX && landedY) {
+        pan.x = event.clientX;
+        pan.y = event.clientY;
+        pan.wrap = null;
+        return;
+      }
+      // Never arrived (the OS pointer can't be moved here): an ordinary drag, which may ask again.
+      if (performance.now() - pan.wrap.requestedAt > PAN_WRAP_TIMEOUT_MS) {
+        pan.wrap = null;
+      }
     }
+    el.scrollLeft -= event.clientX - pan.x;
+    el.scrollTop -= event.clientY - pan.y;
+    pan.x = event.clientX;
+    pan.y = event.clientY;
+    if (!pan.wrap) {
+      const target = wrapTargetAt(rect, pan.x, pan.y);
+      if (target) {
+        pan.wrap = { ...target, requestedAt: performance.now() };
+        window.northstarPdf.warpPointer(target.x ?? pan.x, target.y ?? pan.y);
+      }
+    }
+  };
+
+  /** Follows a link clicked in the document: a web link opens in a new tab, an internal one scrolls to its page. */
+  const followLink = (link: PageLink): void => {
+    if (link.url !== null) {
+      window.northstarPdf.openLink(link.url);
+      return;
+    }
+    if (!doc) {
+      return;
+    }
+    void (async () => {
+      try {
+        const dest: unknown = typeof link.dest === 'string' ? await doc.getDestination(link.dest) : link.dest;
+        const target: unknown = Array.isArray(dest) ? dest[0] : null;
+        // A destination names its page by reference, or (in some files) by a 0-based index.
+        const pageIndex =
+          typeof target === 'number'
+            ? target
+            : target !== null && typeof target === 'object'
+              ? await doc.getPageIndex(target as Parameters<PDFDocumentProxy['getPageIndex']>[0])
+              : null;
+        const el = scrollRef.current;
+        const pageEl = pageIndex === null ? null : el?.querySelector<HTMLElement>(`[data-page-number="${pageIndex + 1}"]`);
+        if (el && pageEl) {
+          el.scrollTo({ top: el.scrollTop + pageEl.getBoundingClientRect().top - el.getBoundingClientRect().top });
+        }
+      } catch {
+        // A destination the document doesn't actually contain: the click does nothing.
+      }
+    })();
   };
 
   /** Turns the finished text selection into highlights, split per page the rectangles fall on. */
@@ -711,10 +752,6 @@ export function PdfViewer() {
       }
     }
     panRef.current = null;
-    if (document.pointerLockElement) {
-      document.exitPointerLock();
-    }
-    moveGrabHand();
     setIsPanning(false);
   };
 
@@ -738,8 +775,9 @@ export function PdfViewer() {
       <style>{`::highlight(${PREVIEW_HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, ${PREVIEW_ALPHA}); }`}</style>
       <div
         ref={scrollRef}
-        className={`pdf-viewer__scroll${doc ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
+        className={`pdf-viewer__scroll${doc && pointerMode === 'pan' ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
         data-tool={activeTool}
+        data-pointer-mode={pointerMode}
         style={toolCursor ? ({ '--pdf-tool-cursor': toolCursor } as CSSProperties) : undefined}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -770,6 +808,7 @@ export function PdfViewer() {
                   onCropDragStart={(shift) => startCropDrag(page, shift)}
                   onCropDrag={(rect) => setCropDrag((previous) => (previous ? { ...previous, rect } : previous))}
                   onCropCommit={(next) => commitCrop(page, next)}
+                  onFollowLink={followLink}
                   annotations={{
                     tool: activeTool,
                     color: tool.color,
@@ -823,17 +862,6 @@ export function PdfViewer() {
         ) : (
           <div className="pdf-viewer__empty">{error && <p className="pdf-viewer__error">{error}</p>}</div>
         )}
-      </div>
-      <div ref={grabHandRef} className="pdf-viewer__grab-hand" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="24" height="24">
-          <path
-            d="M7 11V8.5a1.5 1.5 0 0 1 3 0V10m0-1.5v-2a1.5 1.5 0 0 1 3 0V10m0-3a1.5 1.5 0 0 1 3 0v3m0-1.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-4.7-2.3L4.5 15.5a1.5 1.5 0 0 1 2.3-1.9L7 14"
-            fill="currentColor"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            strokeLinejoin="round"
-          />
-        </svg>
       </div>
       {doc && error && <p className="pdf-viewer__error pdf-viewer__error--floating">{error}</p>}
     </div>

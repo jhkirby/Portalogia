@@ -1,15 +1,17 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-18
 
 import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import { previewTabOrder } from '../../lib/previewTabOrder';
+import { tabDropTargetAt } from '../../lib/tabDropTarget';
 import { formatShortcut } from '../../lib/shortcuts';
 import { GlobeIcon, HistoryIcon } from '../icons';
+import { useTabTransitions } from './useTabTransitions';
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
 // element following the cursor by default; over this chrome's mix of HTML
@@ -21,6 +23,20 @@ const TRANSPARENT_DRAG_IMAGE = new Image();
 TRANSPARENT_DRAG_IMAGE.src =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7';
 
+/** One click's ripple: where it starts in the tab, and the diameter that reaches the tab's farthest corner from there. */
+interface Ripple {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly size: number;
+}
+
+/** The animation (in `tab-bar.css`) that ends a tab's opening, and the one that ends its closing. */
+const TAB_TRANSITION_LAST_ANIMATIONS = new Set(['tab-bar-tab-rise', 'tab-bar-tab-close']);
+
+/** Stands in for every handler of a closing tab, which takes no input while it shrinks away. */
+const noop = (): void => undefined;
+
 /** How far below the tab strip the cursor must travel before the tab tears off into its own window. */
 const TEAR_OFF_MARGIN_PX = 16;
 /** How long the cursor must stay out of the tab strip before it tears off — see `onDragMove`. */
@@ -29,6 +45,8 @@ const TEAR_OFF_DWELL_MS = 200;
 interface TabBarProps {
   /** Tabs to render, left to right, in the order they were opened. */
   readonly tabs: readonly TabState[];
+  /** The workspace the tabs belong to: switching it swaps the whole row, which isn't animated as tabs opening and closing. */
+  readonly workspaceId: string | null;
   /** Every saved bookmark — a bookmarked page's tab shows its saved name, like the address bar's bubble. */
   readonly bookmarks: readonly BookmarkState[];
   /** Id of the tab drawn as selected; `null` while no window has one yet. */
@@ -77,6 +95,7 @@ interface DropTarget {
 /** The row of open tabs at the top of the window, plus a "new tab" button. */
 export function TabBar({
   tabs,
+  workspaceId,
   bookmarks,
   activeTabId,
   selectedTabIds,
@@ -147,10 +166,43 @@ export function TabBar({
   const handleContainerDragOver = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    if (draggedId !== null) {
+      previewLocalDrag(event.clientX);
+      return;
+    }
     const overTab = (event.target as HTMLElement).closest('.tab-bar__tab');
     const lastTab = tabs[tabs.length - 1];
     if (!overTab && lastTab) {
       setDropTarget({ id: lastTab.id, position: 'after' });
+    }
+  };
+
+  // A tab from this strip: the target is read from where the tabs are laid out, not from which tab's half the pointer
+  // is over. The preview moves tabs under the pointer and they slide there, so the hovered tab, and which half of it
+  // the pointer is in, kept changing under a still pointer and the tabs flipped back and forth (`tabDropTargetAt`).
+  const previewLocalDrag = (clientX: number): void => {
+    const elements = Array.from(tabBarRef.current?.querySelectorAll<HTMLElement>('.tab-bar__tab[data-tab-id]') ?? []);
+    const parent = elements[0]?.offsetParent;
+    if (!parent) {
+      return;
+    }
+    // `offsetLeft` is the laid-out place, which a sliding tab's animated transform doesn't change.
+    const x = clientX - parent.getBoundingClientRect().left - parent.clientLeft + parent.scrollLeft;
+    const slots = elements
+      .map((element) => ({ id: element.dataset['tabId'] ?? '', left: element.offsetLeft, width: element.offsetWidth }))
+      .sort((first, second) => first.left - second.left);
+    const target = tabDropTargetAt(slots, draggedGroup, x);
+    const last = slots[slots.length - 1];
+    if (target) {
+      setDropTarget((current) =>
+        current?.id === target.id && current.position === target.side ? current : { id: target.id, position: target.side },
+      );
+    } else if (last && x >= last.left + last.width) {
+      // Past the last tab (the "+" button, or the empty strip): the end.
+      const lastRest = [...slots].reverse().find((slot) => !draggedGroup.includes(slot.id));
+      if (lastRest) {
+        setDropTarget((current) => (current?.id === lastRest.id && current.position === 'after' ? current : { id: lastRest.id, position: 'after' }));
+      }
     }
   };
 
@@ -182,6 +234,16 @@ export function TabBar({
     draggedId === null && dropTarget !== null
       ? tabs.findIndex((tab) => tab.id === dropTarget.id) + (dropTarget.position === 'after' ? 1 : 0)
       : null;
+  const { enteringIds, exiting, endEnter, endExit } = useTabTransitions(
+    tabs,
+    workspaceId,
+    displayIds,
+    tabBarRef,
+    draggedId === null ? [] : [draggedId],
+  );
+  // Live tabs take the even `order` slots and a closing tab the odd slot just before the tab that took its place, so
+  // it shrinks where it was.
+  const slotOrder = (index: number): number => 2 * index + 2;
 
   return (
     <div
@@ -198,7 +260,10 @@ export function TabBar({
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
           isGhost={tab === ghostTab}
-          order={foreignInsertAt !== null && orderOf(tab.id) >= foreignInsertAt ? orderOf(tab.id) + 1 : orderOf(tab.id)}
+          order={slotOrder(foreignInsertAt !== null && orderOf(tab.id) >= foreignInsertAt ? orderOf(tab.id) + 1 : orderOf(tab.id))}
+          isEntering={enteringIds.has(tab.id)}
+          isExiting={false}
+          onTransitionEnd={() => endEnter(tab.id)}
           isActive={tab.id === activeTabId}
           isSelected={selectedTabIds.includes(tab.id)}
           onToggleSelect={onToggleSelect}
@@ -221,8 +286,9 @@ export function TabBar({
             );
           }}
           onDragOver={(position) => {
-            // Over one of the dragged tabs' own slots: the preview is already right.
-            if (draggedGroup.includes(tab.id)) {
+            // A tab from this strip is placed by `previewLocalDrag`; this half-of-the-tab reading is for one dragged
+            // in from another window. Over one of the dragged tabs' own slots, the preview is already right.
+            if (draggedId !== null || draggedGroup.includes(tab.id)) {
               return;
             }
             setDropTarget({ id: tab.id, position });
@@ -280,15 +346,39 @@ export function TabBar({
           }}
         />
       ))}
+      {exiting.map(({ tab, slot }) => (
+        <Tab
+          key={`exiting-${tab.id}`}
+          tab={tab}
+          label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
+          isGhost={false}
+          order={slotOrder(slot) - 1}
+          isActive={false}
+          isSelected={false}
+          onToggleSelect={noop}
+          onSelectRange={noop}
+          onActivate={noop}
+          onClose={noop}
+          isDragging={false}
+          onDragStart={noop}
+          onDragOver={noop}
+          onDragEnd={noop}
+          onDragEndOutside={noop}
+          onDragMove={noop}
+          isEntering={false}
+          isExiting
+          onTransitionEnd={() => endExit(tab.id)}
+        />
+      ))}
       {foreignInsertAt !== null && (
-        <div className="tab-bar__placeholder" style={{ order: foreignInsertAt }} aria-hidden="true" />
+        <div className="tab-bar__placeholder" style={{ order: slotOrder(foreignInsertAt) }} aria-hidden="true" />
       )}
       {/* At the per-workspace limit the "+" goes away entirely (main enforces it too) and returns once a tab closes. */}
       {tabs.length < MAX_TABS_PER_WORKSPACE && (
         <button
           type="button"
-          className="tab-bar__new chrome-tooltip"
-          style={{ order: displayIds.length + 2 }}
+          className="tab-bar__new hover-grow chrome-tooltip"
+          style={{ order: slotOrder(displayIds.length + 2) }}
           aria-label="New tab"
           onClick={onNewTab}
           data-tooltip={`New tab (${formatShortcut('N')})`}
@@ -326,6 +416,12 @@ interface TabProps {
   readonly onDragMove: (screenX: number, screenY: number, clientX: number, clientY: number) => void;
   /** True for the invisible stand-in kept mounted after the tab tore off — see `TabBar`'s `ghostTab`. */
   readonly isGhost: boolean;
+  /** Just opened: grows into the row. */
+  readonly isEntering: boolean;
+  /** Already closed: drawn only while it shrinks out of the row, and takes no input. */
+  readonly isExiting: boolean;
+  /** The grow-in or shrink-out finished. */
+  readonly onTransitionEnd: () => void;
 }
 
 /** One tab. A `div[role=tab]` rather than a `<button>` because it hosts its own close `<button>`. */
@@ -346,8 +442,24 @@ function Tab({
   onDragMove,
   isGhost,
   order,
+  isEntering,
+  isExiting,
+  onTransitionEnd,
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
+  const [ripples, setRipples] = useState<readonly Ripple[]>([]);
+  const nextRippleIdRef = useRef(0);
+
+  /** Starts a ripple from the click point; it removes itself when its animation ends. */
+  const addRipple = (event: MouseEvent<HTMLDivElement>): void => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const reach = Math.hypot(Math.max(x, rect.width - x), Math.max(y, rect.height - y));
+    nextRippleIdRef.current += 1;
+    const ripple: Ripple = { id: nextRippleIdRef.current, x, y, size: reach * 2 };
+    setRipples((previous) => [...previous, ripple]);
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -403,11 +515,20 @@ function Tab({
 
   return (
     <div
-      role="tab"
-      tabIndex={0}
-      aria-selected={isActive || isSelected}
-      draggable
-      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isSelected ? ' tab-bar__tab--selected' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}`}
+      role={isExiting ? 'presentation' : 'tab'}
+      tabIndex={isExiting ? -1 : 0}
+      aria-selected={isExiting ? undefined : isActive || isSelected}
+      aria-hidden={isExiting || undefined}
+      draggable={!isExiting}
+      data-tab-id={isExiting || isGhost ? undefined : tab.id}
+      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isSelected ? ' tab-bar__tab--selected' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}${isEntering ? ' tab-bar__tab--entering' : ''}${isExiting ? ' tab-bar__tab--exiting' : ''}`}
+      onAnimationEnd={(event) => {
+        // Only the last of the tab's own opening or closing animations, not a ripple's (which bubbles up from inside
+        // it): the tab is tidied away, or settles, once all of its motion is over.
+        if (event.target === event.currentTarget && TAB_TRANSITION_LAST_ANIMATIONS.has(event.animationName)) {
+          onTransitionEnd();
+        }
+      }}
       onClick={(event) => {
         // Ctrl+click adds to the selection and Shift+click selects a range —
         // neither switches the viewed tab; a plain click does (and ends any selection).
@@ -416,6 +537,7 @@ function Tab({
         } else if (event.shiftKey) {
           onSelectRange(tab.id);
         } else {
+          addRipple(event);
           activate();
         }
       }}
@@ -426,6 +548,18 @@ function Tab({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
+      {/* Below the tab's content: the hover fill rising from the bottom, and the click ripples. */}
+      <span className="tab-bar__effects" aria-hidden="true">
+        <span className="tab-bar__hover-fill" />
+        {ripples.map((ripple) => (
+          <span
+            key={ripple.id}
+            className="tab-bar__ripple"
+            style={{ left: ripple.x - ripple.size / 2, top: ripple.y - ripple.size / 2, width: ripple.size, height: ripple.size }}
+            onAnimationEnd={() => setRipples((previous) => previous.filter((r) => r.id !== ripple.id))}
+          />
+        ))}
+      </span>
       {tab.kind === 'terminal' ? (
         <span className="tab-bar__terminal-icon" aria-hidden="true">
           {'>_'}
@@ -454,7 +588,7 @@ function Tab({
       </span>
       <button
         type="button"
-        className="tab-bar__close chrome-tooltip"
+        className="tab-bar__close hover-grow chrome-tooltip"
         aria-label={`Close ${tab.title || 'tab'}`}
         onClick={handleClose}
         data-tooltip={isActive ? `Close tab (${formatShortcut('W')})` : 'Close tab'}

@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { DropRegionRect, IpcResult } from '@shared/ipc-contract';
-import type { BrowserState } from '@shared/tab-state';
+import type { BrowserState, MarkdownDisplay, PdfPointerMode } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
   tabs: [],
@@ -162,6 +162,10 @@ export function useTabs() {
     void window.northstar.goToPdfPage(id, page).then(logIfFailed);
   }, []);
 
+  const setPdfPointerMode = useCallback((id: string, mode: PdfPointerMode) => {
+    void window.northstar.setPdfPointerMode(id, mode).then(logIfFailed);
+  }, []);
+
   /** Resolves to an error message to show the user, or `null` on success. */
   const renamePdfFile = useCallback(async (id: string, name: string): Promise<string | null> => {
     const result = await window.northstar.renamePdfFile(id, name);
@@ -187,6 +191,10 @@ export function useTabs() {
   }, []);
   const setMarkdownMode = useCallback((id: string, mode: 'view' | 'edit') => {
     void window.northstar.setMarkdownMode(id, mode).then(logIfFailed);
+  }, []);
+
+  const setMarkdownDisplay = useCallback((id: string, display: MarkdownDisplay) => {
+    void window.northstar.setMarkdownDisplay(id, display).then(logIfFailed);
   }, []);
   const navigateMarkdownHistory = useCallback((id: string, direction: 1 | -1) => {
     void window.northstar.navigateMarkdownHistory(id, direction).then(logIfFailed);
@@ -373,6 +381,7 @@ export function useTabs() {
     createHistoryTab,
     openPdfFile,
     goToPdfPage,
+    setPdfPointerMode,
     renamePdfFile,
     createMarkdownTab,
     openMarkdownFile,
@@ -380,6 +389,7 @@ export function useTabs() {
     closeMarkdownFile,
     renameMarkdownFile,
     setMarkdownMode,
+    setMarkdownDisplay,
     navigateMarkdownHistory,
     addMarkdownBookmark,
     openMarkdownPath,

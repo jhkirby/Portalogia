@@ -1,10 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 /**
- * Writes THIRD_PARTY_NOTICES.txt: the license text of every production
+ * Writes license/THIRD_PARTY_NOTICES.txt: the license text of every production
  * dependency. MIT/BSD/Apache all require their notices travel with
  * redistributed copies, and MPL-2.0 additionally requires telling recipients
  * where the source is - so this is generated rather than maintained by hand.
@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 import { init as checkLicenses } from 'license-checker-rseidelsohn';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const outputPath = join(root, 'THIRD_PARTY_NOTICES.txt');
+const outputPath = join(root, 'license', 'THIRD_PARTY_NOTICES.txt');
 const rule = '='.repeat(78);
 
 /**

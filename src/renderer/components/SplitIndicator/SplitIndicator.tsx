@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-12
+// Last Modified: 2026-10-17
 
 import type { TabState } from '@shared/tab-state';
 
@@ -27,7 +27,7 @@ export function SplitIndicator({ secondaryTab, onExit }: SplitIndicatorProps) {
       <span className="split-indicator__title">{secondaryTab.title || 'New Tab'}</span>
       <button
         type="button"
-        className="split-indicator__exit"
+        className="split-indicator__exit hover-grow"
         onClick={onExit}
         aria-label="Exit split view"
       >

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-17
 
 import { useState } from 'react';
 import type { BookmarkState, PdfTabState } from '@shared/tab-state';
@@ -36,8 +36,10 @@ interface PdfToolbarProps {
 
 /**
  * The PDF tab's controls, shown in the main toolbar where a browser tab has
- * its address bar: the bookmark star, Open PDF, the page counter, the file name (an editable text box — or, while no file is open, a search over the bookmarked PDFs), the
- * page counter, and Export. The PDF page itself only draws the document.
+ * its address bar: the bookmark star, Open, Close and Export, the page
+ * counter, and the file name (an editable text
+ * box — or, while no file is open, a search over the bookmarked PDFs). The
+ * PDF page itself only draws the document.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
 export function PdfToolbar({
@@ -90,7 +92,7 @@ export function PdfToolbar({
     <div className="pdf-toolbar">
       <button
         type="button"
-        className="pdf-toolbar__bookmark chrome-tooltip"
+        className="pdf-toolbar__bookmark hover-grow chrome-tooltip"
         onClick={() => onToggleBookmark(tab.id)}
         disabled={fileName === null}
         aria-pressed={isBookmarked}
@@ -101,7 +103,7 @@ export function PdfToolbar({
       </button>
       <button
         type="button"
-        className="pdf-toolbar__button chrome-tooltip"
+        className="pdf-toolbar__button hover-grow chrome-tooltip"
         onClick={() => onOpen(tab.id)}
         data-tooltip={`Open PDF (${formatShortcut('O')})`}
       >
@@ -109,7 +111,7 @@ export function PdfToolbar({
       </button>
       <button
         type="button"
-        className="pdf-toolbar__button chrome-tooltip"
+        className="pdf-toolbar__button hover-grow chrome-tooltip"
         onClick={() => onClose(tab.id)}
         disabled={fileName === null}
         data-tooltip={`Close the open PDF (${formatShortcut('Shift+C')})`}
@@ -118,7 +120,7 @@ export function PdfToolbar({
       </button>
       <button
         type="button"
-        className="pdf-toolbar__button chrome-tooltip"
+        className="pdf-toolbar__button hover-grow chrome-tooltip"
         onClick={() => onExport(tab.id)}
         disabled={fileName === null}
         data-tooltip="Export a copy with crops, drawings, text boxes and highlights"

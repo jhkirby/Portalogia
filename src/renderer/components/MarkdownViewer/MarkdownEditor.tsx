@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useEffect, useRef } from 'react';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
@@ -10,13 +10,15 @@ import { javascript } from '@codemirror/lang-javascript';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { python } from '@codemirror/lang-python';
 import { indentOnInput, LanguageDescription } from '@codemirror/language';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import {
   Decoration,
   drawSelection,
   EditorView,
   highlightActiveLine,
+  highlightActiveLineGutter,
   keymap,
+  lineNumbers,
   MatchDecorator,
   ViewPlugin,
   type DecorationSet,
@@ -25,12 +27,41 @@ import {
 import { latexCompletionSource, wikiLinkCompletionSource } from '../../lib/markdown/editorCompletions';
 import { editorFindField } from '../../lib/markdown/editorFind';
 import { editorHighlight, editorTheme } from '../../lib/markdown/editorTheme';
+import { livePreview as livePreviewExtension } from '../../lib/markdown/livePreview';
+import { syncRenderedBlocksFocus } from '../../lib/markdown/livePreviewBlocks';
 
 /** Languages whose code blocks get their own colouring inside the editor — the two that can also be run, the rest stay plain. */
 const CODE_LANGUAGES = [
   LanguageDescription.of({ name: 'javascript', alias: ['js', 'node', 'mjs', 'cjs'], support: javascript() }),
   LanguageDescription.of({ name: 'python', alias: ['py', 'python3'], support: python() }),
 ];
+
+/**
+ * The two settings that change while the editor is open: whether it can be
+ * edited, and whether it shows the note formatted (live preview) or raw.
+ * Module-level so a saved state from an earlier mount, which carries these
+ * same compartments, can be reconfigured too.
+ */
+const editableCompartment = new Compartment();
+const previewCompartment = new Compartment();
+
+/**
+ * @param readOnly Whether the note is only being viewed.
+ * @returns The extensions that make the editor read-only, or editable.
+ */
+function editableExtensions(readOnly: boolean): Extension {
+  return [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
+}
+
+/**
+ * @param formatted Whether the note is shown formatted.
+ * @returns The live preview, or — for raw text — line numbers in a gutter, as in a code editor.
+ */
+function previewExtensions(formatted: boolean): Extension {
+  return formatted
+    ? livePreviewExtension()
+    : [lineNumbers(), highlightActiveLineGutter(), EditorView.editorAttributes.of({ class: 'cm-raw' })];
+}
 
 /** Marks `[[wikilinks]]` and `$math$` in the source so they read as what they are while writing. */
 function markupDecorations(): Extension {
@@ -69,15 +100,36 @@ interface MarkdownEditorProps {
   readonly onContextMenu: (x: number, y: number) => void;
   /** The scroll position to start at, as a fraction of the document's height. */
   readonly initialScroll: number;
+  /** View mode: the text can be read and selected but not changed. */
+  readonly readOnly: boolean;
+  /** Formatted display: the note is drawn formatted while staying editable, Obsidian-style (see `livePreview`). */
+  readonly livePreview: boolean;
+  /** Where the caret is (its offset in the note), whenever it moves or the text under it changes — for the status bar. */
+  readonly onSelection: (head: number) => void;
 }
 
 /**
- * The note's source in CodeMirror: Markdown with colouring, list
- * continuation on Enter, bracket pairing, and completion — LaTeX commands
- * while typing math, and the vault's note names after `[[`. The editor is
- * created once per mount; the viewer remounts it when the mode flips back.
+ * The note in CodeMirror: Markdown with colouring, list continuation on
+ * Enter, bracket pairing, and completion — LaTeX commands while typing math,
+ * and the vault's note names after `[[`. Shows the raw text, or (with
+ * `livePreview`) the note formatted while still editable; `readOnly` makes
+ * either one view-only. Both switch in place, keeping the undo history. The
+ * editor is created once per mount; the viewer unmounts it only for the
+ * read-only formatted reader. Escape takes the caret out of it.
  */
-export function MarkdownEditor({ initialSource, savedState, onChange, onView, listNotes, onContextMenu, initialScroll }: MarkdownEditorProps) {
+export function MarkdownEditor({
+  initialSource,
+  savedState,
+  onChange,
+  onView,
+  listNotes,
+  onContextMenu,
+  initialScroll,
+  readOnly,
+  livePreview,
+  onSelection,
+}: MarkdownEditorProps) {
+  const viewRef = useRef<EditorView | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   // The latest callbacks, read from the editor's listeners, so the editor itself is built just once.
   const onChangeRef = useRef(onChange);
@@ -86,6 +138,8 @@ export function MarkdownEditor({ initialSource, savedState, onChange, onView, li
   listNotesRef.current = listNotes;
   const onViewRef = useRef(onView);
   onViewRef.current = onView;
+  const onSelectionRef = useRef(onSelection);
+  onSelectionRef.current = onSelection;
   const onContextMenuRef = useRef(onContextMenu);
   onContextMenuRef.current = onContextMenu;
 
@@ -114,7 +168,23 @@ export function MarkdownEditor({ initialSource, savedState, onChange, onView, li
         activateOnTyping: true,
         icons: false,
       }),
-      keymap.of([...closeBracketsKeymap, ...completionKeymap, ...historyKeymap, ...defaultKeymap, indentWithTab]),
+      keymap.of([
+        ...closeBracketsKeymap,
+        // Before Escape below, so an open completion list closes first and the caret stays.
+        ...completionKeymap,
+        {
+          key: 'Escape',
+          run: (target) => {
+            target.contentDOM.blur();
+            return true;
+          },
+        },
+        ...historyKeymap,
+        ...defaultKeymap,
+        indentWithTab,
+      ]),
+      editableCompartment.of(editableExtensions(readOnly)),
+      previewCompartment.of(previewExtensions(livePreview)),
       markupDecorations(),
       editorFindField,
       EditorView.domEventHandlers({
@@ -130,27 +200,64 @@ export function MarkdownEditor({ initialSource, savedState, onChange, onView, li
         if (update.docChanged) {
           onChangeRef.current(update.state.doc.toString());
         }
+        if (update.docChanged || update.selectionSet) {
+          onSelectionRef.current(update.state.selection.main.head);
+        }
       }),
     ];
     const state =
       savedState && savedState.doc.toString() === initialSource
         ? savedState
         : EditorState.create({ doc: initialSource, extensions });
-    // A saved state keeps its own extensions and history; only a fresh one needs them built here.
+    // A saved state keeps its own extensions and history; only a fresh one needs them built here — but its two
+    // switchable settings are brought up to date.
     const view = new EditorView({ state, parent: host });
+    if (state === savedState) {
+      view.dispatch({
+        effects: [
+          editableCompartment.reconfigure(editableExtensions(readOnly)),
+          previewCompartment.reconfigure(previewExtensions(livePreview)),
+        ],
+      });
+    }
+    viewRef.current = view;
     onViewRef.current(view);
-    view.focus();
+    onSelectionRef.current(view.state.selection.main.head);
+    if (!readOnly) {
+      view.focus();
+    }
+    syncRenderedBlocksFocus(view);
     requestAnimationFrame(() => {
       const scroller = view.scrollDOM;
       scroller.scrollTop = initialScroll * scroller.scrollHeight;
     });
     return () => {
+      viewRef.current = null;
       onViewRef.current(null, view.state);
       view.destroy();
     };
-    // Built once per mount: the callbacks are read through refs, and the text only ever enters at creation.
+    // Built once per mount: the callbacks are read through refs, the text only ever enters at creation, and the two
+    // settings switch in place (below).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // View ↔ Edit and Raw ↔ Formatted, in place: the document, its scroll and its undo history stay.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) {
+      return;
+    }
+    view.dispatch({
+      effects: [
+        editableCompartment.reconfigure(editableExtensions(readOnly)),
+        previewCompartment.reconfigure(previewExtensions(livePreview)),
+      ],
+    });
+    if (!readOnly) {
+      view.focus();
+    }
+    syncRenderedBlocksFocus(view);
+  }, [readOnly, livePreview]);
 
   return <div ref={hostRef} className="md-editor" />;
 }

@@ -1,11 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-17
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
 import type { FindCommand, FindResult, NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
+import type { PdfPointerMode as PointerMode } from '@shared/tab-state';
 import type { RGB } from '@shared/color';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
@@ -19,6 +20,9 @@ const PdfRedo = 'pdf:redo';
 const PdfPageInfo = 'pdf:page-info';
 const PdfCropState = 'pdf:crop-state';
 const PdfScrollToPage = 'pdf:scroll-to-page';
+const PdfPointerMode = 'pdf:pointer-mode';
+const PdfOpenLink = 'pdf:open-link';
+const PdfWarpPointer = 'pdf:warp-pointer';
 const FindCommandChannel = 'find:command';
 const FindResultChannel = 'find:result';
 
@@ -27,6 +31,13 @@ const tabId = new URLSearchParams(window.location.search).get('id') ?? '';
 
 const scrollListeners = new Set<(page: number) => void>();
 ipcRenderer.on(PdfScrollToPage, (_event, page: number) => scrollListeners.forEach((listener) => listener(page)));
+
+let latestPointerMode: PointerMode | null = null;
+const pointerModeListeners = new Set<(mode: PointerMode) => void>();
+ipcRenderer.on(PdfPointerMode, (_event, mode: PointerMode) => {
+  latestPointerMode = mode;
+  pointerModeListeners.forEach((listener) => listener(mode));
+});
 // Same strings `PenController` / `CommentController` (main) send on; hardcoded for the same sandboxed-preload reason as above.
 const PenState = 'pen:state';
 const CommentToolState = 'comment-tool:state';
@@ -145,6 +156,21 @@ const api: NorthstarPdfApi = {
       scrollListeners.delete(listener);
     };
   },
+  onPointerMode: (listener) => {
+    pointerModeListeners.add(listener);
+    if (latestPointerMode !== null) {
+      listener(latestPointerMode);
+    }
+    return () => {
+      pointerModeListeners.delete(listener);
+    };
+  },
+  openLink: (url) => {
+    ipcRenderer.send(PdfOpenLink, { id: tabId, url });
+  },
+  warpPointer: (x, y) => {
+    ipcRenderer.send(PdfWarpPointer, { id: tabId, x, y });
+  },
   onUndo: (listener) => {
     undoListeners.add(listener);
     return () => {
@@ -207,17 +233,22 @@ const api: NorthstarPdfApi = {
 contextBridge.exposeInMainWorld('northstarPdf', api satisfies NorthstarPdfApi);
 
 // Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
-// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. Repeated in each
+// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. A `contenteditable`
+// region is reported as 'rich': a web page's rich editor gives Ctrl+B/I/U meanings of its own. Repeated in each
 // preload that needs it: two entries can't share a module (see the note on `tabZoom.ts`'s imports).
 const EditableFocus = 'ui:editable-focus';
 const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
-let editableReported = false;
-function reportEditableFocus(): void {
-  const element = document.activeElement;
-  const editable =
+function isEditableElement(element: Element | null): element is HTMLElement {
+  return (
     element instanceof HTMLTextAreaElement ||
     (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||
-    (element instanceof HTMLElement && element.isContentEditable);
+    (element instanceof HTMLElement && element.isContentEditable)
+  );
+}
+let editableReported: 'plain' | 'rich' | false = false;
+function reportEditableFocus(): void {
+  const element = document.activeElement;
+  const editable = !isEditableElement(element) ? false : element.isContentEditable ? 'rich' : 'plain';
   if (editable !== editableReported) {
     editableReported = editable;
     ipcRenderer.send(EditableFocus, editable);
@@ -226,3 +257,25 @@ function reportEditableFocus(): void {
 window.addEventListener('focusin', reportEditableFocus, true);
 // `focusout` fires before the next element has focus, so look once focus has settled.
 window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
+
+// Escape takes the caret out of a text box, so the shortcuts that stand aside while one has it work again. Decided
+// once the page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a popup)
+// called `preventDefault`, and then the caret stays for the next press.
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
+      return;
+    }
+    const element = document.activeElement;
+    if (!isEditableElement(element)) {
+      return;
+    }
+    setTimeout(() => {
+      if (!event.defaultPrevented && document.activeElement === element) {
+        element.blur();
+      }
+    }, 0);
+  },
+  true,
+);

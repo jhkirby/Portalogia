@@ -1,7 +1,7 @@
 # Project: Northstar
 # Owner: Joshua H. Kirby
 # Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-# Last Modified: 2026-10-06
+# Last Modified: 2026-10-17
 
 <#
 .SYNOPSIS
@@ -146,7 +146,7 @@ Invoke-Npm $appDir @('ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no
 # The license requires every copy to carry its terms, and the bundled
 # dependencies' licenses require their notices too, so all three ship next
 # to the executable.
-foreach ($file in 'LICENSE', 'PRIVACY.md', 'THIRD_PARTY_NOTICES.txt') {
+foreach ($file in 'license\LICENSE', 'docs\privacy.md', 'license\THIRD_PARTY_NOTICES.txt') {
     Copy-Item (Join-Path $repoRoot $file) $outputDir
 }
 # install.ps1 points the shortcuts at this icon. Northstar.exe itself still

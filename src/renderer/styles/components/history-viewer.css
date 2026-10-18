@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-05 */
+   Last Modified: 2026-10-17 */
 
 /* ── HISTORY VIEWER ───────────────────────────────────────────────────── */
 /* `history.html`'s whole page — a History tab's own `WebContentsView` (see
@@ -175,8 +175,11 @@ body {
   opacity: 1;
 }
 
+.history__action-button {
+  --hover-grow-bg: var(--color-close-hover-bg);
+}
+
 .history__action-button:hover {
-  background: var(--color-close-hover-bg);
   color: var(--color-tab-text-active);
 }
 

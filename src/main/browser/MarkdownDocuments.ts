@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
@@ -71,6 +71,11 @@ export class MarkdownDocuments {
   /** @returns The open note's source (plain `\n` breaks), or `undefined`. */
   public contentOf(id: string): string | undefined {
     return this.notes.get(id)?.content;
+  }
+
+  /** @returns The line ending the open note's file uses, or `undefined`. */
+  public lineEndingOf(id: string): LineEnding | undefined {
+    return this.notes.get(id)?.ending;
   }
 
   /** @returns The tab's current generation (see `OpenNote.generation`), or `undefined`. */

@@ -1,10 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
 import { useState } from 'react';
-import type { BookmarkState, MarkdownTabState } from '@shared/tab-state';
+import type { BookmarkState, MarkdownDisplay, MarkdownTabState } from '@shared/tab-state';
 import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
 import { PdfSearchBox } from '../PdfToolbar/PdfSearchBox';
@@ -28,6 +28,8 @@ interface MarkdownToolbarProps {
   /** Closes the open note, leaving the tab empty. */
   readonly onClose: (id: string) => void;
   readonly onSetMode: (id: string, mode: 'view' | 'edit') => void;
+  /** Switches between the formatted note and its raw text. */
+  readonly onSetDisplay: (id: string, display: MarkdownDisplay) => void;
   /** Steps back (`-1`) or forward (`1`) through the notes reached by links. */
   readonly onNavigate: (id: string, direction: 1 | -1) => void;
   /** Renames the file on disk; resolves to an error message, or `null` on success. */
@@ -37,8 +39,9 @@ interface MarkdownToolbarProps {
 /**
  * The Markdown tab's controls, shown in the main toolbar where a browser tab
  * has its address bar: the bookmark star, Back/Forward through followed
- * links, New and Open, Close, the switch between the rendered note and its
- * source, and the file name (an editable text box — or, while no note is
+ * links, New and Open, Close, the View/Edit switch (read-only or editable),
+ * the Raw/Formatted switch (exact characters or the drawn note), and the
+ * file name (an editable text box — or, while no note is
  * open, a search over the bookmarked and recent notes). Export lives in the
  * toolbar's export menu; the page itself only draws the note.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
@@ -54,13 +57,14 @@ export function MarkdownToolbar({
   onOpen,
   onClose,
   onSetMode,
+  onSetDisplay,
   onNavigate,
   onRename,
 }: MarkdownToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { fileName, mode } = tab;
+  const { fileName, mode, display } = tab;
 
   const commitName = (): void => {
     const trimmed = nameDraft?.trim();
@@ -80,7 +84,7 @@ export function MarkdownToolbar({
       <div className="nav-controls">
         <button
           type="button"
-          className="nav-controls__button chrome-tooltip"
+          className="nav-controls__button hover-grow chrome-tooltip"
           onClick={() => onNavigate(tab.id, -1)}
           disabled={!tab.canGoBack}
           aria-label="Back"
@@ -90,7 +94,7 @@ export function MarkdownToolbar({
         </button>
         <button
           type="button"
-          className="nav-controls__button chrome-tooltip"
+          className="nav-controls__button hover-grow chrome-tooltip"
           onClick={() => onNavigate(tab.id, 1)}
           disabled={!tab.canGoForward}
           aria-label="Forward"
@@ -101,7 +105,7 @@ export function MarkdownToolbar({
       </div>
       <button
         type="button"
-        className="markdown-toolbar__bookmark chrome-tooltip"
+        className="markdown-toolbar__bookmark hover-grow chrome-tooltip"
         onClick={() => onToggleBookmark(tab.id)}
         disabled={fileName === null}
         aria-pressed={isBookmarked}
@@ -112,7 +116,7 @@ export function MarkdownToolbar({
       </button>
       <button
         type="button"
-        className="markdown-toolbar__button chrome-tooltip"
+        className="markdown-toolbar__button hover-grow chrome-tooltip"
         onClick={() => onNew(tab.id)}
         data-tooltip="Create a new note"
       >
@@ -120,7 +124,7 @@ export function MarkdownToolbar({
       </button>
       <button
         type="button"
-        className="markdown-toolbar__button chrome-tooltip"
+        className="markdown-toolbar__button hover-grow chrome-tooltip"
         onClick={() => onOpen(tab.id)}
         data-tooltip={`Open a note (${formatShortcut('O')})`}
       >
@@ -128,7 +132,7 @@ export function MarkdownToolbar({
       </button>
       <button
         type="button"
-        className="markdown-toolbar__button chrome-tooltip"
+        className="markdown-toolbar__button hover-grow chrome-tooltip"
         onClick={() => onClose(tab.id)}
         disabled={fileName === null}
         data-tooltip={`Close the open note (${formatShortcut('Shift+C')})`}
@@ -146,12 +150,31 @@ export function MarkdownToolbar({
           <button
             key={side}
             type="button"
-            className={`markdown-toolbar__mode${mode === side ? ' markdown-toolbar__mode--active' : ''}`}
+            className={`markdown-toolbar__mode hover-grow${mode === side ? ' markdown-toolbar__mode--active' : ''}`}
             onClick={() => onSetMode(tab.id, side)}
             disabled={fileName === null}
             aria-pressed={mode === side}
           >
             {side === 'view' ? 'View' : 'Edit'}
+          </button>
+        ))}
+      </div>
+      <div
+        className="markdown-toolbar__modes chrome-tooltip"
+        role="group"
+        aria-label="Raw or formatted"
+        data-tooltip="Switch between the raw text and the formatted note"
+      >
+        {(['raw', 'formatted'] as const).map((side) => (
+          <button
+            key={side}
+            type="button"
+            className={`markdown-toolbar__mode hover-grow${display === side ? ' markdown-toolbar__mode--active' : ''}`}
+            onClick={() => onSetDisplay(tab.id, side)}
+            disabled={fileName === null}
+            aria-pressed={display === side}
+          >
+            {side === 'raw' ? 'Raw' : 'Formatted'}
           </button>
         ))}
       </div>

@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-06 */
+   Last Modified: 2026-10-18 */
 
 /* `useTheme` sets `data-theme` on `<html>` before first paint (see its
    `useLayoutEffect`) reflecting either a stored choice or, on first ever
@@ -33,8 +33,7 @@
 
 :root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
-  /* The window drag strip above the tabs: darker grey on hover, darker still while dragging. */
-  --color-grip-hover-bg: #d9dcdf;
+  /* The window drag strip above the tabs, while it's dragging the window. */
   --color-grip-active-bg: #c2c6ca;
   --color-chrome-border: #d7d9db;
 
@@ -77,8 +76,7 @@
 
 :root[data-theme='dark'] {
   --color-chrome-bg: #202124;
-  /* The window drag strip above the tabs: lighter grey on hover, lighter still while dragging. */
-  --color-grip-hover-bg: #34363a;
+  /* The window drag strip above the tabs, while it's dragging the window. */
   --color-grip-active-bg: #4a4d52;
   --color-chrome-border: #3c4043;
 

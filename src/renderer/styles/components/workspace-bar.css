@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-16 */
+   Last Modified: 2026-10-17 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -134,7 +134,6 @@
 }
 
 .sidebar__toggle:hover {
-  background: var(--color-button-hover-bg);
   color: var(--color-tab-text);
 }
 
@@ -328,9 +327,9 @@
   pointer-events: auto;
 }
 
-.workspace-bar__edit:hover,
-.workspace-bar__remove:hover {
-  background: var(--color-close-hover-bg);
+.workspace-bar__edit,
+.workspace-bar__remove {
+  --hover-grow-bg: var(--color-close-hover-bg);
 }
 
 /* Unlike the toolbar's tooltips (see tooltip.css), this one can't just grow
@@ -393,10 +392,6 @@
   text-align: left;
 
   cursor: pointer;
-}
-
-.workspace-bar__new:hover {
-  background: var(--color-button-hover-bg);
 }
 
 /* A tab dragged from `TabBar` is currently hovering this button — same
@@ -530,8 +525,14 @@
   }
 }
 
-.sidebar--hidden .workspace-bar__star::after {
+/* Collapsed, the pill is just its icon: swapping that for the star would put a different target under the pointer
+   the moment it arrives to pick the workspace. `:is()` matches the specificity of the expanded hover rules above. */
+.sidebar--hidden .workspace-bar__pill:is(:hover, :focus-within) .workspace-bar__star {
   display: none;
+}
+
+.sidebar--hidden .workspace-bar__pill:is(:hover, :focus-within) .workspace-bar__glyph {
+  display: flex;
 }
 
 /* "New workspace" and the images button share a row; collapsed, they stack. */
@@ -577,7 +578,6 @@
 }
 
 .workspace-bar__images:hover {
-  background: var(--color-button-hover-bg);
   color: var(--color-tab-text-active);
 }
 

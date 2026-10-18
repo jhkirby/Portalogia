@@ -1,8 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-17
 
+import type { PdfPointerMode } from '@shared/tab-state';
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
@@ -11,6 +12,7 @@ import {
   CommentIcon,
   CropIcon,
   FindIcon,
+  HandIcon,
   HighlighterIcon,
   HistoryIcon,
   LaserPointerIcon,
@@ -20,7 +22,14 @@ import {
   SearchIcon,
   ShieldIcon,
   TextBoxIcon,
+  TextSelectIcon,
 } from '../icons';
+
+/** The PDF pointer modes' buttons, in toolbar order. */
+const POINTER_MODES: readonly { mode: PdfPointerMode; label: string; shortcut: string }[] = [
+  { mode: 'pan', label: 'Pan: drag to move the document', shortcut: '1' },
+  { mode: 'select', label: 'Select: drag to select text; links can be clicked', shortcut: '2' },
+];
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
@@ -110,6 +119,14 @@ interface PageActionsProps {
   readonly onToggleTextTool: () => void;
   readonly onTogglePen: () => void;
   readonly onToggleCrop: () => void;
+  /** Whether the active tab is a PDF, whose pointer modes (Pan, Select) show beside the tools. */
+  readonly showPointerModes: boolean;
+  /** The PDF tab's pointer mode — shown pressed only while no tool is on, since a tool takes the pointer over. */
+  readonly pointerMode: PdfPointerMode;
+  /** The PDF tab has no file open: the modes have nothing to act on. */
+  readonly pointerModesLocked: boolean;
+  /** Picks a pointer mode, turning off whichever tool is on (as turning one tool on turns off the others). */
+  readonly onSetPointerMode: (mode: PdfPointerMode) => void;
   /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
   readonly onRevertPage: () => void;
   readonly onToggleTheme: () => void;
@@ -173,19 +190,48 @@ export function PageActions({
   onToggleTextTool,
   onTogglePen,
   onToggleCrop,
+  showPointerModes,
+  pointerMode,
+  pointerModesLocked,
+  onSetPointerMode,
   onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
   // With none of the tool buttons showing (a History tab), the divider that closes their group would sit alone at the left edge.
   const showAnyTool =
-    showLaserPointer || showPen || showHighlighter || showCommentTool || showTextTool || showCrop || showRevert;
+    showPointerModes ||
+    showLaserPointer ||
+    showPen ||
+    showHighlighter ||
+    showCommentTool ||
+    showTextTool ||
+    showCrop ||
+    showRevert;
+  // The pointer modes are the tools' resting state: one of them is pressed exactly when no tool is.
+  const anyToolActive =
+    laserPointerActive || penActive || highlighterActive || commentToolActive || textToolActive || cropActive;
 
   return (
     <div className="page-actions">
+      {showPointerModes &&
+        POINTER_MODES.map(({ mode, label, shortcut }) => (
+          <button
+            key={mode}
+            type="button"
+            className="page-actions__button hover-grow chrome-tooltip"
+            onClick={() => onSetPointerMode(mode)}
+            disabled={pointerModesLocked}
+            aria-pressed={!anyToolActive && pointerMode === mode}
+            aria-label={label}
+            data-tooltip={`${label} (${formatShortcut(shortcut)})`}
+          >
+            {mode === 'pan' ? <HandIcon /> : <TextSelectIcon />}
+          </button>
+        ))}
       {showLaserPointer && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onToggleLaserPointer}
           disabled={!canExportPdf}
           aria-pressed={laserPointerActive}
@@ -198,7 +244,7 @@ export function PageActions({
       {showPen && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onTogglePen}
           disabled={!canAnnotate || annotationToolsLocked}
           aria-pressed={penActive}
@@ -211,7 +257,7 @@ export function PageActions({
       {showHighlighter && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onToggleHighlighter}
           disabled={!canExportPdf || annotationToolsLocked}
           aria-pressed={highlighterActive}
@@ -224,7 +270,7 @@ export function PageActions({
       {showCommentTool && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onToggleCommentTool}
           disabled={!canAnnotate || annotationToolsLocked}
           aria-pressed={commentToolActive}
@@ -237,7 +283,7 @@ export function PageActions({
       {showTextTool && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onToggleTextTool}
           disabled={!canAnnotate || annotationToolsLocked}
           aria-pressed={textToolActive}
@@ -250,7 +296,7 @@ export function PageActions({
       {showCrop && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onToggleCrop}
           disabled={annotationToolsLocked}
           aria-pressed={cropActive}
@@ -263,7 +309,7 @@ export function PageActions({
       {showRevert && (
         <button
           type="button"
-          className="page-actions__button chrome-tooltip"
+          className="page-actions__button hover-grow chrome-tooltip"
           onClick={onRevertPage}
           disabled={!canAnnotate || annotationToolsLocked}
           aria-label="Revert annotations"
@@ -275,7 +321,7 @@ export function PageActions({
       {showAnyTool && <span className="page-actions__divider" role="separator" aria-hidden="true" />}
       <button
         type="button"
-        className="page-actions__button page-actions__button--pdf chrome-tooltip"
+        className="page-actions__button hover-grow page-actions__button--pdf chrome-tooltip"
         onClick={onOpenPdfViewer}
         aria-label="Open PDF viewer"
         data-tooltip={`Open PDF viewer (${formatShortcut('Shift+P')})`}
@@ -284,7 +330,7 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button page-actions__button--pdf chrome-tooltip"
+        className="page-actions__button hover-grow page-actions__button--pdf chrome-tooltip"
         onClick={onOpenMarkdown}
         aria-label="Open Markdown notes"
         data-tooltip={`Open Markdown notes (${formatShortcut('Shift+M')})`}
@@ -293,7 +339,7 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onNewTerminal}
         aria-label="New terminal"
         data-tooltip={`New terminal (${formatShortcut('>')})`}
@@ -303,7 +349,7 @@ export function PageActions({
       {showExportMenu && <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} markdown={markdownExport} />}
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onOpenHistory}
         aria-label="Open history"
         data-tooltip={`Open history (${formatShortcut('Shift+H')})`}
@@ -312,7 +358,7 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onOpenTabSearch}
         aria-label="Search tabs"
         data-tooltip={`Search tabs (${formatShortcut('K')})`}
@@ -321,7 +367,7 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onToggleFind}
         disabled={!canFind}
         aria-pressed={findOpen}
@@ -333,7 +379,7 @@ export function PageActions({
       {showAdBlock && (
         <button
           type="button"
-          className="page-actions__button page-actions__button--adblock chrome-tooltip"
+          className="page-actions__button hover-grow page-actions__button--adblock chrome-tooltip"
           onClick={onToggleAdBlock}
           disabled={adBlockGloballyOff}
           // Lit while the blocker is *off* here, so the default (blocking) state stays quiet.
@@ -365,7 +411,7 @@ export function PageActions({
       )}
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onOpenWorkspaceInNewWindow}
         aria-label="Open tab in new window"
         data-tooltip={`Open tab in new window (${formatShortcut('Shift+O')})`}
@@ -374,7 +420,7 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onToggleFocusMode}
         aria-pressed={focusMode}
         aria-label={focusMode ? 'Exit Focus Mode' : 'Enter Focus Mode'}
@@ -386,7 +432,7 @@ export function PageActions({
       <ColorPicker />
       <button
         type="button"
-        className="page-actions__button chrome-tooltip"
+        className="page-actions__button hover-grow chrome-tooltip"
         onClick={onToggleTheme}
         aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
         data-tooltip={`${theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} (${formatShortcut('D')})`}

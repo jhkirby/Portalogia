@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-17
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { AddressSuggestionItem } from '@shared/ipc-contract';
@@ -228,7 +228,7 @@ export function AddressBar({
     <form ref={containerRef} className="address-bar" onSubmit={handleSubmit} role="search">
       <button
         type="button"
-        className="address-bar__bookmark chrome-tooltip"
+        className="address-bar__bookmark hover-grow chrome-tooltip"
         onClick={onToggleBookmark}
         disabled={!canBookmark}
         aria-pressed={isBookmarked}
