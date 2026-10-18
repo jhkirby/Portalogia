@@ -165,19 +165,30 @@
   transform: scaleY(1);
 }
 
+/* The active background sliding from the tab that was active to the newly active one (`useActiveTabSlide`). Each
+   tab draws the part of it that is over itself, so it passes under every title on the way. */
+.tab-bar__slide-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.tab-bar__active-slide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+
+  background: var(--color-tab-bg-active);
+  border-radius: var(--size-radius-sm) var(--size-radius-sm) 0 0;
+}
+
+/* The newly active tab waits for the sliding background rather than showing its own at once. */
+.tab-bar__tab--active[data-slide-target] {
+  background: var(--color-tab-bg);
+}
+
 /* A dragged tab's own highlight is the cue; the fill would cover it. */
 .tab-bar__tab--dragging .tab-bar__hover-fill {
   display: none;
-}
-
-.tab-bar__ripple {
-  position: absolute;
-
-  background: rgba(var(--color-accent-rgb), 0.3);
-  border-radius: 50%;
-
-  transform: scale(0);
-  animation: tab-bar-ripple 520ms ease-out forwards;
 }
 
 /* While a tab from another window is dragged over this strip, the slot it
@@ -388,21 +399,8 @@
   }
 }
 
-@keyframes tab-bar-ripple {
-  to {
-    opacity: 0;
-    transform: scale(1);
-  }
-}
-
-/* Still run (as fades, or instantly), since a ripple and a closing tab each remove themselves when their animation
-   ends. */
+/* Still run (instantly), since a closing tab removes itself when its animation ends. */
 @media (prefers-reduced-motion: reduce) {
-  .tab-bar__ripple {
-    transform: scale(1);
-    animation-name: tab-bar-ripple-fade;
-  }
-
   .tab-bar__hover-fill {
     transition: none;
   }
@@ -411,12 +409,6 @@
   .tab-bar__tab--exiting {
     animation-duration: 1ms;
     animation-delay: 0ms;
-  }
-}
-
-@keyframes tab-bar-ripple-fade {
-  to {
-    opacity: 0;
   }
 }
 

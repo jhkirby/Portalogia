@@ -369,3 +369,47 @@ preview. New tabs start as View + Formatted.
       darkens while dragging the window). `GripHoverWatcher`, which polled the
       cursor only to report that hover while maximized, is removed, with its
       IPC channel and the shared grip height.
+
+## Fix (2026-10-18): dragged tabs flipped back and forth
+
+- [x] A drag read its target from which half of the hovered tab the pointer
+      was in, using where that tab was drawn mid-slide, so the target kept
+      changing under a still pointer. `tabDropTargetAt` reads the laid-out
+      positions instead: the dragged tab passes a neighbour when the pointer
+      crosses its middle, and only crossing it again goes back. Tested in
+      `tests/unit/tabDropTarget.spec.ts`.
+
+## Change (2026-10-18): no hover grey on the window's drag strip
+
+- [x] The strip along the top edge no longer turns grey on hover (it still
+      darkens while dragging the window). `GripHoverWatcher`, which polled the
+      cursor only for that hover, is removed with its IPC channel.
+
+## Change (2026-10-18): the address bar keeps its width; the tools scroll
+
+- [x] The address bar is never narrower than 240px; the PDF, Markdown and
+      history toolbars never narrower than their own controls.
+- [x] The page tools (every tab kind) give up room first: they scroll
+      sideways in their own strip, with no scroll bar, and the mouse wheel
+      scrolls them. Their tooltips are pinned to the window with anchor
+      positioning, so the strip doesn't clip them.
+
+## Change (2026-10-18): the active tab's background slides on Ctrl+Left/Right
+
+- [x] A keyboard switch slides the active background from the old tab to the
+      new one, both ways and wrapping round (`useActiveTabSlide`). Each tab
+      draws the part over itself, so it passes under the titles. A click
+      (which ripples), a new or closed tab, and a workspace switch don't
+      slide.
+
+## Change (2026-10-18): workspaces reorder, ripple and grow
+
+- [x] Drag a workspace to a new place: the list previews it, the others
+      slide out of the way, and the drop commits it (`moveWorkspace` in main,
+      `workspaces:move`). The place is read like the tab drag's, so it doesn't
+      flip back and forth. A tab dropped on a workspace still moves into it.
+- [x] A click ripples in the accent colour, shared with the tabs
+      (`useClickRipples`, `click-ripple.css`).
+- [x] Hover grows in and shrinks out like the other buttons (`.hover-grow`).
+- [x] The selected colour leaves the old workspace at once and grows in on
+      the new one (Ctrl+Up/Down, or a click).

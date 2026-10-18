@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-18 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -171,6 +171,8 @@
   /* Sized to its pills, not stretched to fill the sidebar, so "New workspace"
      sits right under the last one; once the list outgrows the sidebar it
      shrinks (min-height: 0) and scrolls, leaving that button in view below. */
+  /* So a pill's `offsetTop` is measured from the list, as dragging one to a new place needs. */
+  position: relative;
   flex: 0 1 auto;
   min-height: 0;
   gap: var(--size-spacing-xs);
@@ -215,28 +217,72 @@
   cursor: pointer;
 }
 
-.workspace-bar__pill:hover {
-  background: var(--color-tab-hover-bg);
+/* Hovering grows the hover colour out from the centre and shrinks it back on leaving, like every other such button
+   (`.hover-grow`, whose layer is the tab hover colour here). */
+.workspace-bar__pill {
+  --hover-grow-bg: var(--color-tab-hover-bg);
 }
 
 .workspace-bar__pill--active {
-  background: var(--color-tab-bg-active);
   color: var(--color-tab-text-active);
 }
 
 /* A tab dragged from `TabBar` is currently hovering this pill (see
-   `WorkspaceBar`'s own `handleDragOver`) — an outline rather than a
-   background swap so it stays visible over `--active`'s own background
-   too, same reasoning as `.tab-bar__tab--drop-before/after` using
-   `box-shadow` instead of competing with `--active`'s background. */
+   `WorkspaceBar`'s own `handleDragOver`) — an outline, which is drawn over
+   everything in the pill, so it stays visible over the selected colour. */
 .workspace-bar__pill--drop-target {
-  box-shadow: inset 0 0 0 2px var(--color-accent-text);
+  outline: 2px solid var(--color-accent-text);
+  outline-offset: -2px;
 }
 
 /* Multi-selected (Ctrl/Shift+click) workspaces: the active pill's own neutral look, like the tabs. */
 .workspace-bar__pill--selected {
-  background: var(--color-tab-bg-active);
   color: var(--color-tab-text-active);
+}
+
+/* Below the pill's content and above its hover layer: the selected colour and the click ripples, clipped to the
+   pill's rounded shape. */
+.workspace-bar__effects {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+
+  border-radius: inherit;
+
+  pointer-events: none;
+}
+
+/* The selected colour leaves at once, and grows in like the hover on the workspace that becomes selected (a click,
+   or stepping with Ctrl+Up/Down): the transition is only on the way in. */
+.workspace-bar__selected-fill {
+  position: absolute;
+  inset: 0;
+
+  background: var(--color-tab-bg-active);
+  border-radius: inherit;
+
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.workspace-bar__pill--active .workspace-bar__selected-fill,
+.workspace-bar__pill--selected .workspace-bar__selected-fill {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity 140ms ease-out;
+}
+
+/* The workspace being dragged to a new place: its in-place highlight is the only cue (no drag snapshot follows the
+   pointer), drawn by the fill layer so it shows on the selected workspace too. */
+.workspace-bar__pill--dragging .workspace-bar__selected-fill {
+  background: var(--color-tab-dragging-bg);
+
+  opacity: 1;
+  transform: scale(1);
+  transition: none;
 }
 
 /* Holds the workspace icon (see `WorkspaceIcon`): a fixed square, so names line up whichever icon is chosen. */
@@ -522,6 +568,11 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace-bar__star[aria-pressed='true']:hover svg {
     animation: none;
+  }
+
+  .workspace-bar__pill--active .workspace-bar__selected-fill,
+  .workspace-bar__pill--selected .workspace-bar__selected-fill {
+    transition: none;
   }
 }
 

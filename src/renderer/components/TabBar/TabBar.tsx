@@ -12,6 +12,8 @@ import { tabDropTargetAt } from '../../lib/tabDropTarget';
 import { formatShortcut } from '../../lib/shortcuts';
 import { GlobeIcon, HistoryIcon } from '../icons';
 import { useTabTransitions } from './useTabTransitions';
+import { useActiveTabSlide } from './useActiveTabSlide';
+import { useClickRipples } from '../../hooks/useClickRipples';
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
 // element following the cursor by default; over this chrome's mix of HTML
@@ -22,14 +24,6 @@ import { useTabTransitions } from './useTabTransitions';
 const TRANSPARENT_DRAG_IMAGE = new Image();
 TRANSPARENT_DRAG_IMAGE.src =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7';
-
-/** One click's ripple: where it starts in the tab, and the diameter that reaches the tab's farthest corner from there. */
-interface Ripple {
-  readonly id: number;
-  readonly x: number;
-  readonly y: number;
-  readonly size: number;
-}
 
 /** The animation (in `tab-bar.css`) that ends a tab's opening, and the one that ends its closing. */
 const TAB_TRANSITION_LAST_ANIMATIONS = new Set(['tab-bar-tab-rise', 'tab-bar-tab-close']);
@@ -241,6 +235,12 @@ export function TabBar({
     tabBarRef,
     draggedId === null ? [] : [draggedId],
   );
+  const notePress = useActiveTabSlide(
+    tabBarRef,
+    activeTabId,
+    workspaceId,
+    tabs.map((tab) => tab.id),
+  );
   // Live tabs take the even `order` slots and a closing tab the odd slot just before the tab that took its place, so
   // it shrinks where it was.
   const slotOrder = (index: number): number => 2 * index + 2;
@@ -253,6 +253,9 @@ export function TabBar({
       aria-label="Open tabs"
       onDragOver={handleContainerDragOver}
       onDrop={handleContainerDrop}
+      onPointerDown={(event) =>
+        notePress((event.target as HTMLElement).closest<HTMLElement>('.tab-bar__tab[data-tab-id]')?.dataset['tabId'] ?? null)
+      }
     >
       {(ghostTab ? [...tabs, ghostTab] : tabs).map((tab) => (
         <Tab
@@ -447,19 +450,7 @@ function Tab({
   onTransitionEnd,
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
-  const [ripples, setRipples] = useState<readonly Ripple[]>([]);
-  const nextRippleIdRef = useRef(0);
-
-  /** Starts a ripple from the click point; it removes itself when its animation ends. */
-  const addRipple = (event: MouseEvent<HTMLDivElement>): void => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const reach = Math.hypot(Math.max(x, rect.width - x), Math.max(y, rect.height - y));
-    nextRippleIdRef.current += 1;
-    const ripple: Ripple = { id: nextRippleIdRef.current, x, y, size: reach * 2 };
-    setRipples((previous) => [...previous, ripple]);
-  };
+  const ripples = useClickRipples();
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -537,7 +528,7 @@ function Tab({
         } else if (event.shiftKey) {
           onSelectRange(tab.id);
         } else {
-          addRipple(event);
+          ripples.add(tab.id, event);
           activate();
         }
       }}
@@ -548,15 +539,17 @@ function Tab({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* Below the tab's content: the hover fill rising from the bottom, and the click ripples. */}
+      {/* Below the tab's content: the hover fill rising from the bottom, the active background sliding past on a
+          keyboard switch (`useActiveTabSlide` draws into it), and the click ripples. */}
       <span className="tab-bar__effects" aria-hidden="true">
         <span className="tab-bar__hover-fill" />
-        {ripples.map((ripple) => (
+        <span className="tab-bar__slide-layer" />
+        {ripples.ripples.map((ripple) => (
           <span
             key={ripple.id}
-            className="tab-bar__ripple"
+            className="click-ripple"
             style={{ left: ripple.x - ripple.size / 2, top: ripple.y - ripple.size / 2, width: ripple.size, height: ripple.size }}
-            onAnimationEnd={() => setRipples((previous) => previous.filter((r) => r.id !== ripple.id))}
+            onAnimationEnd={() => ripples.remove(ripple.id)}
           />
         ))}
       </span>

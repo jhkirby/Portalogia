@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-18
 
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
@@ -103,6 +103,7 @@ export function App() {
     createWorkspace,
     switchWorkspace,
     renameWorkspace,
+    moveWorkspace,
     updateWorkspace,
     removeWorkspace,
     saveWorkspaceImage,
@@ -655,6 +656,7 @@ export function App() {
           onSwitch={switchWorkspace}
           onCreate={() => createWorkspace()}
           onRename={renameWorkspace}
+          onMove={moveWorkspace}
           onEdit={openWorkspaceEditor}
           onRemove={removeWorkspace}
           onDropTab={moveTabToWorkspace}

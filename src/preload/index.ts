@@ -85,6 +85,7 @@ const api: NorthstarApi = {
   toggleWorkspaceSelection: (id) => invoke(IpcChannel.WorkspacesToggleSelect, { id }),
   selectWorkspaceRange: (id) => invoke(IpcChannel.WorkspacesSelectRange, { id }),
   renameWorkspace: (id, name) => invoke(IpcChannel.WorkspacesRename, { id, name }),
+  moveWorkspace: (id, beforeId) => invoke(IpcChannel.WorkspacesMove, { id, beforeId }),
   updateWorkspace: (id, update) => invoke(IpcChannel.WorkspacesUpdate, { id, ...update }),
   removeWorkspace: (id) => invoke(IpcChannel.WorkspacesRemove, { id }),
   saveWorkspaceImage: (workspaceId) => invoke(IpcChannel.WorkspaceImagesSave, { id: workspaceId }),

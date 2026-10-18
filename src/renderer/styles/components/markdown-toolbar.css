@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-18 */
 
 /* ── MARKDOWN TOOLBAR ─────────────────────────────────────────────────── */
 /* The Markdown tab's controls inside the chrome's main toolbar, in the slot a
@@ -14,7 +14,8 @@
   align-items: center;
   flex: 1;
   gap: var(--size-spacing-sm);
-  min-width: 0;
+  /* No smaller than its own controls: in a narrow window the page tools beside it scroll instead (`.page-actions`). */
+  min-width: min-content;
 }
 
 /* The file name: always a text box (selectable, unlike the page body). */

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-18
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -32,6 +32,7 @@ import {
   navigateRequestSchema,
   penRequestSchema,
   renameWorkspaceRequestSchema,
+  moveWorkspaceRequestSchema,
   updateWorkspaceRequestSchema,
   splitEnterRequestSchema,
   textToolRequestSchema,
@@ -163,6 +164,9 @@ export function registerTabIpc(
   );
   handle(IpcChannel.WorkspacesRename, renameWorkspaceRequestSchema, (request, event) =>
     resolveTabManager(event).renameWorkspace(request.id, request.name),
+  );
+  handle(IpcChannel.WorkspacesMove, moveWorkspaceRequestSchema, (request, event) =>
+    resolveTabManager(event).moveWorkspace(request.id, request.beforeId),
   );
   handle(IpcChannel.WorkspacesRemove, workspaceIdRequestSchema, (request, event) =>
     resolveTabManager(event).removeWorkspace(request.id),

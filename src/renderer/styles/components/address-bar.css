@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-18 */
 
 /* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
 
@@ -10,6 +10,8 @@
   display: flex;
   align-items: center;
   flex: 1;
+  /* Never squeezed away: in a narrow window the page tools beside it scroll instead (`.page-actions`). */
+  min-width: 240px;
   height: 30px;
   padding: 0 var(--size-spacing-md);
   gap: var(--size-spacing-sm);

@@ -1,8 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-18
 
+import { useEffect, useRef } from 'react';
 import type { PdfPointerMode } from '@shared/tab-state';
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -211,8 +212,31 @@ export function PageActions({
   const anyToolActive =
     laserPointerActive || penActive || highlighterActive || commentToolActive || textToolActive || cropActive;
 
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  // In a window too narrow for every tool the strip scrolls sideways, with no scroll bar, so an ordinary (vertical)
+  // wheel turn scrolls it; a sideways one (a touchpad, Shift+wheel) already does. Not passive, to keep the turn
+  // from going anywhere else.
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) {
+      return undefined;
+    }
+    const scrollSideways = (event: WheelEvent): void => {
+      if (strip.scrollWidth <= strip.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+        return;
+      }
+      event.preventDefault();
+      // A wheel that reports lines rather than pixels.
+      const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
+      strip.scrollLeft += pixels;
+    };
+    strip.addEventListener('wheel', scrollSideways, { passive: false });
+    return () => strip.removeEventListener('wheel', scrollSideways);
+  }, []);
+
   return (
-    <div className="page-actions">
+    <div ref={stripRef} className="page-actions">
       {showPointerModes &&
         POINTER_MODES.map(({ mode, label, shortcut }) => (
           <button

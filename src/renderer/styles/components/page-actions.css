@@ -1,15 +1,48 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-18 */
 
 /* ── PAGE ACTIONS ─────────────────────────────────────────────────────── */
 
+/* The tools give up room before anything else in the toolbar: when the window is too narrow for all of them, they
+   scroll sideways (the mouse wheel scrolls them too — see `PageActions`), with no scroll bar. The full toolbar
+   height, so a hovered button's grown fill isn't clipped at the top or bottom, and a little room at each end for the
+   same reason. */
 .page-actions {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  align-self: stretch;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 2px;
   gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+
+  scrollbar-width: none;
+}
+
+/* Every tool keeps its size; the strip scrolls instead of squeezing them. */
+.page-actions > * {
+  flex-shrink: 0;
+}
+
+/* A tooltip drawn inside the scrolling strip would be clipped by it, so it is pinned to the window instead and placed
+   against its own button with anchor positioning: still just above the button, growing leftward from its right edge
+   (see `.page-actions__button::after`), and hidden while its button is scrolled out of sight. */
+.page-actions .chrome-tooltip {
+  anchor-name: --page-action;
+  anchor-scope: --page-action;
+}
+
+.page-actions .chrome-tooltip::after {
+  position: fixed;
+  position-anchor: --page-action;
+  bottom: anchor(top);
+  right: anchor(right);
+  left: auto;
 }
 
 .page-actions__divider {

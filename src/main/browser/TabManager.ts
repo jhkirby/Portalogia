@@ -3604,6 +3604,32 @@ export class TabManager {
   }
 
   /**
+   * Moves a workspace to a new place in the sidebar (a drag in the sidebar).
+   * The order is also the order Ctrl+Up/Down steps through. A no-op if either
+   * workspace doesn't exist.
+   * @param id The workspace to move.
+   * @param beforeId The workspace it goes just above, or `null` for the end.
+   * @returns The full browser state after the change.
+   */
+  public moveWorkspace(id: string, beforeId: string | null): BrowserState {
+    const workspace = this.workspaces.get(id);
+    if (!workspace || id === beforeId || (beforeId !== null && !this.workspaces.has(beforeId))) {
+      return this.getState();
+    }
+    const others = Array.from(this.workspaces.entries()).filter(([otherId]) => otherId !== id);
+    const at = beforeId === null ? others.length : others.findIndex(([otherId]) => otherId === beforeId);
+    const ordered = [...others.slice(0, at), [id, workspace] as const, ...others.slice(at)];
+    // Rebuilt in place, not replaced: every window shares this one map (`SharedTabRegistry`), and its insertion order
+    // is the sidebar's order.
+    this.workspaces.clear();
+    for (const [workspaceId, state] of ordered) {
+      this.workspaces.set(workspaceId, state);
+    }
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
    * Changes a workspace's name, icon color and icon in one step — the
    * workspace editor's Save. A no-op if it doesn't exist or the name is blank.
    * @param id The workspace to change.

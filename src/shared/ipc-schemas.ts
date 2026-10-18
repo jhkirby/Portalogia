@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-18
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -413,6 +413,12 @@ export const renameWorkspaceRequestSchema = z.object({
   name: z.string().min(1),
 });
 export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>;
+
+export const moveWorkspaceRequestSchema = z.object({
+  id: z.string().min(1),
+  beforeId: z.string().min(1).nullable(),
+});
+export type MoveWorkspaceRequest = z.infer<typeof moveWorkspaceRequestSchema>;
 
 export const updateWorkspaceRequestSchema = z.object({
   id: z.string().min(1),

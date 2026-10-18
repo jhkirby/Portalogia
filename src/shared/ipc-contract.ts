@@ -180,6 +180,7 @@ export const IpcChannel = {
   WorkspacesToggleSelect: 'workspaces:toggle-select',
   WorkspacesSelectRange: 'workspaces:select-range',
   WorkspacesRename: 'workspaces:rename',
+  WorkspacesMove: 'workspaces:move',
   WorkspacesUpdate: 'workspaces:update',
   WorkspacesRemove: 'workspaces:remove',
   WorkspaceOpenInNewWindow: 'workspaces:open-in-new-window',
@@ -524,6 +525,8 @@ export interface NorthstarApi {
   /** Shift+click: selects every workspace between the active one and this one. */
   selectWorkspaceRange(id: string): Promise<IpcResult<BrowserState>>;
   renameWorkspace(id: string, name: string): Promise<IpcResult<BrowserState>>;
+  /** Moves a workspace in the sidebar to just above `beforeId`, or to the end for `null`. */
+  moveWorkspace(id: string, beforeId: string | null): Promise<IpcResult<BrowserState>>;
   /** Changes a workspace's name, icon color and icon together — what the workspace editor's Save does. */
   updateWorkspace(id: string, update: { name: string; color: string; icon: string }): Promise<IpcResult<BrowserState>>;
   removeWorkspace(id: string): Promise<IpcResult<BrowserState>>;

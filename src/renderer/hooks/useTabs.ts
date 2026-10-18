@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-18
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
@@ -226,6 +226,10 @@ export function useTabs() {
   const switchWorkspace = useCallback((id: string) => {
     void window.northstar.switchWorkspace(id).then(logIfFailed);
   }, []);
+  const moveWorkspace = useCallback((id: string, beforeId: string | null) => {
+    void window.northstar.moveWorkspace(id, beforeId).then(logIfFailed);
+  }, []);
+
   const renameWorkspace = useCallback((id: string, name: string) => {
     void window.northstar.renameWorkspace(id, name).then(logIfFailed);
   }, []);
@@ -400,6 +404,7 @@ export function useTabs() {
     createWorkspaceWithTab,
     switchWorkspace,
     renameWorkspace,
+    moveWorkspace,
     updateWorkspace,
     removeWorkspace,
     saveWorkspaceImage,

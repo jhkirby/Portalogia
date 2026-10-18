@@ -1,15 +1,17 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-18
 
-import { useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
+import { useClickRipples } from '../../hooks/useClickRipples';
 import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon, PencilIcon, WorkspaceImagesIcon } from '../icons';
 import { WorkspaceIcon } from '../WorkspaceIcon';
+import { useWorkspaceReorder } from './useWorkspaceReorder';
 
 interface WorkspaceBarProps {
   readonly workspaces: readonly WorkspaceState[];
@@ -36,6 +38,8 @@ interface WorkspaceBarProps {
   readonly onSwitch: (id: string) => void;
   readonly onCreate: () => void;
   readonly onRename: (id: string, name: string) => void;
+  /** Moves a workspace to just above `beforeId`, or to the end for `null`: a drag in the sidebar. */
+  readonly onMove: (id: string, beforeId: string | null) => void;
   /** Opens the workspace editor (name, icon color, icon) for one workspace: its pencil button. */
   readonly onEdit: (id: string) => void;
   readonly onRemove: (id: string) => void;
@@ -57,7 +61,7 @@ interface WorkspaceBarProps {
  * The vertical sidebar of workspaces on the left edge of the window. Each
  * groups its own set of tabs (see `App`'s `workspaceTabs` filter);
  * switching one swaps which tabs the tab bar shows. Double-click a
- * workspace's name to rename it in place.
+ * workspace's name to rename it in place, or drag it to a new place in the list.
  */
 export function WorkspaceBar({
   workspaces,
@@ -71,6 +75,7 @@ export function WorkspaceBar({
   onSwitch,
   onCreate,
   onRename,
+  onMove,
   onEdit,
   onRemove,
   onDropTab,
@@ -86,6 +91,13 @@ export function WorkspaceBar({
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   /** Whether a dragged tab is currently hovering the "+ New workspace" button — drives its own drop-target highlight, same idea as `dropTargetId` for the pills above it. */
   const [isNewWorkspaceDropTarget, setNewWorkspaceDropTarget] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const reorder = useWorkspaceReorder(
+    listRef,
+    workspaces.map((workspace) => workspace.id),
+    onMove,
+  );
+  const ripples = useClickRipples();
 
   // Collapsed (`!sidebarVisible`), these two buttons swap their tooltip
   // from the plain CSS one (tooltip.css) to `TooltipOverlay` — see
@@ -128,11 +140,30 @@ export function WorkspaceBar({
           the one thing meant to stay visible in the collapsed (but not
           Focus Mode) state; see workspace-bar.css's own comments. */}
       <div className="sidebar__inner">
-        <div className="workspace-bar" role="tablist" aria-label="Workspaces" aria-orientation="vertical">
+        <div
+          ref={listRef}
+          className="workspace-bar"
+          role="tablist"
+          aria-label="Workspaces"
+          aria-orientation="vertical"
+          // The gaps between pills: a workspace dragged over them still places itself.
+          onDragOver={(event) => {
+            if (reorder.isWorkspaceDrag(event)) {
+              reorder.over(event);
+            }
+          }}
+          onDrop={(event) => {
+            if (reorder.isWorkspaceDrag(event)) {
+              reorder.drop(event);
+            }
+          }}
+        >
           {workspaces.map((workspace) => {
             const isActive = workspace.id === activeWorkspaceId;
             const isEditing = editingId === workspace.id;
             const isDropTarget = dropTargetId === workspace.id;
+            const isDragged = reorder.draggedId === workspace.id;
+            const order = reorder.displayIds.indexOf(workspace.id);
 
             // Accepts a tab dragged from `TabBar` (its own `handleDragStart`
             // puts the dragged tab's id on `dataTransfer` as `text/plain`) —
@@ -142,6 +173,10 @@ export function WorkspaceBar({
             // (`'move'`) show up on the dragged tab's own `dragend`, which is
             // how it knows *not* to treat this as a tear-off-to-new-window.
             const handleDragOver = (event: DragEvent<HTMLDivElement>): void => {
+              // A workspace being reordered is placed by the list (above), not dropped into this one.
+              if (reorder.isWorkspaceDrag(event)) {
+                return;
+              }
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
               setDropTargetId(workspace.id);
@@ -150,6 +185,9 @@ export function WorkspaceBar({
               setDropTargetId((current) => (current === workspace.id ? null : current));
             };
             const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
+              if (reorder.isWorkspaceDrag(event)) {
+                return;
+              }
               event.preventDefault();
               const tabId = event.dataTransfer.getData('text/plain');
               if (tabId) {
@@ -164,7 +202,12 @@ export function WorkspaceBar({
                 role="tab"
                 tabIndex={0}
                 aria-selected={isActive || selectedWorkspaceIds.includes(workspace.id)}
-                className={`workspace-bar__pill${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}`}
+                data-workspace-id={workspace.id}
+                className={`workspace-bar__pill hover-grow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}`}
+                style={{ order }}
+                draggable={!isEditing}
+                onDragStart={(event) => reorder.start(workspace.id, event)}
+                onDragEnd={reorder.end}
                 onClick={(event) => {
                   if (isEditing) {
                     return;
@@ -176,6 +219,7 @@ export function WorkspaceBar({
                   } else if (event.shiftKey) {
                     onSelectRange(workspace.id);
                   } else {
+                    ripples.add(workspace.id, event);
                     onSwitch(workspace.id);
                   }
                 }}
@@ -184,6 +228,26 @@ export function WorkspaceBar({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
+                {/* Below the pill's content: the selected colour, which grows in like the hover when this workspace
+                    becomes the selected one, and the click ripples. */}
+                <span className="workspace-bar__effects" aria-hidden="true">
+                  <span className="workspace-bar__selected-fill" />
+                  {ripples.ripples
+                    .filter((ripple) => ripple.ownerId === workspace.id)
+                    .map((ripple) => (
+                      <span
+                        key={ripple.id}
+                        className="click-ripple"
+                        style={{
+                          left: ripple.x - ripple.size / 2,
+                          top: ripple.y - ripple.size / 2,
+                          width: ripple.size,
+                          height: ripple.size,
+                        }}
+                        onAnimationEnd={() => ripples.remove(ripple.id)}
+                      />
+                    ))}
+                </span>
                 <span className="workspace-bar__icon">
                   <span className="workspace-bar__glyph" aria-hidden="true">
                     <WorkspaceIcon icon={workspace.icon} color={workspace.color} />
