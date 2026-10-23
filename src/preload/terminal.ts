@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-22
 
-import { contextBridge, ipcRenderer, webFrame } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 import type { FindCommand, FindResult, NorthstarTerminalApi } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 
@@ -38,8 +38,15 @@ const HighlighterState = 'highlighter:state';
 // `src/preload/tabZoom.ts` (the same listener, for a browser tab's own
 // view) for why this has to be frame-local rather than the main-process
 // `contents.zoomLevel` it used to be pushed through.
+//
+// Not the page's zoom, though, for a terminal: the level is handed to the terminal, which sizes its own text by it,
+// so its stat bar (and everything else outside xterm) stays the same size at any zoom. Kept, for a listener added
+// after the first push.
+let latestZoomLevel = 0;
+const zoomListeners = new Set<(level: number) => void>();
 ipcRenderer.on(ZoomApply, (_event, level: number) => {
-  webFrame.setZoomLevel(level);
+  latestZoomLevel = level;
+  zoomListeners.forEach((listener) => listener(level));
 });
 
 // Ctrl+mouse wheel zooms the tab by `ZOOM_PERCENT_WHEEL_STEP` per tick,
@@ -50,16 +57,42 @@ ipcRenderer.on(ZoomApply, (_event, level: number) => {
 window.addEventListener(
   'wheel',
   (event) => {
-    if (!event.ctrlKey || event.deltaY === 0) {
+    // With Shift held too, Windows turns the wheel sideways, so the step comes in `deltaX`; Shift asks for the coarse
+    // step (`ZOOM_PERCENT_WHEEL_STEP_COARSE`).
+    const delta = event.deltaY || event.deltaX;
+    if (!event.ctrlKey || delta === 0) {
       return;
     }
     event.preventDefault();
-    ipcRenderer.send('zoom:wheel', { direction: event.deltaY < 0 ? 1 : -1 });
+    ipcRenderer.send('zoom:wheel', { direction: delta < 0 ? 1 : -1, coarse: event.shiftKey });
   },
   { passive: false, capture: true },
 );
 
+// Whether the window is in Focus Mode: the stat bar hides with the chrome. Kept, so a listener added later hears it.
+const TabFocusMode = 'tab:focus-mode';
+let latestFocusMode = false;
+const focusModeListeners = new Set<(focusMode: boolean) => void>();
+ipcRenderer.on(TabFocusMode, (_event, focusMode: unknown) => {
+  latestFocusMode = focusMode === true;
+  focusModeListeners.forEach((listener) => listener(latestFocusMode));
+});
+
 const api: NorthstarTerminalApi = {
+  onZoom: (listener) => {
+    listener(latestZoomLevel);
+    zoomListeners.add(listener);
+    return () => {
+      zoomListeners.delete(listener);
+    };
+  },
+  onFocusMode: (listener) => {
+    listener(latestFocusMode);
+    focusModeListeners.add(listener);
+    return () => {
+      focusModeListeners.delete(listener);
+    };
+  },
   sendTerminalInput: (id, data) => ipcRenderer.send(TerminalInput, { id, data }),
   resizeTerminal: (id, cols, rows) => ipcRenderer.send(TerminalResize, { id, cols, rows }),
   onTerminalData: (listener) => {

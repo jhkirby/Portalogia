@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { syntaxTree } from '@codemirror/language';
 import { renderedBlocks } from './livePreviewBlocks';
@@ -69,23 +69,53 @@ class TaskCheckboxWidget extends WidgetType {
   }
 }
 
-/** A list item's `-`, `*` or `+`, drawn as a bullet. */
+/** The reader's bullets by nesting depth — the browser's own `disc`, `circle` and `square` — the deepest repeat the last. */
+const BULLET_STYLES = ['disc', 'circle', 'square'] as const;
+
+/**
+ * A list item's `-`, `*` or `+`, drawn as the bullet the reader draws at its depth, hanging left of the item's text.
+ * Not a typed glyph: an empty list item whose marker the browser draws, outside, exactly as it draws the reader's —
+ * the same shape, size and gap — so the list doesn't change look as the caret comes into it.
+ */
 class BulletWidget extends WidgetType {
-  /**
-   * @param other The widget it would replace.
-   * @returns Always `true`: every bullet looks the same.
-   */
-  public override eq(other: BulletWidget): boolean {
-    return other instanceof BulletWidget;
+  /** @param depth How deeply the list is nested: 1 for a top-level list. */
+  public constructor(private readonly depth: number) {
+    super();
   }
 
-  /** @returns The bullet element. */
+  /**
+   * @param other The widget it would replace.
+   * @returns Whether it's a bullet of the same depth, which looks the same.
+   */
+  public override eq(other: BulletWidget): boolean {
+    return other instanceof BulletWidget && other.depth === this.depth;
+  }
+
+  /** @returns The bullet element: a zero-width holder for the list marker, which hangs to its left. */
   public override toDOM(): HTMLElement {
     const bullet = document.createElement('span');
     bullet.className = 'cm-lp-bullet';
-    bullet.textContent = '•';
+    bullet.setAttribute('aria-hidden', 'true');
+    const marker = document.createElement('span');
+    marker.className = 'cm-lp-bullet__marker';
+    marker.style.listStyleType = BULLET_STYLES[Math.min(this.depth, BULLET_STYLES.length) - 1]!;
+    bullet.append(marker);
     return bullet;
   }
+}
+
+/**
+ * How deeply a syntax node sits in lists: 0 outside any, 1 in a top-level list, and so on.
+ * @param node A node in the tree, or `null`.
+ */
+function listDepth(node: SyntaxNodeRef['node'] | null): number {
+  let depth = 0;
+  for (let at = node; at; at = at.parent) {
+    if (at.name === 'BulletList' || at.name === 'OrderedList') {
+      depth += 1;
+    }
+  }
+  return depth;
 }
 
 /** A `---` thematic break, drawn as a rule across the column. */
@@ -109,7 +139,6 @@ class RuleWidget extends WidgetType {
 // ── DECORATIONS ─────────────────────────────────────────────────────────
 
 const HIDDEN = Decoration.replace({});
-const BULLET = Decoration.replace({ widget: new BulletWidget() });
 const RULE = Decoration.replace({ widget: new RuleWidget() });
 
 /** Inline Markdown nodes and the class their text takes. Their marks (`**`, `` ` ``…) are hidden off the caret's lines. */
@@ -223,7 +252,10 @@ function buildDecorations(view: EditorView): DecorationSet {
         const end = state.doc.sliceString(to, to + 1) === ' ' ? to + 1 : to;
         ranges.push(HIDDEN.range(from, end));
       } else if (mark === '-' || mark === '*' || mark === '+') {
-        ranges.push(BULLET.range(from, to));
+        // The space after the mark goes with it: the bullet hangs in the indent, and the text starts at the indent's
+        // edge, as in the reader.
+        const end = state.doc.sliceString(to, to + 1) === ' ' ? to + 1 : to;
+        ranges.push(Decoration.replace({ widget: new BulletWidget(listDepth(node.node)) }).range(from, end));
       }
       return;
     }
@@ -239,6 +271,46 @@ function buildDecorations(view: EditorView): DecorationSet {
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(state).iterate({ from, to, enter: visit });
+  }
+
+  // Lines in a list take the reader's layout: indented by their depth (the source's own leading spaces hidden, as
+  // they'd otherwise add to it), with the reader's room between items, and more where a nested list starts or ends.
+  // The bullet hangs in that indent (`.cm-lp-bullet`), so a line that wraps carries on under its text. The caret's
+  // line keeps its raw text unindented, but the same room above and below, so nothing shifts as the caret moves.
+  const tree = syntaxTree(state);
+  /** A line's list depth: 0 for a blank line, one outside any list, or one in a code block. */
+  const lineDepth = (number: number): { depth: number; indent: number } => {
+    const line = state.doc.line(number);
+    const indent = /^[ \t]*/.exec(line.text)![0].length;
+    if (line.length === 0 || indent === line.length) {
+      return { depth: 0, indent };
+    }
+    const node = tree.resolveInner(line.from + indent, 1);
+    for (let at: SyntaxNodeRef['node'] | null = node; at; at = at.parent) {
+      if (at.name === 'FencedCode' || at.name === 'CodeBlock') {
+        return { depth: 0, indent };
+      }
+    }
+    return { depth: listDepth(node), indent };
+  };
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos <= to; ) {
+      const line = state.doc.lineAt(pos);
+      pos = line.to + 1;
+      const { depth, indent } = lineDepth(line.number);
+      if (depth === 0) {
+        continue;
+      }
+      // The reader puts 0.8em, not 0.2em, around a nested list (its `ul` margin): here, a line whose depth differs
+      // from the list line before it opens a nested list or follows the end of one.
+      const previous = line.number > 1 ? lineDepth(line.number - 1).depth : 0;
+      const levelChange = previous > 0 && previous !== depth;
+      const classes = `cm-lp-li${levelChange ? ' cm-lp-li--level-change' : ''}${raw.has(line.number) ? ' cm-lp-li--raw' : ''}`;
+      ranges.push(Decoration.line({ class: classes, attributes: { style: `--lp-depth: ${depth}` } }).range(line.from));
+      if (indent > 0 && !raw.has(line.number)) {
+        ranges.push(HIDDEN.range(line.from, line.from + indent));
+      }
+    }
   }
   return Decoration.set(ranges, true);
 }
@@ -309,7 +381,21 @@ const livePreviewTheme = EditorView.theme({
     fontSize: '0.9em',
     paddingLeft: '0.8em',
   },
-  '.cm-lp-bullet': { display: 'inline-block', width: '0.8em', color: 'var(--color-tab-text)' },
+  // A list line, as the reader lays out an item: indented 1.7em a level (its `ul` padding), with 0.2em between items
+  // (its `li` margins, which meet and overlap there) split above and below.
+  '.cm-line.cm-lp-li': { paddingLeft: 'calc(var(--lp-depth) * 1.7em)', paddingTop: '0.1em', paddingBottom: '0.1em' },
+  // Where a nested list starts or ends: 0.8em in all with the 0.1em the line before leaves below it.
+  '.cm-line.cm-lp-li--level-change': { paddingTop: '0.7em' },
+  // The caret's line: its raw text from the left edge, as typed, but the same room above and below as when formatted.
+  '.cm-line.cm-lp-li--raw': { paddingLeft: '0' },
+  // A zero-width holder at the start of the item's text, so a wrapped line carries on under the text, not the bullet…
+  '.cm-lp-bullet': { display: 'inline-block', width: '0', verticalAlign: 'baseline' },
+  // …and in it an empty list item whose marker the browser draws outside, to its left, as it draws the reader's.
+  '.cm-lp-bullet__marker': {
+    display: 'list-item',
+    listStylePosition: 'outside',
+    color: 'var(--color-tab-text-active)',
+  },
   '.cm-lp-task': { margin: '0 0.4em 0 0', verticalAlign: 'middle', cursor: 'pointer' },
   '.cm-lp-rule': {
     display: 'inline-block',

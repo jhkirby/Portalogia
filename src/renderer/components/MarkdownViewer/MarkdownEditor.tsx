@@ -55,13 +55,32 @@ function editableExtensions(readOnly: boolean): Extension {
 }
 
 /**
+ * Line numbers for the raw text, each a handle for its line: a press selects the whole line, break included, so it can
+ * be copied, cut or typed over in one go.
+ */
+const clickableLineNumbers = lineNumbers({
+  domEventHandlers: {
+    mousedown: (view, line, event) => {
+      if ((event as MouseEvent).button !== 0) {
+        return false;
+      }
+      event.preventDefault();
+      view.dispatch({ selection: { anchor: line.from, head: Math.min(line.to + 1, view.state.doc.length) }, userEvent: 'select' });
+      view.focus();
+      return true;
+    },
+  },
+});
+
+/**
  * @param formatted Whether the note is shown formatted.
- * @returns The live preview, or — for raw text — line numbers in a gutter, as in a code editor.
+ * @returns The live preview with its syntax colours and math and wikilink marks, or — for raw text — line numbers
+ *   in a gutter, as in a code editor, and every character exactly as typed: no bold, italic, code or link styling.
  */
 function previewExtensions(formatted: boolean): Extension {
   return formatted
-    ? livePreviewExtension()
-    : [lineNumbers(), highlightActiveLineGutter(), EditorView.editorAttributes.of({ class: 'cm-raw' })];
+    ? [livePreviewExtension(), editorHighlight, markupDecorations()]
+    : [clickableLineNumbers, highlightActiveLineGutter(), EditorView.editorAttributes.of({ class: 'cm-raw' })];
 }
 
 /** Marks `[[wikilinks]]` and `$math$` in the source so they read as what they are while writing. */
@@ -193,7 +212,6 @@ export function MarkdownEditor({
       ]),
       editableCompartment.of(editableExtensions(readOnly)),
       previewCompartment.of(previewExtensions(livePreview)),
-      markupDecorations(),
       editorFindField,
       EditorView.domEventHandlers({
         contextmenu: (event) => {
@@ -203,7 +221,6 @@ export function MarkdownEditor({
         },
       }),
       editorTheme,
-      editorHighlight,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onChangeRef.current(update.state.doc.toString());

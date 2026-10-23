@@ -3,6 +3,8 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
 
+import { execFile } from 'node:child_process';
+import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
 import { WeatherMonitor } from '../platform/WeatherMonitor';
@@ -23,6 +25,33 @@ function broadcast(channel: string, payload: unknown): void {
 }
 
 /**
+ * Whether the computer has a battery. The page's battery API can't say: a
+ * desktop with none and a laptop fully charged on its charger read exactly
+ * the same (full, charging, never running down). So Windows is asked once,
+ * through the CIM `Win32_Battery` class; elsewhere a battery is assumed and
+ * the page's API decides.
+ * @returns Whether there's a battery; `null` if Windows couldn't be asked.
+ */
+function findBattery(): Promise<boolean | null> {
+  if (process.platform !== 'win32') {
+    return Promise.resolve(true);
+  }
+  const systemRoot = process.env['SystemRoot'] ?? 'C:\\Windows';
+  const powershell = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return new Promise((resolve) => {
+    execFile(
+      powershell,
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '@(Get-CimInstance -ClassName Win32_Battery).Count'],
+      { windowsHide: true, timeout: 15_000 },
+      (error, stdout) => {
+        const count = Number.parseInt(stdout.trim(), 10);
+        resolve(error || !Number.isFinite(count) ? null : count > 0);
+      },
+    );
+  });
+}
+
+/**
  * Starts following the Wi-Fi connection and the outside temperature, for the
  * titlebar's status corner (`TitlebarClock`), and answers the chrome's
  * requests for their current state. One of each for the whole app, pushed to
@@ -36,6 +65,8 @@ export function registerStatusIpc(): void {
 
   ipcMain.handle(IpcChannel.StatusWifiGet, (event) => (isChromeSender(event) ? wifi.current : null));
   ipcMain.handle(IpcChannel.StatusWeatherGet, (event) => (isChromeSender(event) ? weather.current : null));
+  const batteryPresent = findBattery();
+  ipcMain.handle(IpcChannel.StatusBatteryPresentGet, (event) => (isChromeSender(event) ? batteryPresent : null));
 
   wifi.start();
   weather.start();

@@ -596,6 +596,8 @@ export const colorPickerColorChangeRequestSchema = z.object({
 
 export const zoomWheelRequestSchema = z.object({
   direction: z.union([z.literal(1), z.literal(-1)]),
+  /** Shift was held: the coarse step. */
+  coarse: z.boolean().optional(),
 });
 
 export const exportMenuSyncRequestSchema = z.object({

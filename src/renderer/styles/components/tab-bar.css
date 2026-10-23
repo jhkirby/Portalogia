@@ -275,6 +275,7 @@
      doesn't shift width as the pointer moves across the strip. */
   opacity: 0;
   pointer-events: none;
+  transition: opacity 150ms ease-out;
 }
 
 .tab-bar__tab:hover .tab-bar__close,
@@ -404,7 +405,8 @@
 
 /* Still run (instantly), since a closing tab removes itself when its animation ends. */
 @media (prefers-reduced-motion: reduce) {
-  .tab-bar__hover-fill {
+  .tab-bar__hover-fill,
+  .tab-bar__close {
     transition: none;
   }
 

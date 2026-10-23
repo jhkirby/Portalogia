@@ -150,11 +150,13 @@ export const SEARCH_SUGGESTIONS_LIMIT = 500;
  * and the renderer (`ZoomPercentInput`, which restricts what a person can
  * even type to this same range) so the two can't quietly drift apart.
  */
-export const ZOOM_PERCENT_MIN = 25;
+export const ZOOM_PERCENT_MIN = 50;
 export const ZOOM_PERCENT_MAX = 200;
 export const ZOOM_PERCENT_DEFAULT = 100;
 /** How far one Ctrl+mouse-wheel tick moves a tab's zoom, in percentage points — applies to browser, terminal and PDF tabs alike. */
 export const ZOOM_PERCENT_WHEEL_STEP = 5;
+/** How far one Ctrl+Shift+mouse-wheel tick moves it: the coarse step, for getting somewhere fast. */
+export const ZOOM_PERCENT_WHEEL_STEP_COARSE = 10;
 
 /**
  * Font size, in CSS pixels, `TooltipOverlay`'s own page renders its text

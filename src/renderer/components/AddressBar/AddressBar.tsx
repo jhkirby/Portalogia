@@ -110,7 +110,17 @@ export function AddressBar({
   // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps here regardless of
   // which tab's WebContentsView currently has focus; `onFocus` below
   // already selects the text once it lands.
-  useEffect(() => window.northstar.onFocusAddressBar(() => inputRef.current?.focus()), []);
+  // Ctrl+Shift+? empties it as well, for a new search.
+  useEffect(
+    () =>
+      window.northstar.onFocusAddressBar((clear) => {
+        if (clear) {
+          setDraft('');
+        }
+        inputRef.current?.focus();
+      }),
+    [],
+  );
 
   const query = draft.trim().toLowerCase();
   const recentPages = useHistorySuggestions('url', draft, isFocused);

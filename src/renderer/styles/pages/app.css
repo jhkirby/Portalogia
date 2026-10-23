@@ -190,7 +190,8 @@ body {
 
 /* `:focus-visible` rather than `:focus-within`: a tab clicked with the mouse keeps focus, and the controls would then
    stay up after the pointer left. */
-.titlebar:is(:hover, :has(:focus-visible)) :is(.tab-bar__new, .window-controls) {
+/* `--pointer-inside`: main's word that the pointer is on the row's empty (drag) space, where `:hover` can't tell. */
+.titlebar:is(:hover, :has(:focus-visible), .titlebar--pointer-inside) :is(.tab-bar__new, .window-controls) {
   opacity: 1;
 }
 

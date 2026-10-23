@@ -27,6 +27,10 @@ interface MarkdownStatusBarProps {
   /** The word the caret is on (1-based, 0 before the first), or `null` where there is no caret. */
   readonly word: number | null;
   readonly wordCount: number;
+  /** The caret line's indentation level, or `null` where there is no caret. */
+  readonly indent: number | null;
+  /** The deepest indentation level in the note. */
+  readonly indentMax: number;
   readonly characters: number;
   readonly links: number;
   /** What's selected, counted; `null` while nothing is, which hides those fields. */
@@ -42,8 +46,8 @@ interface MarkdownStatusBarProps {
 /**
  * The bar along the bottom of a note: where the pointer is over the page, where the caret is (line, column and
  * word, each a box you can type a number into to jump there — Alt+G, Alt+C
- * and Alt+W go straight to them), and the note's size in words, characters,
- * lines and links. While text is selected, its lines, words and characters
+ * and Alt+W go straight to them), its indentation level of the deepest, and
+ * the note's size in words, characters, lines and links. While text is selected, its lines, words and characters
  * too. (No byte count: for a note it's the character count again, near enough.)
  */
 export function MarkdownStatusBar({
@@ -52,6 +56,8 @@ export function MarkdownStatusBar({
   column,
   word,
   wordCount,
+  indent,
+  indentMax,
   characters,
   links,
   selection,
@@ -98,6 +104,10 @@ export function MarkdownStatusBar({
       <span className="md-status__item">
         Word <JumpField name="word" value={word} max={wordCount} shortcut="Alt+W" label="Word" onCommit={onGoToWord} />
         <span className="md-status__total">/{count(wordCount)}</span>
+      </span>
+      <span className="md-status__item" title="Indentation: the caret line's level, of the deepest in the note">
+        {indent === null ? '–' : count(indent)}
+        <span className="md-status__total">/{count(indentMax)}</span> indentations
       </span>
       <span className="md-status__item">{count(characters)} characters</span>
       <span className="md-status__item">

@@ -208,6 +208,36 @@ export function countCharacters(text: string): number {
   return text.length - surrogates;
 }
 
+/** How many columns a tab counts for when measuring a line's indentation. */
+const TAB_WIDTH = 4;
+
+/**
+ * Each line's indentation level: its leading whitespace measured in the
+ * note's own indent step (the smallest indentation any line has, so a note
+ * indented two spaces at a time counts two spaces as one level), a tab
+ * counting `TAB_WIDTH` columns.
+ * @param source The note's source.
+ * @returns One level per line, 0 for a line with no indentation.
+ */
+export function indentLevels(source: string): number[] {
+  const widths = source.split('\n').map((line) => {
+    let width = 0;
+    for (const character of line) {
+      if (character === ' ') {
+        width += 1;
+      } else if (character === '\t') {
+        width += TAB_WIDTH - (width % TAB_WIDTH);
+      } else {
+        break;
+      }
+    }
+    // A line of nothing but whitespace isn't indented text.
+    return width === line.length ? 0 : width;
+  });
+  const step = Math.min(...widths.filter((width) => width > 0), Infinity);
+  return widths.map((width) => (width === 0 || step === Infinity ? 0 : Math.round(width / step)));
+}
+
 /**
  * A selection's size, as a stat bar shows it: the lines it touches (a line
  * break it ends on starts no new line), its words, and its characters.

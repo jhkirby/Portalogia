@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useState } from 'react';
 import type { BookmarkState, MarkdownDisplay, MarkdownTabState } from '@shared/tab-state';
@@ -155,7 +155,7 @@ export function MarkdownToolbar({
             disabled={fileName === null}
             aria-pressed={mode === side}
           >
-            {side === 'view' ? 'View' : 'Edit'}
+            <ModeLabel text={side === 'view' ? 'View' : 'Edit'} />
           </button>
         ))}
       </div>
@@ -165,7 +165,7 @@ export function MarkdownToolbar({
         aria-label="Raw or formatted"
         data-tooltip="Switch between the raw text and the formatted note"
       >
-        {(['raw', 'formatted'] as const).map((side) => (
+        {(['formatted', 'raw'] as const).map((side) => (
           <button
             key={side}
             type="button"
@@ -174,7 +174,7 @@ export function MarkdownToolbar({
             disabled={fileName === null}
             aria-pressed={display === side}
           >
-            {side === 'raw' ? 'Raw' : 'Formatted'}
+            <ModeLabel text={side === 'raw' ? 'Raw' : 'Formatted'} />
           </button>
         ))}
       </div>
@@ -206,5 +206,25 @@ export function MarkdownToolbar({
       )}
       {error && <span className="markdown-toolbar__error">{error}</span>}
     </div>
+  );
+}
+
+/** The longest label on either switch: every side of both is made this wide, so the two switches match. */
+const WIDEST_MODE_LABEL = 'Formatted';
+
+/**
+ * A switch side's label, laid over an unseen copy of the longest label so the
+ * button is that wide whatever its own word: View/Edit then lines up with
+ * Raw/Formatted, in any font.
+ * @param text The label.
+ */
+function ModeLabel({ text }: { readonly text: string }) {
+  return (
+    <span className="markdown-toolbar__mode-label">
+      <span>{text}</span>
+      <span className="markdown-toolbar__mode-sizer" aria-hidden="true">
+        {WIDEST_MODE_LABEL}
+      </span>
+    </span>
   );
 }

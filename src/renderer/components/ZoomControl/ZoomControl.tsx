@@ -1,14 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { ZOOM_PERCENT_MAX, ZOOM_PERCENT_MIN } from '@shared/constants';
 import { formatShortcut } from '../../lib/shortcuts';
 
 interface ZoomControlProps {
-  /** The active tab's current zoom, already clamped to 25–200 by main. */
+  /** The active tab's current zoom, already clamped by main to `ZOOM_PERCENT_MIN`–`ZOOM_PERCENT_MAX`. */
   readonly percent: number;
   /** Whether there's an active tab to zoom at all. */
   readonly canZoom: boolean;

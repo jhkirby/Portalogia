@@ -177,9 +177,14 @@ const api: NorthstarApi = {
   },
 
   onFocusAddressBar: (listener) => {
-    const handler = (): void => listener();
+    const handler = (_event: Electron.IpcRendererEvent, payload?: { clear?: boolean }): void => listener(payload?.clear === true);
     ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
+  },
+  onTitlebarPointer: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, inside: unknown): void => listener(inside === true);
+    ipcRenderer.on(IpcChannel.UiTitlebarPointer, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiTitlebarPointer, handler);
   },
   onFocusZoom: (listener) => {
     const handler = (): void => listener();
@@ -221,6 +226,7 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.PageStatsChanged, handler);
   },
   getWifiStatus: () => ipcRenderer.invoke(IpcChannel.StatusWifiGet),
+  getBatteryPresent: () => ipcRenderer.invoke(IpcChannel.StatusBatteryPresentGet),
   onWifiStatusChanged: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, status: WifiStatus): void => {
       listener(status);

@@ -569,7 +569,7 @@ export function registerTabIpc(
   ipcMain.on(IpcChannel.ZoomWheel, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = zoomWheelRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabForContents(event.sender)?.manager.wheelZoom(event.sender, parsed.data.direction);
+      resolveTabForContents(event.sender)?.manager.wheelZoom(event.sender, parsed.data.direction, parsed.data.coarse === true);
     }
   });
 

@@ -39,6 +39,7 @@ import {
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   ZOOM_PERCENT_WHEEL_STEP,
+  ZOOM_PERCENT_WHEEL_STEP_COARSE,
   STATUS_BAR_HEIGHT_PX,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
@@ -748,6 +749,7 @@ export class TabManager {
         // has registered a listener and is silently dropped. This is the
         // first point that page is guaranteed ready to receive it.
         this.pushHighlighterStateTo(id);
+        this.pushFocusModeTo(id);
       }
     });
 
@@ -2093,14 +2095,14 @@ export class TabManager {
   }
 
   /**
-   * Tells a note or PDF tab's page whether this window is in Focus Mode, so it hides its stat bar along with the
-   * chrome. A web page's stat bar is the chrome's own, which hides by itself.
+   * Tells a note, PDF or terminal tab's page whether this window is in Focus Mode, so it hides its stat bar along
+   * with the chrome. A web page's stat bar is the chrome's own, which hides by itself.
    * @param id The tab.
    */
   private pushFocusModeTo(id: string): void {
     const kind = this.states.get(id)?.kind;
     const view = this.views.get(id);
-    if ((kind === 'pdf' || kind === 'markdown') && view && !view.webContents.isDestroyed()) {
+    if ((kind === 'pdf' || kind === 'markdown' || kind === 'terminal') && view && !view.webContents.isDestroyed()) {
       view.webContents.send(IpcChannel.TabFocusMode, this.focusMode);
     }
   }
@@ -5053,15 +5055,17 @@ export class TabManager {
    * split view the one under the pointer needn't be the active one.
    * @param sender The `webContents` the wheel event came from.
    * @param direction `1` to zoom in, `-1` to zoom out.
+   * @param coarse Shift was held too: step by `ZOOM_PERCENT_WHEEL_STEP_COARSE` instead.
    */
-  public wheelZoom(sender: WebContents, direction: 1 | -1): void {
+  public wheelZoom(sender: WebContents, direction: 1 | -1, coarse = false): void {
     for (const [id, view] of this.views) {
       if (view.webContents === sender) {
         if (!this.isZoomable(id)) {
           return;
         }
         const current = this.registry.zoomPercentByTabId.get(id) ?? ZOOM_PERCENT_DEFAULT;
-        this.setZoomPercent(id, clampZoomPercent(current + direction * ZOOM_PERCENT_WHEEL_STEP));
+        const step = coarse ? ZOOM_PERCENT_WHEEL_STEP_COARSE : ZOOM_PERCENT_WHEEL_STEP;
+        this.setZoomPercent(id, clampZoomPercent(current + direction * step));
         return;
       }
     }
@@ -5352,6 +5356,21 @@ export class TabManager {
     if (this.handleTabJumpShortcut(event, input)) {
       return true;
     }
+    // Ctrl+Shift+? (the ? key, Shift+/): the search bar, emptied, from anywhere. Matched by physical key, since
+    // Shift turns `/` into `?` (or something else on another layout).
+    if (
+      input.type === 'keyDown' &&
+      (input.control || input.meta) &&
+      input.shift &&
+      !input.alt &&
+      input.code === 'Slash'
+    ) {
+      event.preventDefault();
+      if (!input.isAutoRepeat) {
+        this.requestFocusAddressBar(true);
+      }
+      return true;
+    }
     if (input.type !== 'keyDown' || input.isAutoRepeat || !(input.control || input.meta) || !input.alt || input.shift) {
       return false;
     }
@@ -5622,10 +5641,11 @@ export class TabManager {
    * Asks this window's chrome to focus the address bar
    * (menu/accelerator-driven, Ctrl+/). See `requestTabSearch` for why
    * `webContents.focus()` has to happen here too.
+   * @param clear Whether to empty it too (Ctrl+Shift+?), ready for a new search.
    */
-  public requestFocusAddressBar(): void {
+  public requestFocusAddressBar(clear = false): void {
     this.window.webContents.focus();
-    this.window.webContents.send(IpcChannel.UiFocusAddressBar);
+    this.window.webContents.send(IpcChannel.UiFocusAddressBar, { clear });
   }
 
   /**

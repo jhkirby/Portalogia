@@ -167,6 +167,12 @@ export function App() {
   /** The tab-search popup's state while open: the active tab's last frame, shown blurred behind it. */
   const [tabSearch, setTabSearch] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
+  /**
+   * Whether the pointer is on the tab row, as main reports it (`watchTitlebarHover`): the row's empty space is the
+   * window's drag region, where the page never sees the pointer, so `:hover` alone can't show the controls there.
+   */
+  const [pointerOnTitlebar, setPointerOnTitlebar] = useState(false);
+  useEffect(() => window.northstar.onTitlebarPointer(setPointerOnTitlebar), []);
   /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
   const [pageStats, setPageStats] = useState<{ readonly tabId: string; readonly stats: PageStats | null } | null>(null);
   useEffect(() => window.northstar.onPageStats((tabId, stats) => setPageStats({ tabId, stats })), []);
@@ -584,7 +590,7 @@ export function App() {
               a native double-click-to-maximize there. Tabs themselves opt
               out of dragging (see tab-bar.css) so clicking and reordering
               them still works. */}
-          <div className="titlebar">
+          <div className={`titlebar${pointerOnTitlebar ? ' titlebar--pointer-inside' : ''}`}>
             <TabBar
               tabs={workspaceTabs}
               workspaceId={activeWorkspaceId}

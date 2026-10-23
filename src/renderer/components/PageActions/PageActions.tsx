@@ -65,7 +65,7 @@ interface PageActionsProps {
   /** Whether Revert Annotations is shown — hidden on a terminal tab, which can't be annotated. */
   readonly showRevert: boolean;
   readonly canZoom: boolean;
-  /** The active tab's current zoom, 25–200. */
+  /** The active tab's current zoom, within its range. */
   readonly zoomPercent: number;
   readonly focusMode: boolean;
   /** Whether the laser pointer overlay is currently on. */

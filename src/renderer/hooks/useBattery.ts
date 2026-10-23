@@ -64,11 +64,22 @@ export function useBattery(): BatteryStatus | null {
     }
     let battery: BatteryManagerLike | null = null;
     let cancelled = false;
+    // Whether Windows says there's a battery (`null` until it has answered). A full, plugged-in laptop reads to the
+    // page's API just like a desktop with none, so the guess from the reading is only used until then.
+    let present: boolean | null = null;
     const update = (): void => {
-      if (battery) {
-        setStatus(isNoBattery(battery) ? null : { percent: Math.round(battery.level * 100), charging: battery.charging });
+      if (!battery) {
+        return;
       }
+      const hasBattery = present ?? !isNoBattery(battery);
+      setStatus(hasBattery ? { percent: Math.round(battery.level * 100), charging: battery.charging } : null);
     };
+    void window.northstar.getBatteryPresent().then((answer) => {
+      if (!cancelled && answer !== null) {
+        present = answer;
+        update();
+      }
+    });
     void getBattery.call(navigator).then((manager) => {
       if (cancelled) {
         return;

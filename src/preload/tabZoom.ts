@@ -47,11 +47,14 @@ ipcRenderer.on(ZoomApply, (_event, level: number) => {
 window.addEventListener(
   'wheel',
   (event) => {
-    if (!event.ctrlKey || event.deltaY === 0) {
+    // With Shift held too, Windows turns the wheel sideways, so the step comes in `deltaX`; Shift asks for the coarse
+    // step (`ZOOM_PERCENT_WHEEL_STEP_COARSE`).
+    const delta = event.deltaY || event.deltaX;
+    if (!event.ctrlKey || delta === 0) {
       return;
     }
     event.preventDefault();
-    ipcRenderer.send('zoom:wheel', { direction: event.deltaY < 0 ? 1 : -1 });
+    ipcRenderer.send('zoom:wheel', { direction: delta < 0 ? 1 : -1, coarse: event.shiftKey });
   },
   { passive: false, capture: true },
 );

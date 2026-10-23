@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-22 */
 
 /* ── MARKDOWN TOOLBAR ─────────────────────────────────────────────────── */
 /* The Markdown tab's controls inside the chrome's main toolbar, in the slot a
@@ -110,6 +110,21 @@
 
   background: var(--color-selection-bg);
   color: var(--color-accent-text);
+}
+
+/* The label and an unseen copy of the longest label share one cell, so every side of both switches is that wide
+   (`ModeLabel`), the word itself centred in it. */
+.markdown-toolbar__mode-label {
+  display: inline-grid;
+  justify-items: center;
+}
+
+.markdown-toolbar__mode-label > * {
+  grid-area: 1 / 1;
+}
+
+.markdown-toolbar__mode-sizer {
+  visibility: hidden;
 }
 
 .markdown-toolbar__mode:disabled {

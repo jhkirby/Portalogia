@@ -83,8 +83,8 @@
 }
 
 .sidebar--hidden .sidebar__inner {
-  /* A sliver, so the selected pill's grey doesn't run into the window's left edge. */
-  padding-left: 3px;
+  /* A little room, so the selected pill's grey doesn't run into the window's left edge. */
+  padding-left: 6px;
   /* Still clears the toggle strip when collapsed. */
   padding-right: calc(var(--size-sidebar-toggle-width) + 2px);
   /* Collapsed, this still occupies `--size-sidebar-collapsed-width` — not
@@ -647,6 +647,12 @@
   }
 }
 
+/* Collapsed, a pill shows only its icon: centred in the pill's grey (its width less the icon's, halved, on the left; a
+   percentage padding is of the list's width, which is the pill's). */
+.sidebar--hidden .workspace-bar__pill {
+  padding-left: calc((100% - 16px) / 2);
+}
+
 /* Collapsed, the pill is just its icon: swapping that for the star would put a different target under the pointer
    the moment it arrives to pick the workspace. `:is()` matches the specificity of the expanded hover rules above. */
 .sidebar--hidden .workspace-bar__pill:is(:hover, :focus-within) .workspace-bar__star {
@@ -664,6 +670,10 @@
   gap: 2px;
   width: 100%;
   margin-top: var(--size-spacing-xs);
+  /* A thin line, the chrome's own border colour, setting "New workspace" and the images button off from the list of
+     workspaces above them. */
+  padding-top: var(--size-spacing-xs);
+  border-top: 1px solid var(--color-chrome-border);
   flex-shrink: 0;
 }
 

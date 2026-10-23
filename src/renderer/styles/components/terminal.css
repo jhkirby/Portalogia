@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-24 */
+   Last Modified: 2026-10-22 */
 
 /* ── TERMINAL ─────────────────────────────────────────────────────────── */
 /* One terminal tab's whole page (`terminal.html`), a dedicated
@@ -22,6 +22,9 @@ html,
 body {
   height: 100%;
   margin: 0;
+  /* The terminal's own background: what shows in the sliver below its last whole row (xterm lays out whole rows
+     only), which was the browser's darker default and read as an empty black band along the bottom. */
+  background: light-dark(#ffffff, #1e1e1e);
   /* This page is a fixed single-terminal layout, never meant to be a
      scrollable document itself — same reasoning as the chrome's own
      `html, body` rule in app.css. Without this, a sub-pixel mismatch
@@ -38,14 +41,24 @@ body {
   height: 100%;
 }
 
+/* The terminal above, its stat bar below. */
 .terminal {
   position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 
 .terminal__surface {
+  flex: 1;
+  min-height: 0;
+  /* Room between the prompt and the window's left edge (and a little above the first line). xterm's fit measures the
+     space inside this padding, so its rows and columns stay whole. */
+  padding: 8px 0 0 14px;
+  box-sizing: border-box;
   width: 100%;
-  height: 100%;
+  /* The terminal never draws past its own area, onto the stat bar below, even mid-resize. */
+  overflow: hidden;
   /* xterm.js paints its own background from the `theme` option passed in
      `Terminal.tsx` (see `xtermThemes.ts`); this is just the instant it
      takes for that to happen, so it should match rather than always
@@ -141,4 +154,90 @@ body {
   color: #e8eaed;
   background: rgba(0, 0, 0, 0.55);
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ── Stat bar ──
+   Along the bottom, like a note's, a PDF's and a web page's (`.md-status`, `.pdf-status`, `.web-status`). */
+.terminal-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--size-spacing-md) * 1.5);
+  height: var(--size-status-bar-height);
+  padding: 0 var(--size-spacing-md);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background: light-dark(#f1f3f4, #202124);
+  border-top: 1px solid light-dark(#d7d9db, #3c4043);
+
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: light-dark(#5f6368, #bdc1c6);
+  white-space: nowrap;
+}
+
+.terminal-status__item {
+  flex: none;
+}
+
+/* Where the pointer is (`x×y`): first, in steady-width digits so the bar doesn't shuffle as it moves. */
+.terminal-status__pointer {
+  min-width: 9ch;
+}
+
+/* The selection's own counts, set off from the rest by a thin vertical line; there only while there's a selection. */
+.terminal-status__selection {
+  display: flex;
+  flex: none;
+  gap: var(--size-spacing-md);
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+
+  border-left: 1px solid light-dark(#d7d9db, #3c4043);
+}
+
+/* ── Scroll bar ──
+   xterm draws its own (VS Code's), not the page's: made to look like the app's other scroll bars (scrollbar.css) — a
+   thin rounded thumb on no track, without the inset shadow along the top. Its sizes are set inline by xterm, so
+   these need `!important` to win. */
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: 8px !important;
+  background: transparent !important;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  left: 1px !important;
+  width: 6px !important;
+
+  background: var(--color-scrollbar-thumb, light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.2))) !important;
+  border-radius: 4px;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider:hover {
+  background: var(--color-scrollbar-thumb-hover, light-dark(rgba(0, 0, 0, 0.35), rgba(255, 255, 255, 0.3))) !important;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+  background: var(--color-scrollbar-thumb-active, light-dark(rgba(0, 0, 0, 0.45), rgba(255, 255, 255, 0.4))) !important;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .shadow {
+  display: none !important;
+}
+
+/* No horizontal scroll bar: the terminal wraps to its width, so there's never anything to scroll sideways, and its
+   empty track showed as a black band along the bottom. */
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.horizontal {
+  display: none !important;
+}
+
+/* xterm's scroll layer is painted black and runs a little past the last row of text, which showed as a black band
+   along the bottom; transparent, the terminal's own background shows there instead. */
+.terminal__surface .xterm .xterm-viewport {
+  background-color: transparent !important;
 }

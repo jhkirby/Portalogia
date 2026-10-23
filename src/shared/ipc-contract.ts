@@ -261,6 +261,8 @@ export const IpcChannel = {
   UiEditWorkspace: 'ui:edit-workspace',
   UiOpenWorkspaceImages: 'ui:open-workspace-images',
   UiFocusAddressBar: 'ui:focus-address-bar',
+  /** Main → chrome: the pointer came onto (`true`) or left the tab row, its empty drag space included. */
+  UiTitlebarPointer: 'ui:titlebar-pointer',
   UiFocusZoom: 'ui:focus-zoom',
   UiToggleTheme: 'ui:toggle-theme',
   ThemeSet: 'theme:set',
@@ -279,6 +281,8 @@ export const IpcChannel = {
   StatusWifiChanged: 'status:wifi-changed',
   /** Chrome → main: the Wi-Fi connection now. */
   StatusWifiGet: 'status:wifi-get',
+  /** Chrome → main: whether the computer has a battery at all (`null` while still finding out). */
+  StatusBatteryPresentGet: 'status:battery-present-get',
   /** Main → chrome: the outside temperature changed. */
   StatusWeatherChanged: 'status:weather-changed',
   /** Chrome → main: the outside temperature now. */
@@ -818,7 +822,9 @@ export interface NorthstarApi {
   onOpenTabSearch(listener: () => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+/) to focus the address bar. */
-  onFocusAddressBar(listener: () => void): () => void;
+  onFocusAddressBar(listener: (clear: boolean) => void): () => void;
+  /** Pushed as the pointer comes onto or leaves the tab row (main watches it: the row's empty space is the OS drag region). */
+  onTitlebarPointer(listener: (inside: boolean) => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+0) to focus and select `ZoomControl`'s percent field. */
   onFocusZoom(listener: () => void): () => void;
@@ -863,6 +869,8 @@ export interface NorthstarApi {
   onPageStats(listener: (tabId: string, stats: PageStats | null) => void): () => void;
   /** The Wi-Fi connection now (`null` if asked from anywhere but the chrome). */
   getWifiStatus(): Promise<WifiStatus | null>;
+  /** Whether the computer has a battery, as Windows reports it; `null` while that's still being asked. */
+  getBatteryPresent(): Promise<boolean | null>;
   /** Pushed whenever the Wi-Fi connection or its signal changes. Returns an unsubscribe function. */
   onWifiStatusChanged(listener: (status: WifiStatus) => void): () => void;
   /** The outside temperature now (`null` if asked from anywhere but the chrome). */
@@ -881,6 +889,10 @@ export interface NorthstarApi {
  * API). See `TabManager.createTerminalTab` for how this view is created.
  */
 export interface NorthstarTerminalApi {
+  /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
+  /** The tab's zoom level (Chromium's: 0 is 100%), for the terminal to size its text by; the page itself never zooms. */
+  onZoom(listener: (level: number) => void): () => void;
+  onFocusMode(listener: (focusMode: boolean) => void): () => void;
   /** Sends raw keystroke/paste bytes from xterm.js to this tab's pty. Fire-and-forget: latency matters more than delivery confirmation. */
   sendTerminalInput(id: string, data: string): void;
   /** Tells this tab's pty its terminal grid resized (e.g. the window resized). Fire-and-forget, same as `sendTerminalInput`. */

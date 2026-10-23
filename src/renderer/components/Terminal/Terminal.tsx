@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-22
 
 import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
@@ -12,7 +12,15 @@ import { TERMINAL_PREPARE_PRINT_GLOBAL } from '@shared/constants';
 import type { RGB } from '@shared/color';
 import { ACCENT_STORAGE_KEY } from '../../lib/accentStorage';
 import { createTerminalFind } from './terminalFind';
+import { TerminalStatusBar, type TerminalStats } from './TerminalStatusBar';
 import { currentXtermTheme } from './xtermThemes';
+
+/**
+ * The terminal's text size at 100% zoom. Set so that 100% is the size the text
+ * used to have at 160% (13px then, so about 21px now), which reads comfortably
+ * next to the rest of the app; zooming scales from here like any other tab.
+ */
+const TERMINAL_FONT_SIZE = Math.round(13 * 1.6);
 
 /** One highlighted selection in a terminal's buffer — one `IDecoration` per row it spans (xterm's own API has no multi-row decoration), plus the original buffer range and the exact color used, both needed to correctly re-wrap the matching text in `<mark>` when preparing to print (see `TERMINAL_PREPARE_PRINT_GLOBAL` below). */
 interface TerminalHighlight {
@@ -182,6 +190,10 @@ export function Terminal({ id }: TerminalProps) {
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [exited, setExited] = useState(false);
+  const [stats, setStats] = useState<TerminalStats>({ line: 1, words: 0, characters: 0, commands: 0, selection: null });
+  /** The window's Focus Mode: the stat bar hides with the chrome. */
+  const [focusMode, setFocusMode] = useState(false);
+  useEffect(() => window.northstarTerminal.onFocusMode(setFocusMode), []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -205,7 +217,7 @@ export function Terminal({ id }: TerminalProps) {
 
     const term = new XTerm({
       cursorBlink: true,
-      fontSize: 13,
+      fontSize: TERMINAL_FONT_SIZE,
       fontFamily: 'Menlo, Consolas, "Cascadia Code", monospace',
       theme: currentXtermTheme(),
     });
@@ -217,7 +229,107 @@ export function Terminal({ id }: TerminalProps) {
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    const dataDisposable = term.onData((data) => window.northstarTerminal.sendTerminalInput(id, data));
+    // Fits the terminal to its area, whole rows only. The fit add-on divides the height by the cell's exact height,
+    // but xterm draws each row at a whole-pixel height, slightly taller, so at some sizes it fitted a row too many
+    // and the last one ran past the bottom, under the stat bar. So the rows as drawn are measured, and any that
+    // don't wholly fit are dropped.
+    const fitTerminal = (): void => {
+      fitAddon.fit();
+      const row = container.querySelector<HTMLElement>('.xterm-rows > div');
+      const rowHeight = row?.getBoundingClientRect().height ?? 0;
+      if (rowHeight <= 0) {
+        return;
+      }
+      const style = getComputedStyle(container);
+      const available = container.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      const rows = Math.max(1, Math.floor(available / rowHeight));
+      if (rows < term.rows) {
+        term.resize(term.cols, rows);
+      }
+    };
+
+    // ── Stat bar ──
+    // Commands entered: Enter on a line where something was typed (an Enter on an empty prompt runs nothing). Counted
+    // from the keys sent, so a pasted block of several lines counts each of them.
+    let commands = 0;
+    let lineHasInput = false;
+    const countCommands = (data: string): void => {
+      for (const character of data) {
+        if (character === '\r') {
+          if (lineHasInput) {
+            commands += 1;
+          }
+          lineHasInput = false;
+        } else if (character === '\u0003' || character === '\u0015') {
+          // Ctrl+C abandons the line; Ctrl+U clears it.
+          lineHasInput = false;
+        } else if (character >= ' ' && character !== '\u007f') {
+          lineHasInput = true;
+        }
+      }
+    };
+    // The shell's prompt isn't content: Git Bash's `user@host MINGW64 ~/path` line, and the `$ ` (or PowerShell's
+    // `PS C:\path> `) a command is typed after. Left out of the on-screen counts; the command typed after it stays.
+    const PROMPT_LINE = /^\S+@\S+ (?:MINGW64|MINGW32|MSYS|UCRT64|CLANG64|CLANGARM64)(?: .*)?$/;
+    const PROMPT_MARK = /^(?:[$#] |[$#]$|PS [^>]*> ?)/;
+    const withoutPrompt = (row: string): string => (PROMPT_LINE.test(row) ? '' : row.replace(PROMPT_MARK, ''));
+    const measure = (text: string): { words: number; characters: number } => ({
+      words: text.match(/\S+/g)?.length ?? 0,
+      characters: text.replace(/\n/g, '').length,
+    });
+    // Recounted at most once a frame from whatever moved: output, scrolling, the cursor, the selection, the keys.
+    let statsFrame = 0;
+    const updateStats = (): void => {
+      if (statsFrame) {
+        return;
+      }
+      statsFrame = requestAnimationFrame(() => {
+        statsFrame = 0;
+        const buffer = term.buffer.active;
+        const rows: string[] = [];
+        for (let row = 0; row < term.rows; row += 1) {
+          rows.push(withoutPrompt(buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ''));
+        }
+        const onScreen = measure(rows.join('\n'));
+        const selected = term.getSelection();
+        setStats({
+          line: buffer.baseY + buffer.cursorY + 1,
+          words: onScreen.words,
+          characters: onScreen.characters,
+          commands,
+          selection: selected.trim() === '' ? null : measure(selected),
+        });
+      });
+    };
+    // Zoom sizes the terminal's text (Chromium's levels: each step is ×1.2), then refits its rows and columns; the
+    // page around it, stat bar included, keeps its size.
+    // The refit waits for xterm's next draw, which comes after it has measured the new font's cell size: a fit before
+    // that still used the old size and left rows running past the bottom, under the stat bar. Fitted once more a
+    // moment later in case that draw came before the measurement settled.
+    const unsubscribeZoom = window.northstarTerminal.onZoom((level) => {
+      // Whole pixels: a fractional size gives fractional rows, which xterm rounds up as it draws but not as it fits,
+      // so over a screen of rows the text ran several pixels past the bottom.
+      term.options.fontSize = Math.round(TERMINAL_FONT_SIZE * Math.pow(1.2, level));
+      const afterDraw = term.onRender(() => {
+        afterDraw.dispose();
+        fitTerminal();
+        window.setTimeout(fitTerminal, 50);
+      });
+      term.refresh(0, term.rows - 1);
+    });
+
+    const statsDisposables = [
+      term.onRender(updateStats),
+      term.onScroll(updateStats),
+      term.onCursorMove(updateStats),
+      term.onSelectionChange(updateStats),
+    ];
+
+    const dataDisposable = term.onData((data) => {
+      countCommands(data);
+      updateStats();
+      window.northstarTerminal.sendTerminalInput(id, data);
+    });
     const resizeDisposable = term.onResize(({ cols, rows }) => window.northstarTerminal.resizeTerminal(id, cols, rows));
     const unsubscribeData = window.northstarTerminal.onTerminalData((dataId, data) => {
       if (dataId === id) {
@@ -470,7 +582,7 @@ export function Terminal({ id }: TerminalProps) {
     // resize, sidebar toggle, Focus Mode) — the container fills the whole
     // page, so this is equivalent to a window 'resize' listener but also
     // catches the DPI/zoom-driven resizes that don't fire one.
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+    const resizeObserver = new ResizeObserver(fitTerminal);
     resizeObserver.observe(container);
 
     // Fills `.terminal__print-view` (see terminal.css's `@media print`
@@ -539,6 +651,9 @@ export function Terminal({ id }: TerminalProps) {
       highlights.forEach((highlight) => highlight.decorations.forEach((decoration) => decoration.dispose()));
       highlights.clear();
       resizeObserver.disconnect();
+      cancelAnimationFrame(statsFrame);
+      unsubscribeZoom();
+      statsDisposables.forEach((disposable) => disposable.dispose());
       delete (window as unknown as Record<string, unknown>)[TERMINAL_PREPARE_PRINT_GLOBAL];
       term.dispose();
       termRef.current = null;
@@ -559,6 +674,7 @@ export function Terminal({ id }: TerminalProps) {
           effect above) for `printToPDF()`'s own `print` media pass. See
           terminal.css's `@media print` rule for the swap. */}
       <pre ref={printViewRef} className="terminal__print-view" />
+      {!focusMode && <TerminalStatusBar stats={stats} />}
     </div>
   );
 }

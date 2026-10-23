@@ -16,6 +16,7 @@ import {
   countCharacters,
   countSelection,
   extractHeadings,
+  indentLevels,
   extractOutboundLinks,
   fileByteSize,
   wordIndexAt,
@@ -669,6 +670,9 @@ export function MarkdownViewer() {
     };
   }, [source, lineEnding]);
 
+  // Each line's indentation level, for the status bar's "indentations".
+  const lineIndents = useMemo(() => indentLevels(source), [source]);
+
   // What's selected, counted for the status bar: from the source in the editor, from the drawn text in the reader.
   const selectedText =
     showEditor && editorSelection
@@ -953,6 +957,8 @@ export function MarkdownViewer() {
               column={caretColumn}
               word={caretWord}
               wordCount={structure.wordStarts.length}
+              indent={caretLine === null ? null : (lineIndents[caretLine - 1] ?? 0)}
+              indentMax={lineIndents.reduce((deepest, level) => Math.max(deepest, level), 0)}
               characters={structure.characters}
               links={structure.links.length}
               selection={selectionStats}

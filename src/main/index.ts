@@ -41,6 +41,7 @@ import { buildMenu } from './menu/buildMenu';
 import { buildHomePageHtml } from './protocol/homePage';
 import { TerminalManager } from './terminal/TerminalManager';
 import { createMainWindow } from './windows/MainWindow';
+import { watchTitlebarHover } from './windows/titlebarHover';
 
 // Electron requires this to be set before `app.whenReady()`.
 app.setName('Northstar');
@@ -337,6 +338,7 @@ function launchWindow(
   options: { hidden?: boolean } = {},
 ): BrowserWindow {
   const window = createMainWindow(adBlocker, { showWhenReady: !options.hidden });
+  watchTitlebarHover(window);
   if (position) {
     window.setPosition(Math.round(position.x), Math.round(position.y));
   }

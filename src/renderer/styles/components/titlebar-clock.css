@@ -22,13 +22,15 @@
   line-height: 1.25;
   white-space: nowrap;
 
-  pointer-events: none;
+  /* Takes the pointer while showing, so pointing at the clock counts as being on the row (`.titlebar:hover`) and brings
+     up the controls, as pointing anywhere else on it does; once they're up (below) it lets clicks through to them. */
   user-select: none;
   transition: opacity var(--size-titlebar-reveal-duration) ease-out;
 }
 
-.titlebar:is(:hover, :has(:focus-visible)) .titlebar-clock {
+.titlebar:is(:hover, :has(:focus-visible), .titlebar--pointer-inside) .titlebar-clock {
   opacity: 0;
+  pointer-events: none;
 }
 
 .titlebar-clock__clock {
