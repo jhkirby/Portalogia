@@ -27,6 +27,7 @@ import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
 import { PAN_WRAP_TIMEOUT_MS, wrapTargetAt, type PanWrap } from '@shared/panWrap';
 import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
+import { FluidBackground } from '../FluidBackground';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -1009,7 +1010,10 @@ export function PdfViewer() {
             })}
           </div>
         ) : (
-          <div className="pdf-viewer__empty">{error && <p className="pdf-viewer__error">{error}</p>}</div>
+          <div className="pdf-viewer__empty">
+            <FluidBackground />
+            {error && <p className="pdf-viewer__error">{error}</p>}
+          </div>
         )}
       </div>
       {doc && error && <p className="pdf-viewer__error pdf-viewer__error--floating">{error}</p>}

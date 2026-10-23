@@ -182,7 +182,9 @@ body {
 
 /* ── Empty / error ── */
 
+/* Positioned for the fluid filling it (`FluidBackground`); the error message sits above the fluid. */
 .pdf-viewer__empty {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -192,6 +194,8 @@ body {
 }
 
 .pdf-viewer__error {
+  position: relative;
+  z-index: 1;
   margin: 0;
 
   font-size: var(--size-font-sm);

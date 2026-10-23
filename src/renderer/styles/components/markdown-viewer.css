@@ -135,6 +135,8 @@ body {
 /* ── Empty: a blank page until a note is opened from the toolbar ── */
 
 .md-viewer__empty {
+  /* Positioned for the fluid filling it (`FluidBackground`). */
+  position: relative;
   flex: 1;
 
   background: var(--md-empty-bg);

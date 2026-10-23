@@ -5,6 +5,7 @@
 
 import type { WebContents } from 'electron';
 import type { RGB } from '@shared/color';
+import { IpcChannel } from '@shared/ipc-contract';
 
 /** Same default `useAccentColor` (renderer) falls back to before it's ever reported anything via `setAccentColor` — matches so a tab created before that first report (essentially only ever the very first tab of a fresh launch) doesn't show a different blue than everything else briefly does. */
 let currentAccent: RGB = { r: 26, g: 115, b: 232 };
@@ -44,6 +45,10 @@ export function setPageSelectionAccent(rgb: RGB): void {
   currentAccent = rgb;
   for (const wc of trackedWebContents) {
     applyCss(wc);
+    // The new-tab page's fluid recolours itself too (`tabHomeFluid.ts`).
+    if (!wc.isDestroyed()) {
+      wc.send(IpcChannel.TabAccentChanged, rgb);
+    }
   }
 }
 
@@ -71,6 +76,10 @@ export function getCurrentAccent(): RGB {
 export function trackPageSelectionAccent(wc: WebContents): void {
   trackedWebContents.add(wc);
   wc.on('dom-ready', () => applyCss(wc));
+  // The new-tab page's fluid (`tabHomeFluid.ts`) asks for the accent to colour itself with.
+  wc.ipc.on(IpcChannel.TabAccent, (event) => {
+    event.returnValue = currentAccent;
+  });
   wc.on('destroyed', () => trackedWebContents.delete(wc));
 }
 

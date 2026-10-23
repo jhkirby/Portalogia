@@ -41,6 +41,7 @@ import { MarkdownStatusBar } from './MarkdownStatusBar';
 import { useMarkdownFind } from './useMarkdownFind';
 import { useMarkdownPan } from './useMarkdownPan';
 import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
+import { FluidBackground } from '../FluidBackground';
 
 /** Name registered with `CSS.highlights` for the user's highlights, painted by `markdown-viewer.css`. */
 const HIGHLIGHT_NAME = 'northstar-md-highlight';
@@ -844,7 +845,9 @@ export function MarkdownViewer() {
     >
       <style>{`::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, 0.55); }`}</style>
       {!hasNote ? (
-        <div className="md-viewer__empty" />
+        <div className="md-viewer__empty">
+          <FluidBackground />
+        </div>
       ) : (
         <>
           {/* The note and its panel side by side, over the status bar. */}

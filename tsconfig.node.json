@@ -19,5 +19,7 @@
     "baseUrl": ".",
     "paths": { "@shared/*": ["src/shared/*"] }
   },
-  "include": ["src/main/**/*", "src/shared/**/*"]
+  "include": ["src/main/**/*", "src/shared/**/*"],
+  // Browser-only code (WebGL, the DOM), shared by the preloads and the pages but never run in main.
+  "exclude": ["src/shared/dom/**/*"]
 }

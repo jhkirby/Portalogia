@@ -132,6 +132,10 @@ export const IpcChannel = {
   TabPointerPosition: 'tab:pointer-position',
   /** Tab's page → main (sync), before its first paint: whether to start out blurred, having come from another site. */
   TabLoadBlur: 'tab:load-blur',
+  /** Tab's page → main (sync): the accent, as `RGB` — for the new-tab page's fluid. */
+  TabAccent: 'tab:accent',
+  /** Main → tab's page: the accent changed (`RGB`) — the new-tab page's fluid recolours itself. */
+  TabAccentChanged: 'tab:accent-changed',
   /** Browser tab's page → main: its words, characters, images, links and elements, hovered element and selection. */
   TabPageStats: 'tab:page-stats',
   /** Main → chrome: the active web page's stats changed (or another page became the active one). */
