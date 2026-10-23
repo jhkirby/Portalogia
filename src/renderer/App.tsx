@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { useEffect, useMemo, useState } from 'react';
 import { HOME_URL } from '@shared/constants';
@@ -15,6 +15,7 @@ import { PdfToolbar } from './components/PdfToolbar';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
 import { TitlebarGrip } from './components/TitlebarGrip';
+import { TitlebarClock } from './components/TitlebarClock';
 import { TabSearchPopup } from './components/TabSearchPopup';
 import { WorkspaceEditPopup } from './components/WorkspaceEditPopup';
 import { WindowControls } from './components/WindowControls';
@@ -85,7 +86,8 @@ export function App() {
     createHistoryTab,
     openPdfFile,
     goToPdfPage,
-    setPdfPointerMode,
+    setPointerMode,
+    toggleEditMode,
     renamePdfFile,
     createMarkdownTab,
     openMarkdownFile,
@@ -245,6 +247,9 @@ export function App() {
   // A terminal or History tab is an app page, not a document: none of the page-marking tools apply to it.
   const isAppPage = activeTab?.kind === 'terminal' || activeTab?.kind === 'history';
   const isHome = browserTab?.url === HOME_URL;
+  // The tab kinds with the Pan and Select pointer modes.
+  const pointerModeTab =
+    activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown' || activeTab?.kind === 'browser' ? activeTab : null;
   const adBlockSite = hostOfUrl(browserTab?.url);
   const adBlockSiteAllowed = adBlockSite !== null && adBlock.allowedSites.includes(adBlockSite);
   // PDF bookmarks are files, not pages: the address bar and tab labels only ever deal in the page ones.
@@ -492,7 +497,10 @@ export function App() {
               onTearOffEnd={tearOffTabEnd}
               onReportDropRegions={reportDropRegions}
             />
-            <WindowControls />
+            <div className="titlebar__corner">
+              <TitlebarClock />
+              <WindowControls />
+            </div>
           </div>
           <div className="toolbar">
             {activeTab?.kind === 'pdf' ? (
@@ -580,14 +588,19 @@ export function App() {
               penActive={penActive}
               cropActive={cropActive}
               showCrop={activeTab?.kind === 'pdf'}
-              showPointerModes={activeTab?.kind === 'pdf'}
-              pointerMode={activeTab?.kind === 'pdf' ? activeTab.pointerMode : 'pan'}
-              pointerModesLocked={activeTab?.kind === 'pdf' && activeTab.fileName === null}
+              showPointerModes={pointerModeTab !== null}
+              pointerMode={pointerModeTab?.pointerMode ?? 'select'}
+              pointerModesLocked={
+                isHome || ((pointerModeTab?.kind === 'pdf' || pointerModeTab?.kind === 'markdown') && pointerModeTab.fileName === null)
+              }
               onSetPointerMode={(mode) => {
-                if (activeTab?.kind === 'pdf') {
-                  setPdfPointerMode(activeTab.id, mode);
+                if (pointerModeTab) {
+                  setPointerMode(pointerModeTab.id, mode);
                 }
               }}
+              showEditMode={browserTab !== null}
+              editMode={browserTab?.editMode ?? false}
+              onToggleEditMode={() => browserTab && toggleEditMode(browserTab.id)}
               theme={theme}
               showAdBlock={adBlockSite !== null && !isHome}
               adBlockActive={adBlock.enabled && !adBlockSiteAllowed}

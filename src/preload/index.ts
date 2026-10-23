@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -65,7 +65,8 @@ const api: NorthstarApi = {
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
   goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),
-  setPdfPointerMode: (id, mode) => invoke(IpcChannel.PdfSetPointerMode, { id, mode }),
+  setPointerMode: (id, mode) => invoke(IpcChannel.TabsSetPointerMode, { id, mode }),
+  toggleEditMode: (id) => invoke(IpcChannel.TabsToggleEditMode, { id }),
   createMarkdownTab: () => invoke(IpcChannel.TabsCreateMarkdown),
   openMarkdownFile: (id) => invoke(IpcChannel.MarkdownOpenFile, { id }),
   newMarkdownFile: (id) => invoke(IpcChannel.MarkdownNewFile, { id }),

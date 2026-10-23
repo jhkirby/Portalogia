@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 /** The view a pan wraps around, as `getBoundingClientRect` gives it. */
 export interface PanBounds {

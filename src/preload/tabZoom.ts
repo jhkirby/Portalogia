@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-19
 
 import { ipcRenderer, webFrame } from 'electron';
 // Folded into this same preload entry rather than given its own
@@ -9,11 +9,13 @@ import { ipcRenderer, webFrame } from 'electron';
 // `WebContentsView` (see `TabManager.createTab`), and a module imported by
 // two Rollup entries in the same build gets split into a shared chunk the
 // sandboxed CJS loader can't `require()` (see that file's own comment).
-import { deepActiveElement } from './tabHighlighter';
+import './tabHighlighter';
 import './tabComments';
 import './tabTextBoxes';
 import './tabFind';
 import './tabPen';
+import './tabEditableFocus';
+import './tabPan';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see
 // `src/preload/terminal.ts`'s own comment: a value shared between two
@@ -51,53 +53,4 @@ window.addEventListener(
     ipcRenderer.send('zoom:wheel', { direction: event.deltaY < 0 ? 1 : -1 });
   },
   { passive: false, capture: true },
-);
-
-// Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
-// (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. A `contenteditable`
-// region is reported as 'rich': a web page's rich editor gives Ctrl+B/I/U meanings of its own. Repeated in each
-// preload that needs it: two entries can't share a module (see the note on `tabZoom.ts`'s imports).
-const EditableFocus = 'ui:editable-focus';
-const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
-function isEditableElement(element: Element | null): element is HTMLElement {
-  return (
-    element instanceof HTMLTextAreaElement ||
-    (element instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(element.type)) ||
-    (element instanceof HTMLElement && element.isContentEditable)
-  );
-}
-let editableReported: 'plain' | 'rich' | false = false;
-function reportEditableFocus(): void {
-  // Looks into the comment/text-box tools' closed shadow roots, where typing a note is still typing.
-  const element = deepActiveElement();
-  const editable = !isEditableElement(element) ? false : element.isContentEditable ? 'rich' : 'plain';
-  if (editable !== editableReported) {
-    editableReported = editable;
-    ipcRenderer.send(EditableFocus, editable);
-  }
-}
-window.addEventListener('focusin', reportEditableFocus, true);
-// `focusout` fires before the next element has focus, so look once focus has settled.
-window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
-
-// Escape takes the caret out of a text box, so the shortcuts that stand aside while one has it work again. Decided
-// once the page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a popup)
-// called `preventDefault`, and then the caret stays for the next press.
-window.addEventListener(
-  'keydown',
-  (event) => {
-    if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
-      return;
-    }
-    const element = deepActiveElement();
-    if (!isEditableElement(element)) {
-      return;
-    }
-    setTimeout(() => {
-      if (!event.defaultPrevented && deepActiveElement() === element) {
-        element.blur();
-      }
-    }, 0);
-  },
-  true,
 );

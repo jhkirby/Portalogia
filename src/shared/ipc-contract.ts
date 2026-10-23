@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
 import type { MarkdownAnnotations, PdfAnnotations } from '@shared/ipc-schemas';
-import type { BrowserState, MarkdownDisplay, PdfPointerMode } from '@shared/tab-state';
+import type { BrowserState, MarkdownDisplay, PointerMode } from '@shared/tab-state';
 
 /**
  * Every IPC channel name in the app, enumerated once. Both main and
@@ -64,6 +64,8 @@ export const IpcChannel = {
   PdfOpenPath: 'pdf:open-path',
   /** History page → main: copy one visit's stored URL (or PDF path) to the clipboard. */
   HistoryCopy: 'history:copy',
+  /** History page → main: open one visit's stored route (a page, PDF or note) in a new tab. */
+  HistoryOpenInNewTab: 'history:open-in-new-tab',
   /** Main → history page: the bookmark names the table's Bookmark column looks routes up in. */
   HistoryBookmarks: 'history:bookmarks',
   /** Chrome → main: clear the visits within a time range (or all of them). */
@@ -106,8 +108,16 @@ export const IpcChannel = {
   PdfGoToPage: 'pdf:go-to-page',
   /** Main → PDF page: scroll to this 1-based page. */
   PdfScrollToPage: 'pdf:scroll-to-page',
-  /** Chrome → main: switch a PDF tab between panning and selecting. */
-  PdfSetPointerMode: 'pdf:set-pointer-mode',
+  /** Chrome → main: switch a PDF, Markdown or browser tab between panning and selecting. */
+  TabsSetPointerMode: 'tabs:set-pointer-mode',
+  /** Chrome → main: turn a browser tab's edit mode on or off (its tool shortcuts go to the page). */
+  TabsToggleEditMode: 'tabs:toggle-edit-mode',
+  /** Main → browser tab's page: its pointer mode, and whether a tool has the pointer instead. */
+  TabPointerMode: 'tab:pointer-mode',
+  /** Browser or Markdown tab's page → main: a looping pan reached an edge; move the real pointer here. */
+  TabWarpPointer: 'tab:warp-pointer',
+  /** Main → Markdown page: the tab's pointer mode. */
+  MarkdownPointerMode: 'markdown:pointer-mode',
   /** Main → PDF page: the tab's pointer mode (`'pan'` or `'select'`). */
   PdfPointerMode: 'pdf:pointer-mode',
   /** PDF page → main: a web link in the document was clicked; open it in a new tab. */
@@ -483,8 +493,10 @@ export interface NorthstarApi {
   renamePdfFile(id: string, name: string): Promise<IpcResult<null>>;
   /** Scrolls the tab's PDF to a 1-based page (clamped to the document). */
   goToPdfPage(id: string, page: number): Promise<IpcResult<null>>;
-  /** Sets what a drag on a PDF tab's document does: pan it, or select its text (and click its links). */
-  setPdfPointerMode(id: string, mode: PdfPointerMode): Promise<IpcResult<null>>;
+  /** Sets what a drag on a PDF, Markdown or browser tab's document does: pan it, or select its text (and click its links). */
+  setPointerMode(id: string, mode: PointerMode): Promise<IpcResult<null>>;
+  /** Turns a browser tab's edit mode on or off: while on, the toolbar tools' keyboard shortcuts go to the page. */
+  toggleEditMode(id: string): Promise<IpcResult<null>>;
 
   /** Opens a new Markdown tab (the toolbar's MD button, Ctrl+Shift+M, or File > New Markdown Tab). */
   createMarkdownTab(): Promise<IpcResult<BrowserState>>;
@@ -937,7 +949,7 @@ export interface NorthstarPdfApi {
   /** Subscribes to requests to scroll to a 1-based page. */
   onScrollToPage(listener: (page: number) => void): () => void;
   /** Subscribes to the tab's pointer mode; called immediately with the latest value if one already arrived. */
-  onPointerMode(listener: (mode: PdfPointerMode) => void): () => void;
+  onPointerMode(listener: (mode: PointerMode) => void): () => void;
   /** Opens a web link from the document in a new tab. Fire-and-forget; main ignores anything but http(s). */
   openLink(url: string): void;
   /**
@@ -1032,6 +1044,10 @@ export interface NorthstarMarkdownApi {
   onMode(listener: (mode: 'view' | 'edit') => void): () => void;
   /** Subscribes to the formatted/raw display; called immediately with the latest value if one already arrived. */
   onDisplay(listener: (display: MarkdownDisplay) => void): () => void;
+  /** Subscribes to the tab's pointer mode (Pan or Select); called immediately with the latest value if one already arrived. */
+  onPointerMode(listener: (mode: PointerMode) => void): () => void;
+  /** Asks main to move the OS pointer to a point of this page, for a pan that wraps at an edge. Fire-and-forget. */
+  warpPointer(x: number, y: number): void;
   /** Subscribes to formatting shortcuts pressed while the editor is showing (main owns the keys, since Ctrl+B and Ctrl+I are also the app's own). */
   onFormat(listener: (action: MarkdownFormatAction) => void): () => void;
   /** Writes the note's source to disk after an edit, under the `generation` the note arrived with. Fire-and-forget. */
@@ -1124,6 +1140,8 @@ export interface NorthstarHistoryApi {
   deleteEntry(id: string): void;
   /** Copies one visit's stored URL (a PDF's path) to the clipboard — main reads it from its own record, so the page can't put arbitrary text there. Fire-and-forget. */
   copyEntry(id: string): void;
+  /** Opens one visit in a new tab: a page as a browser tab, a PDF or note in a tab of its kind. Main reads the route from its own record. Fire-and-forget. */
+  openEntryInNewTab(id: string): void;
   /** Subscribes to the bookmark names the Bookmark column uses; called immediately with the latest if one already arrived. */
   onBookmarks(listener: (index: HistoryBookmarkIndex) => void): () => void;
   /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */

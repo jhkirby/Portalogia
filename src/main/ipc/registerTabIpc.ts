@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -39,7 +39,8 @@ import {
   cropRequestSchema,
   pdfGoToPageRequestSchema,
   pdfOpenLinkRequestSchema,
-  pdfPointerModeRequestSchema,
+  pointerModeRequestSchema,
+  tabWarpPointerRequestSchema,
   pdfWarpPointerRequestSchema,
   pdfOpenBookmarkRequestSchema,
   pdfPageInfoRequestSchema,
@@ -452,13 +453,33 @@ export function registerTabIpc(
     }
   });
 
-  ipcMain.handle(IpcChannel.PdfSetPointerMode, (event, rawRequest: unknown): IpcResult<null> => {
-    const parsed = pdfPointerModeRequestSchema.safeParse(rawRequest);
+  ipcMain.handle(IpcChannel.TabsSetPointerMode, (event, rawRequest: unknown): IpcResult<null> => {
+    const parsed = pointerModeRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
-    chromeManagerForTab(event, parsed.data.id)?.setPdfPointerMode(parsed.data.id, parsed.data.mode);
+    chromeManagerForTab(event, parsed.data.id)?.setPointerMode(parsed.data.id, parsed.data.mode);
     return { ok: true, data: null };
+  });
+
+  ipcMain.handle(IpcChannel.TabsToggleEditMode, (event, rawRequest: unknown): IpcResult<null> => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    chromeManagerForTab(event, parsed.data.id)?.toggleEditMode(parsed.data.id);
+    return { ok: true, data: null };
+  });
+
+  // Fire-and-forget from a browser or Markdown tab's page as its pan reaches an edge. The tab is whichever one sent
+  // it, so a page can only ever move the pointer within its own view.
+  ipcMain.on(IpcChannel.TabWarpPointer, (event, rawRequest: unknown) => {
+    const parsed = tabWarpPointerRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const tab = resolveTabForContents(event.sender);
+    tab?.manager.warpTabPointer(tab.tabId, parsed.data.x, parsed.data.y);
   });
 
   // Fire-and-forget from the PDF page as a looping pan ends (see `CursorWarper`).
@@ -469,7 +490,7 @@ export function registerTabIpc(
     }
     const manager = resolveTabManagerForTab(parsed.data.id);
     if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
-      manager.warpPdfPointer(parsed.data.id, parsed.data.x, parsed.data.y);
+      manager.warpTabPointer(parsed.data.id, parsed.data.x, parsed.data.y);
     }
   });
 

@@ -1,14 +1,15 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-19
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { MARKDOWN_PRINT_GLOBAL, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { MarkdownFileData, MarkdownFormatAction, MarkdownToolState } from '@shared/ipc-contract';
-import type { MarkdownDisplay } from '@shared/tab-state';
+import type { MarkdownDisplay, PointerMode } from '@shared/tab-state';
+import { HAND_CLOSED_CURSOR, HAND_OPEN_CURSOR } from '@shared/handCursors';
 import { slugifyHeading } from '@shared/markdown/parser';
 import { toggleTask } from '@shared/markdown/source';
 import {
@@ -36,6 +37,7 @@ import { MarkdownReader } from './MarkdownReader';
 import { MarkdownSidePanel } from './MarkdownSidePanel';
 import { MarkdownStatusBar } from './MarkdownStatusBar';
 import { useMarkdownFind } from './useMarkdownFind';
+import { useMarkdownPan } from './useMarkdownPan';
 
 /** Name registered with `CSS.highlights` for the user's highlights, painted by `markdown-viewer.css`. */
 const HIGHLIGHT_NAME = 'northstar-md-highlight';
@@ -316,6 +318,20 @@ export function MarkdownViewer() {
   }, [showReader]);
 
   useEffect(() => window.northstarMarkdown.onTool(setTool), []);
+
+  const [pointerMode, setPointerMode] = useState<PointerMode>('select');
+  useEffect(() => window.northstarMarkdown.onPointerMode(setPointerMode), []);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const pannerScroller = useCallback(
+    (): HTMLElement | null => (showReader ? scrollRef.current : (editorViewRef.current?.scrollDOM ?? null)),
+    [showReader],
+  );
+  const panEnabled = hasNote && pointerMode === 'pan' && tool.tool === 'none';
+  const panning = useMarkdownPan({
+    enabled: panEnabled,
+    bodyRef,
+    scrollerOf: pannerScroller,
+  });
 
   // ── Printing (PDF export): the rendered note, whichever view is showing, at full length ──
 
@@ -752,14 +768,25 @@ export function MarkdownViewer() {
   const toolOn = tool.tool !== 'none';
 
   return (
-    <div className="md-viewer" data-printing={printing ? 'true' : undefined} data-mode={mode} data-display={display}>
+    <div
+      className="md-viewer"
+      data-printing={printing ? 'true' : undefined}
+      data-mode={mode}
+      data-display={display}
+      data-pan={panEnabled ? (panning ? 'grabbing' : 'ready') : undefined}
+      style={
+        panEnabled
+          ? ({ '--md-hand-cursor': panning ? HAND_CLOSED_CURSOR : HAND_OPEN_CURSOR } as CSSProperties)
+          : undefined
+      }
+    >
       <style>{`::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, 0.55); }`}</style>
       {!hasNote ? (
         <div className="md-viewer__empty" />
       ) : (
         <>
           {/* The note and its panel side by side, over the status bar. */}
-          <div className="md-viewer__body">
+          <div ref={bodyRef} className="md-viewer__body">
             {showEditor && (
               <div className="md-viewer__editor">
                 <MarkdownEditor

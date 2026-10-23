@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-19
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -339,55 +339,71 @@ export function buildMenu(
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => getTabManager()?.toggleFocusMode(),
         },
+        // The tools' entries below are display only: `TabManager.handleToolShortcut` dispatches their keys, so that a
+        // browser tab in edit mode can leave them to its page — a registered accelerator takes its key first.
         {
-          label: 'PDF Pan Tool',
-          accelerator: 'CmdOrCtrl+1',
-          // Display only: on a web page the key is the page's; `TabManager` takes it only on a PDF tab.
+          label: 'Toggle Edit Mode',
+          accelerator: 'CmdOrCtrl+Alt+Shift+E',
           registerAccelerator: false,
-          click: () => getTabManager()?.setActivePdfPointerMode('pan'),
+          click: () => {
+            const id = getActiveTabId();
+            if (id) {
+              getTabManager()?.toggleEditMode(id);
+            }
+          },
         },
         {
-          label: 'PDF Select Tool',
+          label: 'Pan Tool',
+          accelerator: 'CmdOrCtrl+1',
+          registerAccelerator: false,
+          click: () => getTabManager()?.setActivePointerMode('pan'),
+        },
+        {
+          label: 'Select Tool',
           accelerator: 'CmdOrCtrl+2',
           registerAccelerator: false,
-          click: () => getTabManager()?.setActivePdfPointerMode('select'),
+          click: () => getTabManager()?.setActivePointerMode('select'),
         },
         {
           label: 'Toggle Laser Pointer',
           accelerator: 'CmdOrCtrl+I',
-          // Display only, like Next Tab below: a web page's rich editor binds this key (italic), so `TabManager` dispatches it
-          // (standing aside while the caret is in one) instead of the menu.
           registerAccelerator: false,
           click: () => getTabManager()?.toggleLaserPointer(),
         },
         {
           label: 'Toggle Pen',
           accelerator: 'CmdOrCtrl+P',
+          registerAccelerator: false,
           click: () => getTabManager()?.togglePen(),
         },
         {
           label: 'Toggle Highlighter',
           accelerator: 'CmdOrCtrl+J',
+          registerAccelerator: false,
           click: () => getTabManager()?.toggleHighlighter(),
         },
         {
           label: 'Toggle Comments',
           accelerator: 'CmdOrCtrl+M',
+          registerAccelerator: false,
           click: () => getTabManager()?.toggleCommentTool(),
         },
         {
           label: 'Toggle Text Box',
           accelerator: 'CmdOrCtrl+E',
+          registerAccelerator: false,
           click: () => getTabManager()?.toggleTextTool(),
         },
         {
           label: 'Toggle Crop',
           accelerator: 'CmdOrCtrl+Shift+X',
+          registerAccelerator: false,
           click: () => getTabManager()?.toggleCrop(),
         },
         {
           label: 'Revert Annotations',
           accelerator: 'CmdOrCtrl+Shift+R',
+          registerAccelerator: false,
           click: () => {
             const id = getActiveTabId();
             if (id) {

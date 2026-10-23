@@ -1,10 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { useEffect, useRef } from 'react';
-import type { PdfPointerMode } from '@shared/tab-state';
+import type { PointerMode } from '@shared/tab-state';
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
@@ -16,6 +16,7 @@ import {
   HandIcon,
   HighlighterIcon,
   HistoryIcon,
+  KeyboardIcon,
   LaserPointerIcon,
   OpenInNewWindowIcon,
   PenIcon,
@@ -27,7 +28,7 @@ import {
 } from '../icons';
 
 /** The PDF pointer modes' buttons, in toolbar order. */
-const POINTER_MODES: readonly { mode: PdfPointerMode; label: string; shortcut: string }[] = [
+const POINTER_MODES: readonly { mode: PointerMode; label: string; shortcut: string }[] = [
   { mode: 'pan', label: 'Pan: drag to move the document', shortcut: '1' },
   { mode: 'select', label: 'Select: drag to select text; links can be clicked', shortcut: '2' },
 ];
@@ -120,14 +121,20 @@ interface PageActionsProps {
   readonly onToggleTextTool: () => void;
   readonly onTogglePen: () => void;
   readonly onToggleCrop: () => void;
-  /** Whether the active tab is a PDF, whose pointer modes (Pan, Select) show beside the tools. */
+  /** Whether the active tab is a PDF, a note or a web page, whose pointer modes (Pan, Select) show beside the tools. */
   readonly showPointerModes: boolean;
-  /** The PDF tab's pointer mode — shown pressed only while no tool is on, since a tool takes the pointer over. */
-  readonly pointerMode: PdfPointerMode;
-  /** The PDF tab has no file open: the modes have nothing to act on. */
+  /** The tab's pointer mode — shown pressed only while no tool is on, since a tool takes the pointer over. */
+  readonly pointerMode: PointerMode;
+  /** The tab has nothing to pan or select: a PDF or note with no file open, or the home page. */
   readonly pointerModesLocked: boolean;
+  /** Whether the edit mode button is shown — browser tabs only, whose pages may bind the tools' keys. */
+  readonly showEditMode: boolean;
+  /** Whether the active browser tab is in edit mode: the tools' keyboard shortcuts go to its page. */
+  readonly editMode: boolean;
+  /** Turns the active browser tab's edit mode on or off. */
+  readonly onToggleEditMode: () => void;
   /** Picks a pointer mode, turning off whichever tool is on (as turning one tool on turns off the others). */
-  readonly onSetPointerMode: (mode: PdfPointerMode) => void;
+  readonly onSetPointerMode: (mode: PointerMode) => void;
   /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
   readonly onRevertPage: () => void;
   readonly onToggleTheme: () => void;
@@ -195,12 +202,16 @@ export function PageActions({
   pointerMode,
   pointerModesLocked,
   onSetPointerMode,
+  showEditMode,
+  editMode,
+  onToggleEditMode,
   onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
   // With none of the tool buttons showing (a History tab), the divider that closes their group would sit alone at the left edge.
   const showAnyTool =
     showPointerModes ||
+    showEditMode ||
     showLaserPointer ||
     showPen ||
     showHighlighter ||
@@ -252,6 +263,22 @@ export function PageActions({
             {mode === 'pan' ? <HandIcon /> : <TextSelectIcon />}
           </button>
         ))}
+      {showEditMode && (
+        <button
+          type="button"
+          className="page-actions__button hover-grow chrome-tooltip"
+          onClick={onToggleEditMode}
+          aria-pressed={editMode}
+          aria-label={editMode ? 'Turn off edit mode' : 'Turn on edit mode'}
+          data-tooltip={`${
+            editMode
+              ? "Turn off edit mode: the tools' shortcuts work again"
+              : "Turn on edit mode: the page gets the tools' shortcut keys"
+          } (${formatShortcut('Alt+Shift+E')})`}
+        >
+          <KeyboardIcon />
+        </button>
+      )}
       {showLaserPointer && (
         <button
           type="button"

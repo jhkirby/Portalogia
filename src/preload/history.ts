@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-19
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
@@ -14,6 +14,7 @@ const HistoryQuery = 'history:query';
 const HistoryRange = 'history:range';
 const HistoryDelete = 'history:delete';
 const HistoryCopy = 'history:copy';
+const HistoryOpenInNewTab = 'history:open-in-new-tab';
 const HistoryBookmarks = 'history:bookmarks';
 
 // The page has no zoom: stopping Ctrl+wheel here keeps Chromium's own pinch/ctrl-wheel zoom from acting on it.
@@ -97,6 +98,9 @@ const api: NorthstarHistoryApi = {
   },
   copyEntry: (id: string) => {
     ipcRenderer.send(HistoryCopy, { id });
+  },
+  openEntryInNewTab: (id: string) => {
+    ipcRenderer.send(HistoryOpenInNewTab, { id });
   },
 };
 

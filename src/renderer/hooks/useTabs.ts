@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { DropRegionRect, IpcResult } from '@shared/ipc-contract';
-import type { BrowserState, MarkdownDisplay, PdfPointerMode } from '@shared/tab-state';
+import type { BrowserState, MarkdownDisplay, PointerMode } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
   tabs: [],
@@ -162,8 +162,12 @@ export function useTabs() {
     void window.northstar.goToPdfPage(id, page).then(logIfFailed);
   }, []);
 
-  const setPdfPointerMode = useCallback((id: string, mode: PdfPointerMode) => {
-    void window.northstar.setPdfPointerMode(id, mode).then(logIfFailed);
+  const setPointerMode = useCallback((id: string, mode: PointerMode) => {
+    void window.northstar.setPointerMode(id, mode).then(logIfFailed);
+  }, []);
+
+  const toggleEditMode = useCallback((id: string) => {
+    void window.northstar.toggleEditMode(id).then(logIfFailed);
   }, []);
 
   /** Resolves to an error message to show the user, or `null` on success. */
@@ -385,7 +389,8 @@ export function useTabs() {
     createHistoryTab,
     openPdfFile,
     goToPdfPage,
-    setPdfPointerMode,
+    setPointerMode,
+    toggleEditMode,
     renamePdfFile,
     createMarkdownTab,
     openMarkdownFile,

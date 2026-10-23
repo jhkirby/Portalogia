@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -65,7 +65,7 @@ import type {
   BrowserState,
   BrowserTabState,
   MarkdownDisplay,
-  PdfPointerMode,
+  PointerMode,
   SplitViewState,
   TabState,
   WorkspaceState,
@@ -99,6 +99,7 @@ import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
 import { editableKindOf, hasEditableFocus } from './editableFocus';
 import { isTextEditingChord, type TextBoxContext } from './textEditingChords';
+import { isEditModeToggle, isToolShortcut } from './toolShortcuts';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -198,6 +199,20 @@ const markdownSaveErrorShown = new Set<string>();
 
 /** Removes a Markdown tab's content-security-policy header hook once the tab is gone. */
 const markdownCspRemovers = new Map<string, () => void>();
+
+/**
+ * The pointer mode last sent to each web page (by `webContents` id), so a page is only told when it changes. Kept
+ * here rather than per window: a page moves between windows, and each would otherwise think it still knew.
+ */
+const pagePointerModesSent = new Map<number, string>();
+
+/**
+ * Whether a kind of tab has the Pan and Select pointer modes.
+ * @param kind The tab's kind, if there is a tab.
+ */
+function isPointerModeKind(kind: TabState['kind'] | undefined): kind is 'pdf' | 'markdown' | 'browser' {
+  return kind === 'pdf' || kind === 'markdown' || kind === 'browser';
+}
 
 /**
  * Owns every tab's `WebContentsView`, keeps a `TabState` snapshot per tab,
@@ -362,6 +377,8 @@ export class TabManager {
         return;
       }
       this.onStateChange(this.getState());
+      // A tool turned on or off, a tab switched, or a mode picked: the pages on show learn whether a press is the hand's.
+      this.syncMountedPagePointerModes();
       // A hidden window (the spare, or a torn-off one mid-drag) has no active
       // tab of its own worth recording — its snapshot would clobber the real one.
       if (window.isVisible()) {
@@ -603,6 +620,8 @@ export class TabManager {
       canGoBack: false,
       canGoForward: false,
       favicon: null,
+      pointerMode: 'select',
+      editMode: false,
       workspaceId,
     });
 
@@ -780,7 +799,7 @@ export class TabManager {
       this.pushTextToolStateTo(id);
       this.pushHighlighterStateTo(id);
       this.pushCropStateTo(id);
-      this.pushPdfPointerModeTo(id);
+      this.pushPointerModeTo(id);
       if (this.findOpen && id === this.activeTabId) {
         this.runFind();
       }
@@ -873,6 +892,7 @@ export class TabManager {
       this.pushHighlighterStateTo(id);
       this.pushMarkdownModeTo(id);
       this.pushMarkdownDisplayTo(id);
+      this.pushPointerModeTo(id);
       // A note opened before the page was up (a restored tab) is delivered now.
       this.pushMarkdownFile(id, 'open', '');
       if (this.findOpen && id === this.activeTabId) {
@@ -895,6 +915,7 @@ export class TabManager {
       display: 'formatted',
       canGoBack: false,
       canGoForward: false,
+      pointerMode: 'select',
       workspaceId: workspaceId ?? this.activeWorkspaceId,
     });
     this.activateTab(id);
@@ -1668,6 +1689,34 @@ export class TabManager {
   }
 
   /**
+   * Opens a visit from the History tab in a new tab of its own kind: a page
+   * as a browser tab, a PDF in a PDF tab, a note in a Markdown tab. Does
+   * nothing for a page whose address isn't one a tab may load, or when the
+   * workspace is full (the new tab is then never made, and the open-from-history
+   * calls refuse the History tab that stays active).
+   * @param entry The visit, as main's own history records it.
+   */
+  public openHistoryEntryInNewTab(entry: HistoryEntry): void {
+    if (entry.type === 'url') {
+      if (isNavigableUrl(entry.url)) {
+        this.createTab(entry.url);
+      }
+      return;
+    }
+    if (entry.type === 'pdf') {
+      const { activeTabId } = this.createPdfTab();
+      if (activeTabId) {
+        void this.openPdfFromHistory(activeTabId, entry.url);
+      }
+      return;
+    }
+    const { activeTabId } = this.createMarkdownTab();
+    if (activeTabId) {
+      void this.openMarkdownFromHistory(activeTabId, entry.url);
+    }
+  }
+
+  /**
    * Clears the browsing history within a range — the toolbar's "Clear History".
    * @param range The last N of a unit, or everything (already validated).
    * @returns The full browser state (unchanged; open History tabs are re-sent the list).
@@ -1753,20 +1802,23 @@ export class TabManager {
   }
 
   /**
-   * Moves the real pointer to a point of a PDF page: a pan that reaches one
-   * edge of the view carries on from the opposite one (see `CursorWarper`).
-   * @param id The PDF tab.
-   * @param x The point, in the page's viewport CSS pixels.
-   * @param y The point, in the page's viewport CSS pixels.
+   * Moves the real pointer to a point of a PDF, Markdown or browser tab's
+   * page: a pan that reaches one edge of the view carries on from the
+   * opposite one (see `CursorWarper`).
+   * @param id The tab.
+   * @param x The point, in the page's viewport CSS pixels (a web page's already scaled by its own zoom).
+   * @param y The point, in the page's viewport CSS pixels (a web page's already scaled by its own zoom).
    */
-  public warpPdfPointer(id: string, x: number, y: number): void {
+  public warpTabPointer(id: string, x: number, y: number): void {
+    const kind = this.states.get(id)?.kind;
     const view = this.views.get(id);
-    if (this.states.get(id)?.kind !== 'pdf' || !view || view.webContents.isDestroyed() || this.window.isDestroyed()) {
+    if (!isPointerModeKind(kind) || !view || view.webContents.isDestroyed() || this.window.isDestroyed()) {
       return;
     }
     const bounds = view.getBounds();
     const content = this.window.getContentBounds();
-    const zoom = view.webContents.getZoomFactor();
+    // A web page's zoom is its frame's own (`tabZoom.ts`), which it has already applied to the point.
+    const zoom = kind === 'browser' ? 1 : view.webContents.getZoomFactor();
     // Kept inside the view: the page only ever means a point of itself.
     const inside = (value: number, size: number): number => Math.min(Math.max(value * zoom, 0), Math.max(size - 1, 0));
     const point = {
@@ -1859,30 +1911,60 @@ export class TabManager {
   }
 
   /**
-   * Switches what a drag on a PDF tab's document does: pan it, or select its
-   * text (which is also when its links take clicks). The modes are the
-   * pointer's resting state, so picking one turns off whichever tool is on,
-   * the same way turning one tool on turns the others off.
-   * @param id The PDF tab. A no-op if it isn't one, or has no file open.
+   * Switches what a drag on a PDF, Markdown or browser tab's document does:
+   * pan it, or select its text (which is also when its links take clicks).
+   * The modes are the pointer's resting state, so picking one turns off
+   * whichever tool is on, the same way turning one tool on turns the others off.
+   * @param id The tab. A no-op on any other kind, or a PDF or note with no file open.
    * @param mode The new pointer mode.
    */
-  public setPdfPointerMode(id: string, mode: PdfPointerMode): void {
+  public setPointerMode(id: string, mode: PointerMode): void {
     const current = this.states.get(id);
-    if (current?.kind !== 'pdf' || current.fileName === null) {
+    if (current?.kind !== 'pdf' && current?.kind !== 'markdown' && current?.kind !== 'browser') {
+      return;
+    }
+    if ((current.kind === 'pdf' || current.kind === 'markdown') && current.fileName === null) {
       return;
     }
     this.turnOffPointerTools();
     if (current.pointerMode !== mode) {
       this.states.set(id, { ...current, pointerMode: mode });
-      this.pushPdfPointerModeTo(id);
+      this.pushPointerModeTo(id);
+    }
+    if (mode === 'pan') {
+      // The grab tool's pointer helper takes a moment to start; have it ready before the first pan reaches an edge.
+      cursorWarper.prepare();
     }
     this.emitState();
   }
 
-  /** `setPdfPointerMode` for the active tab — the View menu's entries. */
-  public setActivePdfPointerMode(mode: PdfPointerMode): void {
+  /**
+   * Turns a browser tab's edit mode on or off: while it's on, the toolbar
+   * tools' keyboard shortcuts are left to the page (see `isToolShortcut`).
+   * @param id The tab. A no-op on anything but a browser tab.
+   */
+  public toggleEditMode(id: string): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'browser') {
+      return;
+    }
+    this.states.set(id, { ...current, editMode: !current.editMode });
+    this.emitState();
+  }
+
+  /**
+   * Whether a tab leaves the tools' keyboard shortcuts to its page (edit mode).
+   * @param id The tab.
+   */
+  private isInEditMode(id: string | null): boolean {
+    const state = id ? this.states.get(id) : undefined;
+    return state?.kind === 'browser' && state.editMode;
+  }
+
+  /** `setPointerMode` for the active tab — the View menu's entries. */
+  public setActivePointerMode(mode: PointerMode): void {
     if (this.activeTabId) {
-      this.setPdfPointerMode(this.activeTabId, mode);
+      this.setPointerMode(this.activeTabId, mode);
     }
   }
 
@@ -1908,12 +1990,57 @@ export class TabManager {
     }
   }
 
-  /** Tells a PDF tab's page its pointer mode. */
-  private pushPdfPointerModeTo(id: string): void {
+  /** Tells a PDF, Markdown or browser tab's page its pointer mode. */
+  private pushPointerModeTo(id: string): void {
     const state = this.states.get(id);
     const view = this.views.get(id);
-    if (state?.kind === 'pdf' && view && !view.webContents.isDestroyed()) {
+    if (!view || view.webContents.isDestroyed()) {
+      return;
+    }
+    if (state?.kind === 'pdf') {
       view.webContents.send(IpcChannel.PdfPointerMode, state.pointerMode);
+    } else if (state?.kind === 'markdown') {
+      view.webContents.send(IpcChannel.MarkdownPointerMode, state.pointerMode);
+    } else if (state?.kind === 'browser') {
+      this.syncPagePointerMode(id);
+    }
+  }
+
+  /**
+   * Tells a browser tab's page its pointer mode, and whether one of this
+   * window's tools has the pointer instead (a press is then the tool's, not
+   * the hand's) — only when that has changed since the page was last told.
+   * A note and a PDF know their tool from their own pushes; a web page's
+   * tools each live in a preload module of their own, so it's told here.
+   * @param id The tab, mounted in this window.
+   */
+  private syncPagePointerMode(id: string): void {
+    const state = this.states.get(id);
+    const contents = this.views.get(id)?.webContents;
+    if (state?.kind !== 'browser' || !contents || contents.isDestroyed()) {
+      return;
+    }
+    const toolActive =
+      this.laserPointerActive ||
+      this.penActive ||
+      this.highlighterActive ||
+      this.commentToolActive ||
+      this.textToolActive ||
+      this.cropActive;
+    const message = { mode: state.pointerMode, toolActive };
+    const key = JSON.stringify(message);
+    if (pagePointerModesSent.get(contents.id) !== key) {
+      pagePointerModesSent.set(contents.id, key);
+      contents.send(IpcChannel.TabPointerMode, message);
+    }
+  }
+
+  /** `syncPagePointerMode` for every tab this window shows: the active one and a split view's other half. */
+  private syncMountedPagePointerModes(): void {
+    for (const id of [this.activeTabId, this.splitView?.secondaryTabId]) {
+      if (id) {
+        this.syncPagePointerMode(id);
+      }
     }
   }
 
@@ -5093,8 +5220,8 @@ export class TabManager {
   /**
    * The chrome's half of the shortcuts whose menu entries are display-only
    * (see buildMenu.ts): Ctrl+←/→ (tabs), Ctrl+↑/↓ (workspaces), Alt+←/→
-   * (back/forward), Ctrl+/ (address bar), Ctrl+I (laser pointer), and a PDF's
-   * Pan and Select (Ctrl+1, Ctrl+2). A registered accelerator would take these even from a text box
+   * (back/forward), Ctrl+/ (address bar), and the tools' (see
+   * `handleToolShortcut`). A registered accelerator would take these even from a text box
    * that edits with them, so they're dispatched here, after the text-box
    * check, instead; a tab's own view handles them in `wireSharedInputHandling`.
    * @param event The input event, so a handled key can `preventDefault`.
@@ -5104,6 +5231,9 @@ export class TabManager {
   private handleTextSensitiveShortcut(event: Electron.Event, input: Electron.Input): boolean {
     if (input.type !== 'keyDown') {
       return false;
+    }
+    if (this.handleToolShortcut(event, input, this.activeTabId)) {
+      return true;
     }
     const key = input.key.toLowerCase();
     const cmdOrCtrl = input.control || input.meta;
@@ -5132,31 +5262,88 @@ export class TabManager {
         event.preventDefault();
         this.cycleWorkspace(key === 'arrowdown' ? 1 : -1);
         return true;
-      case '1':
-      case '2': {
-        const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
-        if (active?.kind !== 'pdf') {
-          return false;
-        }
-        event.preventDefault();
-        this.setPdfPointerMode(active.id, key === '1' ? 'pan' : 'select');
-        return true;
-      }
       case '/':
-      case 'i':
         event.preventDefault();
-        // A held key repeats; these are toggles, so only the first press counts.
+        // A held key repeats; only the first press counts.
         if (!input.isAutoRepeat) {
-          if (key === '/') {
-            this.requestFocusAddressBar();
-          } else {
-            this.toggleLaserPointer();
-          }
+          this.requestFocusAddressBar();
         }
         return true;
       default:
         return false;
     }
+  }
+
+  /**
+   * The toolbar tools' keyboard shortcuts — the laser pointer (Ctrl+I), pen
+   * (Ctrl+P), highlighter (Ctrl+J), comments (Ctrl+M), text box (Ctrl+E),
+   * Pan and Select (Ctrl+1, Ctrl+2), crop (Ctrl+Shift+X) and Revert
+   * Annotations (Ctrl+Shift+R) — and edit mode's switch (Ctrl+Alt+Shift+E).
+   * Their menu entries are display-only (see buildMenu.ts), so that a browser
+   * tab in edit mode can leave the tools' keys to its page: a registered
+   * accelerator takes its key before any page sees it.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @param tabId The tab the key acts on: the one whose page has the keyboard, or the active one from the chrome.
+   * @returns Whether the key was one of them — handled, or left to the page in edit mode — so the caller looks no further.
+   */
+  private handleToolShortcut(event: Electron.Event, input: Electron.Input, tabId: string | null): boolean {
+    if (input.type !== 'keyDown') {
+      return false;
+    }
+    if (isEditModeToggle(input)) {
+      event.preventDefault();
+      if (!input.isAutoRepeat && tabId) {
+        this.toggleEditMode(tabId);
+      }
+      return true;
+    }
+    if (!isToolShortcut(input)) {
+      return false;
+    }
+    // In edit mode a tool's key is the page's: not prevented, so it reaches the page (from the chrome, it does nothing).
+    if (this.isInEditMode(tabId)) {
+      return true;
+    }
+    event.preventDefault();
+    // A held key repeats; these are toggles, so only the first press counts.
+    if (input.isAutoRepeat) {
+      return true;
+    }
+    switch (input.key.toLowerCase()) {
+      case 'i':
+        this.toggleLaserPointer();
+        break;
+      case 'p':
+        this.togglePen();
+        break;
+      case 'j':
+        this.toggleHighlighter();
+        break;
+      case 'm':
+        this.toggleCommentTool();
+        break;
+      case 'e':
+        this.toggleTextTool();
+        break;
+      case 'x':
+        this.toggleCrop();
+        break;
+      case 'r':
+        if (tabId) {
+          this.revertPage(tabId);
+        }
+        break;
+      case '1':
+      case '2':
+        if (tabId) {
+          this.setPointerMode(tabId, input.key === '1' ? 'pan' : 'select');
+        }
+        break;
+      default:
+        break;
+    }
+    return true;
   }
 
   /**
@@ -5593,6 +5780,9 @@ export class TabManager {
     this.wireSharedInputHandling(id, wc);
     trackPageSelectionAccent(wc);
 
+    const contentsId = wc.id;
+    wc.once('destroyed', () => pagePointerModesSent.delete(contentsId));
+
     // A fresh document — the initial load or any later navigation/reload —
     // has none of the previous one's highlights, undo/redo history, or
     // preload-side highlighter state (a brand new preload instance that's
@@ -5609,6 +5799,9 @@ export class TabManager {
       this.pushTextToolStateTo(id);
       this.penController.resetTab(id);
       this.pushPenStateTo(id);
+      // A fresh document has a fresh preload that has never been told its pointer mode.
+      pagePointerModesSent.delete(wc.id);
+      this.syncPagePointerMode(id);
       if (this.findOpen && id === this.activeTabId) {
         this.runFind();
       }
@@ -5664,7 +5857,6 @@ export class TabManager {
 
     // Links that would open a new OS window (target="_blank", window.open)
     // become a new tab instead — this is a browser, not an app shell.
-    const contentsId = wc.id;
     wc.once('destroyed', () => this.adBlocker.forget(contentsId));
     wc.setWindowOpenHandler(({ url }) => {
       // Popups to ad hosts, and floods of them, are dropped rather than made tabs.
@@ -5853,6 +6045,12 @@ export class TabManager {
         return;
       }
 
+      // The tools' keys (Ctrl+I, P, J, M, E, 1, 2, Shift+X, Shift+R) and edit mode's switch. Ctrl+M never reaches
+      // here from a terminal, where it is carriage return: the terminal branch above has already returned.
+      if (owner.handleToolShortcut(event, input, id)) {
+        return;
+      }
+
       // No modifier, so it falls outside the `cmdOrCtrl`-gated switch below
       // — Escape exits Focus Mode if it's on, and/or turns off the laser
       // pointer/highlighter if either is on; a no-op (falls through
@@ -5957,10 +6155,6 @@ export class TabManager {
             event.preventDefault();
             owner.createPdfTab();
             return;
-          case 'r':
-            event.preventDefault();
-            owner.revertPage(id);
-            return;
           case 's':
             // Same as buildMenu.ts's `CmdOrCtrl+Shift+S` ("Workspace Images…").
             event.preventDefault();
@@ -5999,11 +6193,6 @@ export class TabManager {
             // Same as buildMenu.ts's `CmdOrCtrl+Shift+H` ("New History Tab").
             event.preventDefault();
             owner.createHistoryTab();
-            return;
-          case 'x':
-            // Same as buildMenu.ts's `CmdOrCtrl+Shift+X` ("Toggle Crop"); a no-op off a PDF tab.
-            event.preventDefault();
-            owner.toggleCrop();
             return;
           case '>':
             // Shift is what actually produces '>' (it's Shift+Period on a
@@ -6102,19 +6291,6 @@ export class TabManager {
           event.preventDefault();
           owner.openFind();
           return;
-        case 'e':
-          // Same as buildMenu.ts's `CmdOrCtrl+E` ("Toggle Text Box"); a no-op on a terminal tab.
-          event.preventDefault();
-          owner.toggleTextTool();
-          return;
-        case 'm':
-          // Never intercepted on a terminal tab at all (see this method's
-          // own doc comment): this `case` only exists in the browser-tab
-          // branch of the switch, and Ctrl+M is literally carriage return
-          // (Enter) in a terminal — a binding this app must never shadow.
-          event.preventDefault();
-          owner.toggleCommentTool();
-          return;
         case 'h':
           event.preventDefault();
           owner.goHome(id);
@@ -6132,20 +6308,6 @@ export class TabManager {
           // In a text box these were left to the caret (a word jump) by the check above.
           event.preventDefault();
           owner.cycleTab(key === 'arrowright' ? 1 : -1);
-          return;
-        case 'i':
-          // Same as buildMenu.ts's `CmdOrCtrl+I` ("Toggle Laser Pointer"), which is display-only so a text box can
-          // keep the key; in a note's editor it is Italic (see `toggleLaserPointer`).
-          event.preventDefault();
-          owner.toggleLaserPointer();
-          return;
-        case '1':
-        case '2':
-          // A PDF's Pan (Ctrl+1, Okular's Browse key) and Select (Ctrl+2); a web page keeps the keys.
-          if (owner.states.get(id)?.kind === 'pdf') {
-            event.preventDefault();
-            owner.setPdfPointerMode(id, key === '1' ? 'pan' : 'select');
-          }
           return;
         case 'arrowup':
           event.preventDefault();

@@ -8,6 +8,7 @@ export { GlobeIcon } from './GlobeIcon';
 export { HandIcon } from './HandIcon';
 export { HighlighterIcon } from './HighlighterIcon';
 export { HistoryIcon } from './HistoryIcon';
+export { KeyboardIcon } from './KeyboardIcon';
 export { LaserPointerIcon } from './LaserPointerIcon';
 export { OpenInNewWindowIcon } from './OpenInNewWindowIcon';
 export { PenIcon } from './PenIcon';

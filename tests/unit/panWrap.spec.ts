@@ -1,14 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { test, expect } from '@playwright/test';
 import {
   PAN_WRAP_EDGE_PX,
   PAN_WRAP_LANDING_INSET_PX,
   wrapTargetAt,
-} from '../../src/renderer/components/PdfViewer/panWrap';
+} from '../../src/shared/panWrap';
 
 const VIEW = { left: 100, top: 50, right: 900, bottom: 650 };
 

@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-19
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { historyCutoff } from '@shared/history';
 import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry } from '@shared/ipc-contract';
 
@@ -58,6 +58,22 @@ function CopyIcon() {
   );
 }
 
+/** A tab with a plus beside it: open the row in a new tab. */
+function OpenInNewTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M2 13.5V5.3a1.3 1.3 0 0 1 1.3-1.3h3.4l1.2 1.5h5.8a1.3 1.3 0 0 1 1.3 1.3v6.7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M1.5 13.5h13M8 8v4M6 10h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -95,6 +111,8 @@ export function HistoryViewer() {
   /** The row whose copy button is showing its checkmark. */
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copiedTimer = useRef<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLTableSectionElement>(null);
 
   useEffect(() => window.northstarHistory.onEntries(setEntries), []);
   useEffect(() => window.northstarHistory.onBookmarks(setBookmarks), []);
@@ -128,6 +146,22 @@ export function HistoryViewer() {
     );
   }, [entries, bookmarks, query, range]);
   const shown = matches.slice(0, MAX_ROWS);
+  const hasRows = shown.length > 0;
+
+  // The vertical scroll bar starts below the column headers, which stay put over the rows: its track is pushed down by
+  // the header row's height, measured rather than assumed so a change of font or zoom keeps the two lined up.
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const head = headRef.current;
+    if (!wrap || !head) {
+      return undefined;
+    }
+    const sync = (): void => wrap.style.setProperty('--history-header-height', `${head.offsetHeight}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(head);
+    return () => observer.disconnect();
+  }, [hasRows]);
 
   const copy = (entry: HistoryEntry): void => {
     // Main copies what it has stored for this id, not text from here.
@@ -141,12 +175,12 @@ export function HistoryViewer() {
 
   return (
     <div className="history">
-      <div className="history__table-wrap">
+      <div ref={wrapRef} className="history__table-wrap">
         {shown.length === 0 ? (
           <p className="history__empty">{entries.length === 0 ? 'No history yet.' : 'No matching history.'}</p>
         ) : (
           <table className="history__table">
-            <thead>
+            <thead ref={headRef}>
               <tr>
                 <th className="history__th history__th--time">Date &amp; Time</th>
                 <th className="history__th history__th--type">Type</th>
@@ -192,6 +226,15 @@ export function HistoryViewer() {
                     </td>
                     <td className="history__cell history__cell--actions">
                       <div className="history__actions">
+                        <button
+                          type="button"
+                          className="history__action-button hover-grow history__open"
+                          aria-label={`Open ${entry.url} in a new tab`}
+                          title="Open in new tab"
+                          onClick={() => window.northstarHistory.openEntryInNewTab(entry.id)}
+                        >
+                          <OpenInNewTabIcon />
+                        </button>
                         <button
                           type="button"
                           className={`history__action-button hover-grow history__copy${isCopied ? ' history__copy--done' : ''}`}

@@ -1,0 +1,41 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-19 */
+
+/* ── TITLEBAR CLOCK ───────────────────────────────────────────────────── */
+/* Shares the titlebar's top-right corner with WindowControls (see app.css's
+   `.titlebar__corner`), showing while the pointer is away from the tab row
+   and fading out as the controls fade in. Never takes the pointer: the
+   window-drag strip and the controls beneath it keep their clicks. */
+
+.titlebar-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 var(--size-spacing-md);
+
+  color: var(--color-tab-text);
+  /* Digits of one width, so the time doesn't shift sideways as it changes. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+
+  pointer-events: none;
+  user-select: none;
+  transition: opacity var(--size-titlebar-reveal-duration) ease-out;
+}
+
+.titlebar:is(:hover, :has(:focus-visible)) .titlebar-clock {
+  opacity: 0;
+}
+
+.titlebar-clock__date {
+  font-size: var(--size-font-sm);
+}
+
+.titlebar-clock__time {
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}

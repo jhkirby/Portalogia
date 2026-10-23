@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-15
+// Last Modified: 2026-10-19
 
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -23,7 +23,52 @@ const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PAGES: Record<string, string> = {
   '/widgets': '<!doctype html><title>Widgets Catalog</title><h1>Widgets</h1>',
   '/gadgets': '<!doctype html><title>Gadgets Catalog</title><h1>Gadgets</h1>',
+  // A text box, and an editor that takes its typing inside a same-origin frame whose whole document is editable —
+  // the way Google Docs does. Every keydown the page itself sees is recorded in `window.seenKeys`.
+  '/editor':
+    '<!doctype html><title>Editor</title><input id="box" value="one two three">' +
+    '<iframe id="frame" style="width:400px;height:120px"></iframe>' +
+    '<script>window.seenKeys=[];addEventListener("keydown",e=>seenKeys.push((e.ctrlKey?"Ctrl+":"")+e.key),true);' +
+    'const d=document.getElementById("frame").contentDocument;d.open();d.write("<body>alpha beta gamma</body>");' +
+    'd.close();d.designMode="on";</script>',
+  // Much bigger than any window both ways, with a link to (not) follow while panning.
+  '/tall':
+    '<!doctype html><title>Tall Page</title><style>body{margin:0}</style>' +
+    '<div style="width:4000px;height:6000px;background:linear-gradient(135deg,#fff,#888)"></div>' +
+    '<a id="link" href="/widgets" style="position:absolute;top:150px;left:150px;font-size:40px">a link</a>',
 };
+
+/**
+ * A tab's own page (its `WebContentsView`), found by part of its URL, once it is there.
+ * @param app The launched app.
+ * @param urlPart Text the page's URL contains.
+ */
+export async function findTabPage(app: ElectronApplication, urlPart: string): Promise<Page> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const found = app.windows().find((page) => !page.isClosed() && page.url().includes(urlPart));
+    if (found) {
+      return found;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`No tab page at a URL containing "${urlPart}"`);
+}
+
+/**
+ * Loads a URL in the active tab through the address bar, and returns that tab's page once it has loaded.
+ * @param app The launched app.
+ * @param window The chrome window.
+ * @param url Where to go.
+ */
+export async function openInActiveTab(app: ElectronApplication, window: Page, url: string): Promise<Page> {
+  const addressBar = window.getByLabel('Search the internet...');
+  await addressBar.fill(url);
+  await addressBar.press('Enter');
+  const page = await findTabPage(app, url);
+  await page.waitForLoadState('load');
+  return page;
+}
 
 /**
  * The chrome window's page (`index.html`). `electronApp.firstWindow()` can't be

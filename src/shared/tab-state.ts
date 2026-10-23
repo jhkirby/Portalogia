@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-19
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -13,6 +13,14 @@ export interface BrowserTabState {
   readonly canGoBack: boolean;
   readonly canGoForward: boolean;
   readonly favicon: string | null;
+  /** What a drag on the page does — see `PointerMode`. `'select'` (the page's own behavior) by default. */
+  readonly pointerMode: PointerMode;
+  /**
+   * Edit mode: the toolbar tools' keyboard shortcuts are left to the page (see
+   * `isToolShortcut`), for a web app that binds the same keys. The tools'
+   * buttons still work.
+   */
+  readonly editMode: boolean;
   /** The workspace this tab belongs to; only its own workspace's tab row shows it. */
   readonly workspaceId: string;
 }
@@ -52,12 +60,16 @@ export interface PdfTabState {
   /** Pages in the open document, 0 before one is opened. */
   readonly pageCount: number;
   /** What a drag on the document does: `'pan'` moves it (the default), `'select'` selects its text and lets its links be clicked. */
-  readonly pointerMode: PdfPointerMode;
+  readonly pointerMode: PointerMode;
   readonly workspaceId: string;
 }
 
-/** A PDF tab's pointer mode — see `PdfTabState.pointerMode`. */
-export type PdfPointerMode = 'pan' | 'select';
+/**
+ * What a drag on a PDF, a note or a web page does: `'pan'` moves it like a
+ * hand on paper (and a click does nothing), `'select'` selects its text and
+ * lets its links take clicks.
+ */
+export type PointerMode = 'pan' | 'select';
 
 /**
  * The browsing history: a table of the pages reached, rendered in its own
@@ -97,6 +109,8 @@ export interface MarkdownTabState {
   readonly canGoBack: boolean;
   /** Whether stepping back has left a later note this tab can step forward to. */
   readonly canGoForward: boolean;
+  /** What a drag on the note does — see `PointerMode`. `'select'` by default. */
+  readonly pointerMode: PointerMode;
   readonly workspaceId: string;
 }
 

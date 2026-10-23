@@ -68,9 +68,11 @@ anyway**.
 ```
 
 1. **The drag strip.** The thin bar along the very top. Drag it to move the
-   window. On the right are the buttons to minimize, maximize and close.
-2. **Tabs.** Each open page is a tab. Click a tab to view it. Click **+** to
-   open a new one.
+   window. The top-right corner shows today's date and the time (24-hour, with seconds).
+   Point at the tab row and the date and time give way to the buttons to
+   minimize, maximize and close.
+2. **Tabs.** Each open page is a tab. Click a tab to view it. Point at the
+   tab row and click **+** to open a new one.
 3. **The toolbar.** Back, forward and reload buttons, the **address bar**
    (where you type a website or a search), and buttons for the tools
    described in this guide. Point at any button to see what it does and its
@@ -307,6 +309,19 @@ Only one tool is on at a time.
 Your marks are saved on your computer and come back when you revisit the
 page. **Websites can't see your comments or text boxes.**
 
+**Pan and Select.** On web pages, PDFs and notes, the hand and text-cursor
+buttons at the left of the tools choose how the mouse works. In **Pan**
+mode (**Ctrl+1**) you drag to move the page around, and clicks don't follow
+links. In **Select** mode (**Ctrl+2**) you select text and click links as
+usual. Web pages and notes start in Select mode; PDFs start in Pan mode.
+
+**Edit mode.** Some websites, such as Google Docs, use the same keys as the
+tools (Ctrl+I for italic, Ctrl+E to center text). On a web page, click the
+**keyboard** button left of the laser pointer, or press
+**Ctrl+Alt+Shift+E**, to let the page have those keys. While edit mode is
+on, the tools still work from their buttons but not from the keyboard.
+Edit mode is set separately for each tab.
+
 ## 12. Saving and exporting
 
 Click the **export** button in the toolbar to save what you're looking at:
@@ -445,6 +460,8 @@ On a Mac, use **Cmd** in place of **Ctrl**.
 | Crop (PDFs) | Ctrl+Shift+X |
 | Remove all marks | Ctrl+Shift+R |
 | Undo / redo | Ctrl+Z / Ctrl+Y |
+| Pan / Select | Ctrl+1 / Ctrl+2 |
+| Edit mode (web pages) | Ctrl+Alt+Shift+E |
 
 **Appearance**
 
@@ -455,8 +472,9 @@ On a Mac, use **Cmd** in place of **Ctrl**.
 | Show / hide sidebar | Ctrl+L |
 
 > While you're typing in a box, keys like Ctrl+A, Ctrl+Z and the arrow keys
-> work on your text instead of the app. Press **Escape** to leave the box,
-> and the shortcuts work again.
+> work on your text instead of the app. This includes editors that websites
+> build inside the page, such as a Google Docs document. Press **Escape** to
+> leave the box, and the shortcuts work again.
 
 ## 19. Troubleshooting
 

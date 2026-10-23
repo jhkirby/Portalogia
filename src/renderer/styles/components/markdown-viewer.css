@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-19 */
 
 /* ── MARKDOWN VIEWER ──────────────────────────────────────────────────── */
 /* `markdown.html`'s whole page — a Markdown tab's own `WebContentsView` (see
@@ -154,6 +154,25 @@ body {
 
 .md-editor {
   height: 100%;
+}
+
+/* ── Pan mode: the note is grabbed and moved like paper ── */
+
+/* The hand (set inline as `--md-hand-cursor`, open or closed) over the whole note, reader or editor, winning over
+   the text's I-beam and a link's pointer; nothing can be selected while the hand holds the page. */
+.md-viewer[data-pan] :is(.md-viewer__scroll, .cm-scroller),
+.md-viewer[data-pan] :is(.md-viewer__scroll, .cm-scroller) * {
+  user-select: none;
+
+  cursor: var(--md-hand-cursor) !important;
+}
+
+/* While grabbed, the drag's pointer capture sits on `.md-viewer__body` (see `useMarkdownPan`), so the cursor comes
+   from it rather than from whatever is under the pointer: the closed hand goes on the whole page, or the capturing
+   element would show its own arrow for the length of the drag. */
+.md-viewer[data-pan='grabbing'],
+.md-viewer[data-pan='grabbing'] * {
+  cursor: var(--md-hand-cursor) !important;
 }
 
 /* ── The reader's typography ── */

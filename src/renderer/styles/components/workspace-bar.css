@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-19 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -135,6 +135,20 @@
 
 .sidebar__toggle:hover {
   color: var(--color-tab-text);
+}
+
+/* The hover fill slides in from the sidebar's border toward the sidebar, and back out to it on leaving, rather
+   than growing from the centre like other `.hover-grow` buttons: on a full-height strip the centre-out growth read
+   as a bar appearing from nowhere, where a slide from the edge reads as the edge itself. */
+.sidebar__toggle::before {
+  /* Fully opaque from the start, so the fill slides rather than fading as it goes. */
+  opacity: 1;
+  transform: scaleX(0);
+  transform-origin: right center;
+}
+
+.sidebar__toggle:hover:not(:disabled)::before {
+  transform: scaleX(1);
 }
 
 .sidebar__toggle:active {
@@ -651,4 +665,14 @@
 
 .sidebar--hidden .workspace-bar__images::after {
   display: none;
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+
+/* No slide: the toggle's fill only fades in and out, as every `.hover-grow` fill does with reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__toggle::before {
+    opacity: 0;
+    transform: none;
+  }
 }

@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
 import type { FindCommand, FindResult, NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
-import type { PdfPointerMode as PointerMode } from '@shared/tab-state';
+import type { PointerMode } from '@shared/tab-state';
 import type { RGB } from '@shared/color';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed

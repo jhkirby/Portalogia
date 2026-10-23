@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-19
 
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -71,6 +71,15 @@ export class HistoryController {
       const entry = parsed.success && this.isHistoryView(event.sender) ? this.store.find(parsed.data.id) : undefined;
       if (entry) {
         clipboard.writeText(entry.url);
+      }
+    });
+    // Opened from the route main has stored for this id, never one sent by the page, in the window showing the History tab.
+    ipcMain.on(IpcChannel.HistoryOpenInNewTab, (event, rawRequest: unknown) => {
+      const parsed = historyDeleteRequestSchema.safeParse(rawRequest);
+      const historyTabId = parsed.success ? this.historyTabIdOf(event.sender) : null;
+      const entry = parsed.success && historyTabId ? this.store.find(parsed.data.id) : undefined;
+      if (historyTabId && entry) {
+        this.registry.mountOwners.get(historyTabId)?.openHistoryEntryInNewTab(entry);
       }
     });
     ipcMain.on(IpcChannel.HistoryDelete, (event, rawRequest: unknown) => {
@@ -290,11 +299,20 @@ export class HistoryController {
   }
 
   private isHistoryView(sender: WebContents): boolean {
+    return this.historyTabIdOf(sender) !== null;
+  }
+
+  /**
+   * The History tab whose page sent a message.
+   * @param sender The sending `webContents`.
+   * @returns The tab's id, or `null` if the sender isn't a History tab's page.
+   */
+  private historyTabIdOf(sender: WebContents): string | null {
     for (const [tabId, view] of this.registry.views) {
       if (view.webContents === sender) {
-        return this.registry.states.get(tabId)?.kind === 'history';
+        return this.registry.states.get(tabId)?.kind === 'history' ? tabId : null;
       }
     }
-    return false;
+    return null;
   }
 }

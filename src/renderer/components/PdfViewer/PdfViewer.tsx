@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import {
   useCallback,
@@ -16,14 +16,14 @@ import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-d
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { ZOOM_PERCENT_DEFAULT } from '@shared/constants';
 import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract';
-import type { PdfPointerMode } from '@shared/tab-state';
+import type { PointerMode } from '@shared/tab-state';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 import { commentCursor, highlighterCursor, penCursor, textCursor } from '../../lib/toolCursors';
 import { PdfPage, type PageHighlight, type PageLink, type PageRect } from './PdfPage';
 import { usePdfFind } from './usePdfFind';
 import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
-import { PAN_WRAP_TIMEOUT_MS, wrapTargetAt, type PanWrap } from './panWrap';
+import { PAN_WRAP_TIMEOUT_MS, wrapTargetAt, type PanWrap } from '@shared/panWrap';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -158,7 +158,7 @@ export function PdfViewer() {
   const [zoomPercent, setZoomPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [renderPercent, setRenderPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [isPanning, setIsPanning] = useState(false);
-  const [pointerMode, setPointerMode] = useState<PdfPointerMode>('pan');
+  const [pointerMode, setPointerMode] = useState<PointerMode>('pan');
   useEffect(() => window.northstarPdf.onPointerMode(setPointerMode), []);
   // Back in Pan mode, a selection made in Select mode would be left stranded where nothing can change it.
   useEffect(() => {

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-19
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -208,7 +208,13 @@ export const pdfGoToPageRequestSchema = z.object({
   page: z.number().int().min(1).max(1_000_000),
 });
 
-export const pdfPointerModeRequestSchema = z.object({
+/** A tab's page asking for a pan's pointer wrap; the tab is the sender, so only the point comes along. */
+export const tabWarpPointerRequestSchema = z.object({
+  x: z.number().finite().min(-100_000).max(100_000),
+  y: z.number().finite().min(-100_000).max(100_000),
+});
+
+export const pointerModeRequestSchema = z.object({
   id: z.string().min(1),
   mode: z.enum(['pan', 'select']),
 });

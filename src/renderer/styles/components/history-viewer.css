@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-19 */
 
 /* ── HISTORY VIEWER ───────────────────────────────────────────────────── */
 /* `history.html`'s whole page — a History tab's own `WebContentsView` (see
@@ -46,6 +46,19 @@ body {
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
   border-radius: var(--size-radius-sm);
+}
+
+/* The vertical scroll bar runs from the bottom of the column headers down, not through them: the headers stay put
+   over the rows, so the bar is the rows' alone. `--history-header-height` is the header row's measured height, set by
+   `HistoryViewer`.
+
+   The headers' bottom border ends with the table, which stops short of the bar, so the track's own top border carries
+   the line on to the table's right edge. The track starts 1px higher to put that border on the same pixel row as the
+   headers' (the last row of their measured height). */
+.history__table-wrap::-webkit-scrollbar-track:vertical {
+  margin-top: calc(var(--history-header-height, 1px) - 1px);
+
+  border-top: 1px solid var(--color-panel-border);
 }
 
 .history__table {
