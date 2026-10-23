@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
@@ -67,11 +67,14 @@ export class LaserPointerOverlay {
    *   belt-and-suspenders listener — it would just go nowhere. Ctrl+I (the
    *   pointer's own toggle) calls it too.
    * @param onWheel Called with each wheel tick over the overlay, to scroll the tab beneath.
+   * @param onPointer Called as the pointer moves over the overlay (its point in the overlay, which is the tab's view's
+   *   point too), or with `null` once it leaves — for the tab's stat bar, whose page can't see it meanwhile.
    */
   public constructor(
     private readonly window: BrowserWindow,
     onEscape: () => void,
     onWheel: (wheel: LaserPointerWheel) => void,
+    onPointer: (point: { x: number; y: number } | null) => void = () => {},
   ) {
     this.view = new WebContentsView({
       webPreferences: {
@@ -91,6 +94,20 @@ export class LaserPointerOverlay {
         return;
       }
       onWheel(payload);
+    });
+
+    this.view.webContents.ipc.on('laser-pointer:move', (event, payload: unknown) => {
+      if (event.senderFrame !== this.view.webContents.mainFrame) {
+        return;
+      }
+      if (payload === null) {
+        onPointer(null);
+        return;
+      }
+      const point = payload as Record<string, unknown> | undefined;
+      if (typeof point?.['x'] === 'number' && typeof point['y'] === 'number' && Number.isFinite(point['x']) && Number.isFinite(point['y'])) {
+        onPointer({ x: point['x'], y: point['y'] });
+      }
     });
 
     this.view.webContents.on('will-navigate', (event) => event.preventDefault());

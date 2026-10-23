@@ -30,7 +30,7 @@ export function usePointerPosition(): PointerPosition | null {
   useEffect(() => {
     let frame = 0;
     let latest: PointerPosition | null = null;
-    const onMove = (event: PointerEvent): void => {
+    const onMove = (event: MouseEvent): void => {
       latest = { x: Math.round(event.clientX), y: Math.round(event.clientY) };
       if (!frame) {
         frame = requestAnimationFrame(() => {
@@ -46,10 +46,16 @@ export function usePointerPosition(): PointerPosition | null {
     };
     window.addEventListener('pointermove', onMove, { capture: true, passive: true });
     document.documentElement.addEventListener('pointerleave', onLeave);
+    // While the laser pointer's overlay covers the page, the page sees no pointer; its preload passes the position on
+    // as these instead (see `tab:pointer-position`).
+    window.addEventListener('northstar-pointer', onMove as EventListener);
+    window.addEventListener('northstar-pointer-leave', onLeave);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('pointermove', onMove, { capture: true });
       document.documentElement.removeEventListener('pointerleave', onLeave);
+      window.removeEventListener('northstar-pointer', onMove as EventListener);
+      window.removeEventListener('northstar-pointer-leave', onLeave);
     };
   }, []);
 

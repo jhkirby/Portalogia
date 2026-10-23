@@ -31,6 +31,13 @@
   background-color: rgba(var(--color-accent-rgb), 0.4);
 }
 
+/* A focused element's default focus ring: Electron never gives Chromium a colour for it, so it falls back to Blink's
+   orange. The accent instead, at no specificity so a component's own focus style still wins; a web page gets the same
+   rule from main (`pageSelectionAccent.ts`). */
+:where(:focus, :focus-visible) {
+  outline-color: rgb(var(--color-accent-rgb));
+}
+
 :root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
   /* The titlebar battery's fill: plugged in, 30% or less, 10% or less. Darker than the dark theme's, to read on grey. */

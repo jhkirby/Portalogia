@@ -155,6 +155,12 @@ document.addEventListener('mouseleave', () => {
   }
 });
 
+// While the laser pointer's overlay covers the page (which then sees no pointer events), main passes on where it is.
+ipcRenderer.on('tab:pointer-position', (_event, point: { x: number; y: number } | null) => {
+  pointer = point ? { x: point.x, y: point.y } : null;
+  reportSoon();
+});
+
 // Where the pointer is, for the stat bar's x×y; sent no more often than the hover (`LIVE_REPORT_MS`). Any page, the
 // app's own included: it's a position on the screen, not something of the site's.
 window.addEventListener(

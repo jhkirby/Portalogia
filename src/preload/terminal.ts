@@ -69,6 +69,15 @@ window.addEventListener(
   { passive: false, capture: true },
 );
 
+// While the laser pointer's overlay covers this page, main passes on where the pointer is (the page itself sees no
+// pointer events then), raised as a page event for the stat bar's pointer readout (`usePointerPosition`): plain
+// numbers in a DOM event cross into the page, where a preload object wouldn't.
+ipcRenderer.on('tab:pointer-position', (_event, point: { x: number; y: number } | null) => {
+  window.dispatchEvent(
+    point ? new MouseEvent('northstar-pointer', { clientX: point.x, clientY: point.y }) : new Event('northstar-pointer-leave'),
+  );
+});
+
 // Whether the window is in Focus Mode: the stat bar hides with the chrome. Kept, so a listener added later hears it.
 const TabFocusMode = 'tab:focus-mode';
 let latestFocusMode = false;

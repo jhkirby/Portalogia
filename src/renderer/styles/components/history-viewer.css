@@ -33,7 +33,7 @@ body {
   gap: var(--size-spacing-md);
   box-sizing: border-box;
   height: 100%;
-  padding: var(--size-spacing-md) 20px;
+  padding: var(--size-content-frame-y) var(--size-content-frame-x);
 }
 
 /* ── Table ── */
@@ -45,7 +45,7 @@ body {
 
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
-  border-radius: var(--size-radius-sm);
+  border-radius: var(--size-content-frame-radius);
 }
 
 /* The vertical scroll bar runs from the bottom of the column headers down, not through them: the headers stay put

@@ -88,6 +88,22 @@ body {
   min-width: 0;
 }
 
+/* The border around a web page: the frame every tab's content sits in (the History table's look). Main places the
+   page's own view just inside it (`TabManager.computeMainBounds`, `CONTENT_FRAME_*`), above the stat bar's strip,
+   and rounds the view's corners to match. */
+.tab-content__frame {
+  position: absolute;
+  top: var(--size-content-frame-y);
+  right: var(--size-content-frame-x);
+  bottom: calc(var(--size-status-bar-height) + var(--size-content-frame-y));
+  left: var(--size-content-frame-x);
+  box-sizing: border-box;
+
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-content-frame-radius);
+  pointer-events: none;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -165,9 +181,9 @@ body {
   position: relative;
   z-index: 2;
   display: grid;
-  /* Out of the drag region, unlike the rest of the row: an OS drag region gets no mouse events, so pointing at the
-     clock would never count as being on the row (`:hover` below), and the window controls would stay hidden. */
-  -webkit-app-region: no-drag;
+  /* Part of the drag region like the rest of the row: the corner is as wide as the clock, so the space left of the
+     window controls is the row's empty space too. Only the controls themselves opt out (window-controls.css); main
+     reports the pointer being on the row (`--pointer-inside`), which `:hover` can't over a drag region. */
   grid-template-rows: 100%;
   flex-shrink: 0;
 }

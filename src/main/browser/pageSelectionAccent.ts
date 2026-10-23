@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-22
 
 import type { WebContents } from 'electron';
 import type { RGB } from '@shared/color';
@@ -15,8 +15,16 @@ const trackedWebContents = new Set<WebContents>();
 /** The key `insertCSS` returned for whatever's currently injected into a given `webContents`, so a later re-style (`setPageSelectionAccent`) can remove the stale rule before adding the new one instead of the two stacking up as separate stylesheets across every accent change for as long as that tab's document stays loaded. */
 const insertedCssKeys = new WeakMap<WebContents, string>();
 
+/**
+ * The accent for the page's text selection and its focus ring. Electron never gives Chromium a focus-ring colour, so a
+ * focused element's default ring (`outline: auto`) falls back to Blink's orange; this colours it with the accent
+ * instead. `:where()` keeps it at no specificity, so a page's own focus styles still win.
+ */
 function selectionCss(rgb: RGB): string {
-  return `::selection { background-color: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4); }`;
+  return (
+    `::selection { background-color: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4); } ` +
+    `:where(:focus, :focus-visible) { outline-color: rgb(${rgb.r}, ${rgb.g}, ${rgb.b}); }`
+  );
 }
 
 /**

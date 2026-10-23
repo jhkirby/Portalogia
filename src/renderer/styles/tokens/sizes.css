@@ -21,6 +21,12 @@
   /* The web page stat bar's height. Must equal STATUS_BAR_HEIGHT_PX in src/shared/constants.ts: main leaves this
      much of the window's bottom free below a web page for the bar. */
   --size-status-bar-height: 26px;
+  /* The frame a tab's content sits in (the History table's look, for every kind of tab): its inset from the sides and
+     from the top and stat bar, and its corners. Must equal CONTENT_FRAME_* in src/shared/constants.ts: main places a
+     web page's view inside it. */
+  --size-content-frame-x: 20px;
+  --size-content-frame-y: 12px;
+  --size-content-frame-radius: 6px;
 
   --size-tab-max-width: 220px;
 

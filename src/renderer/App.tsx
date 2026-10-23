@@ -801,6 +801,9 @@ export function App() {
             same area the hidden `WebContentsView` it's standing in for
             would otherwise occupy. */}
         <div className="tab-content">
+          {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
+              terminal or History page draws its own frame, and Focus Mode shows none. */}
+          {activeTab?.kind === 'browser' && !focusMode && <div className="tab-content__frame" aria-hidden="true" />}
           {/* In the strip main keeps free below a web page; a note or PDF draws its own, and Focus Mode shows none. */}
           {activeTab?.kind === 'browser' && !focusMode && (
             <WebStatusBar stats={pageStats?.tabId === activeTab.id ? pageStats.stats : null} />

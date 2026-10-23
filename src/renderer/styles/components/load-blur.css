@@ -1,0 +1,26 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-22 */
+
+/* ── LOAD BLUR AND CLOSE FADE ───────────────────────────────────────── */
+/* A note, PDF or terminal blurs while its content loads (`useLoadBlur`), as a web page does on going to a new site
+   (`tabLoadBlur.ts`). On the frame's children, not the frame, so its border stays sharp and it clips the blur. */
+.load-blur > * {
+  transition: filter 300ms ease-out;
+}
+
+.load-blur--on > * {
+  filter: blur(16px);
+}
+
+/* A note or PDF being closed fades away before the empty page takes its place (`CONTENT_FADE_MS`). */
+.content-fading > * {
+  animation: content-fade-out 250ms ease-in forwards;
+}
+
+@keyframes content-fade-out {
+  to {
+    opacity: 0;
+  }
+}

@@ -14,6 +14,7 @@ import { ACCENT_STORAGE_KEY } from '../../lib/accentStorage';
 import { createTerminalFind } from './terminalFind';
 import { TerminalStatusBar, type TerminalStats } from './TerminalStatusBar';
 import { currentXtermTheme } from './xtermThemes';
+import { useLoadBlur } from '../../hooks/useLoadBlur';
 
 /**
  * The terminal's text size at 100% zoom. Set so that 100% is the size the text
@@ -194,6 +195,13 @@ export function Terminal({ id }: TerminalProps) {
   /** The window's Focus Mode: the stat bar hides with the chrome. */
   const [focusMode, setFocusMode] = useState(false);
   useEffect(() => window.northstarTerminal.onFocusMode(setFocusMode), []);
+  /** Blurs the terminal from the start until its shell first writes (its prompt). */
+  const { blurred: loadBlurred, finish: finishLoadBlur } = useLoadBlur(true);
+  const finishLoadBlurRef = useRef(finishLoadBlur);
+  // Toggled here rather than through `className`: the surface's other classes are toggled directly (the highlighter's).
+  useEffect(() => {
+    containerRef.current?.classList.toggle('load-blur--on', loadBlurred);
+  }, [loadBlurred]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -337,7 +345,10 @@ export function Terminal({ id }: TerminalProps) {
         // stand-in above: forces the just-written rows to actually paint
         // rather than trusting xterm's own scheduling to complete on its
         // own, in case anything else ever manages to pause it.
-        term.write(data, () => term.refresh(0, term.rows - 1));
+        term.write(data, () => {
+          term.refresh(0, term.rows - 1);
+          finishLoadBlurRef.current();
+        });
       }
     });
     const unsubscribeExited = window.northstarTerminal.onTerminalExited((exitedId) => {
@@ -664,7 +675,7 @@ export function Terminal({ id }: TerminalProps) {
 
   return (
     <div className="terminal">
-      <div ref={containerRef} className="terminal__surface" />
+      <div ref={containerRef} className="terminal__surface load-blur load-blur--on" />
       {exited && (
         <div className="terminal__exited-banner" role="status">
           Process exited

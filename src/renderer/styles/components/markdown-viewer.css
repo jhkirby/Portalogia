@@ -31,6 +31,20 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+
+  /* Around the frame below: the chrome's own colour, as around the History table. */
+  background: var(--color-chrome-bg);
+}
+
+/* The note (or the empty page before one is open) sits in a rounded, bordered frame, like the History table; the
+   stat bar stays full width below it. */
+.md-viewer > :is(.md-viewer__body, .md-viewer__empty) {
+  margin: var(--size-content-frame-y) var(--size-content-frame-x);
+  overflow: hidden;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-content-frame-radius);
 }
 
 /* The note (reader or editor) and its side panel, side by side above the status bar. `min-height: 0` lets it shrink

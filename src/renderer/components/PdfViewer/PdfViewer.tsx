@@ -26,6 +26,7 @@ import { usePdfFind } from './usePdfFind';
 import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
 import { PAN_WRAP_TIMEOUT_MS, wrapTargetAt, type PanWrap } from '@shared/panWrap';
+import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -160,6 +161,12 @@ export function PdfViewer() {
   /** Hash of the open document, the key its marks are saved under (see `PdfAnnotationStore`); `null` before one is open. */
   const [docKey, setDocKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Blurs the document while a file loads into it. */
+  const loadBlur = useLoadBlur();
+  const { start: startLoadBlur, finish: finishLoadBlur } = loadBlur;
+  /** Whether the document is fading away, having been closed; the timer that then clears it. */
+  const [closing, setClosing] = useState(false);
+  const closeTimerRef = useRef(0);
   const [zoomPercent, setZoomPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [renderPercent, setRenderPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [isPanning, setIsPanning] = useState(false);
@@ -238,7 +245,11 @@ export function PdfViewer() {
   }, [zoomPercent]);
 
   const loadFile = useCallback(async (file: PdfOpenResult) => {
+    // A file opened while the last one fades away replaces it at once.
+    window.clearTimeout(closeTimerRef.current);
+    setClosing(false);
     setError(null);
+    startLoadBlur();
     try {
       // Read before pdf.js takes the bytes: it hands the buffer to its worker, which empties it here.
       const bytes = file.data.byteLength;
@@ -274,8 +285,10 @@ export function PdfViewer() {
       scrollRef.current?.scrollTo({ left: 0, top: 0 });
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : 'Could not open that PDF.');
+    } finally {
+      finishLoadBlur();
     }
-  }, []);
+  }, [startLoadBlur, finishLoadBlur]);
 
   /** The page under the middle of the view (the last page if the view is past the end). */
   const reportVisiblePage = useCallback((): void => {
@@ -444,25 +457,32 @@ export function PdfViewer() {
   useEffect(
     () =>
       window.northstarPdf.onClose(() => {
-        setDoc((previous) => {
-          void previous?.loadingTask.destroy();
-          return null;
-        });
-        setPageSizes([]);
-        undoRef.current = [];
-        redoRef.current = [];
-        baselineRef.current = { strokes: EMPTY_STROKES, highlights: EMPTY_HIGHLIGHTS, crops: EMPTY_CROPS };
-        setStrokes(EMPTY_STROKES);
-        setComments([]);
-        setTextBoxes([]);
-        setHighlights(EMPTY_HIGHLIGHTS);
-        setCrops(EMPTY_CROPS);
-        setOpenCommentId(null);
-        setDocKey(null);
-        setError(null);
+        // The document fades away first, then the empty page takes its place.
+        window.clearTimeout(closeTimerRef.current);
+        setClosing(true);
+        closeTimerRef.current = window.setTimeout(() => {
+          setClosing(false);
+          setDoc((previous) => {
+            void previous?.loadingTask.destroy();
+            return null;
+          });
+          setPageSizes([]);
+          undoRef.current = [];
+          redoRef.current = [];
+          baselineRef.current = { strokes: EMPTY_STROKES, highlights: EMPTY_HIGHLIGHTS, crops: EMPTY_CROPS };
+          setStrokes(EMPTY_STROKES);
+          setComments([]);
+          setTextBoxes([]);
+          setHighlights(EMPTY_HIGHLIGHTS);
+          setCrops(EMPTY_CROPS);
+          setOpenCommentId(null);
+          setDocKey(null);
+          setError(null);
+        }, CONTENT_FADE_MS);
       }),
     [],
   );
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
   useEffect(() => window.northstarPdf.onTool(setTool), []);
 
   // Revert Annotations.
@@ -904,7 +924,7 @@ export function PdfViewer() {
       <style>{`::highlight(${PREVIEW_HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, ${PREVIEW_ALPHA}); }`}</style>
       <div
         ref={scrollRef}
-        className={`pdf-viewer__scroll${doc && pointerMode === 'pan' ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
+        className={`pdf-viewer__scroll load-blur${loadBlur.blurred ? ' load-blur--on' : ''}${closing ? ' content-fading' : ''}${doc && pointerMode === 'pan' ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
         data-tool={activeTool}
         data-pointer-mode={pointerMode}
         style={toolCursor ? ({ '--pdf-tool-cursor': toolCursor } as CSSProperties) : undefined}

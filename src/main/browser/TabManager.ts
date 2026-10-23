@@ -41,6 +41,10 @@ import {
   ZOOM_PERCENT_WHEEL_STEP,
   ZOOM_PERCENT_WHEEL_STEP_COARSE,
   STATUS_BAR_HEIGHT_PX,
+  CONTENT_FRAME_BORDER_PX,
+  CONTENT_FRAME_INSET_X_PX,
+  CONTENT_FRAME_INSET_Y_PX,
+  CONTENT_FRAME_RADIUS_PX,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
 import { DEFAULT_WORKSPACE_ICON, isWorkspaceIconId } from '@shared/workspaceIcons';
@@ -82,6 +86,7 @@ import { markdownToPlainText } from '@shared/markdown/plainText';
 import { isRunnableLanguage, runCodeBlock } from './MarkdownCodeRunner';
 import { readFileCapped } from '../platform/readFileCapped';
 import { beginLoad, endLoad } from './loadProgress';
+import { trackDomainLoadBlur } from './domainLoadBlur';
 import { markdownAnnotationStore } from './MarkdownAnnotationStore';
 import { MarkdownDocuments } from './MarkdownDocuments';
 import {
@@ -142,6 +147,12 @@ interface ClosedTab {
  * `--color-panel-bg` in colors.css), by theme. The view is given the same
  * color natively, so the frames before the page's first paint aren't white.
  */
+/** How long, in ms, a web page takes to fade away before going to the home page (`navigate`). */
+const HOME_FADE_MS = 250;
+
+/** The home page's background (`homePage.ts`): what a page fades to on its way there. */
+const HOME_BACKGROUND = { light: '#ffffff', dark: '#202124' } as const;
+
 const APP_PAGE_BACKGROUNDS = {
   pdf: { light: '#f1f3f4', dark: '#202124' },
   history: { light: '#f1f3f4', dark: '#202124' },
@@ -444,6 +455,7 @@ export class TabManager {
           deltaY: -wheel.deltaY,
         });
       },
+      (point) => this.relayPointerPosition(point),
     );
 
     // The Ctrl+Space reorder gesture also needs to work when OS keyboard
@@ -637,6 +649,8 @@ export class TabManager {
       workspaceId,
     });
 
+    // Rounded to fit just inside the content frame's border (`.tab-content__frame`), whose corners it sits in.
+    view.setBorderRadius(CONTENT_FRAME_RADIUS_PX - CONTENT_FRAME_BORDER_PX);
     this.wireEvents(id, view);
 
     // Every new tab's first load comes through here, so the scheme allowlist `navigate` applies is applied here too:
@@ -2962,8 +2976,46 @@ export class TabManager {
       throw new Error(`Refusing to navigate to disallowed URL: ${target}`);
     }
 
+    // Going home from a page: the page fades away (into the home page's colour) first.
+    const state = this.states.get(id);
+    if (target === HOME_URL && state?.kind === 'browser' && state.url !== HOME_URL) {
+      this.fadeToHome(id, view);
+      return this.getState();
+    }
     void view.webContents.loadURL(target).catch(() => {});
     return this.getState();
+  }
+
+  /** Tabs whose page is fading away on the way home (`fadeToHome`), so pressing Home again doesn't restart it. */
+  private readonly fadingHome = new Set<string>();
+
+  /**
+   * Fades a tab's page away, then loads the home page in its place. A cover over the page fades in to the home page's
+   * background, so the home page then appears with no jump.
+   * @param id The tab.
+   * @param view Its view.
+   */
+  private fadeToHome(id: string, view: WebContentsView): void {
+    if (this.fadingHome.has(id)) {
+      return;
+    }
+    this.fadingHome.add(id);
+    const wc = view.webContents;
+    const color = nativeTheme.shouldUseDarkColors ? HOME_BACKGROUND.dark : HOME_BACKGROUND.light;
+    const go = (): void => {
+      this.fadingHome.delete(id);
+      if (!wc.isDestroyed()) {
+        void wc.loadURL(HOME_URL).catch(() => {});
+      }
+    };
+    wc.insertCSS(
+      `@keyframes northstar-fade-home { from { opacity: 0; } to { opacity: 1; } } ` +
+        `html::after { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
+        `background: ${color}; animation: northstar-fade-home ${HOME_FADE_MS}ms ease-in forwards; }`,
+    )
+      .then(() => setTimeout(go, HOME_FADE_MS))
+      // A page that can't take it (it's mid-navigation) just goes home at once.
+      .catch(go);
   }
 
   /** Navigates a tab to the home page — the same destination the toolbar's Home button uses. A no-op for a terminal tab; see `navigate`. */
@@ -4463,6 +4515,26 @@ export class TabManager {
     );
   }
 
+  /**
+   * Hands the active tab's page the pointer's place while the laser overlay covers it (the page sees no pointer
+   * events then), so its stat bar's `x×y` keeps following. The overlay's point is the view's own; a page's CSS
+   * pixels are that over its zoom (a terminal's page never zooms: it sizes its text instead).
+   * @param point Where the pointer is over the view, or `null` once it has left.
+   */
+  private relayPointerPosition(point: { x: number; y: number } | null): void {
+    const id = this.activeTabId;
+    const view = id ? this.views.get(id) : undefined;
+    if (!id || !view || view.webContents.isDestroyed()) {
+      return;
+    }
+    const zoom =
+      this.states.get(id)?.kind === 'terminal' ? 1 : (this.registry.zoomPercentByTabId.get(id) ?? ZOOM_PERCENT_DEFAULT) / 100;
+    view.webContents.send(
+      IpcChannel.TabPointerPosition,
+      point ? { x: Math.round(point.x / zoom), y: Math.round(point.y / zoom) } : null,
+    );
+  }
+
   // ── Highlighter ──────────────────────────────────────────────────────
 
   /**
@@ -5846,12 +5918,29 @@ export class TabManager {
     return active?.kind === 'browser' && !this.focusMode && this.htmlFullScreenTabId === null ? STATUS_BAR_HEIGHT_PX : 0;
   }
 
+  /**
+   * Whether the active tab's view sits inside the content frame (`CONTENT_FRAME_*`): a web page, outside Focus Mode
+   * and a page's own fullscreen. A note, PDF, terminal or History page fills its view and draws its own frame.
+   */
+  private framesActiveView(): boolean {
+    const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
+    return active?.kind === 'browser' && !this.focusMode && this.htmlFullScreenTabId === null;
+  }
+
   /** @returns The bounds a single full-width tab view should occupy for a given sidebar/chrome inset. */
   private computeMainBounds(left: number, top: number): Rect {
     // Electron types getContentSize() as number[], not a fixed tuple, so
     // noUncheckedIndexedAccess sees each element as possibly undefined.
     const [width = 0, height = 0] = this.window.getContentSize();
-    return { x: left, y: top, width: Math.max(0, width - left), height: Math.max(0, height - top - this.bottomInset()) };
+    // A web page sits inside the content frame, just within the border the chrome draws around it.
+    const insetX = this.framesActiveView() ? CONTENT_FRAME_INSET_X_PX + CONTENT_FRAME_BORDER_PX : 0;
+    const insetY = this.framesActiveView() ? CONTENT_FRAME_INSET_Y_PX + CONTENT_FRAME_BORDER_PX : 0;
+    return {
+      x: left + insetX,
+      y: top + insetY,
+      width: Math.max(0, width - left - 2 * insetX),
+      height: Math.max(0, height - top - this.bottomInset() - 2 * insetY),
+    };
   }
 
   /** @returns The bounds the primary (left) and secondary (right) split-view panes should occupy, for a single-view `main` rect. */
@@ -5965,6 +6054,7 @@ export class TabManager {
 
     this.wireSharedInputHandling(id, wc);
     trackPageSelectionAccent(wc);
+    trackDomainLoadBlur(wc);
 
     const contentsId = wc.id;
     wc.once('destroyed', () => pagePointerModesSent.delete(contentsId));

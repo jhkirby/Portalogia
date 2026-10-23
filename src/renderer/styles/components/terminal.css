@@ -22,9 +22,8 @@ html,
 body {
   height: 100%;
   margin: 0;
-  /* The terminal's own background: what shows in the sliver below its last whole row (xterm lays out whole rows
-     only), which was the browser's darker default and read as an empty black band along the bottom. */
-  background: light-dark(#ffffff, #1e1e1e);
+  /* Around the terminal's frame: the chrome's own colour, as around the History table. */
+  background: light-dark(#f1f3f4, #202124);
   /* This page is a fixed single-terminal layout, never meant to be a
      scrollable document itself — same reasoning as the chrome's own
      `html, body` rule in app.css. Without this, a sub-pixel mismatch
@@ -49,14 +48,17 @@ body {
   height: 100%;
 }
 
+/* The terminal sits in a rounded, bordered frame, like the History table; the stat bar stays full width below it. */
 .terminal__surface {
   flex: 1;
   min-height: 0;
+  margin: var(--size-content-frame-y) var(--size-content-frame-x);
+  border: 1px solid light-dark(#d7d9db, #5f6368);
+  border-radius: var(--size-content-frame-radius);
   /* Room between the prompt and the window's left edge (and a little above the first line). xterm's fit measures the
      space inside this padding, so its rows and columns stay whole. */
   padding: 8px 0 0 14px;
   box-sizing: border-box;
-  width: 100%;
   /* The terminal never draws past its own area, onto the stat bar below, even mid-resize. */
   overflow: hidden;
   /* xterm.js paints its own background from the `theme` option passed in

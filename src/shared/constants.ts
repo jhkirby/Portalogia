@@ -29,6 +29,19 @@ export const CHROME_HEIGHT_PX = 92;
 export const CHROME_HEIGHT_FOCUSED_PX = 0;
 
 /**
+ * The frame every tab's content sits in — the rounded, bordered box a tab's content sits in, as the History table does: inset this far
+ * from the sides (X) and from the top and the stat bar (Y), with a border this
+ * wide and corners this round. Main places a web page's view inside it (the
+ * chrome draws the border around the view); a note, PDF, terminal or History
+ * page draws its own. Must equal the `--size-content-frame-*` tokens in
+ * `sizes.css`.
+ */
+export const CONTENT_FRAME_INSET_X_PX = 20;
+export const CONTENT_FRAME_INSET_Y_PX = 12;
+export const CONTENT_FRAME_BORDER_PX = 1;
+export const CONTENT_FRAME_RADIUS_PX = 6;
+
+/**
  * Height, in CSS pixels, of the stat bar along the bottom of a web page's tab
  * (`WebStatusBar`), which the chrome draws below the page: main leaves this
  * much of the window's bottom free for it. Must equal `--size-status-bar-height`

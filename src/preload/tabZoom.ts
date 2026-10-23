@@ -17,6 +17,7 @@ import './tabPen';
 import './tabEditableFocus';
 import './tabPan';
 import './tabStats';
+import './tabLoadBlur';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see
 // `src/preload/terminal.ts`'s own comment: a value shared between two

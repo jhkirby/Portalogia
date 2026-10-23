@@ -40,6 +40,7 @@ import { MarkdownSidePanel } from './MarkdownSidePanel';
 import { MarkdownStatusBar } from './MarkdownStatusBar';
 import { useMarkdownFind } from './useMarkdownFind';
 import { useMarkdownPan } from './useMarkdownPan';
+import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
 
 /** Name registered with `CSS.highlights` for the user's highlights, painted by `markdown-viewer.css`. */
 const HIGHLIGHT_NAME = 'northstar-md-highlight';
@@ -235,9 +236,24 @@ export function MarkdownViewer() {
   const historyStartedRef = useRef(false);
   /** The note's marks have been loaded for this generation — saving before then would overwrite them with nothing. */
   const [marksLoadedFor, setMarksLoadedFor] = useState(0);
+  /** Whether the note is fading away, having been closed; the timer that then clears it. */
+  const [closing, setClosing] = useState(false);
+  const closeTimerRef = useRef(0);
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
+  /** Blurs the note while one opens, until it's on the page. */
+  const { blurred: loadBlurred, start: startLoadBlur, finish: finishLoadBlur } = useLoadBlur();
+  // The note is on the page once the render that brought it in has committed.
+  useEffect(() => {
+    if (noteKey) {
+      finishLoadBlur();
+    }
+  }, [noteKey, finishLoadBlur]);
 
   const loadNote = useCallback(
     (file: MarkdownFileData): void => {
+      // A note opened while the last one fades away replaces it at once.
+      window.clearTimeout(closeTimerRef.current);
+      setClosing(false);
       flushSave();
       const isNewNote = file.reason !== 'reload' || file.generation !== generationRef.current;
       generationRef.current = file.generation;
@@ -248,6 +264,7 @@ export function MarkdownViewer() {
       setAnchor(file.anchor);
       setLineEnding(file.lineEnding);
       if (isNewNote) {
+        startLoadBlur();
         savedEditorStateRef.current = null;
         scrollRatioRef.current = 0;
         undoRef.current = [];
@@ -268,7 +285,7 @@ export function MarkdownViewer() {
         pendingSaveRef.current = null;
       }
     },
-    [flushSave],
+    [flushSave, startLoadBlur],
   );
   useEffect(() => window.northstarMarkdown.onFile(loadNote), [loadNote]);
 
@@ -276,20 +293,26 @@ export function MarkdownViewer() {
     () =>
       window.northstarMarkdown.onClose(() => {
         flushSave();
-        generationRef.current = 0;
-        sourceRef.current = '';
-        savedEditorStateRef.current = null;
-        undoRef.current = [];
-        redoRef.current = [];
-        baselineRef.current = { strokes: NO_STROKES, highlights: NO_HIGHLIGHTS };
-        setHasNote(false);
-        setSource('');
-        setNoteKey('');
-        setStrokes(NO_STROKES);
-        setHighlights(NO_HIGHLIGHTS);
-        setComments([]);
-        setOpenCommentId(null);
-        setMarksLoadedFor(0);
+        // The note fades away first, then the empty page takes its place.
+        window.clearTimeout(closeTimerRef.current);
+        setClosing(true);
+        closeTimerRef.current = window.setTimeout(() => {
+          setClosing(false);
+          generationRef.current = 0;
+          sourceRef.current = '';
+          savedEditorStateRef.current = null;
+          undoRef.current = [];
+          redoRef.current = [];
+          baselineRef.current = { strokes: NO_STROKES, highlights: NO_HIGHLIGHTS };
+          setHasNote(false);
+          setSource('');
+          setNoteKey('');
+          setStrokes(NO_STROKES);
+          setHighlights(NO_HIGHLIGHTS);
+          setComments([]);
+          setOpenCommentId(null);
+          setMarksLoadedFor(0);
+        }, CONTENT_FADE_MS);
       }),
     [flushSave],
   );
@@ -825,7 +848,7 @@ export function MarkdownViewer() {
       ) : (
         <>
           {/* The note and its panel side by side, over the status bar. */}
-          <div ref={bodyRef} className="md-viewer__body">
+          <div ref={bodyRef} className={`md-viewer__body load-blur${loadBlurred ? ' load-blur--on' : ''}${closing ? ' content-fading' : ''}`}>
             {showEditor && (
               <div className="md-viewer__editor">
                 <MarkdownEditor

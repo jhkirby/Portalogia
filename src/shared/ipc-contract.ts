@@ -128,6 +128,10 @@ export const IpcChannel = {
   PdfPointerMode: 'pdf:pointer-mode',
   /** PDF page → main: a web link in the document was clicked; open it in a new tab. */
   PdfOpenLink: 'pdf:open-link',
+  /** Main → tab's page: where the pointer is over it (its CSS pixels), or `null`, while the laser overlay hides it from the page. */
+  TabPointerPosition: 'tab:pointer-position',
+  /** Tab's page → main (sync), before its first paint: whether to start out blurred, having come from another site. */
+  TabLoadBlur: 'tab:load-blur',
   /** Browser tab's page → main: its words, characters, images, links and elements, hovered element and selection. */
   TabPageStats: 'tab:page-stats',
   /** Main → chrome: the active web page's stats changed (or another page became the active one). */

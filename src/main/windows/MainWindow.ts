@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
@@ -20,8 +20,9 @@ export function createMainWindow(adBlocker: AdBlocker, options: { showWhenReady?
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 640,
-    minHeight: 480,
+    // No smaller than it opens: below this the toolbar's buttons and the tab row no longer fit.
+    minWidth: 1280,
+    minHeight: 800,
     show: false,
     // The app always runs as bare `electron.exe`, which would otherwise
     // show Electron's own default icon in the taskbar.
