@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useEffect, useRef, useState } from 'react';
 import { HISTORY_UNIT_LIMITS, type HistoryUnit } from '@shared/constants';
@@ -23,6 +23,8 @@ const UNIT_OPTIONS: readonly { readonly value: ClearUnit; readonly label: string
 
 interface HistoryToolbarProps {
   readonly tab: HistoryTabState;
+  /** "Clear History" was pressed for a range: the app confirms (`ClearHistoryPopup`) before anything is deleted. */
+  readonly onRequestClear: (range: HistoryClearRange) => void;
 }
 
 /** What the toolbar's inputs held, so switching away from a History tab and back finds them as they were. */
@@ -49,7 +51,7 @@ const controlsByTab = new Map<string, HistoryControls>();
  * tab. Its placeholder types itself in and loops its trailing dots, like the
  * address bar's.
  */
-export function HistoryToolbar({ tab }: HistoryToolbarProps) {
+export function HistoryToolbar({ tab, onRequestClear }: HistoryToolbarProps) {
   const initial = controlsByTab.get(tab.id) ?? DEFAULT_CONTROLS;
   const [query, setQuery] = useState(initial.query);
   const [unit, setUnit] = useState<ClearUnit>(initial.unit);
@@ -89,11 +91,32 @@ export function HistoryToolbar({ tab }: HistoryToolbarProps) {
     }
   };
 
+  // How many visits the range holds, kept current as the history changes: with none, there's nothing to clear.
+  const [rangeCount, setRangeCount] = useState<number | null>(null);
+  const rangeKey = JSON.stringify(range);
+  useEffect(() => {
+    let isStale = false;
+    const recount = (): void => {
+      void window.northstar.countHistory(JSON.parse(rangeKey) as HistoryClearRange).then((result) => {
+        if (!isStale && result.ok) {
+          setRangeCount(result.data);
+        }
+      });
+    };
+    recount();
+    const unsubscribe = window.northstar.onHistoryChanged(recount);
+    return () => {
+      isStale = true;
+      unsubscribe();
+    };
+  }, [rangeKey]);
+  const hasHistoryToClear = canClear && rangeCount !== 0;
+
   const clear = (): void => {
-    if (!canClear) {
+    if (!hasHistoryToClear) {
       return;
     }
-    void window.northstar.clearHistory(range);
+    onRequestClear(range);
   };
 
   // Types itself in once, then its trailing dots loop — the same animation as the address bar's.
@@ -119,10 +142,13 @@ export function HistoryToolbar({ tab }: HistoryToolbarProps) {
         autoCapitalize="off"
         autoCorrect="off"
       />
+      {/* "All Time" takes no number: the box fades and folds away, and the dropdown slides over into its place. */}
       <input
         type="number"
-        className="history-toolbar__amount"
+        className={`history-toolbar__amount${unit === 'all' ? ' history-toolbar__amount--hidden' : ''}`}
         aria-label="Amount of time to clear"
+        aria-hidden={unit === 'all'}
+        tabIndex={unit === 'all' ? -1 : undefined}
         min={1}
         max={limit || undefined}
         step={1}
@@ -132,7 +158,7 @@ export function HistoryToolbar({ tab }: HistoryToolbarProps) {
         onChange={(event) => setAmountText(event.target.value.replace(/\D/g, ''))}
       />
       <UnitSelect options={UNIT_OPTIONS} value={unit} onChange={changeUnit} label="Unit of time to clear" />
-      <button type="button" className="history-toolbar__clear hover-grow" onClick={clear} disabled={!canClear}>
+      <button type="button" className="history-toolbar__clear hover-grow" onClick={clear} disabled={!hasHistoryToClear}>
         Clear History
       </button>
     </div>

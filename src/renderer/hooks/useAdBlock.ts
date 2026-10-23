@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { useEffect, useState } from 'react';
 import type { AdBlockState } from '@shared/ipc-contract';
@@ -27,7 +27,7 @@ export function useAdBlock(): AdBlockState {
   useEffect(() => {
     let cancelled = false;
     void window.northstar.getAdBlockState().then((initial) => {
-      if (!cancelled) {
+      if (!cancelled && initial) {
         setState(initial);
       }
     });

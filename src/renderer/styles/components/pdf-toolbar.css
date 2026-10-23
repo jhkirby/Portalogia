@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-22 */
 
 /* ── PDF TOOLBAR ──────────────────────────────────────────────────────── */
 /* The PDF tab's controls inside the chrome's main toolbar, in the slot a
@@ -40,45 +40,6 @@
 }
 
 .pdf-toolbar__file-name:focus {
-  outline: none;
-  border-color: var(--color-accent-text);
-}
-
-/* "current / total", just before the file name. */
-.pdf-toolbar__pages {
-  display: flex;
-  align-items: center;
-  flex: none;
-  /* No gap: the number's own right padding and the total's left margin are the only space around the "/", so it reads as one fraction. */
-  gap: 0;
-
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text);
-}
-
-.pdf-toolbar__page-input {
-  box-sizing: content-box;
-  height: 24px;
-  padding: 0 3px;
-
-  background: transparent;
-  /* No box until the pointer is over it or the cursor is in it, like the file name. */
-  border: 1px solid transparent;
-  border-radius: var(--size-radius-sm);
-
-  font: inherit;
-  color: var(--color-tab-text-active);
-  /* Right-aligned so the digits hug the "/" however wide the box is. */
-  text-align: right;
-  user-select: text;
-}
-
-/* Hovering shows the toolbar's grey border; the accent color is for when the cursor is inside. */
-.pdf-toolbar__page-input:hover {
-  border-color: var(--color-chrome-border);
-}
-
-.pdf-toolbar__page-input:focus {
   outline: none;
   border-color: var(--color-accent-text);
 }

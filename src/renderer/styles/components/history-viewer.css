@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-19 */
+   Last Modified: 2026-10-22 */
 
 /* ── HISTORY VIEWER ───────────────────────────────────────────────────── */
 /* `history.html`'s whole page — a History tab's own `WebContentsView` (see
@@ -52,9 +52,9 @@ body {
    over the rows, so the bar is the rows' alone. `--history-header-height` is the header row's measured height, set by
    `HistoryViewer`.
 
-   The headers' bottom border ends with the table, which stops short of the bar, so the track's own top border carries
-   the line on to the table's right edge. The track starts 1px higher to put that border on the same pixel row as the
-   headers' (the last row of their measured height). */
+   The line under the headers ends with the table, which stops short of the bar, so the track's own top border carries
+   it on to the table's right edge. The track starts 1px higher to put that border on the same pixel row as the
+   headers' line (the last row of their measured height). */
 .history__table-wrap::-webkit-scrollbar-track:vertical {
   margin-top: calc(var(--history-header-height, 1px) - 1px);
 
@@ -76,7 +76,10 @@ body {
   padding: var(--size-spacing-sm) var(--size-spacing-md);
 
   background: var(--color-panel-bg);
-  border-bottom: 1px solid var(--color-panel-border);
+  /* The line under the headers, drawn inside the cell's last pixel row rather than as a border: in a collapsed-border
+     table a sticky cell's border doesn't stick, so once scrolled it went off with the rows and left only the scroll
+     track's piece of the line (below) standing alone at the right. */
+  box-shadow: inset 0 -1px 0 var(--color-panel-border);
 
   font-size: var(--size-font-sm);
   font-weight: 600;
@@ -150,6 +153,42 @@ body {
   background: var(--color-button-hover-bg);
 }
 
+/* Rows fade up into place when the table appears (or new ones arrive), each a moment after the one above it
+   (`--row-index`, capped, so a long table doesn't keep you waiting). */
+.history__row {
+  animation: history-row-in 260ms ease-out calc(var(--row-index, 0) * 18ms) both;
+}
+
+/* A deleted row fades and slides out to the left where it stood; `HistoryViewer` drops it when this ends. */
+.history__row--exiting {
+  pointer-events: none;
+  animation: history-row-out 240ms ease-in both;
+}
+
+@keyframes history-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes history-row-out {
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history__row {
+    animation: none;
+  }
+
+  .history__row--exiting {
+    animation-duration: 1ms;
+  }
+}
+
 .history__cell--actions {
   padding: 0 var(--size-spacing-xs);
 }
@@ -208,6 +247,11 @@ body {
 
   text-align: center;
   color: var(--color-tab-text);
+}
+
+/* The rest of the message, not yet showing, holding its place: see `HistoryViewer`'s `emptyRest`. */
+.history__empty-rest {
+  visibility: hidden;
 }
 
 .history__note {

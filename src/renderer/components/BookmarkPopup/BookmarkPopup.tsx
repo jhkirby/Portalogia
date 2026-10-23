@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useState, type KeyboardEvent } from 'react';
 
@@ -16,7 +16,7 @@ interface BookmarkPopupProps {
   readonly previewImage: string | null;
   /** Commits the bookmark with whatever the two fields hold at the time. */
   readonly onSave: (name: string, url: string) => void;
-  /** Cancels — clicking the backdrop, the × button, or Escape all take this path; nothing gets saved. */
+  /** Cancels — clicking the backdrop, the × button, or Escape all take this path; nothing gets saved. There's no Cancel button: the × is it. */
   readonly onClose: () => void;
 }
 
@@ -105,10 +105,8 @@ export function BookmarkPopup({
           />
         </label>
 
-        <div className="bookmark-popup__actions">
-          <button type="button" className="bookmark-popup__cancel hover-grow" onClick={onClose}>
-            Cancel
-          </button>
+        {/* Only Save: the × (and Escape, and a click outside) already cancel. */}
+        <div className="bookmark-popup__actions bookmark-popup__actions--centered">
           <button type="button" className="bookmark-popup__save" onClick={handleSave} disabled={!canSave}>
             Save
           </button>

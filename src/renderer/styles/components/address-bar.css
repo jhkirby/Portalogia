@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-22 */
 
 /* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
 
@@ -19,6 +19,9 @@
   background: var(--color-address-bg);
   border: 1px solid var(--color-address-border);
   border-radius: var(--size-radius-pill);
+  /* Its own stacking layer, so the load progress (`z-index: -1`) paints above this background but below everything
+     else in the bar, and never escapes behind the toolbar. */
+  isolation: isolate;
 }
 
 .address-bar:hover {
@@ -58,18 +61,6 @@
 .address-bar__bookmark:disabled {
   color: var(--color-button-disabled-text);
   cursor: default;
-}
-
-.address-bar__spinner {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-
-  border: 2px solid var(--color-spinner-track);
-  border-top-color: var(--color-spinner-active);
-  border-radius: 50%;
-
-  animation: address-bar-spin 0.7s linear infinite;
 }
 
 .address-bar__field {
@@ -134,9 +125,106 @@
   background: var(--color-button-hover-bg);
 }
 
-@keyframes address-bar-spin {
+/* ── Load progress ──
+   The bar's own background fills from its left end to its right as the page
+   loads (`BrowserTabState.loadProgress`): an accent tint behind the text,
+   clipped to the pill's rounded ends, with the percentage at the right end. */
+.address-bar__progress {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.address-bar__progress-fill {
+  display: block;
+  height: 100%;
+
+  background: rgba(var(--color-accent-rgb), 0.28);
+
+  transition: width 150ms ease-out;
+}
+
+.address-bar__percent {
+  flex: none;
+  min-width: 4ch;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-address-placeholder);
+  text-align: right;
+}
+
+/* Done: the tint and the percentage fade away together (`PROGRESS_FADE_MS` in `AddressBar`) rather than vanishing. */
+.address-bar__progress,
+.address-bar__percent {
+  transition: opacity 300ms ease-out;
+}
+
+.address-bar__progress--leaving {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address-bar__progress-fill {
+    transition: none;
+  }
+}
+
+/* ── Loading ring ──
+   While the page loads, a short bright line chases around the edge of the
+   domain chip (or of the whole bar, when no chip is showing) — in place of a
+   separate spinner, which pushed the chip sideways. Drawn by a conic gradient
+   whose start angle turns, masked down to a 2px band along the box's own
+   rounded edge, so it follows the pill's shape. */
+@property --address-bar-ring-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.address-bar__bubble--loading::after,
+.address-bar--loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: inherit;
+
+  background: conic-gradient(
+    from var(--address-bar-ring-angle),
+    transparent 0 62%,
+    var(--color-spinner-active) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  pointer-events: none;
+  animation: address-bar-ring-spin 0.9s linear infinite;
+}
+
+/* The bar's border sits outside its padding box, so its ring covers the border instead of running inside it. */
+.address-bar--loading::after {
+  inset: -1px;
+}
+
+@keyframes address-bar-ring-spin {
   to {
-    transform: rotate(360deg);
+    --address-bar-ring-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address-bar__bubble--loading::after,
+  .address-bar--loading::after {
+    animation-duration: 3s;
   }
 }
 

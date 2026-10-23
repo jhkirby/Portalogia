@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -354,13 +354,13 @@ export function buildMenu(
         },
         {
           label: 'Pan Tool',
-          accelerator: 'CmdOrCtrl+1',
+          accelerator: 'Alt+1',
           registerAccelerator: false,
           click: () => getTabManager()?.setActivePointerMode('pan'),
         },
         {
           label: 'Select Tool',
-          accelerator: 'CmdOrCtrl+2',
+          accelerator: 'Alt+2',
           registerAccelerator: false,
           click: () => getTabManager()?.setActivePointerMode('select'),
         },

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-22
 
 import { useEffect, useState } from 'react';
 import type { HistoryEntry, HistorySuggestion } from '@shared/ipc-contract';
@@ -22,18 +22,20 @@ const DEBOUNCE_MS = 60;
  * @param type Pages (`'url'`) or PDFs (`'pdf'`).
  * @param query The text typed so far.
  * @param enabled Whether the dropdown can show at all (the box is focused).
+ * @param listWhenEmpty Whether nothing typed lists everything (the PDF and note search) rather than nothing.
  * @returns The matches, newest first.
  */
 export function useHistorySuggestions(
   type: HistoryEntry['type'],
   query: string,
   enabled: boolean,
+  listWhenEmpty = false,
 ): readonly HistorySuggestion[] {
   const [matches, setMatches] = useState<readonly HistorySuggestion[]>([]);
 
   useEffect(() => {
     const needle = query.trim();
-    if (!enabled || !needle) {
+    if (!enabled || (!needle && !listWhenEmpty)) {
       setMatches([]);
       return undefined;
     }
@@ -49,7 +51,7 @@ export function useHistorySuggestions(
       isStale = true;
       window.clearTimeout(timer);
     };
-  }, [type, query, enabled]);
+  }, [type, query, enabled, listWhenEmpty]);
 
   return matches;
 }

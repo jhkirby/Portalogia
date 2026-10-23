@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-19 */
+   Last Modified: 2026-10-22 */
 
 :root {
   /* Also the titlebar's own height now that the tab strip and
@@ -18,6 +18,9 @@
      since Focus Mode slides the entire titlebar row and toolbar out of
      view (see `.app--focus-mode` in app.css) rather than just the tabs. */
   --size-chrome-height-focused: 0px;
+  /* The web page stat bar's height. Must equal STATUS_BAR_HEIGHT_PX in src/shared/constants.ts: main leaves this
+     much of the window's bottom free below a web page for the bar. */
+  --size-status-bar-height: 26px;
 
   --size-tab-max-width: 220px;
 

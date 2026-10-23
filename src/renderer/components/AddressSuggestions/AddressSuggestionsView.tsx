@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-22
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
 import { BookmarkStarIcon, HistoryIcon } from '../icons';
 
@@ -41,6 +41,16 @@ export function AddressSuggestionsView() {
 
   useEffect(() => window.northstarSuggestions.onSync(setPayload), []);
 
+  // The keyboard's row is kept in view: Up and Down walk the whole list, past what the view shows at once.
+  const listRef = useRef<HTMLUListElement>(null);
+  const selectedIndex = payload?.selectedIndex ?? 0;
+  useLayoutEffect(() => {
+    const row = listRef.current?.children[selectedIndex];
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selectedIndex, payload]);
+
   if (!payload || !payload.open) {
     return null;
   }
@@ -48,7 +58,7 @@ export function AddressSuggestionsView() {
   const isMenu = payload.variant === 'menu';
 
   return (
-    <ul className={`address-bar__suggestions${isMenu ? ' address-bar__suggestions--menu' : ''}`} role="listbox">
+    <ul ref={listRef} className={`address-bar__suggestions${isMenu ? ' address-bar__suggestions--menu' : ''}`} role="listbox">
       {payload.suggestions.map((item, index) => (
         <li
           key={item.id}

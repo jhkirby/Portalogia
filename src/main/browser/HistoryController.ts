@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { clipboard, ipcMain, type Session, type WebContents } from 'electron';
+import { BrowserWindow, clipboard, ipcMain, type Session, type WebContents } from 'electron';
 import {
   IpcChannel,
   type HistoryBookmarkIndex,
@@ -14,6 +14,7 @@ import {
   type HistoryEntry,
   type HistorySuggestion,
 } from '@shared/ipc-contract';
+import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { historyCutoff } from '@shared/history';
 import type { BookmarkState } from '@shared/tab-state';
 import { historyDeleteRequestSchema } from '@shared/ipc-schemas';
@@ -30,11 +31,11 @@ const MAX_URL_LENGTH = 2048;
 const PUSH_DEBOUNCE_MS = 400;
 
 
-/** The most routes a search considers; the chrome shows at most 10 rows after the bookmarks, and asks for extra since some are bookmarked already. */
-const MAX_SEARCH_RESULTS = 20;
+/** The most routes a search returns: the dropdown scrolls back through all of them (`SEARCH_SUGGESTIONS_LIMIT`). */
+const MAX_SEARCH_RESULTS = SEARCH_SUGGESTIONS_LIMIT;
 
-/** How many PDF paths are checked for existence before giving up on finding enough. */
-const MAX_PDF_EXISTENCE_CHECKS = 60;
+/** How many PDF paths are checked for existence before giving up on finding enough: each check reads the disk. */
+const MAX_PDF_EXISTENCE_CHECKS = 200;
 
 /**
  * Owns the browsing history's cross-process wiring — one instance shared by
@@ -93,12 +94,15 @@ export class HistoryController {
   /**
    * Starts recording from a session's web requests. The session allows one
    * listener per event, so nothing else may claim `onCompleted` or
-   * `onBeforeRedirect` on it.
+   * `onBeforeRedirect` on it — which is why anything else that needs to
+   * know a request finished hears it through `onRequestCompleted`.
    * @param ses The session browser tabs load their pages in.
+   * @param onRequestCompleted Told of every finished request's page (the load progress estimate).
    */
-  public attachTo(ses: Session): void {
+  public attachTo(ses: Session, onRequestCompleted: (webContentsId: number | undefined) => void = () => {}): void {
     const filter = { urls: RECORDED_URLS };
     ses.webRequest.onCompleted(filter, (details) => {
+      onRequestCompleted(details.webContentsId);
       this.record(details.resourceType, details.webContentsId, details.url, details.method, details.statusCode, details.timestamp);
     });
     ses.webRequest.onBeforeRedirect(filter, (details) => {
@@ -112,6 +116,14 @@ export class HistoryController {
    * confirmed came from the chrome rather than a page.
    * @param range The last N of a unit, or everything.
    */
+  /**
+   * How many visits a range covers: what `clear` would delete, for its confirmation to say.
+   * @param range The last N of a unit, or everything.
+   */
+  public count(range: HistoryClearRange): number {
+    return this.store.countSince(HistoryController.cutoffFor(range, Date.now()));
+  }
+
   public clear(range: HistoryClearRange): void {
     if (this.store.removeSince(HistoryController.cutoffFor(range, Date.now())) > 0) {
       this.pushToAll(true);
@@ -158,13 +170,14 @@ export class HistoryController {
    * counts only if it loaded (2xx): a redirect hop's destination is its own
    * entry, and an error page isn't somewhere to suggest going. A PDF counts
    * only if its file is still there, so a suggestion never opens to an error.
-   * @param type Pages or PDFs.
-   * @param query The typed text; empty returns nothing.
+   * @param type Pages, PDFs or notes.
+   * @param query The typed text. Empty returns nothing for pages, and every file for PDFs and notes (their search
+   *   boxes list them all as soon as they're focused).
    * @returns Up to `MAX_SEARCH_RESULTS` matches, newest first.
    */
   public async search(type: HistoryEntry['type'], query: string): Promise<HistorySuggestion[]> {
     const needle = query.trim().toLowerCase();
-    if (!needle) {
+    if (!needle && type === 'url') {
       return [];
     }
     const matches = (entry: HistoryEntry): boolean => entry.url.toLowerCase().includes(needle);
@@ -279,6 +292,12 @@ export class HistoryController {
       for (const [tabId, state] of this.registry.states) {
         if (state.kind === 'history') {
           this.pushTo(tabId);
+        }
+      }
+      // The chrome's History toolbar counts what "Clear History" would delete; a change may make that stale.
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send(IpcChannel.HistoryChanged);
         }
       }
     };

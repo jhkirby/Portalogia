@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -10,6 +10,11 @@ export interface BrowserTabState {
   readonly title: string;
   readonly url: string;
   readonly isLoading: boolean;
+  /**
+   * How far the page's load has got, 0-100 (an estimate: see `loadProgress.ts`), for the address bar's progress
+   * line. 100 for a second after it finishes, then `null` until the next load.
+   */
+  readonly loadProgress: number | null;
   readonly canGoBack: boolean;
   readonly canGoForward: boolean;
   readonly favicon: string | null;
@@ -59,6 +64,10 @@ export interface PdfTabState {
   readonly page: number;
   /** Pages in the open document, 0 before one is opened. */
   readonly pageCount: number;
+  /** Whether a jump in the document (a followed link, the page box) has left an earlier place to step back to. */
+  readonly canGoBack: boolean;
+  /** Whether stepping back has left a later place to step forward to. */
+  readonly canGoForward: boolean;
   /** What a drag on the document does: `'pan'` moves it (the default), `'select'` selects its text and lets its links be clicked. */
   readonly pointerMode: PointerMode;
   readonly workspaceId: string;

@@ -28,7 +28,7 @@ stay valid.
 | MDF | `tests/unit/markdownFormat.spec.ts` | Unit | 12 |
 | MDM | `tests/unit/markdownMain.spec.ts` | Unit (with temp files and child processes) | 22 |
 | PTO | `tests/unit/previewTabOrder.spec.ts` | Unit | 5 |
-| SNP | `tests/unit/snapZones.spec.ts` | Unit | 6 |
+| SYS | `tests/unit/systemStatus.spec.ts` | Unit | 13 |
 | URL | `tests/unit/url.spec.ts` | Unit | 16 |
 | WSI | `tests/unit/workspaceImages.spec.ts` | Unit (with temp files) | 5 |
 | BKM | `tests/e2e/bookmarks.spec.ts` | E2E | 3 |
@@ -40,7 +40,7 @@ stay valid.
 | TSR | `tests/e2e/tab-search.spec.ts` | E2E | 6 |
 | TRO | `tests/e2e/tab-tear-off.spec.ts` | E2E | 7 |
 | TRM | `tests/e2e/terminal.spec.ts` | E2E | 1 |
-| GRP | `tests/e2e/titlebar-grip.spec.ts` | E2E | 2 |
+| TDR | `tests/e2e/titlebar-drag.spec.ts` | E2E | 2 |
 | WSP | `tests/e2e/workspaces.spec.ts` | E2E | 4 |
 
 ---
@@ -179,16 +179,23 @@ stay valid.
 | UT-PTO-04 | Unit | previewTabOrder | moves a multi-selection together, keeping its internal order | [F1.4](features.md#f1-tabs) |
 | UT-PTO-05 | Unit | previewTabOrder | never loses or duplicates a tab | [F1.4](features.md#f1-tabs) |
 
-### `snapZones.spec.ts`: window snapping
+### `systemStatus.spec.ts`: titlebar Wi-Fi, battery and temperature
 
 | ID | Type | Group | Test | Features |
 | --- | --- | --- | --- | --- |
-| UT-SNP-01 | Unit | snapZoneAt | the middle of the screen is no zone | [F12.2](features.md#f12-window-and-chrome) |
-| UT-SNP-02 | Unit | snapZoneAt | the top edge maximizes into the work area | [F12.2](features.md#f12-window-and-chrome) |
-| UT-SNP-03 | Unit | snapZoneAt | the left and right edges snap to that half of the work area | [F12.2](features.md#f12-window-and-chrome) |
-| UT-SNP-04 | Unit | snapZoneAt | the four corners snap to a quarter | [F12.2](features.md#f12-window-and-chrome) |
-| UT-SNP-05 | Unit | snapZoneAt | an odd work-area width gives the right half the extra pixel, so the halves tile exactly | [F12.2](features.md#f12-window-and-chrome) |
-| UT-SNP-06 | Unit | snapZoneAt | measures against the display the cursor is on, including one with a negative origin | [F12.2](features.md#f12-window-and-chrome) |
+| UT-SYS-01 | Unit | parseWlanInterfaces | reads the signal of a connected adapter | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-02 | Unit | parseWlanInterfaces | a disconnected adapter has no signal | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-03 | Unit | parseWlanInterfaces | no wireless adapter (or unreadable output) is unavailable | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-04 | Unit | parseWlanInterfaces | a garbled signal counts as 0, and one out of range is clamped | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-05 | Unit | WifiMonitor | reports only changes, and a failed read as unavailable | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-06 | Unit | wifiBars | lights the arcs in thirds, at least one for any signal | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-07 | Unit | WeatherMonitor | finds the location by IP, then reports the temperature rounded to whole degrees Fahrenheit | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-08 | Unit | WeatherMonitor | looks the location up once an hour, not on every refresh | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-09 | Unit | WeatherMonitor | a failed fetch keeps the last temperature instead of blanking it | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-10 | Unit | WeatherMonitor | falls back to the second location service when the first refuses (ipapi.co rate-limits) | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-11 | Unit | WeatherMonitor | no location, or a malformed answer, fails without throwing | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-12 | Unit | battery | a desktop with no battery is recognized, so the icon hides | [F12.10](features.md#f12-window-and-chrome) |
+| UT-SYS-13 | Unit | battery | colors the fill: charging always green, then red at 10% or less and orange at 30% or less | [F12.10](features.md#f12-window-and-chrome) |
 
 ### `url.spec.ts`: URL handling
 
@@ -311,12 +318,12 @@ fresh, throwaway profile folder, and drives it through Playwright.
 | --- | --- | --- | --- | --- |
 | E2E-TRM-01 | E2E | terminal | a real shell runs `ls` and its output actually renders | [F11.1](features.md#f11-terminal) |
 
-### `titlebar-grip.spec.ts`: window drag strip
+### `titlebar-drag.spec.ts`: title bar drag region
 
 | ID | Type | Group | Test | Features |
 | --- | --- | --- | --- | --- |
-| E2E-GRP-01 | E2E | titlebar drag strip | is an ordinary element above the tabs that shows pressed and hover states | [F12.1](features.md#f12-window-and-chrome) |
-| E2E-GRP-02 | E2E | titlebar drag strip | sits above the tabs without covering the window controls | [F12.1](features.md#f12-window-and-chrome) |
+| E2E-TDR-01 | E2E | title bar drag region | the empty part of the tab row is an OS drag region | [F12.1](features.md#f12-window-and-chrome) |
+| E2E-TDR-02 | E2E | title bar drag region | tabs, the new-tab button and the window controls opt out of it | [F12.1](features.md#f12-window-and-chrome) |
 
 ### `workspaces.spec.ts`: workspaces
 

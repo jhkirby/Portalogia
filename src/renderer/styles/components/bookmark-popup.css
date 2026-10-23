@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-22 */
 
 /* ── BOOKMARK POPUP ───────────────────────────────────────────────────── */
 
@@ -124,6 +124,11 @@
   color: var(--color-address-placeholder);
 }
 
+/* Lighter on hover, like the address bar's border. A focused box keeps its accent border (the rule after this one). */
+.bookmark-popup__input:hover {
+  border-color: var(--color-address-border-hover);
+}
+
 .bookmark-popup__input:focus {
   outline: none;
   border-color: var(--color-address-border-focus);
@@ -133,6 +138,11 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--size-spacing-sm);
+}
+
+/* The bookmark popup's lone Save button sits in the middle. */
+.bookmark-popup__actions--centered {
+  justify-content: center;
 }
 
 .bookmark-popup__cancel,
@@ -161,6 +171,19 @@
 
 .bookmark-popup__save:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+/* Clear History's confirm box: "DELETE" as it's typed, in capitals whatever case the keys are, centred and spaced
+   so it reads as a word to spell rather than a field to fill. */
+.clear-history__confirm {
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* The word spelled out in full: red, for Enter will now delete. */
+.clear-history__confirm--ready {
+  color: var(--color-danger-text);
 }
 
 .bookmark-popup__save:disabled {

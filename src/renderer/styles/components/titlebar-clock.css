@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-19 */
+   Last Modified: 2026-10-22 */
 
 /* ── TITLEBAR CLOCK ───────────────────────────────────────────────────── */
 /* Shares the titlebar's top-right corner with WindowControls (see app.css's
@@ -9,11 +9,11 @@
    and fading out as the controls fade in. Never takes the pointer: the
    window-drag strip and the controls beneath it keep their clicks. */
 
+/* One row: the Wi-Fi icon, the battery, the temperature, then the date stacked over the time. */
 .titlebar-clock {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
+  align-items: center;
+  gap: var(--size-spacing-md);
   padding: 0 var(--size-spacing-md);
 
   color: var(--color-tab-text);
@@ -31,6 +31,45 @@
   opacity: 0;
 }
 
+.titlebar-clock__clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* A flex box, so the icon centres on the row instead of sitting on a text baseline. */
+.titlebar-clock__wifi {
+  display: flex;
+}
+
+/* The icon and its percentage, close together as one item. The fill's color is the level's, through the
+   `--battery-fill` the icon reads (see `BatteryIcon`); a normal level leaves it at the text color. */
+.titlebar-clock__battery {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
+.titlebar-clock__battery[data-level='charging'] {
+  --battery-fill: var(--color-battery-charging);
+}
+
+.titlebar-clock__battery[data-level='low'] {
+  --battery-fill: var(--color-battery-low);
+}
+
+.titlebar-clock__battery[data-level='critical'] {
+  --battery-fill: var(--color-battery-critical);
+}
+
+.titlebar-clock__temperature {
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
 .titlebar-clock__date {
   font-size: var(--size-font-sm);
 }
@@ -38,4 +77,10 @@
 .titlebar-clock__time {
   font-size: var(--size-font-md);
   font-weight: 600;
+}
+
+/* The time zone after the time (`EDT`): lighter than the time, so the digits still lead. */
+.titlebar-clock__zone {
+  margin-left: var(--size-spacing-xs);
+  font-weight: 400;
 }

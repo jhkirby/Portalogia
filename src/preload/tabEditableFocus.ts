@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { ipcRenderer } from 'electron';
 import { deepActiveElement } from './tabHighlighter';
@@ -16,6 +16,8 @@ import { deepActiveElement } from './tabHighlighter';
 // follows focus down through every same-origin frame. A cross-origin frame can't be looked into from here and
 // counts as not editable.
 const EditableFocus = 'ui:editable-focus';
+// Main → page: Shift+Escape was pressed; take the caret out of whatever text box has it.
+const LeaveTextBox = 'tab:leave-text-box';
 const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
 
 /** Frames whose focus changes and Escape presses are already being listened to. */
@@ -87,9 +89,29 @@ function reportEditableFocus(): void {
 }
 
 /**
+ * Takes the caret out of the text box that has it, if one does.
+ * @param expected Leave only if this is still the element with the caret; omitted, whichever box has it.
+ */
+function leaveTextBox(expected?: Element): void {
+  const element = innermostActiveElement();
+  if (!isEditableElement(element) || (expected && element !== expected)) {
+    return;
+  }
+  element.blur();
+  // A frame whose whole document is editable (`designMode`) keeps the caret through a blur of its body; taking
+  // focus off the frame itself is what leaves it.
+  const outer = document.activeElement;
+  if (outer && sameOriginFrameWindow(outer)) {
+    (outer as HTMLElement).blur();
+  }
+  reportEditableFocus();
+}
+
+/**
  * Takes the caret out of a text box after Escape, so the shortcuts that stand aside while one has it work again.
  * Decided once the page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a
- * popup) called `preventDefault`, and then the caret stays for the next press.
+ * popup) called `preventDefault`, and then the caret stays for the next press. A page that takes every Escape for
+ * itself (Google Docs does) never lets this through, which is what Shift+Escape (`LeaveTextBox`) is for.
  * @param event The keydown, from this page or any frame in it.
  */
 function leaveTextBoxOnEscape(event: KeyboardEvent): void {
@@ -101,17 +123,9 @@ function leaveTextBoxOnEscape(event: KeyboardEvent): void {
     return;
   }
   setTimeout(() => {
-    if (event.defaultPrevented || innermostActiveElement() !== element) {
-      return;
+    if (!event.defaultPrevented) {
+      leaveTextBox(element);
     }
-    element.blur();
-    // A frame whose whole document is editable (`designMode`) keeps the caret through a blur of its body; taking
-    // focus off the frame itself is what leaves it.
-    const outer = document.activeElement;
-    if (outer && sameOriginFrameWindow(outer)) {
-      (outer as HTMLElement).blur();
-    }
-    reportEditableFocus();
   }, 0);
 }
 
@@ -133,3 +147,4 @@ function watchWindow(target: Window): void {
 }
 
 watchWindow(window);
+ipcRenderer.on(LeaveTextBox, () => leaveTextBox());

@@ -1,8 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
+import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { AddressSuggestionItem } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
@@ -20,8 +21,8 @@ interface PdfSearchBoxProps {
   readonly onOpenPath: (path: string) => void;
 }
 
-/** The most matches the dropdown shows at once, bookmarks and recently opened PDFs together. */
-const MAX_SUGGESTIONS = 10;
+/** Every match, up to a generous limit: the dropdown scrolls through them. */
+const MAX_SUGGESTIONS = SEARCH_SUGGESTIONS_LIMIT;
 
 /** Vertical gap, in CSS pixels, between the box's own bottom edge and the suggestions overlay below it. */
 const DROPDOWN_GAP_PX = 6;
@@ -53,13 +54,12 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
   useEffect(() => window.northstar.onFocusAddressBar(() => inputRef.current?.focus()), []);
 
   const query = draft.trim().toLowerCase();
-  const recentPdfs = useHistorySuggestions(kind, draft, isFocused);
+  // Open as soon as the box is focused, like the address bar's once typing starts: with nothing typed yet, it lists
+  // every bookmarked and recently opened file, for an empty tab is here to pick one.
+  const recentPdfs = useHistorySuggestions(kind, draft, isFocused, true);
   // The bookmarked PDFs that match come first, newest bookmark first; then the PDFs most recently opened that
-  // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`.
+  // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`. Nothing typed matches all.
   const suggestions = useMemo((): readonly AddressSuggestionItem[] => {
-    if (!query) {
-      return [];
-    }
     const bookmarkRows = [...bookmarks]
       .reverse()
       .filter(

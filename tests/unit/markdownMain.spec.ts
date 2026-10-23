@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -95,6 +95,9 @@ test.describe('vault: finding notes', () => {
 });
 
 test.describe('fetchRemoteImageDataUrl', () => {
+  /** Resolves every host to a public address (example.com's), so no test touches real DNS. */
+  const publicHost = async (): Promise<readonly string[]> => ['93.184.215.14'];
+
   /** A stand-in `fetch` answering every request with `body` and `headers`, recording what it was asked. */
   function fakeFetch(
     body: Uint8Array | string,
@@ -113,32 +116,78 @@ test.describe('fetchRemoteImageDataUrl', () => {
 
   test('an https picture comes back as a data URL, fetched without cookies', async () => {
     const { fetchImpl, calls } = fakeFetch(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png; x=y' } });
-    expect(await fetchRemoteImageDataUrl('https://example.com/a.png', fetchImpl)).toBe('data:image/png;base64,AQID');
+    expect(await fetchRemoteImageDataUrl('https://example.com/a.png', fetchImpl, publicHost)).toBe('data:image/png;base64,AQID');
     expect(calls[0]?.init?.credentials).toBe('omit');
   });
 
   test('anything but https is refused before any request is made', async () => {
     const { fetchImpl, calls } = fakeFetch('x', { headers: { 'content-type': 'image/png' } });
     for (const url of ['http://example.com/a.png', 'file:///C:/a.png', 'data:image/png;base64,AA==', 'javascript:alert(1)']) {
-      expect(await fetchRemoteImageDataUrl(url, fetchImpl)).toBeNull();
+      expect(await fetchRemoteImageDataUrl(url, fetchImpl, publicHost)).toBeNull();
     }
     expect(calls).toHaveLength(0);
   });
 
   test('a redirect away from https, a non-picture, an error status or an oversized body gives nothing', async () => {
     const png = { 'content-type': 'image/png' };
-    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('x', { headers: png, finalUrl: 'http://a.test/x' }).fetchImpl)).toBeNull();
-    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('<script>', { headers: { 'content-type': 'text/html' } }).fetchImpl)).toBeNull();
-    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('x', { headers: png, status: 404 }).fetchImpl)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('x', { headers: png, finalUrl: 'http://a.test/x' }).fetchImpl, publicHost)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('<script>', { headers: { 'content-type': 'text/html' } }).fetchImpl, publicHost)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch('x', { headers: png, status: 404 }).fetchImpl, publicHost)).toBeNull();
     const huge = new Uint8Array(15 * 1024 * 1024 + 1);
-    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch(huge, { headers: png }).fetchImpl)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', fakeFetch(huge, { headers: png }).fetchImpl, publicHost)).toBeNull();
   });
 
   test('a failed request gives nothing rather than throwing', async () => {
     const failing = (async () => {
       throw new TypeError('network down');
     }) as typeof fetch;
-    expect(await fetchRemoteImageDataUrl('https://a.test/x', failing)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://a.test/x', failing, publicHost)).toBeNull();
+  });
+  test('a host on this computer or the local network is refused before any request is made', async () => {
+    const { fetchImpl, calls } = fakeFetch('x', { headers: { 'content-type': 'image/png' } });
+    for (const url of [
+      'https://localhost/a.png',
+      'https://127.0.0.1/a.png',
+      'https://2130706433/a.png',
+      'https://192.168.1.10/a.png',
+      'https://10.0.0.5/a.png',
+      'https://169.254.169.254/latest/meta-data',
+      'https://[::1]/a.png',
+      'https://[::ffff:127.0.0.1]/a.png',
+      'https://[fd00::1]/a.png',
+    ]) {
+      expect(await fetchRemoteImageDataUrl(url, fetchImpl, async (host) => (host === 'localhost' ? ['127.0.0.1'] : ['93.184.215.14']))).toBeNull();
+    }
+    // A public-looking name that resolves to a private address is refused too, as is one that resolves to nothing.
+    expect(await fetchRemoteImageDataUrl('https://intranet.example/a.png', fetchImpl, async () => ['10.1.2.3'])).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://split.example/a.png', fetchImpl, async () => ['93.184.215.14', '192.168.0.2'])).toBeNull();
+    expect(
+      await fetchRemoteImageDataUrl('https://nx.example/a.png', fetchImpl, async () => {
+        throw new Error('ENOTFOUND');
+      }),
+    ).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a redirect is followed only to another public https host', async () => {
+    const png = { 'content-type': 'image/png' };
+    const redirectingTo = (location: string): typeof fetch =>
+      (async (input: string | URL | Request) =>
+        String(input).startsWith('https://public.example/')
+          ? new Response(null, { status: 302, headers: { location } })
+          : new Response(new Uint8Array([1, 2, 3]), { headers: png })) as typeof fetch;
+    const resolve = async (host: string): Promise<readonly string[]> => (host === 'internal.example' ? ['10.0.0.9'] : ['93.184.215.14']);
+    expect(await fetchRemoteImageDataUrl('https://public.example/a', redirectingTo('https://cdn.example/a.png'), resolve)).toBe(
+      'data:image/png;base64,AQID',
+    );
+    expect(await fetchRemoteImageDataUrl('https://public.example/a', redirectingTo('https://internal.example/a.png'), resolve)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://public.example/a', redirectingTo('https://127.0.0.1/a.png'), resolve)).toBeNull();
+    expect(await fetchRemoteImageDataUrl('https://public.example/a', redirectingTo('http://cdn.example/a.png'), resolve)).toBeNull();
+  });
+
+  test('an endless redirect loop gives nothing', async () => {
+    const loop = (async () => new Response(null, { status: 302, headers: { location: 'https://public.example/again' } })) as typeof fetch;
+    expect(await fetchRemoteImageDataUrl('https://public.example/a', loop, publicHost)).toBeNull();
   });
 });
 

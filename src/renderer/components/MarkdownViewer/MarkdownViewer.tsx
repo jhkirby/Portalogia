@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { EditorState } from '@codemirror/state';
@@ -14,6 +14,7 @@ import { slugifyHeading } from '@shared/markdown/parser';
 import { toggleTask } from '@shared/markdown/source';
 import {
   countCharacters,
+  countSelection,
   extractHeadings,
   extractOutboundLinks,
   fileByteSize,
@@ -109,6 +110,14 @@ export function MarkdownViewer() {
   const [tool, setTool] = useState<MarkdownToolState>({ tool: 'none', color: { r: 26, g: 115, b: 232 } });
   /** The editor's caret, as an offset into the note; `null` while the reader is showing (it has no caret). */
   const [caret, setCaret] = useState<number | null>(null);
+  /** The editor's selection (`from` before `to`), or `null` when nothing is selected in it. */
+  const [editorSelection, setEditorSelection] = useState<{ readonly from: number; readonly to: number } | null>(null);
+  /** The text selected in the reader (which has no offsets into the source), or `null`. */
+  const [readerSelection, setReaderSelection] = useState<string | null>(null);
+  const handleEditorSelection = useCallback((head: number, from: number, to: number): void => {
+    setCaret(head);
+    setEditorSelection(from === to ? null : { from, to });
+  }, []);
   /** The note file's own line ending, so the status bar's byte count is the file's. */
   const [lineEnding, setLineEnding] = useState<'\n' | '\r\n'>('\n');
   const [panelOpen, setPanelOpen] = useState(false);
@@ -321,6 +330,22 @@ export function MarkdownViewer() {
 
   const [pointerMode, setPointerMode] = useState<PointerMode>('select');
   useEffect(() => window.northstarMarkdown.onPointerMode(setPointerMode), []);
+  // The reader's selection, for the status bar's counts: whatever is selected inside the drawn note.
+  useEffect(() => {
+    const onSelectionChange = (): void => {
+      const selection = window.getSelection();
+      const host = readerHostRef.current;
+      const inReader =
+        selection !== null && !selection.isCollapsed && host !== null && host.contains(selection.anchorNode) && host.contains(selection.focusNode);
+      setReaderSelection(inReader ? selection.toString() : null);
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, []);
+
+  /** The window's Focus Mode: the stat bar hides with the chrome. */
+  const [focusMode, setFocusMode] = useState(false);
+  useEffect(() => window.northstarMarkdown.onFocusMode(setFocusMode), []);
   const bodyRef = useRef<HTMLDivElement>(null);
   const pannerScroller = useCallback(
     (): HTMLElement | null => (showReader ? scrollRef.current : (editorViewRef.current?.scrollDOM ?? null)),
@@ -367,6 +392,7 @@ export function MarkdownViewer() {
     editorViewRef.current = view;
     if (view === null) {
       setCaret(null);
+      setEditorSelection(null);
     }
     if (view === null && finalState) {
       savedEditorStateRef.current = finalState;
@@ -643,6 +669,15 @@ export function MarkdownViewer() {
     };
   }, [source, lineEnding]);
 
+  // What's selected, counted for the status bar: from the source in the editor, from the drawn text in the reader.
+  const selectedText =
+    showEditor && editorSelection
+      ? source.slice(editorSelection.from, Math.min(editorSelection.to, source.length))
+      : !showEditor
+        ? readerSelection
+        : null;
+  const selectionStats = selectedText ? countSelection(selectedText) : null;
+
   // Where the caret is, as the status bar shows it; nothing while the reader (which has no caret) is showing.
   const caretAt = showEditor && caret !== null ? Math.min(caret, source.length) : null;
   let caretLine: number | null = null;
@@ -805,7 +840,7 @@ export function MarkdownViewer() {
                   initialScroll={scrollRatioRef.current}
                   readOnly={mode === 'view'}
                   livePreview={display === 'formatted'}
-                  onSelection={setCaret}
+                  onSelection={handleEditorSelection}
                 />
               </div>
             )}
@@ -911,7 +946,7 @@ export function MarkdownViewer() {
               </>
             )}
           </div>
-          {!printing && (
+          {!printing && !focusMode && (
             <MarkdownStatusBar
               line={caretLine}
               lineCount={structure.lineStarts.length}
@@ -920,7 +955,7 @@ export function MarkdownViewer() {
               wordCount={structure.wordStarts.length}
               characters={structure.characters}
               links={structure.links.length}
-              bytes={structure.bytes}
+              selection={selectionStats}
               onGoToLine={goToLine}
               onGoToColumn={goToColumn}
               onGoToWord={goToWord}

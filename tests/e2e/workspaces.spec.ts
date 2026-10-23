@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-15
+// Last Modified: 2026-10-22
 
 import { test, expect } from './fixtures';
 
@@ -52,5 +52,24 @@ test.describe('workspaces', () => {
 
     await workspaces.first().getByRole('button', { name: /Remove/ }).click();
     await expect(workspaces).toHaveCount(1);
+  });
+});
+
+test.describe('the collapsed sidebar', () => {
+  test('a double-click does nothing: no rename box, and the workspaces stay where they are', async ({ window }) => {
+    await window.getByRole('button', { name: 'New workspace' }).click();
+    await window.locator('.sidebar__toggle').click();
+    await expect(window.locator('.sidebar--hidden')).toHaveCount(1);
+    const pill = window.locator('.workspace-bar__pill').first();
+    await expect.poll(async () => (await pill.boundingBox())?.width).toBeLessThan(40);
+    const box = (await pill.boundingBox())!;
+
+    await window.mouse.dblclick(box.x + 8, box.y + box.height / 2);
+    await window.waitForTimeout(300);
+
+    await expect(window.locator('.workspace-bar__name-input')).toHaveCount(0);
+    expect(await window.locator('.workspace-bar').evaluate((list) => list.scrollLeft)).toBe(0);
+    // Within a pixel: the collapse may still be settling by a fraction of one; the shift this guards against was 17px.
+    expect(Math.abs((await pill.boundingBox())!.x - box.x)).toBeLessThan(1);
   });
 });

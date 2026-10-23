@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-22
 
-import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
@@ -11,6 +11,7 @@ import { previewTabOrder } from '../../lib/previewTabOrder';
 import { tabDropTargetAt } from '../../lib/tabDropTarget';
 import { formatShortcut } from '../../lib/shortcuts';
 import { GlobeIcon, HistoryIcon } from '../icons';
+import { SHIMMER_PERIOD_MS, useShimmerTick } from '../../hooks/useShimmerTick';
 import { useTabTransitions } from './useTabTransitions';
 import { useActiveTabSlide } from './useActiveTabSlide';
 import { useClickRipples } from '../../hooks/useClickRipples';
@@ -228,6 +229,9 @@ export function TabBar({
     draggedId === null && dropTarget !== null
       ? tabs.findIndex((tab) => tab.id === dropTarget.id) + (dropTarget.position === 'after' ? 1 : 0)
       : null;
+  // Every 20 s a shimmer runs along the tabs' icons and names, ten seconds out of step with the workspaces', so one of
+  // the two runs every ten seconds.
+  const shimmer = useShimmerTick(SHIMMER_PERIOD_MS / 2);
   const { enteringIds, exiting, endEnter, endExit } = useTabTransitions(
     tabs,
     workspaceId,
@@ -249,6 +253,7 @@ export function TabBar({
     <div
       ref={tabBarRef}
       className="tab-bar"
+      data-shimmer={shimmer ?? undefined}
       role="tablist"
       aria-label="Open tabs"
       onDragOver={handleContainerDragOver}
@@ -533,7 +538,11 @@ function Tab({
         }
       }}
       onKeyDown={handleKeyDown}
-      style={isGhost ? { position: 'absolute', opacity: 0, pointerEvents: 'none', order } : { order }}
+      style={
+        (isGhost
+          ? { position: 'absolute', opacity: 0, pointerEvents: 'none', order }
+          : { order, '--shimmer-index': order }) as CSSProperties
+      }
       onDragStart={handleDragStart}
       onDrag={(event) => onDragMove(event.screenX, event.screenY, event.clientX, event.clientY)}
       onDragOver={handleDragOver}

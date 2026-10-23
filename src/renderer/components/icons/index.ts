@@ -21,3 +21,5 @@ export { TextSelectIcon } from './TextSelectIcon';
 export { TextBoxIcon } from './TextBoxIcon';
 export { ShieldIcon } from './ShieldIcon';
 export { WorkspaceImagesIcon } from './WorkspaceImagesIcon';
+export { WifiIcon } from './WifiIcon';
+export { BatteryIcon } from './BatteryIcon';

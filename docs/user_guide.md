@@ -67,8 +67,9 @@ anyway**.
      ④
 ```
 
-1. **The drag strip.** The thin bar along the very top. Drag it to move the
-   window. The top-right corner shows today's date and the time (24-hour, with seconds).
+1. **The title bar.** The row the tabs sit in. Drag any empty part of it to
+   move the window, or double-click it to maximize. The top-right corner shows today's date and the time (24-hour, with seconds),
+   with the Wi-Fi signal, the battery and the outside temperature (°F) to their left.
    Point at the tab row and the date and time give way to the buttons to
    minimize, maximize and close.
 2. **Tabs.** Each open page is a tab. Click a tab to view it. Point at the
@@ -113,6 +114,16 @@ can also hold **Ctrl** and turn the mouse wheel, or use the **−** and **+**
 buttons at the right of the toolbar. **Ctrl+0** returns the page to normal
 size.
 
+**While a page loads**, a line fills along the bottom of the address bar and
+a percentage shows at its right end. It's an estimate, worked out from how
+many of the page's files have arrived. It stays at 100% for a second, then
+goes away.
+
+**The bar along the bottom** of a web page counts its words, characters,
+pictures, links and elements (the building blocks the page is made of), and
+shows which element the pointer is over. Select some text and its words and
+characters appear too.
+
 ## 4. Working with tabs
 
 | To... | Do this |
@@ -124,6 +135,7 @@ size.
 | Make a copy of a tab | **Ctrl+Shift+D** |
 | Rearrange tabs | Drag a tab left or right |
 | Find any open tab | Click the magnifying-glass button, or press **Ctrl+K** |
+| Go to the 1st–8th tab | **Ctrl+1** to **Ctrl+8** |
 
 **Ctrl+W closes the tab, never the whole window.** If you close the last tab
 in a workspace, a fresh blank tab takes its place.
@@ -244,6 +256,14 @@ In a PDF tab you can:
   crops, drawings, text boxes and highlights included.
 - **Rename it.** Click the file name in the toolbar and type a new one.
 - **Close it.** Press **Ctrl+Shift+C**.
+- **Jump to a page.** The bar along the bottom shows the page you're on. Click
+  the number, type another and press **Enter**.
+- **Go back.** After jumping to a page or following a link inside the PDF,
+  the **‹** button (or **Alt+←**) takes you back to where you were, and **›**
+  (or **Alt+→**) forward again.
+- **Count it.** The bar along the bottom also shows the PDF's words,
+  characters and links and the file's size. Select some text and its words
+  and characters appear too.
 
 ## 10. Writing notes
 
@@ -287,6 +307,10 @@ Northstar can run it and show the result. It always asks you first and shows
 you the code. **Only run code from notes you trust**, because it runs on your
 computer.
 
+**The bar along the bottom** shows where your cursor is (line, column and
+word) and counts the note's words, characters and links. Select some text and
+its lines, words and characters appear too.
+
 ## 11. Highlighting, drawing and commenting
 
 These tools work on web pages, PDFs and notes. Turn a tool on with its
@@ -311,8 +335,8 @@ page. **Websites can't see your comments or text boxes.**
 
 **Pan and Select.** On web pages, PDFs and notes, the hand and text-cursor
 buttons at the left of the tools choose how the mouse works. In **Pan**
-mode (**Ctrl+1**) you drag to move the page around, and clicks don't follow
-links. In **Select** mode (**Ctrl+2**) you select text and click links as
+mode (**Alt+1**) you drag to move the page around, and clicks don't follow
+links. In **Select** mode (**Alt+2**) you select text and click links as
 usual. Web pages and notes start in Select mode; PDFs start in Pan mode.
 
 **Edit mode.** Some websites, such as Google Docs, use the same keys as the
@@ -352,7 +376,7 @@ web addresses.
 | --- | --- |
 | Switch between light and dark | Click the sun/moon button, or press **Ctrl+D** |
 | Change the highlight color | Click the **accent color** droplet button and pick a color |
-| Hide everything but the page | Press **Ctrl+Shift+F** (Focus Mode). Press it again, or **Escape**, to come back. |
+| Hide everything but the page | Press **Ctrl+Shift+F** (Focus Mode). The page fills the window, which keeps its size. Press it again, or **Escape**, to come back. |
 | Hide the sidebar | **Ctrl+L** |
 
 The accent color is used for highlights, selections and marks throughout
@@ -460,7 +484,8 @@ On a Mac, use **Cmd** in place of **Ctrl**.
 | Crop (PDFs) | Ctrl+Shift+X |
 | Remove all marks | Ctrl+Shift+R |
 | Undo / redo | Ctrl+Z / Ctrl+Y |
-| Pan / Select | Ctrl+1 / Ctrl+2 |
+| Pan / Select | Alt+1 / Alt+2 |
+| Go to the 1st–8th tab | Ctrl+1 – Ctrl+8 |
 | Edit mode (web pages) | Ctrl+Alt+Shift+E |
 
 **Appearance**
@@ -474,7 +499,8 @@ On a Mac, use **Cmd** in place of **Ctrl**.
 > While you're typing in a box, keys like Ctrl+A, Ctrl+Z and the arrow keys
 > work on your text instead of the app. This includes editors that websites
 > build inside the page, such as a Google Docs document. Press **Escape** to
-> leave the box, and the shortcuts work again.
+> leave the box, and the shortcuts work again. Some websites, Google Docs among
+> them, keep Escape for themselves; press **Shift+Escape** there instead.
 
 ## 19. Troubleshooting
 
@@ -497,7 +523,7 @@ workspace with **Ctrl+Shift+N**.
 You're probably in Focus Mode. Press **Escape** or **Ctrl+Shift+F**.
 
 **A keyboard shortcut does nothing.**
-You may be typing in a text box. Press **Escape** first, then try again.
+You may be typing in a text box. Press **Escape** (or **Shift+Escape**) first, then try again.
 
 **I want to erase everything Northstar has saved.**
 Close Northstar, then delete the folder `%APPDATA%\Northstar`. Paste that

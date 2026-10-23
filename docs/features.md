@@ -163,15 +163,16 @@ own versions. Marks are saved by the app, never written into the page or file.
 
 | ID | Feature | Tests |
 | --- | --- | --- |
-| F12.1 | **Frameless window with a drag strip.** A thin strip above the tabs moves the window and shows hover and pressed states without covering the window buttons. | E2E-GRP-01, E2E-GRP-02 |
-| F12.2 | **Snap zones.** Dragging the window to an edge snaps it to a half, a corner or maximized, on whichever display the cursor is on. | UT-SNP-01, UT-SNP-02, UT-SNP-03, UT-SNP-04, UT-SNP-05, UT-SNP-06 |
-| F12.3 | **Focus Mode** (Ctrl+Shift+F). Hides the tab and workspace rows so only the page shows. | E2E-FOC-01 |
+| F12.1 | **Frameless window with a Chrome-style title bar.** Any empty part of the tab row moves the window; the tabs and window buttons still take clicks. | E2E-TDR-01, E2E-TDR-02 |
+| F12.2 | **Snap zones.** Dragging the window to an edge snaps it to a half, a corner or maximized, on whichever display the cursor is on (the OS's own snapping). | No automated test |
+| F12.3 | **Focus Mode** (Ctrl+Shift+F). Hides the sidebar, tab row and toolbar so only the page, PDF or note fills the window. The window keeps its size (not OS fullscreen), so it works in a half-screen window and the taskbar stays. | E2E-FOC-01 |
 | F12.4 | **Collapsible sidebar** (Ctrl+L). | No automated test |
 | F12.5 | **Light and dark themes** (Ctrl+D) and a custom **accent color**. | No automated test |
 | F12.6 | **Launch.** Opens one window with one home tab and one workspace. | E2E-LCH-01 |
 | F12.7 | **Session restore.** Open tabs and workspaces come back after a restart. | No automated test |
 | F12.8 | **Instant new windows.** A hidden spare window is kept ready so torn-off tabs appear at once, and shortcuts still act on the visible window. | E2E-TRO-05, E2E-MSL-09 |
 | F12.9 | **Split view.** Two tabs side by side, with a chip to exit. The main process supports it, but nothing in the interface starts it yet. | No automated test |
+| F12.10 | **Titlebar status.** Beside the clock, a live Wi-Fi signal icon, the battery icon and percentage (hidden on a computer without one), and the outside temperature in whole degrees Fahrenheit (location from the IP address via ipapi.co or ipwho.is, weather from Open-Meteo), since the window may cover the taskbar. | UT-SYS-01 to UT-SYS-13 |
 
 ## F13 Page export
 

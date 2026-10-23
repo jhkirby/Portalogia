@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { ipcRenderer, webFrame } from 'electron';
 // Folded into this same preload entry rather than given its own
@@ -16,6 +16,7 @@ import './tabFind';
 import './tabPen';
 import './tabEditableFocus';
 import './tabPan';
+import './tabStats';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see
 // `src/preload/terminal.ts`'s own comment: a value shared between two

@@ -1,10 +1,16 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { test, expect } from '@playwright/test';
-import { isEditModeToggle, isToolShortcut, type PhysicalKeyChord } from '../../src/main/browser/toolShortcuts';
+import {
+  isEditModeToggle,
+  isToolShortcut,
+  pointerModeShortcut,
+  tabJumpIndex,
+  type PhysicalKeyChord,
+} from '../../src/main/browser/toolShortcuts';
 
 /** A key with the modifiers named in `held` down, the way Electron's `before-input-event` reports it. */
 function chord(key: string, code: string, ...held: ('control' | 'meta' | 'alt' | 'shift')[]): PhysicalKeyChord {
@@ -20,7 +26,7 @@ function chord(key: string, code: string, ...held: ('control' | 'meta' | 'alt' |
 
 test.describe('isToolShortcut', () => {
   test('every tool key with Ctrl is a tool shortcut', () => {
-    for (const key of ['i', 'p', 'j', 'm', 'e', '1', '2']) {
+    for (const key of ['i', 'p', 'j', 'm', 'e']) {
       expect(isToolShortcut(chord(key, ''))).toBe(false);
       expect(isToolShortcut(chord(key, '', 'control'))).toBe(true);
     }
@@ -46,7 +52,8 @@ test.describe('isToolShortcut', () => {
   });
 
   test('app shortcuts that are not tools are left alone', () => {
-    for (const key of ['w', 'n', 't', 'b', 'f', 'l', 'z', 'arrowleft', '3']) {
+    // Ctrl+1–8 jump to tabs now, so the digits are no tool's.
+    for (const key of ['w', 'n', 't', 'b', 'f', 'l', 'z', 'arrowleft', '1', '2', '3']) {
       expect(isToolShortcut(chord(key, '', 'control'))).toBe(false);
     }
   });
@@ -72,5 +79,40 @@ test.describe('isEditModeToggle', () => {
 
   test('the switch is not itself a tool shortcut, so edit mode never leaves it to the page', () => {
     expect(isToolShortcut(chord('E', 'KeyE', 'control', 'alt', 'shift'))).toBe(false);
+  });
+});
+
+test.describe('pointerModeShortcut', () => {
+  test('Alt+1 is Pan and Alt+2 is Select, by physical key', () => {
+    expect(pointerModeShortcut(chord('1', 'Digit1', 'alt'))).toBe('pan');
+    expect(pointerModeShortcut(chord('2', 'Digit2', 'alt'))).toBe('select');
+    // Another layout's character on the same key still counts.
+    expect(pointerModeShortcut(chord('&', 'Digit1', 'alt'))).toBe('pan');
+  });
+
+  test('needs Alt alone: Ctrl+1 is a tab, and other digits are nothing', () => {
+    expect(pointerModeShortcut(chord('1', 'Digit1'))).toBeNull();
+    expect(pointerModeShortcut(chord('1', 'Digit1', 'control'))).toBeNull();
+    expect(pointerModeShortcut(chord('1', 'Digit1', 'control', 'alt'))).toBeNull();
+    expect(pointerModeShortcut(chord('!', 'Digit1', 'alt', 'shift'))).toBeNull();
+    expect(pointerModeShortcut(chord('3', 'Digit3', 'alt'))).toBeNull();
+  });
+});
+
+test.describe('tabJumpIndex', () => {
+  test('Ctrl+1 to Ctrl+8 pick the first to the eighth tab, number pad too', () => {
+    for (let digit = 1; digit <= 8; digit += 1) {
+      expect(tabJumpIndex(chord(String(digit), `Digit${digit}`, 'control'))).toBe(digit - 1);
+      expect(tabJumpIndex(chord(String(digit), `Numpad${digit}`, 'control'))).toBe(digit - 1);
+    }
+    expect(tabJumpIndex(chord('3', 'Digit3', 'meta'))).toBe(2);
+  });
+
+  test('9, 0, and any other modifier are not tab jumps', () => {
+    expect(tabJumpIndex(chord('9', 'Digit9', 'control'))).toBeNull();
+    expect(tabJumpIndex(chord('0', 'Digit0', 'control'))).toBeNull();
+    expect(tabJumpIndex(chord('1', 'Digit1'))).toBeNull();
+    expect(tabJumpIndex(chord('1', 'Digit1', 'control', 'shift'))).toBeNull();
+    expect(tabJumpIndex(chord('1', 'Digit1', 'control', 'alt'))).toBeNull();
   });
 });

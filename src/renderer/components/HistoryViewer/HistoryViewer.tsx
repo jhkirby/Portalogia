@@ -1,14 +1,27 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { historyCutoff } from '@shared/history';
+import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry } from '@shared/ipc-contract';
 
 /** The most rows drawn at once — thousands of rows would slow the page, and nobody reads past the newest few hundred; the search narrows the rest. */
 const MAX_ROWS = 500;
+
+/** The most deleted rows drawn on their way out at once; past this many, the rest just go. */
+const MAX_EXITING_ROWS = 60;
+
+/** How many rows into the table the fade-in's stagger reaches; the rest come in with the last of them. */
+const MAX_ROW_STAGGER = 25;
+
+/** A deleted row still drawn while it fades out, at the place it held. */
+interface ExitingRow {
+  readonly entry: HistoryEntry;
+  readonly at: number;
+}
 
 /** How long a row's copy button shows its checkmark after copying. */
 const COPIED_FEEDBACK_MS = 1200;
@@ -146,7 +159,44 @@ export function HistoryViewer() {
     );
   }, [entries, bookmarks, query, range]);
   const shown = matches.slice(0, MAX_ROWS);
-  const hasRows = shown.length > 0;
+
+  // Rows whose visits were just deleted (Clear History, or a row's own ×) stay a moment, fading out where they were,
+  // rather than vanishing. Only a deletion does this: rows a search or the range hides simply go.
+  const [exiting, setExiting] = useState<readonly ExitingRow[]>([]);
+  const previousRef = useRef({ entries, shown });
+  useLayoutEffect(() => {
+    const previous = previousRef.current;
+    previousRef.current = { entries, shown };
+    if (previous.entries === entries) {
+      return;
+    }
+    const kept = new Set(entries.map((entry) => entry.id));
+    const removed = previous.shown
+      .map((entry, at) => ({ entry, at }))
+      .filter(({ entry }) => !kept.has(entry.id))
+      .slice(0, MAX_EXITING_ROWS);
+    if (removed.length > 0 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setExiting((current) => [...current, ...removed]);
+    }
+  }, [entries, shown]);
+  const endExit = (id: string): void => setExiting((current) => current.filter((row) => row.entry.id !== id));
+
+  /** The rows drawn: the ones shown, with any on their way out put back at the places they held. */
+  const displayRows = useMemo(() => {
+    const rows: { entry: HistoryEntry; exiting: boolean }[] = shown.map((entry) => ({ entry, exiting: false }));
+    for (const row of [...exiting].sort((first, second) => first.at - second.at)) {
+      rows.splice(Math.min(row.at, rows.length), 0, { entry: row.entry, exiting: true });
+    }
+    return rows;
+  }, [shown, exiting]);
+  const hasRows = displayRows.length > 0;
+
+  // The empty table's message ends in the same looping dots as the search boxes' placeholders.
+  const emptyText = entries.length === 0 ? 'No history yet' : 'No matching history';
+  const emptyMessage = useAnimatedPlaceholder(!hasRows, emptyText);
+  // The whole message with all three dots: what isn't showing yet is laid out unseen after what is, so the centred
+  // line keeps its full width and its words stay put while the dots come and go.
+  const emptyRest = `${emptyText}...`.slice(emptyMessage.length);
 
   // The vertical scroll bar starts below the column headers, which stay put over the rows: its track is pushed down by
   // the header row's height, measured rather than assumed so a change of font or zoom keeps the two lined up.
@@ -176,8 +226,13 @@ export function HistoryViewer() {
   return (
     <div className="history">
       <div ref={wrapRef} className="history__table-wrap">
-        {shown.length === 0 ? (
-          <p className="history__empty">{entries.length === 0 ? 'No history yet.' : 'No matching history.'}</p>
+        {!hasRows ? (
+          <p className="history__empty">
+            {emptyMessage}
+            <span className="history__empty-rest" aria-hidden="true">
+              {emptyRest}
+            </span>
+          </p>
         ) : (
           <table className="history__table">
             <thead ref={headRef}>
@@ -192,12 +247,23 @@ export function HistoryViewer() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((entry) => {
+              {displayRows.map(({ entry, exiting: isExiting }, index) => {
                 const bookmarkName = bookmarkNameFor(entry, bookmarks);
                 const routeKind = entry.type === 'url' ? 'URL' : 'path';
                 const isCopied = copiedId === entry.id;
                 return (
-                  <tr key={entry.id} className="history__row">
+                  <tr
+                    key={entry.id}
+                    className={`history__row${isExiting ? ' history__row--exiting' : ''}`}
+                    // How far down the fade-in's stagger this row comes.
+                    style={{ '--row-index': Math.min(index, MAX_ROW_STAGGER) } as CSSProperties}
+                    aria-hidden={isExiting || undefined}
+                    onAnimationEnd={(event) => {
+                      if (isExiting && event.animationName === 'history-row-out') {
+                        endExit(entry.id);
+                      }
+                    }}
+                  >
                     <td className="history__cell history__cell--time">{DATE_TIME_FORMAT.format(entry.timestamp)}</td>
                     <td className="history__cell history__cell--type">
                       {entry.type === 'pdf' ? 'PDF' : entry.type === 'markdown' ? 'MD' : 'URL'}

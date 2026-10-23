@@ -1,29 +1,48 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { HistoryClearRange, PageStats } from '@shared/ipc-contract';
 import { HOME_URL } from '@shared/constants';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
+import { ClearHistoryPopup } from './components/ClearHistoryPopup';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
 import { HistoryToolbar } from './components/HistoryToolbar';
 import { MarkdownToolbar } from './components/MarkdownToolbar';
 import { PdfToolbar } from './components/PdfToolbar';
+import { PopupTransition } from './components/PopupTransition';
 import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
-import { TitlebarGrip } from './components/TitlebarGrip';
 import { TitlebarClock } from './components/TitlebarClock';
 import { TabSearchPopup } from './components/TabSearchPopup';
 import { WorkspaceEditPopup } from './components/WorkspaceEditPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
+import { WebStatusBar } from './components/WebStatusBar';
 import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
+
+/** The popups that cover the page, each closed with an animation (see `PopupTransition`). */
+type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory';
+
+/** The longest a popup's closing motion may take before it closes anyway (it can't end while the window is hidden). */
+const POPUP_EXIT_FALLBACK_MS = 500;
+
+/**
+ * A file's name without its extension (`iot.md` → `iot`), the name a PDF or note bookmark starts with. A name that
+ * is only an extension (`.md`) is left whole, so the box never starts empty.
+ * @param fileName The file's name.
+ */
+function withoutExtension(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  return dot > 0 ? fileName.slice(0, dot) : fileName;
+}
 
 /** `BookmarkPopup`'s state while open — captured once, when the star button is clicked, not re-derived live, since the popup edits its own copy of the name/URL independent of whatever the tab does in the meantime. */
 interface BookmarkPopupState {
@@ -85,7 +104,6 @@ export function App() {
     createPdfTab,
     createHistoryTab,
     openPdfFile,
-    goToPdfPage,
     setPointerMode,
     toggleEditMode,
     renamePdfFile,
@@ -149,6 +167,43 @@ export function App() {
   /** The tab-search popup's state while open: the active tab's last frame, shown blurred behind it. */
   const [tabSearch, setTabSearch] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const [bookmarkPopup, setBookmarkPopup] = useState<BookmarkPopupState | null>(null);
+  /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
+  const [pageStats, setPageStats] = useState<{ readonly tabId: string; readonly stats: PageStats | null } | null>(null);
+  useEffect(() => window.northstar.onPageStats((tabId, stats) => setPageStats({ tabId, stats })), []);
+  /** Popups playing their closing motion; each one's real close waits in `popupFinishers` until it ends. */
+  const [closingPopups, setClosingPopups] = useState<ReadonlySet<PopupName>>(() => new Set());
+  const popupFinishers = useRef(new Map<PopupName, () => void>());
+
+  /** Really closes a popup whose closing motion has ended (or run out of time). Safe to call twice. */
+  const finishPopupClose = (name: PopupName): void => {
+    const finish = popupFinishers.current.get(name);
+    if (!finish) {
+      return;
+    }
+    popupFinishers.current.delete(name);
+    setClosingPopups((current) => {
+      const next = new Set(current);
+      next.delete(name);
+      return next;
+    });
+    finish();
+  };
+
+  /**
+   * Closes a popup with its closing motion first: the page's still sharpens as the panel shrinks, and only then does
+   * `finish` take it away and give the tab its live view back — which, coming back sooner, would cover the motion.
+   * What the close leads to (another tab, a new workspace) waits for `finish` too, for the same reason.
+   * @param name The popup.
+   * @param finish What really closing it takes.
+   */
+  const closePopupAnimated = (name: PopupName, finish: () => void): void => {
+    if (popupFinishers.current.has(name)) {
+      return;
+    }
+    popupFinishers.current.set(name, finish);
+    setClosingPopups((current) => new Set([...current, name]));
+    window.setTimeout(() => finishPopupClose(name), POPUP_EXIT_FALLBACK_MS);
+  };
   /** The workspace images popup while open: the still of the tab standing in behind it. */
   const [imagesPopup, setImagesPopup] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   /** The workspace editor while open: which workspace, and the still of the tab standing in behind it. */
@@ -309,7 +364,7 @@ export function App() {
     }
     const { id: tabId, filePath, fileName } = activeTab;
     void beginTabPreview(tabId).then((previewImage) => {
-      setBookmarkPopup({ tabId, variant: 'pdf', url: filePath, title: fileName, previewImage });
+      setBookmarkPopup({ tabId, variant: 'pdf', url: filePath, title: withoutExtension(fileName), previewImage });
     });
   };
 
@@ -324,7 +379,7 @@ export function App() {
     }
     const { id: tabId, filePath, fileName } = activeTab;
     void beginTabPreview(tabId).then((previewImage) => {
-      setBookmarkPopup({ tabId, variant: 'markdown', url: filePath, title: fileName, previewImage });
+      setBookmarkPopup({ tabId, variant: 'markdown', url: filePath, title: withoutExtension(fileName), previewImage });
     });
   };
 
@@ -340,16 +395,56 @@ export function App() {
     } else {
       addBookmark(name, url);
     }
-    endTabPreview(bookmarkPopup.tabId);
-    setBookmarkPopup(null);
+    handleCloseBookmarkPopup();
   };
 
   const handleCloseBookmarkPopup = (): void => {
     if (!bookmarkPopup) {
       return;
     }
-    endTabPreview(bookmarkPopup.tabId);
-    setBookmarkPopup(null);
+    const { tabId } = bookmarkPopup;
+    closePopupAnimated('bookmark', () => {
+      endTabPreview(tabId);
+      setBookmarkPopup(null);
+    });
+  };
+
+  // Clear History's confirmation: says how many visits would go, and deletes them only once "delete" is typed. Opens
+  // over the History tab like the other popups (its native view comes off the window, a blurred still stands in).
+  const [clearHistoryPopup, setClearHistoryPopup] = useState<{
+    readonly tabId: string;
+    readonly range: HistoryClearRange;
+    readonly count: number | null;
+    readonly previewImage: string | null;
+  } | null>(null);
+
+  const openClearHistory = (range: HistoryClearRange): void => {
+    const tabId = activeTabId;
+    if (clearHistoryPopup || !tabId) {
+      return;
+    }
+    setClearHistoryPopup({ tabId, range, count: null, previewImage: null });
+    void window.northstar.countHistory(range).then((result) => {
+      setClearHistoryPopup((current) => (current ? { ...current, count: result.ok ? result.data : 0 } : current));
+    });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setClearHistoryPopup((current) => (current ? { ...current, previewImage } : current));
+    });
+  };
+
+  const closeClearHistory = (confirmed: boolean): void => {
+    if (!clearHistoryPopup) {
+      return;
+    }
+    const { tabId, range } = clearHistoryPopup;
+    closePopupAnimated('clearHistory', () => {
+      endTabPreview(tabId);
+      setClearHistoryPopup(null);
+      // Deleted once the History page is back in view, so its rows can be seen fading out.
+      if (confirmed) {
+        void window.northstar.clearHistory(range);
+      }
+    });
   };
 
   // Opens over whichever kind of tab is showing, so the tab's native view comes off the window first (it would paint above
@@ -376,13 +471,16 @@ export function App() {
     if (!tabSearch) {
       return;
     }
-    if (jumpTo) {
-      activateTab(jumpTo);
-    }
-    if (tabSearch.tabId) {
-      endTabPreview(tabSearch.tabId);
-    }
-    setTabSearch(null);
+    const { tabId } = tabSearch;
+    closePopupAnimated('tabSearch', () => {
+      if (jumpTo) {
+        activateTab(jumpTo);
+      }
+      if (tabId) {
+        endTabPreview(tabId);
+      }
+      setTabSearch(null);
+    });
   };
 
   // Opens like the tab search: the active tab's native view comes off the window and a blurred still of it stands in.
@@ -408,13 +506,16 @@ export function App() {
     if (!imagesPopup) {
       return;
     }
-    if (openId) {
-      openWorkspaceImage(openId);
-    }
-    if (imagesPopup.tabId) {
-      endTabPreview(imagesPopup.tabId);
-    }
-    setImagesPopup(null);
+    const { tabId } = imagesPopup;
+    closePopupAnimated('images', () => {
+      if (openId) {
+        openWorkspaceImage(openId);
+      }
+      if (tabId) {
+        endTabPreview(tabId);
+      }
+      setImagesPopup(null);
+    });
   };
 
   useEffect(() => window.northstar.onOpenWorkspaceImages(openWorkspaceImages));
@@ -436,10 +537,16 @@ export function App() {
   };
 
   const closeWorkspaceEditor = (): void => {
-    if (workspaceEdit?.tabId) {
-      endTabPreview(workspaceEdit.tabId);
+    if (!workspaceEdit) {
+      return;
     }
-    setWorkspaceEdit(null);
+    const { tabId } = workspaceEdit;
+    closePopupAnimated('workspaceEdit', () => {
+      if (tabId) {
+        endTabPreview(tabId);
+      }
+      setWorkspaceEdit(null);
+    });
   };
 
   const handleSaveWorkspace = (name: string, color: string, icon: string): void => {
@@ -466,9 +573,9 @@ export function App() {
         {/* Both bars stay mounted and slide away together as one unit in
             Focus Mode (see `.app__bar` in app.css) rather than unmounting,
             so there's something to animate instead of an instant cut —
-            the window itself goes true OS fullscreen at the same time
-            (see `setFocusMode` in TabManager.ts), so nothing of the
-            chrome remains, Escape/Ctrl+Shift+F exit it. */}
+            the page then fills the window (which keeps its own size; see
+            `setFocusMode` in TabManager.ts) with nothing of the chrome
+            left. Escape/Ctrl+Shift+F exit it. */}
         <div className="app__bar">
           {/* The frameless window's own drag region (see MainWindow.ts's
               `frame: false`) — the tab strip shares this row with
@@ -478,7 +585,6 @@ export function App() {
               out of dragging (see tab-bar.css) so clicking and reordering
               them still works. */}
           <div className="titlebar">
-            <TitlebarGrip />
             <TabBar
               tabs={workspaceTabs}
               workspaceId={activeWorkspaceId}
@@ -513,7 +619,7 @@ export function App() {
                 onOpenBookmark={openPdfBookmark}
                 onOpenPdfPath={openPdfPath}
                 onOpen={openPdfFile}
-                onGoToPage={goToPdfPage}
+                onNavigate={(id, direction) => (direction === -1 ? goBack(id) : goForward(id))}
                 onExport={exportPdfFile}
                 onClose={closePdfFile}
                 onRename={renamePdfFile}
@@ -536,7 +642,7 @@ export function App() {
                 onRename={renameMarkdownFile}
               />
             ) : activeTab?.kind === 'history' ? (
-              <HistoryToolbar key={activeTab.id} tab={activeTab} />
+              <HistoryToolbar key={activeTab.id} tab={activeTab} onRequestClear={openClearHistory} />
             ) : activeTab?.kind === 'terminal' ? (
               // Empty on purpose — occupies the same flex space
               // NavControls + AddressBar would, so PageActions stays
@@ -558,6 +664,7 @@ export function App() {
                   key={activeTabId ?? 'none'}
                   url={isHome ? '' : (browserTab?.url ?? '')}
                   isLoading={browserTab?.isLoading ?? false}
+                  loadProgress={browserTab?.loadProgress ?? null}
                   onNavigate={(input) => activeTabId && navigate(activeTabId, input)}
                   bookmarks={pageBookmarks}
                   isBookmarked={activeBookmark !== null}
@@ -688,44 +795,66 @@ export function App() {
             same area the hidden `WebContentsView` it's standing in for
             would otherwise occupy. */}
         <div className="tab-content">
+          {/* In the strip main keeps free below a web page; a note or PDF draws its own, and Focus Mode shows none. */}
+          {activeTab?.kind === 'browser' && !focusMode && (
+            <WebStatusBar stats={pageStats?.tabId === activeTab.id ? pageStats.stats : null} />
+          )}
           {bookmarkPopup && (
-            <BookmarkPopup
-              variant={bookmarkPopup.variant}
-              url={bookmarkPopup.url}
-              title={bookmarkPopup.title}
-              previewImage={bookmarkPopup.previewImage}
-              onSave={handleSaveBookmark}
-              onClose={handleCloseBookmarkPopup}
-            />
+            <PopupTransition closing={closingPopups.has('bookmark')} onExited={() => finishPopupClose('bookmark')}>
+              <BookmarkPopup
+                variant={bookmarkPopup.variant}
+                url={bookmarkPopup.url}
+                title={bookmarkPopup.title}
+                previewImage={bookmarkPopup.previewImage}
+                onSave={handleSaveBookmark}
+                onClose={handleCloseBookmarkPopup}
+              />
+            </PopupTransition>
           )}
           {workspaceEdit && (
-            <WorkspaceEditPopup
-              // Keyed so reopening for another workspace starts from that one's values.
-              key={workspaceEdit.workspaceId}
-              workspace={workspaces.find((workspace) => workspace.id === workspaceEdit.workspaceId) ?? workspaces[0]!}
-              previewImage={workspaceEdit.previewImage}
-              onSave={handleSaveWorkspace}
-              onClose={closeWorkspaceEditor}
-            />
+            <PopupTransition closing={closingPopups.has('workspaceEdit')} onExited={() => finishPopupClose('workspaceEdit')}>
+              <WorkspaceEditPopup
+                // Keyed so reopening for another workspace starts from that one's values.
+                key={workspaceEdit.workspaceId}
+                workspace={workspaces.find((workspace) => workspace.id === workspaceEdit.workspaceId) ?? workspaces[0]!}
+                previewImage={workspaceEdit.previewImage}
+                onSave={handleSaveWorkspace}
+                onClose={closeWorkspaceEditor}
+              />
+            </PopupTransition>
           )}
           {imagesPopup && (
-            <WorkspaceImagesPopup
-              images={workspaceImages}
-              previewImage={imagesPopup.previewImage}
-              onOpen={(id) => closeWorkspaceImages(id)}
-              onRemove={removeWorkspaceImage}
-              onRename={renameWorkspaceImage}
-              onClose={() => closeWorkspaceImages(null)}
-            />
+            <PopupTransition closing={closingPopups.has('images')} onExited={() => finishPopupClose('images')}>
+              <WorkspaceImagesPopup
+                images={workspaceImages}
+                previewImage={imagesPopup.previewImage}
+                onOpen={(id) => closeWorkspaceImages(id)}
+                onRemove={removeWorkspaceImage}
+                onRename={renameWorkspaceImage}
+                onClose={() => closeWorkspaceImages(null)}
+              />
+            </PopupTransition>
+          )}
+          {clearHistoryPopup && (
+            <PopupTransition closing={closingPopups.has('clearHistory')} onExited={() => finishPopupClose('clearHistory')}>
+              <ClearHistoryPopup
+                count={clearHistoryPopup.count}
+                previewImage={clearHistoryPopup.previewImage}
+                onConfirm={() => closeClearHistory(true)}
+                onClose={() => closeClearHistory(false)}
+              />
+            </PopupTransition>
           )}
           {tabSearch && (
-            <TabSearchPopup
-              tabs={tabs}
-              workspaces={workspaces}
-              previewImage={tabSearch.previewImage}
-              onSelect={(tabId) => closeTabSearch(tabId)}
-              onClose={() => closeTabSearch(null)}
-            />
+            <PopupTransition closing={closingPopups.has('tabSearch')} onExited={() => finishPopupClose('tabSearch')}>
+              <TabSearchPopup
+                tabs={tabs}
+                workspaces={workspaces}
+                previewImage={tabSearch.previewImage}
+                onSelect={(tabId) => closeTabSearch(tabId)}
+                onClose={() => closeTabSearch(null)}
+              />
+            </PopupTransition>
           )}
         </div>
       </div>

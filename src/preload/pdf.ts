@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
@@ -18,6 +18,8 @@ const PdfClosed = 'pdf:closed';
 const PdfUndo = 'pdf:undo';
 const PdfRedo = 'pdf:redo';
 const PdfPageInfo = 'pdf:page-info';
+const PdfHistoryInfo = 'pdf:history-info';
+const PdfHistoryGo = 'pdf:history-go';
 const PdfCropState = 'pdf:crop-state';
 const PdfScrollToPage = 'pdf:scroll-to-page';
 const PdfPointerMode = 'pdf:pointer-mode';
@@ -140,15 +142,48 @@ const redoListeners = new Set<() => void>();
 ipcRenderer.on(PdfUndo, () => undoListeners.forEach((listener) => listener()));
 ipcRenderer.on(PdfRedo, () => redoListeners.forEach((listener) => listener()));
 
+const historyGoListeners = new Set<(direction: 1 | -1) => void>();
+ipcRenderer.on(PdfHistoryGo, (_event, direction: unknown) => {
+  if (direction === 1 || direction === -1) {
+    historyGoListeners.forEach((listener) => listener(direction));
+  }
+});
+
 const closeListeners = new Set<() => void>();
 ipcRenderer.on(PdfClosed, () => closeListeners.forEach((listener) => listener()));
 
+// Whether the window is in Focus Mode: the stat bar hides with the chrome. Kept, so a listener added later hears it.
+const TabFocusMode = 'tab:focus-mode';
+let latestFocusMode = false;
+const focusModeListeners = new Set<(focusMode: boolean) => void>();
+ipcRenderer.on(TabFocusMode, (_event, focusMode: unknown) => {
+  latestFocusMode = focusMode === true;
+  focusModeListeners.forEach((listener) => listener(latestFocusMode));
+});
+
 const api: NorthstarPdfApi = {
+  onFocusMode: (listener) => {
+    listener(latestFocusMode);
+    focusModeListeners.add(listener);
+    return () => {
+      focusModeListeners.delete(listener);
+    };
+  },
+
   saveAnnotations: (key: string, annotations: PdfAnnotations) => {
     ipcRenderer.send(PdfSaveAnnotations, { key, annotations });
   },
   reportPage: (page, pageCount) => {
     ipcRenderer.send(PdfPageInfo, { id: tabId, page, pageCount });
+  },
+  reportHistory: (canGoBack, canGoForward) => {
+    ipcRenderer.send(PdfHistoryInfo, { id: tabId, canGoBack, canGoForward });
+  },
+  onHistoryGo: (listener) => {
+    historyGoListeners.add(listener);
+    return () => {
+      historyGoListeners.delete(listener);
+    };
   },
   onScrollToPage: (listener) => {
     scrollListeners.add(listener);

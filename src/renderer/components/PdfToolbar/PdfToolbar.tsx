@@ -1,11 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useState } from 'react';
 import type { BookmarkState, PdfTabState } from '@shared/tab-state';
-import { formatShortcut } from '../../lib/shortcuts';
+import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
 import { PdfSearchBox } from './PdfSearchBox';
 
@@ -25,7 +25,8 @@ interface PdfToolbarProps {
   /** Opens a PDF from the history, by path, in the tab. */
   readonly onOpenPdfPath: (id: string, path: string) => void;
   readonly onOpen: (id: string) => void;
-  readonly onGoToPage: (id: string, page: number) => void;
+  /** Steps back (-1) or forward (1) through the jumps made in the document. */
+  readonly onNavigate: (id: string, direction: 1 | -1) => void;
   /** Saves a copy of the open file with its crops, drawings, text boxes and highlights applied. */
   readonly onExport: (id: string) => void;
   /** Closes the open file, leaving the tab empty. */
@@ -36,10 +37,11 @@ interface PdfToolbarProps {
 
 /**
  * The PDF tab's controls, shown in the main toolbar where a browser tab has
- * its address bar: the bookmark star, Open, Close and Export, the page
- * counter, and the file name (an editable text
+ * its address bar: Back/Forward through the jumps made in the document
+ * (followed links, the page box), the bookmark star, Open, Close and Export,
+ * and the file name (an editable text
  * box — or, while no file is open, a search over the bookmarked PDFs). The
- * PDF page itself only draws the document.
+ * page counter is in the PDF page's own stat bar (`PdfStatusBar`).
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
 export function PdfToolbar({
@@ -50,29 +52,15 @@ export function PdfToolbar({
   onOpenBookmark,
   onOpenPdfPath,
   onOpen,
-  onGoToPage,
+  onNavigate,
   onExport,
   onClose,
   onRename,
 }: PdfToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
   const [nameDraft, setNameDraft] = useState<string | null>(null);
-  /** Uncommitted text while the page box is being edited; null shows the live page. */
-  const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { fileName, page, pageCount } = tab;
-
-  const commitPage = (): void => {
-    const requested = Number.parseInt(pageDraft ?? '', 10);
-    setPageDraft(null);
-    if (Number.isNaN(requested)) {
-      return;
-    }
-    const target = Math.min(Math.max(requested, 1), pageCount);
-    if (target !== page) {
-      onGoToPage(tab.id, target);
-    }
-  };
+  const { fileName } = tab;
 
   const commitName = (): void => {
     const trimmed = nameDraft?.trim();
@@ -90,6 +78,29 @@ export function PdfToolbar({
 
   return (
     <div className="pdf-toolbar">
+      {/* The browser and note tabs' own back/forward buttons, so every kind of tab reads alike. */}
+      <div className="nav-controls">
+        <button
+          type="button"
+          className="nav-controls__button hover-grow chrome-tooltip"
+          onClick={() => onNavigate(tab.id, -1)}
+          disabled={!tab.canGoBack}
+          aria-label="Back"
+          data-tooltip={`Back (${formatAltShortcut('←')})`}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          className="nav-controls__button hover-grow chrome-tooltip"
+          onClick={() => onNavigate(tab.id, 1)}
+          disabled={!tab.canGoForward}
+          aria-label="Forward"
+          data-tooltip={`Forward (${formatAltShortcut('→')})`}
+        >
+          ›
+        </button>
+      </div>
       <button
         type="button"
         className="pdf-toolbar__bookmark hover-grow chrome-tooltip"
@@ -127,31 +138,6 @@ export function PdfToolbar({
       >
         Export
       </button>
-      {pageCount > 0 && (
-        <div className="pdf-toolbar__pages">
-          <input
-            type="text"
-            inputMode="numeric"
-            className="pdf-toolbar__page-input"
-            aria-label="Current page"
-            value={pageDraft ?? String(page)}
-            // Just wide enough for the largest page number, so it sits snug against the "/".
-            style={{ width: `${String(pageCount).length}ch` }}
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setPageDraft(event.target.value.replace(/\D/g, ''))}
-            onBlur={commitPage}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.currentTarget.blur();
-              } else if (event.key === 'Escape') {
-                setPageDraft(null);
-                event.currentTarget.blur();
-              }
-            }}
-          />
-          <span className="pdf-toolbar__page-total">/ {pageCount}</span>
-        </div>
-      )}
       {/* Before a file is open there's nothing to rename, so the slot is a search over the bookmarked PDFs instead. */}
       {fileName === null ? (
         <PdfSearchBox

@@ -50,7 +50,7 @@ input that would be slow or awkward to reach through the interface.
   completion, the drag-reorder preview).
 - Main-process modules that only need Node (`AdBlockStore`,
   `WorkspaceImageStore`, `MarkdownVault`, `MarkdownDocuments`,
-  `MarkdownCodeRunner`, `snapZones`).
+  `MarkdownCodeRunner`).
 
 **How:**
 

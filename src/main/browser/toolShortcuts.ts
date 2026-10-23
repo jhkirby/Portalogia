@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import type { KeyChord } from './textEditingChords';
 
@@ -13,10 +13,16 @@ export interface PhysicalKeyChord extends KeyChord {
 
 /**
  * The Ctrl+letter keys that pick a toolbar tool: the laser pointer (I), pen
- * (P), highlighter (J), comments (M), text box (E), and the Pan (1) and
- * Select (2) pointer modes.
+ * (P), highlighter (J), comments (M) and text box (E). Pan and Select are
+ * Alt+1 and Alt+2 (`pointerModeShortcut`): Ctrl+1–8 jump to tabs.
  */
-const TOOL_KEYS = new Set(['i', 'p', 'j', 'm', 'e', '1', '2']);
+const TOOL_KEYS = new Set(['i', 'p', 'j', 'm', 'e']);
+
+/** The physical keys Alt+1 and Alt+2 come from, and the pointer mode each picks. */
+const POINTER_MODE_CODES: Readonly<Record<string, 'pan' | 'select'>> = { Digit1: 'pan', Digit2: 'select' };
+
+/** The physical keys for Ctrl+1 to Ctrl+8, in order, top row and number pad alike. */
+const TAB_JUMP_CODES = ['1', '2', '3', '4', '5', '6', '7', '8'].flatMap((digit) => [`Digit${digit}`, `Numpad${digit}`]);
 
 /** The Ctrl+Shift+letter keys that work a tool: Crop (X) and Revert Annotations (R). */
 const SHIFTED_TOOL_KEYS = new Set(['x', 'r']);
@@ -34,6 +40,35 @@ export function isToolShortcut(input: KeyChord): boolean {
   }
   const key = input.key.toLowerCase();
   return input.shift ? SHIFTED_TOOL_KEYS.has(key) : TOOL_KEYS.has(key);
+}
+
+/**
+ * The pointer mode a key picks: Alt+1 Pan, Alt+2 Select. Matched by physical
+ * key, so the shifted row of another layout still works. Like the tools'
+ * keys, edit mode leaves these to the page.
+ * @param input The key event.
+ * @returns The mode, or `null` for any other key.
+ */
+export function pointerModeShortcut(input: PhysicalKeyChord): 'pan' | 'select' | null {
+  if (!input.alt || input.control || input.meta || input.shift) {
+    return null;
+  }
+  return POINTER_MODE_CODES[input.code] ?? null;
+}
+
+/**
+ * Which tab Ctrl+1 to Ctrl+8 jumps to: the first to the eighth of the
+ * workspace, as many as a workspace can hold. Matched by physical key, number
+ * pad included.
+ * @param input The key event.
+ * @returns The tab's 0-based place, or `null` for any other key.
+ */
+export function tabJumpIndex(input: PhysicalKeyChord): number | null {
+  if (!(input.control || input.meta) || input.alt || input.shift) {
+    return null;
+  }
+  const at = TAB_JUMP_CODES.indexOf(input.code);
+  return at === -1 ? null : Math.floor(at / 2);
 }
 
 /**

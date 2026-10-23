@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-22
 
 /**
  * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
@@ -20,13 +20,22 @@ export const CHROME_HEIGHT_PX = 92;
 
 /**
  * Chrome height while Focus Mode is on: 0 — the titlebar row and toolbar
- * both slide fully out of view (see `.app--focus-mode` in app.css) and the
- * window itself goes OS-fullscreen (`setFocusMode` in TabManager.ts), so
- * the page has the entire screen to itself with no chrome reserved at all.
+ * both slide fully out of view (see `.app--focus-mode` in app.css), so
+ * the page has the whole window to itself with no chrome reserved at all
+ * (the window keeps its own size; `setFocusMode` in TabManager.ts).
  * Must equal `--size-chrome-height-focused` in `sizes.css`, the same way
  * `CHROME_HEIGHT_PX` must equal `--size-chrome-height`.
  */
 export const CHROME_HEIGHT_FOCUSED_PX = 0;
+
+/**
+ * Height, in CSS pixels, of the stat bar along the bottom of a web page's tab
+ * (`WebStatusBar`), which the chrome draws below the page: main leaves this
+ * much of the window's bottom free for it. Must equal `--size-status-bar-height`
+ * in `sizes.css`. Not reserved in Focus Mode, or for a note or PDF, which draw
+ * their own bars inside their pages.
+ */
+export const STATUS_BAR_HEIGHT_PX = 26;
 
 /**
  * Width, in CSS pixels, of the workspace sidebar on the left edge of the
@@ -114,6 +123,26 @@ export const ADDRESS_SUGGESTION_ROW_HEIGHT_PX = 32;
  * resolves to. See `ADDRESS_SUGGESTION_ROW_HEIGHT_PX`.
  */
 export const ADDRESS_SUGGESTIONS_PADDING_PX = 4;
+
+/**
+ * The suggestions dropdown's border width, in CSS pixels, on each side: the
+ * view is sized to hold it too. Must match `.address-bar__suggestions`'s
+ * `border` in `suggestions-overlay.css`.
+ */
+export const ADDRESS_SUGGESTIONS_BORDER_PX = 1;
+
+/**
+ * The most rows the suggestions dropdown shows at once; past this many it
+ * keeps that height and scrolls (`suggestions-overlay.css`).
+ */
+export const ADDRESS_SUGGESTIONS_MAX_ROWS = 10;
+
+/**
+ * The most matches a search bar's dropdown lists (the address bar's, the PDF
+ * and note search's): bookmarks first, then the history, newest first. Enough
+ * to scroll back through the history, few enough to stay quick.
+ */
+export const SEARCH_SUGGESTIONS_LIMIT = 500;
 
 /**
  * A tab's own zoom range and default, as a whole percent — shared by main

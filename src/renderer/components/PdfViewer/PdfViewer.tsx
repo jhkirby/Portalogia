@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import {
   useCallback,
@@ -19,7 +19,9 @@ import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract'
 import type { PointerMode } from '@shared/tab-state';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 import { commentCursor, highlighterCursor, penCursor, textCursor } from '../../lib/toolCursors';
+import { countCharacters, countSelection, wordStarts } from '@shared/markdown/structure';
 import { PdfPage, type PageHighlight, type PageLink, type PageRect } from './PdfPage';
+import { PdfStatusBar, type PdfDocumentStats } from './PdfStatusBar';
 import { usePdfFind } from './usePdfFind';
 import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
@@ -79,6 +81,9 @@ function subtractRects(rect: PageRect, blockers: readonly PageRect[], minWidth: 
 
 /** A mark tagged with the 1-based page it belongs to. */
 type OnPage<T> = T & { readonly page: number };
+
+/** pdf.js's annotation type for a link (`AnnotationType.LINK`), counted for the stat bar. */
+const LINK_ANNOTATION_TYPE = 2;
 
 /** The undoable marks: what Ctrl+Z / Ctrl+Y step through. */
 interface MarksSnapshot {
@@ -160,6 +165,17 @@ export function PdfViewer() {
   const [isPanning, setIsPanning] = useState(false);
   const [pointerMode, setPointerMode] = useState<PointerMode>('pan');
   useEffect(() => window.northstarPdf.onPointerMode(setPointerMode), []);
+  /** The window's Focus Mode: the stat bar hides with the chrome. */
+  const [focusMode, setFocusMode] = useState(false);
+  useEffect(() => window.northstarPdf.onFocusMode(setFocusMode), []);
+  /** The page in view, for the stat bar (main hears it too, through `reportPage`). */
+  const [visiblePage, setVisiblePage] = useState(1);
+  /** The open file's size in bytes, for the stat bar. */
+  const [fileBytes, setFileBytes] = useState(0);
+  /** The document's words, characters and links, counted after it opens; `null` while counting. */
+  const [docStats, setDocStats] = useState<PdfDocumentStats | null>(null);
+  /** The selected text's words and characters; `null` while nothing in the document is selected. */
+  const [selectionStats, setSelectionStats] = useState<{ words: number; characters: number } | null>(null);
   // Back in Pan mode, a selection made in Select mode would be left stranded where nothing can change it.
   useEffect(() => {
     if (pointerMode === 'pan') {
@@ -224,7 +240,10 @@ export function PdfViewer() {
   const loadFile = useCallback(async (file: PdfOpenResult) => {
     setError(null);
     try {
+      // Read before pdf.js takes the bytes: it hands the buffer to its worker, which empties it here.
+      const bytes = file.data.byteLength;
       const loaded = await getDocument({ data: file.data }).promise;
+      setFileBytes(bytes);
       const sizes: PageSize[] = [];
       for (let n = 1; n <= loaded.numPages; n += 1) {
         const viewport = (await loaded.getPage(n)).getViewport({ scale: CSS_PIXELS_PER_POINT });
@@ -262,6 +281,7 @@ export function PdfViewer() {
   const reportVisiblePage = useCallback((): void => {
     const el = scrollRef.current;
     if (!el || pageSizes.length === 0) {
+      setVisiblePage(1);
       window.northstarPdf.reportPage(1, pageSizes.length);
       return;
     }
@@ -272,8 +292,58 @@ export function PdfViewer() {
         current = Number(pageEl.dataset['pageNumber']);
       }
     });
+    setVisiblePage(current);
     window.northstarPdf.reportPage(current, pageSizes.length);
   }, [pageSizes]);
+
+  // The document's words, characters and links, for the stat bar: read page by page in the background once it opens
+  // (a long document takes a moment), then shown all at once.
+  useEffect(() => {
+    setDocStats(null);
+    if (!doc) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      let words = 0;
+      let characters = 0;
+      let links = 0;
+      for (let n = 1; n <= doc.numPages && !cancelled; n += 1) {
+        try {
+          const page = await doc.getPage(n);
+          const content = await page.getTextContent();
+          // pdf.js's runs carry their own spaces and mark where a line ends; a line end counts as a space, as it reads.
+          const text = content.items.map((item) => ('str' in item ? item.str + (item.hasEOL ? ' ' : '') : '')).join('');
+          words += wordStarts(text).length;
+          characters += countCharacters(text.trimEnd());
+          const annotations: unknown[] = await page.getAnnotations({ intent: 'display' });
+          links += annotations.filter((raw) => (raw as { annotationType?: number }).annotationType === LINK_ANNOTATION_TYPE).length;
+        } catch {
+          // A page pdf.js can't read adds nothing to the counts.
+        }
+      }
+      if (!cancelled) {
+        setDocStats({ words, characters, links });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [doc]);
+
+  // The selection's words and characters, for the stat bar: whatever is selected inside the document.
+  useEffect(() => {
+    const onSelectionChange = (): void => {
+      const selection = window.getSelection();
+      const scroller = scrollRef.current;
+      const inDocument =
+        selection !== null && !selection.isCollapsed && scroller !== null && scroller.contains(selection.anchorNode) && scroller.contains(selection.focusNode);
+      const counts = inDocument ? countSelection(selection.toString()) : null;
+      setSelectionStats(counts && counts.characters > 0 ? { words: counts.words, characters: counts.characters } : null);
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, []);
 
   // Report on load, and whenever zoom reflows the pages or the user scrolls.
   useLayoutEffect(() => {
@@ -296,18 +366,77 @@ export function PdfViewer() {
     };
   }, [reportVisiblePage]);
 
-  // The toolbar's page box asks for a jump: bring that page's top to the top of the view.
+  // ── Jump history (Back/Forward) ──
+  // Where the view was before each jump (a followed link, the page box), as a fraction of the document's height so a
+  // zoom in between still lands on the same spot. Scrolling by hand isn't a jump and leaves no entry, as in a browser.
+  const historyRef = useRef<{ back: number[]; forward: number[] }>({ back: [], forward: [] });
+
+  const reportHistory = useCallback((): void => {
+    window.northstarPdf.reportHistory(historyRef.current.back.length > 0, historyRef.current.forward.length > 0);
+  }, []);
+
+  /** The view's place as a fraction of the document's height. */
+  const currentPlace = (): number => {
+    const el = scrollRef.current;
+    return el && el.scrollHeight > 0 ? el.scrollTop / el.scrollHeight : 0;
+  };
+
+  /** Scrolls the view for a jump, remembering where it was so Back can return there. */
+  const jumpTo = useCallback(
+    (top: number): void => {
+      const el = scrollRef.current;
+      if (!el || Math.abs(top - el.scrollTop) < 1) {
+        return;
+      }
+      historyRef.current = { back: [...historyRef.current.back, currentPlace()], forward: [] };
+      el.scrollTo({ top });
+      reportHistory();
+    },
+    [reportHistory],
+  );
+
+  // Back or Forward: the place left is kept on the other side, so the step can be undone.
   useEffect(
     () =>
-      window.northstarPdf.onScrollToPage((page) => {
+      window.northstarPdf.onHistoryGo((direction) => {
         const el = scrollRef.current;
-        const target = el?.querySelector<HTMLElement>(`[data-page-number="${Math.min(Math.max(page, 1), pageSizes.length)}"]`);
-        if (el && target) {
-          el.scrollTo({ top: el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top });
+        const { back, forward } = historyRef.current;
+        const from = direction === -1 ? back : forward;
+        const place = from[from.length - 1];
+        if (!el || place === undefined) {
+          return;
         }
+        const here = currentPlace();
+        historyRef.current =
+          direction === -1
+            ? { back: back.slice(0, -1), forward: [...forward, here] }
+            : { back: [...back, here], forward: forward.slice(0, -1) };
+        el.scrollTo({ top: place * el.scrollHeight });
+        reportHistory();
       }),
-    [pageSizes],
+    [reportHistory],
   );
+
+  // A new document, or none, starts with no history.
+  useEffect(() => {
+    historyRef.current = { back: [], forward: [] };
+    reportHistory();
+  }, [doc, reportHistory]);
+
+  /** Brings a page's top to the top of the view, as a jump Back can return from (the stat bar's page box). */
+  const goToPage = useCallback(
+    (page: number): void => {
+      const el = scrollRef.current;
+      const target = el?.querySelector<HTMLElement>(`[data-page-number="${Math.min(Math.max(page, 1), pageSizes.length)}"]`);
+      if (el && target) {
+        jumpTo(el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top);
+      }
+    },
+    [pageSizes, jumpTo],
+  );
+
+  // Main asks for a page too (`goToPdfPage`).
+  useEffect(() => window.northstarPdf.onScrollToPage(goToPage), [goToPage]);
 
   useEffect(() => window.northstarPdf.onFile((file) => void loadFile(file)), [loadFile]);
 
@@ -667,7 +796,7 @@ export function PdfViewer() {
         const el = scrollRef.current;
         const pageEl = pageIndex === null ? null : el?.querySelector<HTMLElement>(`[data-page-number="${pageIndex + 1}"]`);
         if (el && pageEl) {
-          el.scrollTo({ top: el.scrollTop + pageEl.getBoundingClientRect().top - el.getBoundingClientRect().top });
+          jumpTo(el.scrollTop + pageEl.getBoundingClientRect().top - el.getBoundingClientRect().top);
         }
       } catch {
         // A destination the document doesn't actually contain: the click does nothing.
@@ -864,6 +993,16 @@ export function PdfViewer() {
         )}
       </div>
       {doc && error && <p className="pdf-viewer__error pdf-viewer__error--floating">{error}</p>}
+      {doc && !focusMode && (
+        <PdfStatusBar
+          page={visiblePage}
+          pageCount={pageSizes.length}
+          stats={docStats}
+          bytes={fileBytes}
+          selection={selectionStats}
+          onGoToPage={goToPage}
+        />
+      )}
     </div>
   );
 }

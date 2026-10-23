@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-22
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
@@ -33,6 +33,8 @@ import { registerAccentColorIpc } from './ipc/registerAccentColorIpc';
 import { registerMarkdownIpc } from './ipc/registerMarkdownIpc';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
+import { requestFinished, requestStarted } from './browser/loadProgress';
+import { registerStatusIpc } from './ipc/registerStatusIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
 import { chromeWindowOf } from './ipc/senderGuards';
 import { buildMenu } from './menu/buildMenu';
@@ -176,7 +178,15 @@ const sharedTerminalManager = new TerminalManager(
 void app.whenReady().then(() => {
   // First, so the headers hook the chrome's CSP registers through exists before any window does.
   void adBlocker.start(session.defaultSession);
-  historyController.attachTo(session.defaultSession);
+  // The load progress estimate counts each page's requests: sent, then completed (through the history's own listener,
+  // the session allowing one per event) or failed.
+  historyController.attachTo(session.defaultSession, (webContentsId) => requestFinished(webContentsId));
+  session.defaultSession.webRequest.onSendHeaders({ urls: ['http://*/*', 'https://*/*'] }, (details) =>
+    requestStarted(details.webContentsId),
+  );
+  session.defaultSession.webRequest.onErrorOccurred({ urls: ['http://*/*', 'https://*/*'] }, (details) =>
+    requestFinished(details.webContentsId),
+  );
 
   // Deny every site permission request (camera, mic, geolocation, ...) by
   // default. A future version should replace this with a per-origin
@@ -207,6 +217,7 @@ void app.whenReady().then(() => {
   registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab, resolveTabForContents);
   registerMarkdownIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
+  registerStatusIpc();
   registerThemeIpc();
   registerAdBlockIpc(adBlocker);
   registerAccentColorIpc(() => {

@@ -1,6 +1,6 @@
 # Northstar Privacy Policy
 
-*Effective: October 6, 2026*
+*Effective: October 22, 2026*
 
 Northstar is a desktop web browser made by Joshua H. Kirby. This policy
 explains what Northstar stores, what it sends over the network, and what it
@@ -45,8 +45,9 @@ gone.
 
 ## What Northstar sends over the network
 
-Northstar only connects to the internet to do what you ask it to do, plus one
-background download:
+Northstar only connects to the internet to do what you ask it to do, plus two
+kinds of background request: the ad blocker's filter lists, and the outside
+temperature shown in the title bar.
 
 - **Websites you visit.** Like any browser, Northstar sends the sites you
   visit the usual information browsers send, such as your IP address, the
@@ -60,6 +61,17 @@ background download:
   periodically downloads public filter lists maintained by Ghostery from
   GitHub (`raw.githubusercontent.com`). This request contains no information
   about you or your browsing. Blocking happens entirely on your computer.
+- **The temperature in the title bar.** To show the outside temperature,
+  Northstar looks up your approximate location (about city level) from your
+  public IP address, at most once an hour, by asking ipapi.co
+  (<https://ipapi.co/privacy/>), or ipwho.is (<https://ipwho.is/>) if ipapi.co
+  doesn't answer. Those services see your IP address. About every 10 minutes,
+  Northstar then sends those approximate coordinates to Open-Meteo
+  (<https://open-meteo.com/en/terms>) to get the current temperature;
+  Open-Meteo sees your IP address too, as any website would. Nothing about your
+  browsing is sent, and the location isn't saved to disk.
+- **Wi-Fi and battery status.** The Wi-Fi signal and battery level shown in
+  the title bar are read from your computer and never leave it.
 - **Spell-check dictionaries (Linux only).** On Linux, Chromium may download
   spell-check dictionaries from Google the first time they're needed. Windows
   and macOS use the operating system's built-in spell checker.

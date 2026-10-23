@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -39,6 +39,7 @@ import {
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   ZOOM_PERCENT_WHEEL_STEP,
+  STATUS_BAR_HEIGHT_PX,
 } from '@shared/constants';
 import { escapeHtml } from '@shared/html';
 import { DEFAULT_WORKSPACE_ICON, isWorkspaceIconId } from '@shared/workspaceIcons';
@@ -59,6 +60,7 @@ import {
   type MarkdownRunResult,
   type PdfOpenResult,
   type TooltipSyncPayload,
+  type PageStats,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type {
@@ -77,6 +79,8 @@ import { buildMarkdownCsp } from '@shared/markdown/csp';
 import { listCodeBlocks, splitWikiTarget } from '@shared/markdown/parser';
 import { markdownToPlainText } from '@shared/markdown/plainText';
 import { isRunnableLanguage, runCodeBlock } from './MarkdownCodeRunner';
+import { readFileCapped } from '../platform/readFileCapped';
+import { beginLoad, endLoad } from './loadProgress';
 import { markdownAnnotationStore } from './MarkdownAnnotationStore';
 import { MarkdownDocuments } from './MarkdownDocuments';
 import {
@@ -99,7 +103,7 @@ import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
 import { editableKindOf, hasEditableFocus } from './editableFocus';
 import { isTextEditingChord, type TextBoxContext } from './textEditingChords';
-import { isEditModeToggle, isToolShortcut } from './toolShortcuts';
+import { isEditModeToggle, isToolShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -180,6 +184,12 @@ const pdfFileKeys = new Map<string, string>();
 
 /** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
 const markdownDocuments = new MarkdownDocuments();
+
+/** How long the address bar's progress line stays at 100% after a page finishes loading, so it can be read. */
+const LOAD_PROGRESS_HOLD_MS = 1000;
+
+/** Each web page's latest stats, from its own page (`setPageStats`); shared, since a tab can move between windows. */
+const pageStatsByTab = new Map<string, PageStats>();
 
 /** Markdown tabs whose page has finished loading — a note sent before then would have nobody listening, so it waits for `did-finish-load`. */
 const markdownPagesReady = new Set<string>();
@@ -617,6 +627,7 @@ export class TabManager {
       title: 'New Tab',
       url: DEFAULT_TAB_URL,
       isLoading: true,
+      loadProgress: null,
       canGoBack: false,
       canGoForward: false,
       favicon: null,
@@ -627,7 +638,11 @@ export class TabManager {
 
     this.wireEvents(id, view);
 
-    const target = normalizeUrlOrSearch(url ?? DEFAULT_TAB_URL);
+    // Every new tab's first load comes through here, so the scheme allowlist `navigate` applies is applied here too:
+    // a main-process `loadURL` fires no `will-navigate`, and `file://host/share` would make Windows hand the user's
+    // credentials to that host.
+    const normalized = normalizeUrlOrSearch(url ?? DEFAULT_TAB_URL);
+    const target = isNavigableUrl(normalized) ? normalized : DEFAULT_TAB_URL;
     void view.webContents.loadURL(target).catch(() => {
       // Load failures surface to the UI via the 'did-fail-load' listener
       // wired in wireEvents; the rejection itself carries nothing new.
@@ -800,6 +815,7 @@ export class TabManager {
       this.pushHighlighterStateTo(id);
       this.pushCropStateTo(id);
       this.pushPointerModeTo(id);
+      this.pushFocusModeTo(id);
       if (this.findOpen && id === this.activeTabId) {
         this.runFind();
       }
@@ -816,6 +832,8 @@ export class TabManager {
       filePath: null,
       page: 1,
       pageCount: 0,
+      canGoBack: false,
+      canGoForward: false,
       pointerMode: 'pan',
       workspaceId: workspaceId ?? this.activeWorkspaceId,
     });
@@ -893,6 +911,7 @@ export class TabManager {
       this.pushMarkdownModeTo(id);
       this.pushMarkdownDisplayTo(id);
       this.pushPointerModeTo(id);
+      this.pushFocusModeTo(id);
       // A note opened before the page was up (a restored tab) is delivered now.
       this.pushMarkdownFile(id, 'open', '');
       if (this.findOpen && id === this.activeTabId) {
@@ -1721,6 +1740,14 @@ export class TabManager {
    * @param range The last N of a unit, or everything (already validated).
    * @returns The full browser state (unchanged; open History tabs are re-sent the list).
    */
+  /**
+   * How many visits a range of the history covers (what "Clear History" would delete), for its confirmation.
+   * @param range The last N of a unit, or everything.
+   */
+  public countHistory(range: HistoryClearRange): number {
+    return this.historyController.count(range);
+  }
+
   public clearHistory(range: HistoryClearRange): BrowserState {
     this.historyController.clear(range);
     return this.getState();
@@ -1766,10 +1793,14 @@ export class TabManager {
     }
     let data: Buffer;
     try {
-      if ((await stat(filePath)).size > MAX_PDF_BYTES) {
+      const read = await readFileCapped(filePath, MAX_PDF_BYTES);
+      if (read.kind === 'too-large') {
         throw new Error('That PDF is too large to open (limit 512 MB).');
       }
-      data = await readFile(filePath);
+      if (read.kind === 'not-file') {
+        throw new Error('That is not a file.');
+      }
+      data = read.data;
     } catch (error) {
       dialog.showErrorBox('Could not open PDF', error instanceof Error ? error.message : String(error));
       return;
@@ -1810,9 +1841,16 @@ export class TabManager {
    * @param y The point, in the page's viewport CSS pixels (a web page's already scaled by its own zoom).
    */
   public warpTabPointer(id: string, x: number, y: number): void {
-    const kind = this.states.get(id)?.kind;
+    const state = this.states.get(id);
+    const kind = state?.kind;
     const view = this.views.get(id);
     if (!isPointerModeKind(kind) || !view || view.webContents.isDestroyed() || this.window.isDestroyed()) {
+      return;
+    }
+    // Only a pan moves the pointer, and only in a tab on screen: a page (or a compromised one) can't otherwise take
+    // hold of the user's mouse, or move it from a tab in the background.
+    const onScreen = id === this.activeTabId || id === this.splitView?.secondaryTabId;
+    if (!state || !('pointerMode' in state) || state.pointerMode !== 'pan' || !onScreen) {
       return;
     }
     const bounds = view.getBounds();
@@ -1841,7 +1879,16 @@ export class TabManager {
     }
     pdfFilePaths.delete(id);
     pdfFileKeys.delete(id);
-    this.states.set(id, { ...current, title: 'PDF', fileName: null, filePath: null, page: 1, pageCount: 0 });
+    this.states.set(id, {
+      ...current,
+      title: 'PDF',
+      fileName: null,
+      filePath: null,
+      page: 1,
+      pageCount: 0,
+      canGoBack: false,
+      canGoForward: false,
+    });
     this.releaseUnavailableTools();
     if (this.findOpen && !this.canFind(this.activeTabId)) {
       this.closeFind();
@@ -1900,6 +1947,34 @@ export class TabManager {
   }
 
   /**
+   * Records whether a PDF tab's jump history can step back and forward (its page keeps the history itself; this is
+   * only what the toolbar's arrows show).
+   * @param id The PDF tab. A no-op if it isn't one.
+   * @param canGoBack Whether there's an earlier place.
+   * @param canGoForward Whether there's a later place.
+   */
+  public setPdfHistory(id: string, canGoBack: boolean, canGoForward: boolean): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'pdf' || (current.canGoBack === canGoBack && current.canGoForward === canGoForward)) {
+      return;
+    }
+    this.states.set(id, { ...current, canGoBack, canGoForward });
+    this.emitState();
+  }
+
+  /**
+   * Asks a PDF tab's page to step through its jump history.
+   * @param id The PDF tab.
+   * @param direction Back (-1) or forward (1).
+   */
+  private stepPdfHistory(id: string, direction: 1 | -1): void {
+    const view = this.views.get(id);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.PdfHistoryGo, direction);
+    }
+  }
+
+  /**
    * Asks a PDF tab's viewer to scroll to a page.
    * @param id The PDF tab. A no-op if it isn't one.
    * @param page 1-based; the viewer clamps it to the document.
@@ -1930,6 +2005,7 @@ export class TabManager {
     if (current.pointerMode !== mode) {
       this.states.set(id, { ...current, pointerMode: mode });
       this.pushPointerModeTo(id);
+      this.pushFocusModeTo(id);
     }
     if (mode === 'pan') {
       // The grab tool's pointer helper takes a moment to start; have it ready before the first pan reaches an edge.
@@ -1987,6 +2063,45 @@ export class TabManager {
     }
     if (this.cropActive) {
       this.setCrop(false);
+    }
+  }
+
+  /**
+   * Records a web page's latest stats (from its own page), and hands them to the chrome if it's this window's
+   * active tab — the one the stat bar describes.
+   * @param id The browser tab.
+   * @param stats What its page counted.
+   */
+  public setPageStats(id: string, stats: PageStats): void {
+    if (this.states.get(id)?.kind !== 'browser') {
+      return;
+    }
+    pageStatsByTab.set(id, stats);
+    const owner = this.registry.mountOwners.get(id) ?? this;
+    if (owner.activeTabId === id) {
+      owner.pushPageStats();
+    }
+  }
+
+  /** Sends the chrome the active tab's stats (`null` before its page has counted, or for any other kind of tab). */
+  private pushPageStats(): void {
+    const id = this.activeTabId;
+    if (!id || this.window.isDestroyed()) {
+      return;
+    }
+    this.window.webContents.send(IpcChannel.PageStatsChanged, { tabId: id, stats: pageStatsByTab.get(id) ?? null });
+  }
+
+  /**
+   * Tells a note or PDF tab's page whether this window is in Focus Mode, so it hides its stat bar along with the
+   * chrome. A web page's stat bar is the chrome's own, which hides by itself.
+   * @param id The tab.
+   */
+  private pushFocusModeTo(id: string): void {
+    const kind = this.states.get(id)?.kind;
+    const view = this.views.get(id);
+    if ((kind === 'pdf' || kind === 'markdown') && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.TabFocusMode, this.focusMode);
     }
   }
 
@@ -2715,12 +2830,16 @@ export class TabManager {
     if (view) {
       this.registry.detachViewFromAllWindows(view);
       this.window.contentView.addChildView(view, 0);
+      this.pushFocusModeTo(id);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
       view.webContents.focus();
       this.registry.mountOwners.set(id, this);
     }
     const previousTabId = this.activeTabId;
     this.activeTabId = id;
+    // Sized again now it's the active tab: whether the bottom is kept for the web stat bar depends on its kind.
+    view?.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
+    this.pushPageStats();
     // Showing a different tab (a plain click, a shortcut, a fallback after a
     // close) ends a multi-selection; Ctrl/Shift+click never reach here.
     this.selectedTabIds.clear();
@@ -2856,6 +2975,10 @@ export class TabManager {
       void this.navigateMarkdownHistory(id, -1);
       return this.getState();
     }
+    if (this.states.get(id)?.kind === 'pdf') {
+      this.stepPdfHistory(id, -1);
+      return this.getState();
+    }
     const history = this.states.get(id)?.kind === 'browser' ? this.views.get(id)?.webContents.navigationHistory : undefined;
     if (history?.canGoBack()) {
       history.goBack();
@@ -2867,6 +2990,10 @@ export class TabManager {
   public goForward(id: string): BrowserState {
     if (this.states.get(id)?.kind === 'markdown') {
       void this.navigateMarkdownHistory(id, 1);
+      return this.getState();
+    }
+    if (this.states.get(id)?.kind === 'pdf') {
+      this.stepPdfHistory(id, 1);
       return this.getState();
     }
     const history = this.states.get(id)?.kind === 'browser' ? this.views.get(id)?.webContents.navigationHistory : undefined;
@@ -4113,13 +4240,13 @@ export class TabManager {
   // ── Focus mode ───────────────────────────────────────────────────────
 
   /**
-   * Toggles Focus Mode: puts the window into true OS fullscreen (covering
-   * the taskbar too) and slides away every bit of chrome — titlebar, tab
-   * strip, toolbar, sidebar — so only the page fills the screen, animating
+   * Toggles Focus Mode: slides away every bit of chrome — titlebar, tab
+   * strip, toolbar, sidebar — so only the page fills the window, animating
    * the native content's bounds in step with the chrome's own CSS
    * transition the same way `toggleSidebar` already does (see
-   * `animateBoundsInset`). Exits the same way, back to the window's prior
-   * (non-fullscreen) bounds.
+   * `animateBoundsInset`). The window itself keeps its size and place: not
+   * OS fullscreen, so the taskbar stays, and a window snapped to half the
+   * screen stays there with just its page showing.
    * @param enabled Whether Focus Mode should be on.
    * @returns The full browser state after the change.
    */
@@ -4127,7 +4254,9 @@ export class TabManager {
     const fromLeft = this.targetLeftInset();
     const fromTop = this.targetTopInset();
     this.focusMode = enabled;
-    this.window.setFullScreen(enabled);
+    for (const id of this.views.keys()) {
+      this.pushFocusModeTo(id);
+    }
     this.emitState();
     this.animateBoundsInset(fromLeft, this.targetLeftInset(), fromTop, this.targetTopInset());
     return this.getState();
@@ -4135,8 +4264,8 @@ export class TabManager {
 
   /**
    * Gives a tab's own fullscreen request (a video's fullscreen button) the
-   * whole window, or takes it back. The window goes OS-fullscreen unless Focus
-   * Mode already has it there, and is only taken out again if this put it in.
+   * whole window, or takes it back. The window goes OS-fullscreen unless it
+   * already was, and is only taken out again if this put it in.
    * @param tabId The tab whose page entered or left fullscreen.
    * @param entering Whether it entered.
    */
@@ -5187,6 +5316,29 @@ export class TabManager {
   }
 
   /**
+   * Ctrl+1 to Ctrl+8: the first to the eighth tab of the workspace, as this
+   * window's tab bar lists them (a number past the last tab does nothing).
+   * Handled with the window's own keys, ahead of everything else, so it works
+   * from the chrome and from any tab, a terminal or a text box included —
+   * none of them gives Ctrl+digit a meaning.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @returns Whether the key was one of them and was handled.
+   */
+  private handleTabJumpShortcut(event: Electron.Event, input: Electron.Input): boolean {
+    const index = input.type === 'keyDown' ? tabJumpIndex(input) : null;
+    if (index === null) {
+      return false;
+    }
+    event.preventDefault();
+    const tabId = this.listedTabIds(this.activeWorkspaceId)[index];
+    if (!input.isAutoRepeat && tabId && tabId !== this.activeTabId) {
+      this.activateTab(tabId);
+    }
+    return true;
+  }
+
+  /**
    * The Window menu's keyboard commands for this window: Ctrl+Alt+M minimizes it and
    * Ctrl+Alt+Enter maximizes or restores it. Also handled here, on the tab's own input,
    * because menu accelerators are unreliable while a tab's view holds the keyboard (see
@@ -5197,6 +5349,9 @@ export class TabManager {
    * @returns Whether the key was one of them and was handled.
    */
   private handleWindowShortcut(event: Electron.Event, input: Electron.Input): boolean {
+    if (this.handleTabJumpShortcut(event, input)) {
+      return true;
+    }
     if (input.type !== 'keyDown' || input.isAutoRepeat || !(input.control || input.meta) || !input.alt || input.shift) {
       return false;
     }
@@ -5277,7 +5432,7 @@ export class TabManager {
   /**
    * The toolbar tools' keyboard shortcuts — the laser pointer (Ctrl+I), pen
    * (Ctrl+P), highlighter (Ctrl+J), comments (Ctrl+M), text box (Ctrl+E),
-   * Pan and Select (Ctrl+1, Ctrl+2), crop (Ctrl+Shift+X) and Revert
+   * Pan and Select (Alt+1, Alt+2), crop (Ctrl+Shift+X) and Revert
    * Annotations (Ctrl+Shift+R) — and edit mode's switch (Ctrl+Alt+Shift+E).
    * Their menu entries are display-only (see buildMenu.ts), so that a browser
    * tab in edit mode can leave the tools' keys to its page: a registered
@@ -5298,7 +5453,8 @@ export class TabManager {
       }
       return true;
     }
-    if (!isToolShortcut(input)) {
+    const pointerMode = pointerModeShortcut(input);
+    if (!isToolShortcut(input) && !pointerMode) {
       return false;
     }
     // In edit mode a tool's key is the page's: not prevented, so it reaches the page (from the chrome, it does nothing).
@@ -5308,6 +5464,12 @@ export class TabManager {
     event.preventDefault();
     // A held key repeats; these are toggles, so only the first press counts.
     if (input.isAutoRepeat) {
+      return true;
+    }
+    if (pointerMode) {
+      if (tabId) {
+        this.setPointerMode(tabId, pointerMode);
+      }
       return true;
     }
     switch (input.key.toLowerCase()) {
@@ -5332,12 +5494,6 @@ export class TabManager {
       case 'r':
         if (tabId) {
           this.revertPage(tabId);
-        }
-        break;
-      case '1':
-      case '2':
-        if (tabId) {
-          this.setPointerMode(tabId, input.key === '1' ? 'pan' : 'select');
         }
         break;
       default:
@@ -5660,12 +5816,22 @@ export class TabManager {
     return this.focusMode ? CHROME_HEIGHT_FOCUSED_PX : CHROME_HEIGHT_PX;
   }
 
+  /**
+   * The strip kept free along the window's bottom for the web page stat bar the chrome draws there
+   * (`STATUS_BAR_HEIGHT_PX`): only below a web page, and not in Focus Mode or while a page has the whole window
+   * for its own fullscreen (a video).
+   */
+  private bottomInset(): number {
+    const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
+    return active?.kind === 'browser' && !this.focusMode && this.htmlFullScreenTabId === null ? STATUS_BAR_HEIGHT_PX : 0;
+  }
+
   /** @returns The bounds a single full-width tab view should occupy for a given sidebar/chrome inset. */
   private computeMainBounds(left: number, top: number): Rect {
     // Electron types getContentSize() as number[], not a fixed tuple, so
     // noUncheckedIndexedAccess sees each element as possibly undefined.
     const [width = 0, height = 0] = this.window.getContentSize();
-    return { x: left, y: top, width: Math.max(0, width - left), height: Math.max(0, height - top) };
+    return { x: left, y: top, width: Math.max(0, width - left), height: Math.max(0, height - top - this.bottomInset()) };
   }
 
   /** @returns The bounds the primary (left) and secondary (right) split-view panes should occupy, for a single-view `main` rect. */
@@ -5818,8 +5984,45 @@ export class TabManager {
     wc.on('page-favicon-updated', (_event, favicons) => {
       this.patchState(id, { favicon: favicons[0] ?? null });
     });
+    // The address bar's progress line: estimated from the page's requests while it loads, 100 when it finishes, kept
+    // there a second so it can be read, then cleared. A new load in that second takes over from it.
+    // Only a website's load shows it: the app's own pages (a new tab's home page) load from disk in an instant, and a
+    // progress line for them would just flash. Started when the page begins navigating to an http(s) address.
+    let progressClear: NodeJS.Timeout | null = null;
+    let webLoad = false;
     wc.on('did-start-loading', () => this.patchState(id, { isLoading: true }));
-    wc.on('did-stop-loading', () => this.patchState(id, { isLoading: false, ...historyFlags() }));
+    wc.on('did-start-navigation', (details) => {
+      if (!details.isMainFrame || details.isSameDocument || !/^https?:/i.test(details.url)) {
+        return;
+      }
+      if (progressClear) {
+        clearTimeout(progressClear);
+        progressClear = null;
+      }
+      webLoad = true;
+      beginLoad(wc.id, (percent) => this.patchState(id, { loadProgress: percent }));
+    });
+    wc.on('did-stop-loading', () => {
+      endLoad(wc.id);
+      if (!webLoad) {
+        this.patchState(id, { isLoading: false, loadProgress: null, ...historyFlags() });
+        return;
+      }
+      webLoad = false;
+      this.patchState(id, { isLoading: false, loadProgress: 100, ...historyFlags() });
+      progressClear = setTimeout(() => {
+        progressClear = null;
+        if (!wc.isDestroyed() && !wc.isLoading()) {
+          this.patchState(id, { loadProgress: null });
+        }
+      }, LOAD_PROGRESS_HOLD_MS);
+    });
+    wc.once('destroyed', () => {
+      endLoad(wc.id);
+      if (progressClear) {
+        clearTimeout(progressClear);
+      }
+    });
     wc.on('did-navigate', (_event, url) => {
       this.patchState(id, { url, ...historyFlags() });
       if (id === this.activeTabId) {
@@ -6036,6 +6239,15 @@ export class TabManager {
       const key = input.key.toLowerCase();
 
       if (input.isAutoRepeat) {
+        return;
+      }
+
+      // Shift+Escape always takes the caret out of a page's text box. Plain Escape does too, but only when the page
+      // leaves it alone, and some (Google Docs) take every Escape for themselves. Ctrl+Escape and Alt+Escape would read
+      // better, but Windows keeps both (the Start menu, switching windows), so neither ever reaches the app.
+      if (key === 'escape' && input.shift && !input.control && !input.meta && !input.alt && this.states.get(id)?.kind === 'browser') {
+        event.preventDefault();
+        wc.send(IpcChannel.TabLeaveTextBox);
         return;
       }
 

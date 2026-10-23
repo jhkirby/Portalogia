@@ -1,11 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { ipcMain } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
-import { WindowDragController } from '../windows/WindowDragController';
 import { chromeWindowOf } from './senderGuards';
 
 /**
@@ -20,24 +19,6 @@ import { chromeWindowOf } from './senderGuards';
  * Call this exactly once for the app's lifetime, same as `registerTabIpc`.
  */
 export function registerWindowIpc(): void {
-  // Moving the window by its drag strip (with edge snapping) lives in
-  // `WindowDragController` — see there for why it isn't an OS drag region.
-  const dragController = new WindowDragController();
-
-  ipcMain.on(IpcChannel.WindowDragStart, (event) => {
-    const window = chromeWindowOf(event.sender);
-    if (window) {
-      dragController.begin(window);
-    }
-  });
-
-  ipcMain.on(IpcChannel.WindowDragEnd, (event) => {
-    const window = chromeWindowOf(event.sender);
-    if (window) {
-      dragController.end(window);
-    }
-  });
-
   ipcMain.handle(IpcChannel.WindowGetState, (event) => ({
     isMaximized: chromeWindowOf(event.sender)?.isMaximized() ?? false,
   }));

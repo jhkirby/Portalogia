@@ -1,14 +1,22 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useEffect, useRef, useState } from 'react';
+import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
 
 /** The fields a keyboard command jumps into, and the Alt+key for each. */
 const JUMP_KEYS: Readonly<Record<string, JumpFieldName>> = { KeyG: 'line', KeyC: 'column', KeyW: 'word' };
 
 type JumpFieldName = 'line' | 'column' | 'word';
+
+/** The selected text's size, as the status bar shows it. */
+export interface SelectionStats {
+  readonly lines: number;
+  readonly words: number;
+  readonly characters: number;
+}
 
 interface MarkdownStatusBarProps {
   /** The caret's line (1-based), or `null` where there is no caret (the reader). */
@@ -21,8 +29,8 @@ interface MarkdownStatusBarProps {
   readonly wordCount: number;
   readonly characters: number;
   readonly links: number;
-  /** The file's size on disk, in bytes. */
-  readonly bytes: number;
+  /** What's selected, counted; `null` while nothing is, which hides those fields. */
+  readonly selection: SelectionStats | null;
   /** Puts the caret at the start of a line (the number is clamped by the editor). */
   readonly onGoToLine: (line: number) => void;
   /** Puts the caret at a column of its line. */
@@ -32,10 +40,11 @@ interface MarkdownStatusBarProps {
 }
 
 /**
- * The bar along the bottom of a note: where the caret is (line, column and
+ * The bar along the bottom of a note: where the pointer is over the page, where the caret is (line, column and
  * word, each a box you can type a number into to jump there — Alt+G, Alt+C
  * and Alt+W go straight to them), and the note's size in words, characters,
- * lines, links and bytes.
+ * lines and links. While text is selected, its lines, words and characters
+ * too. (No byte count: for a note it's the character count again, near enough.)
  */
 export function MarkdownStatusBar({
   line,
@@ -45,7 +54,7 @@ export function MarkdownStatusBar({
   wordCount,
   characters,
   links,
-  bytes,
+  selection,
   onGoToLine,
   onGoToColumn,
   onGoToWord,
@@ -71,9 +80,13 @@ export function MarkdownStatusBar({
   }, []);
 
   const count = (value: number): string => value.toLocaleString();
+  const pointer = usePointerPosition();
 
   return (
     <footer ref={barRef} className="md-status" aria-label="Note statistics">
+      <span className="md-status__item md-status__pointer" title="Pointer position in the page (x×y, in CSS pixels from its top-left)">
+        {formatPointerPosition(pointer)}
+      </span>
       <span className="md-status__item">
         Ln{' '}
         <JumpField name="line" value={line} max={lineCount} shortcut="Alt+G" label="Line" onCommit={onGoToLine} />
@@ -90,7 +103,20 @@ export function MarkdownStatusBar({
       <span className="md-status__item">
         {count(links)} {links === 1 ? 'link' : 'links'}
       </span>
-      <span className="md-status__item">{count(bytes)} bytes</span>
+      {selection && (
+        <span className="md-status__selection" aria-label="Selection">
+          <span className="md-status__item">Selected:</span>
+          <span className="md-status__item">
+            {count(selection.lines)} {selection.lines === 1 ? 'line' : 'lines'}
+          </span>
+          <span className="md-status__item">
+            {count(selection.words)} {selection.words === 1 ? 'word' : 'words'}
+          </span>
+          <span className="md-status__item">
+            {count(selection.characters)} {selection.characters === 1 ? 'character' : 'characters'}
+          </span>
+        </span>
+      )}
     </footer>
   );
 }

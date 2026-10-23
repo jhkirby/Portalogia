@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
@@ -60,6 +60,10 @@ export const IpcChannel = {
   HistoryDelete: 'history:delete',
   /** Chrome → main: the most recent distinct pages (or PDFs) from the history matching a search, for the search bars' dropdowns. */
   HistorySearch: 'history:search',
+  /** Chrome → main: how many visits a range covers (Clear History's confirmation). */
+  HistoryCount: 'history:count',
+  /** Main → chrome: the history changed (a visit recorded or deleted), so a count of it may be stale. */
+  HistoryChanged: 'history:changed',
   /** Chrome → main: open a PDF from the history (picked from the PDF search's dropdown) in this tab. */
   PdfOpenPath: 'pdf:open-path',
   /** History page → main: copy one visit's stored URL (or PDF path) to the clipboard. */
@@ -114,6 +118,8 @@ export const IpcChannel = {
   TabsToggleEditMode: 'tabs:toggle-edit-mode',
   /** Main → browser tab's page: its pointer mode, and whether a tool has the pointer instead. */
   TabPointerMode: 'tab:pointer-mode',
+  /** Main → browser tab's page: Shift+Escape was pressed; take the caret out of any text box. */
+  TabLeaveTextBox: 'tab:leave-text-box',
   /** Browser or Markdown tab's page → main: a looping pan reached an edge; move the real pointer here. */
   TabWarpPointer: 'tab:warp-pointer',
   /** Main → Markdown page: the tab's pointer mode. */
@@ -122,6 +128,16 @@ export const IpcChannel = {
   PdfPointerMode: 'pdf:pointer-mode',
   /** PDF page → main: a web link in the document was clicked; open it in a new tab. */
   PdfOpenLink: 'pdf:open-link',
+  /** Browser tab's page → main: its words, characters, images, links and elements, hovered element and selection. */
+  TabPageStats: 'tab:page-stats',
+  /** Main → chrome: the active web page's stats changed (or another page became the active one). */
+  PageStatsChanged: 'page-stats:changed',
+  /** Main → note or PDF page: whether this window is in Focus Mode (the page then hides its stat bar). */
+  TabFocusMode: 'tab:focus-mode',
+  /** PDF page → main: whether its jump history has somewhere to step back or forward to. */
+  PdfHistoryInfo: 'pdf:history-info',
+  /** Main → PDF page: step back (-1) or forward (1) through its jump history. */
+  PdfHistoryGo: 'pdf:history-go',
   /** PDF page → main: a looping pan ended; put the real pointer where the page's stand-in hand was. */
   PdfWarpPointer: 'pdf:warp-pointer',
   /** Chrome → main: pick a Markdown file to open in this tab. */
@@ -256,11 +272,17 @@ export const IpcChannel = {
   AdBlockSetSiteAllowed: 'adblock:set-site-allowed',
   WindowMinimize: 'window:minimize',
   WindowToggleMaximize: 'window:toggle-maximize',
-  WindowDragStart: 'window:drag-start',
-  WindowDragEnd: 'window:drag-end',
   WindowClose: 'window:close',
   WindowStateChanged: 'window:state-changed',
   WindowGetState: 'window:get-state',
+  /** Main → chrome: the Wi-Fi connection changed. */
+  StatusWifiChanged: 'status:wifi-changed',
+  /** Chrome → main: the Wi-Fi connection now. */
+  StatusWifiGet: 'status:wifi-get',
+  /** Main → chrome: the outside temperature changed. */
+  StatusWeatherChanged: 'status:weather-changed',
+  /** Chrome → main: the outside temperature now. */
+  StatusWeatherGet: 'status:weather-get',
 } as const;
 
 // Request validation schemas live in `@shared/ipc-schemas` (zod-based,
@@ -288,9 +310,46 @@ export interface ExportPdfResult {
   readonly savedPath: string | null;
 }
 
+/** What the stat bar along the bottom of a web page's tab shows (`WebStatusBar`). */
+export interface PageStats {
+  readonly words: number;
+  readonly characters: number;
+  readonly images: number;
+  readonly links: number;
+  /**
+   * The page's size: the bytes of its document and every file it has loaded, as the browser records them (compressed,
+   * as sent). A file from another site that doesn't allow its sizes to be read counts as 0, so this can fall short.
+   */
+  readonly bytes: number;
+  /** Every element in the page. */
+  readonly elements: number;
+  /** The element under the pointer (`a#home.nav-link`), or `null` when the pointer isn't over the page. */
+  readonly hovered: string | null;
+  /** The element with the keyboard (a text box with the caret, a focused button), or `null` when none in particular has. */
+  readonly focused: string | null;
+  /** Where the pointer is over the page, in its CSS pixels from the top-left of the view; `null` when it's elsewhere. */
+  readonly pointer: { readonly x: number; readonly y: number } | null;
+  /** The selection's words and characters, or `null` when nothing is selected. */
+  readonly selection: { readonly words: number; readonly characters: number } | null;
+}
+
 /** Pushed whenever the frameless window's maximized state changes, so `WindowControls` can swap its maximize/restore icon. */
 export interface WindowState {
   readonly isMaximized: boolean;
+}
+
+/** The computer's Wi-Fi connection, for the titlebar's status icon. */
+export interface WifiStatus {
+  /** `unavailable`: no wireless adapter, or its state couldn't be read; the icon hides. */
+  readonly state: 'connected' | 'disconnected' | 'unavailable';
+  /** Signal quality, 0-100; 0 unless connected. */
+  readonly signal: number;
+}
+
+/** The outside temperature where the computer is, for the titlebar. */
+export interface WeatherState {
+  /** Whole degrees Fahrenheit, or `null` until it has been fetched once. */
+  readonly temperatureF: number | null;
 }
 
 /** One bookmark match shown as a row in the address bar's suggestions dropdown. */
@@ -477,6 +536,10 @@ export interface NorthstarApi {
   setHistoryRange(id: string, range: HistoryClearRange): void;
   /** Clears the browsing history within a range (the History toolbar's "Clear History"). */
   clearHistory(range: HistoryClearRange): Promise<IpcResult<BrowserState>>;
+  /** How many visits a range covers — what `clearHistory` would delete — for its confirmation popup. */
+  countHistory(range: HistoryClearRange): Promise<IpcResult<number>>;
+  /** Told whenever the history changes, for the toolbar to count its range again. Returns an unsubscribe function. */
+  onHistoryChanged(listener: () => void): () => void;
   /**
    * The most recent distinct pages (`'url'`) or PDFs (`'pdf'`) from the
    * history whose route contains `query` — what the address bar and the PDF
@@ -766,7 +829,7 @@ export interface NorthstarApi {
   setNativeTheme(theme: ThemePreference): void;
 
   /** Reads the ad blocker's current state — the push channel only fires on change. */
-  getAdBlockState(): Promise<AdBlockState>;
+  getAdBlockState(): Promise<AdBlockState | null>;
   /** Subscribes to ad blocker state changes (a toggle, or a tab's blocked count moving). */
   onAdBlockState(listener: (state: AdBlockState) => void): () => void;
   /** Turns the ad blocker on or off everywhere. Fire-and-forget. */
@@ -790,16 +853,22 @@ export interface NorthstarApi {
   minimizeWindow(): void;
   /** Toggles the frameless window between maximized and restored. Fire-and-forget, same as `sendTerminalInput`. */
   toggleMaximizeWindow(): void;
-  /** Starts moving this window with the cursor (the titlebar's drag strip was pressed); main follows the cursor until `endWindowDrag`. */
-  beginWindowDrag(): void;
-  /** Ends the move started by `beginWindowDrag`. */
-  endWindowDrag(): void;
   /** Closes the frameless window (and quits the app, once every window is closed). Fire-and-forget, same as `sendTerminalInput`. */
   closeWindow(): void;
   /** Subscribes to the window's maximized state changing; returns an unsubscribe function. */
   onWindowStateChanged(listener: (state: WindowState) => void): () => void;
   /** Reads whether this window is maximized right now (the push channel above only fires on a change). */
   getWindowState(): Promise<WindowState>;
+  /** Pushed whenever the active web page's stats change: its tab, and the stats (`null` before it has counted). */
+  onPageStats(listener: (tabId: string, stats: PageStats | null) => void): () => void;
+  /** The Wi-Fi connection now (`null` if asked from anywhere but the chrome). */
+  getWifiStatus(): Promise<WifiStatus | null>;
+  /** Pushed whenever the Wi-Fi connection or its signal changes. Returns an unsubscribe function. */
+  onWifiStatusChanged(listener: (status: WifiStatus) => void): () => void;
+  /** The outside temperature now (`null` if asked from anywhere but the chrome). */
+  getWeather(): Promise<WeatherState | null>;
+  /** Pushed whenever the outside temperature changes. Returns an unsubscribe function. */
+  onWeatherChanged(listener: (state: WeatherState) => void): () => void;
 }
 
 /**
@@ -946,6 +1015,12 @@ export interface NorthstarPdfApi {
   onTool(listener: (state: PdfToolState) => void): () => void;
   /** Reports the page in view and the page count so the chrome can show "page / total". Fire-and-forget. */
   reportPage(page: number, pageCount: number): void;
+  /** Tells main whether the document's jump history can step back and forward, for the toolbar's arrows. */
+  reportHistory(canGoBack: boolean, canGoForward: boolean): void;
+  /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
+  onFocusMode(listener: (focusMode: boolean) => void): () => void;
+  /** Main asks to step back (-1) or forward (1) through the jump history (the arrows, or Alt+←/→). */
+  onHistoryGo(listener: (direction: 1 | -1) => void): () => void;
   /** Subscribes to requests to scroll to a 1-based page. */
   onScrollToPage(listener: (page: number) => void): () => void;
   /** Subscribes to the tab's pointer mode; called immediately with the latest value if one already arrived. */
@@ -1045,6 +1120,8 @@ export interface NorthstarMarkdownApi {
   /** Subscribes to the formatted/raw display; called immediately with the latest value if one already arrived. */
   onDisplay(listener: (display: MarkdownDisplay) => void): () => void;
   /** Subscribes to the tab's pointer mode (Pan or Select); called immediately with the latest value if one already arrived. */
+  /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
+  onFocusMode(listener: (focusMode: boolean) => void): () => void;
   onPointerMode(listener: (mode: PointerMode) => void): () => void;
   /** Asks main to move the OS pointer to a point of this page, for a pan that wraps at an edge. Fire-and-forget. */
   warpPointer(x: number, y: number): void;

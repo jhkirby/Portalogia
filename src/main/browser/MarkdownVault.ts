@@ -1,12 +1,15 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { lookup } from 'node:dns/promises';
+import { readdir, stat } from 'node:fs/promises';
+import { BlockList, isIP } from 'node:net';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { MarkdownBacklink } from '@shared/ipc-contract';
 import { splitWikiTarget } from '@shared/markdown/parser';
+import { readFileCapped } from '../platform/readFileCapped';
 
 /** The files a note can be: `.md` and `.markdown`. */
 export const MARKDOWN_EXTENSION_PATTERN = /\.(md|markdown)$/i;
@@ -67,6 +70,20 @@ function isLocalPathText(target: string): boolean {
     return false;
   }
   return !/^[a-z][a-z0-9+.-]+:/i.test(target) || /^[a-z]:[\\/]/i.test(target);
+}
+
+/**
+ * Whether a path lies inside one of the folders a note may reach: its vault, or (outside a vault) its own folder and
+ * the one above, the same places `![[name]]` embeds are looked for. A note is untrusted text, so `C:/Users/...` or a
+ * run of `../` must not let it read any file on the disk.
+ * @param path An absolute path.
+ * @param roots The folders allowed, from `searchRoots`.
+ */
+function isWithinRoots(path: string, roots: readonly string[]): boolean {
+  return roots.some((root) => {
+    const fromRoot = relative(root, path);
+    return fromRoot !== '' && !fromRoot.startsWith('..') && !isAbsolute(fromRoot);
+  });
 }
 
 /** `decodeURIComponent` that gives the text back unchanged if it isn't validly encoded. */
@@ -242,7 +259,7 @@ export async function resolveWikiTarget(currentPath: string, target: string): Pr
 /**
  * The note an ordinary Markdown link points at, if it points at a note that
  * exists: relative to the note holding the link (or absolute), with any
- * `#heading` dropped.
+ * `#heading` dropped. Only a note inside the linking note's vault counts (see `isWithinRoots`).
  * @param currentPath The note holding the link.
  * @param target The link's address.
  */
@@ -251,9 +268,10 @@ export async function resolveLinkTarget(currentPath: string, target: string): Pr
   if (withoutFragment === '' || !isLocalPathText(withoutFragment)) {
     return null;
   }
+  const roots = await searchRoots(currentPath);
   for (const text of new Set([withoutFragment, safeDecode(withoutFragment)])) {
-    const path = isAbsolute(text) ? text : resolve(dirname(currentPath), text);
-    if (isMarkdownPath(path) && (await isFile(path))) {
+    const path = resolve(dirname(currentPath), text);
+    if (isMarkdownPath(path) && isWithinRoots(path, roots) && (await isFile(path))) {
       return path;
     }
   }
@@ -342,10 +360,11 @@ export async function findBacklinks(currentPath: string): Promise<MarkdownBackli
         return;
       }
       try {
-        if ((await stat(note)).size > MAX_BACKLINK_FILE_BYTES) {
+        const read = await readFileCapped(note, MAX_BACKLINK_FILE_BYTES);
+        if (read.kind !== 'ok') {
           continue;
         }
-        if (links(note, await readFile(note, 'utf-8'))) {
+        if (links(note, read.data.toString('utf-8'))) {
           found.push({ name: noteStem(note), target: toLinkPath(relative(dirname(currentPath), note)) });
         }
       } catch {
@@ -371,9 +390,10 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
   }
   const withoutFragment = src.split('#')[0] ?? '';
   let found: string | null = null;
+  const roots = await searchRoots(currentPath);
   for (const text of new Set([withoutFragment, safeDecode(withoutFragment)])) {
-    const path = isAbsolute(text) ? text : resolve(dirname(currentPath), text);
-    if (extname(path).toLowerCase() in IMAGE_MIME_TYPES && (await isFile(path))) {
+    const path = resolve(dirname(currentPath), text);
+    if (extname(path).toLowerCase() in IMAGE_MIME_TYPES && isWithinRoots(path, roots) && (await isFile(path))) {
       found = path;
       break;
     }
@@ -384,7 +404,7 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
     if (!(extname(wanted) in IMAGE_MIME_TYPES)) {
       return null;
     }
-    for (const root of await searchRoots(currentPath)) {
+    for (const root of roots) {
       const matches = (await scanFiles(root)).filter((file) => basename(file).toLowerCase() === wanted);
       found = bestMatch(matches, dirname(currentPath), root);
       if (found !== null) {
@@ -396,11 +416,12 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
     return null;
   }
   try {
-    if ((await stat(found)).size > MAX_IMAGE_BYTES) {
+    const read = await readFileCapped(found, MAX_IMAGE_BYTES);
+    if (read.kind !== 'ok') {
       return null;
     }
     const mime = IMAGE_MIME_TYPES[extname(found).toLowerCase()] ?? 'application/octet-stream';
-    return `data:${mime};base64,${(await readFile(found)).toString('base64')}`;
+    return `data:${mime};base64,${read.data.toString('base64')}`;
   } catch {
     return null;
   }
@@ -409,30 +430,136 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
 /** How long a web picture may take to arrive before it's given up on. */
 const REMOTE_IMAGE_TIMEOUT_MS = 15_000;
 
+/** How many redirects a web picture may take; each one's destination is checked like the first. */
+const MAX_IMAGE_REDIRECTS = 5;
+
+/**
+ * Addresses a note's picture may not be fetched from: this computer, the local network, link-local (including cloud
+ * metadata at 169.254.169.254) and other non-public ranges. Fetched from main, a picture would otherwise let a note
+ * probe services only reachable from where the user sits.
+ */
+const NON_PUBLIC_ADDRESSES = (() => {
+  const list = new BlockList();
+  for (const [network, prefix] of [
+    ['0.0.0.0', 8],
+    ['10.0.0.0', 8],
+    ['100.64.0.0', 10],
+    ['127.0.0.0', 8],
+    ['169.254.0.0', 16],
+    ['172.16.0.0', 12],
+    ['192.0.0.0', 24],
+    ['192.168.0.0', 16],
+    ['198.18.0.0', 15],
+    ['224.0.0.0', 3],
+  ] as const) {
+    list.addSubnet(network, prefix, 'ipv4');
+  }
+  for (const [network, prefix] of [
+    // No `::ffff:0:0/96` rule: `BlockList` checks IPv4 addresses against IPv4-mapped rules too, so it would block
+    // every IPv4 address. Mapped addresses are unwrapped to IPv4 instead (see `unmapIpv4`).
+    ['::', 127],
+    ['64:ff9b::', 96],
+    ['fc00::', 7],
+    ['fe80::', 10],
+    ['ff00::', 8],
+  ] as const) {
+    list.addSubnet(network, prefix, 'ipv6');
+  }
+  return list;
+})();
+
+/** Finds every address a host name stands for; injectable so tests needn't use real DNS. */
+export type HostResolver = (host: string) => Promise<readonly string[]>;
+
+/** Every address the system resolves a host to. */
+const resolveWithDns: HostResolver = async (host) => (await lookup(host, { all: true })).map((entry) => entry.address);
+
+/**
+ * Whether a URL's host is somewhere public: every address it resolves to is outside `NON_PUBLIC_ADDRESSES`
+ * (IPv4-mapped IPv6 is judged as the IPv4 address it carries). A name that can't be resolved counts as not public.
+ * @param url The address about to be fetched.
+ * @param resolveHost Resolves its host name.
+ */
+async function isPublicHost(url: URL, resolveHost: HostResolver): Promise<boolean> {
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  let addresses: readonly string[];
+  try {
+    addresses = isIP(host) ? [host] : await resolveHost(host);
+  } catch {
+    return false;
+  }
+  return (
+    addresses.length > 0 &&
+    addresses.every((address) => {
+      const ipv4 = isIP(address) === 4 ? address : unmapIpv4(address);
+      return ipv4 !== null ? !NON_PUBLIC_ADDRESSES.check(ipv4, 'ipv4') : !NON_PUBLIC_ADDRESSES.check(address, 'ipv6');
+    })
+  );
+}
+
+/**
+ * The IPv4 address inside an IPv4-mapped IPv6 one, in either spelling: `::ffff:127.0.0.1`, or `::ffff:7f00:1` as the
+ * `URL` parser normalizes it.
+ * @param address An IPv6 address.
+ * @returns The IPv4 address, or `null` if it isn't a mapped one.
+ */
+function unmapIpv4(address: string): string | null {
+  const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)?.[1];
+  if (dotted) {
+    return dotted;
+  }
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(address);
+  if (!hex) {
+    return null;
+  }
+  const high = Number.parseInt(hex[1]!, 16);
+  const low = Number.parseInt(hex[2]!, 16);
+  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+}
+
 /**
  * A web picture as a `data:` URL — fetched here rather than by the Markdown
  * page, whose content-security-policy loads no web content at all: a note
  * from anywhere must not be able to tell a server it was opened. The page
  * only asks for a picture the user clicked to load.
  *
- * `https:` only (redirects included), no cookies, an `image/*` response only,
- * and at most `MAX_IMAGE_BYTES` — read as a stream so an oversized reply is
- * dropped without being held in memory.
+ * `https:` only (redirects included), public hosts only (redirects included,
+ * see `isPublicHost`), no cookies, an `image/*` response only, and at most
+ * `MAX_IMAGE_BYTES` — read as a stream so an oversized reply is dropped
+ * without being held in memory. A host whose DNS answer changes between the
+ * check and the request (DNS rebinding) isn't caught; the user's click is still
+ * required first.
  * @param url The picture's address.
  * @param fetchImpl The `fetch` to use, for tests.
+ * @param resolveHost Resolves a host name, for tests.
  * @returns The data URL, or `null` if it can't be fetched or isn't a picture.
  */
-export async function fetchRemoteImageDataUrl(url: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+export async function fetchRemoteImageDataUrl(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  resolveHost: HostResolver = resolveWithDns,
+): Promise<string | null> {
   if (!/^https:\/\//i.test(url)) {
     return null;
   }
   try {
-    const response = await fetchImpl(url, {
-      credentials: 'omit',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS),
-    });
-    if (!response.ok || !/^https:\/\//i.test(response.url || url) || !response.body) {
+    const signal = AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS);
+    let target = new URL(url);
+    let response: Response | null = null;
+    // Redirects are followed by hand, so each hop's host is checked before it is contacted.
+    for (let hop = 0; hop <= MAX_IMAGE_REDIRECTS; hop += 1) {
+      if (target.protocol !== 'https:' || !(await isPublicHost(target, resolveHost))) {
+        return null;
+      }
+      const reply = await fetchImpl(target.href, { credentials: 'omit', redirect: 'manual', signal });
+      const location = reply.status >= 300 && reply.status < 400 ? reply.headers.get('location') : null;
+      if (location === null) {
+        response = reply;
+        break;
+      }
+      target = new URL(location, target);
+    }
+    if (!response || !response.ok || !/^https:\/\//i.test(response.url || target.href) || !response.body) {
       return null;
     }
     const mime = (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';

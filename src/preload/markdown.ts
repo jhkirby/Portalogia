@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MarkdownAnnotations } from '@shared/ipc-schemas';
@@ -164,7 +164,24 @@ const RUN_FAILED: MarkdownRunResult = {
   durationMs: 0,
 };
 
+// Whether the window is in Focus Mode: the stat bar hides with the chrome. Kept, so a listener added later hears it.
+const TabFocusMode = 'tab:focus-mode';
+let latestFocusMode = false;
+const focusModeListeners = new Set<(focusMode: boolean) => void>();
+ipcRenderer.on(TabFocusMode, (_event, focusMode: unknown) => {
+  latestFocusMode = focusMode === true;
+  focusModeListeners.forEach((listener) => listener(latestFocusMode));
+});
+
 const api: NorthstarMarkdownApi = {
+  onFocusMode: (listener) => {
+    listener(latestFocusMode);
+    focusModeListeners.add(listener);
+    return () => {
+      focusModeListeners.delete(listener);
+    };
+  },
+
   onFind: (listener) => subscribe(findListeners, listener),
   reportFind: (result: FindResult) => {
     ipcRenderer.send(FindResultChannel, result);

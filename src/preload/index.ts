@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -10,6 +10,9 @@ import {
   type ColorPickerColorChangedPayload,
   type IpcResult,
   type NorthstarApi,
+  type PageStats,
+  type WeatherState,
+  type WifiStatus,
   type WindowState,
 } from '@shared/ipc-contract';
 import type { BrowserState } from '@shared/tab-state';
@@ -60,6 +63,12 @@ const api: NorthstarApi = {
   setHistoryQuery: (id, query) => ipcRenderer.send(IpcChannel.HistorySetQuery, { id, query }),
   setHistoryRange: (id, range) => ipcRenderer.send(IpcChannel.HistorySetRange, { id, range }),
   clearHistory: (range) => invoke(IpcChannel.HistoryClear, range),
+  countHistory: (range) => ipcRenderer.invoke(IpcChannel.HistoryCount, range),
+  onHistoryChanged: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.HistoryChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.HistoryChanged, handler);
+  },
   searchHistory: (type, query) => invoke(IpcChannel.HistorySearch, { type, query }),
   openPdfPath: (id, path) => ipcRenderer.send(IpcChannel.PdfOpenPath, { id, path }),
   openPdfFile: (id) => invoke(IpcChannel.PdfOpenFile, { id }),
@@ -195,8 +204,6 @@ const api: NorthstarApi = {
 
   minimizeWindow: () => ipcRenderer.send(IpcChannel.WindowMinimize),
   toggleMaximizeWindow: () => ipcRenderer.send(IpcChannel.WindowToggleMaximize),
-  beginWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragStart),
-  endWindowDrag: () => ipcRenderer.send(IpcChannel.WindowDragEnd),
   closeWindow: () => ipcRenderer.send(IpcChannel.WindowClose),
   getWindowState: () => ipcRenderer.invoke(IpcChannel.WindowGetState),
   onWindowStateChanged: (listener) => {
@@ -205,6 +212,29 @@ const api: NorthstarApi = {
     };
     ipcRenderer.on(IpcChannel.WindowStateChanged, handler);
     return () => ipcRenderer.removeListener(IpcChannel.WindowStateChanged, handler);
+  },
+  onPageStats: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { tabId: string; stats: PageStats | null }): void => {
+      listener(payload.tabId, payload.stats);
+    };
+    ipcRenderer.on(IpcChannel.PageStatsChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.PageStatsChanged, handler);
+  },
+  getWifiStatus: () => ipcRenderer.invoke(IpcChannel.StatusWifiGet),
+  onWifiStatusChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: WifiStatus): void => {
+      listener(status);
+    };
+    ipcRenderer.on(IpcChannel.StatusWifiChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.StatusWifiChanged, handler);
+  },
+  getWeather: () => ipcRenderer.invoke(IpcChannel.StatusWeatherGet),
+  onWeatherChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: WeatherState): void => {
+      listener(state);
+    };
+    ipcRenderer.on(IpcChannel.StatusWeatherChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.StatusWeatherChanged, handler);
   },
 };
 

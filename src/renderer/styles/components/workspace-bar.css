@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-19 */
+   Last Modified: 2026-10-22 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -83,7 +83,8 @@
 }
 
 .sidebar--hidden .sidebar__inner {
-  padding-left: 0;
+  /* A sliver, so the selected pill's grey doesn't run into the window's left edge. */
+  padding-left: 3px;
   /* Still clears the toggle strip when collapsed. */
   padding-right: calc(var(--size-sidebar-toggle-width) + 2px);
   /* Collapsed, this still occupies `--size-sidebar-collapsed-width` — not
@@ -121,7 +122,7 @@
 
   /* A full-height strip along the sidebar's edge that's invisible — the strip
      and its arrow both — until the pointer is over it, then a grey that goes lighter while the button is held down
-     (darker in the light theme, matching the window grip's own press shade). */
+     (darker in the light theme). */
   background: transparent;
   border: none;
   border-radius: 0;
@@ -247,6 +248,62 @@
 .workspace-bar__pill--drop-target {
   outline: 2px solid var(--color-accent-text);
   outline-offset: -2px;
+}
+
+/* A new workspace on its way in (see `useWorkspaceTransitions`): its row opens first, so the workspaces below it
+   and "New workspace" glide down, then it slides in rightward from the sidebar's left edge (clipped until it
+   arrives), the way a closed one leaves. The negative margin keeps the list's gap from appearing all at once.
+   `WorkspaceBar` ends it on `workspace-pill-slide-in`. */
+.workspace-bar__pill--entering {
+  animation:
+    workspace-pill-open 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    workspace-pill-slide-in 240ms cubic-bezier(0.2, 0.8, 0.3, 1) 200ms backwards;
+}
+
+@keyframes workspace-pill-open {
+  from {
+    height: 0;
+    margin-bottom: calc(-1 * var(--size-spacing-xs));
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+  to {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+@keyframes workspace-pill-slide-in {
+  from {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+/* A closed workspace on its way out (see `useWorkspaceTransitions`): it slides left out of the sidebar, which clips it
+   at its edge, then its height folds away so the pills below glide up instead of jumping. The negative margin
+   takes back the list's gap along with it, or the last few pixels would still jump. `WorkspaceBar` stops drawing
+   it on the last animation (`workspace-pill-collapse`). Timed like a closing tab. */
+.workspace-bar__pill--exiting {
+  overflow: hidden;
+  pointer-events: none;
+  animation:
+    workspace-pill-slide-out 180ms cubic-bezier(0.5, 0, 0.75, 0) forwards,
+    workspace-pill-collapse 240ms cubic-bezier(0.4, 0, 0.2, 1) 180ms forwards;
+}
+
+@keyframes workspace-pill-slide-out {
+  to {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+@keyframes workspace-pill-collapse {
+  from {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+  to {
+    height: 0;
+    margin-bottom: calc(-1 * var(--size-spacing-xs));
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
 }
 
 /* Multi-selected (Ctrl/Shift+click) workspaces: the active pill's own neutral look, like the tabs. */
@@ -674,5 +731,39 @@
   .sidebar__toggle::before {
     opacity: 0;
     transform: none;
+  }
+}
+
+/* ── Shimmer ──
+   Every 20 seconds (`useShimmerTick`) a wave runs down the workspaces, top to bottom: each one's icon
+   and name brighten and lift a little, one after another, `--shimmer-index`
+   setting how far along the wave each is. Two identical keyframes taken by
+   turns (`data-shimmer` a/b), since an animation only restarts when its name
+   changes. */
+.workspace-bar[data-shimmer='a'] :is(.workspace-bar__glyph, .workspace-bar__name) {
+  animation: workspace-shimmer-a 700ms ease-in-out calc(var(--shimmer-index, 0) * 70ms) both;
+}
+
+.workspace-bar[data-shimmer='b'] :is(.workspace-bar__glyph, .workspace-bar__name) {
+  animation: workspace-shimmer-b 700ms ease-in-out calc(var(--shimmer-index, 0) * 70ms) both;
+}
+
+@keyframes workspace-shimmer-a {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes workspace-shimmer-b {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-bar[data-shimmer] :is(.workspace-bar__glyph, .workspace-bar__name) {
+    animation: none;
   }
 }

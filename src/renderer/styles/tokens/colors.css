@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-22 */
 
 /* `useTheme` sets `data-theme` on `<html>` before first paint (see its
    `useLayoutEffect`) reflecting either a stored choice or, on first ever
@@ -33,6 +33,12 @@
 
 :root[data-theme='light'] {
   --color-chrome-bg: #f1f3f4;
+  /* The titlebar battery's fill: plugged in, 30% or less, 10% or less. Darker than the dark theme's, to read on grey. */
+  --color-battery-charging: #188038;
+  --color-battery-low: #e37400;
+  --color-battery-critical: #d93025;
+  /* Text that warns of something that can't be undone (Clear History's confirmed "DELETE"). */
+  --color-danger-text: #d93025;
   /* The window drag strip above the tabs, while it's dragging the window. */
   --color-grip-active-bg: #c2c6ca;
   --color-chrome-border: #d7d9db;
@@ -76,6 +82,12 @@
 
 :root[data-theme='dark'] {
   --color-chrome-bg: #202124;
+  /* The titlebar battery's fill: plugged in, 30% or less, 10% or less. */
+  --color-battery-charging: #81c995;
+  --color-battery-low: #f29900;
+  --color-battery-critical: #f28b82;
+  /* Text that warns of something that can't be undone (Clear History's confirmed "DELETE"). */
+  --color-danger-text: #f28b82;
   /* The window drag strip above the tabs, while it's dragging the window. */
   --color-grip-active-bg: #4a4d52;
   --color-chrome-border: #3c4043;

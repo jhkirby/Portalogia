@@ -1,10 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { test, expect } from '@playwright/test';
-import { formatClockDate, formatClockTime, msUntilNextSecond, ordinalDay } from '../../src/renderer/lib/clockFormat';
+import { formatClockDate, formatClockTime, formatClockTimeZone, msUntilNextSecond, ordinalDay } from '../../src/renderer/lib/clockFormat';
 
 test.describe('ordinalDay', () => {
   test('1, 2 and 3 end in st, nd and rd; the rest in th', () => {
@@ -75,5 +75,18 @@ test.describe('msUntilNextSecond', () => {
 
   test('part way through, the rest of the second', () => {
     expect(msUntilNextSecond(new Date(2026, 9, 19, 14, 7, 30, 250))).toBe(750);
+  });
+});
+
+test.describe('formatClockTimeZone', () => {
+  test('names the zone by its abbreviation, following daylight saving', () => {
+    expect(formatClockTimeZone(new Date('2026-10-22T16:00:00Z'), 'America/Indiana/Indianapolis')).toBe('EDT');
+    expect(formatClockTimeZone(new Date('2026-12-22T16:00:00Z'), 'America/Indiana/Indianapolis')).toBe('EST');
+    expect(formatClockTimeZone(new Date('2026-07-01T16:00:00Z'), 'America/Los_Angeles')).toBe('PDT');
+    expect(formatClockTimeZone(new Date('2026-07-01T16:00:00Z'), 'UTC')).toBe('UTC');
+  });
+
+  test('a zone with no English abbreviation reads as its offset', () => {
+    expect(formatClockTimeZone(new Date('2026-07-01T16:00:00Z'), 'Africa/Cairo')).toMatch(/^GMT[+-]\d/);
   });
 });

@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { useEffect, useRef } from 'react';
 import type { PointerMode } from '@shared/tab-state';
 import type { Theme } from '../../hooks/useTheme';
-import { formatShortcut } from '../../lib/shortcuts';
+import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
 import { ExportMenu } from '../ExportMenu';
 import {
@@ -258,7 +258,8 @@ export function PageActions({
             disabled={pointerModesLocked}
             aria-pressed={!anyToolActive && pointerMode === mode}
             aria-label={label}
-            data-tooltip={`${label} (${formatShortcut(shortcut)})`}
+            // Alt+1 / Alt+2: Ctrl+1–8 jump to tabs.
+            data-tooltip={`${label} (${formatAltShortcut(shortcut)})`}
           >
             {mode === 'pan' ? <HandIcon /> : <TextSelectIcon />}
           </button>

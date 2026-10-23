@@ -1,11 +1,16 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-22
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
-import { ADDRESS_SUGGESTIONS_PADDING_PX, ADDRESS_SUGGESTION_ROW_HEIGHT_PX } from '@shared/constants';
+import {
+  ADDRESS_SUGGESTIONS_BORDER_PX,
+  ADDRESS_SUGGESTIONS_MAX_ROWS,
+  ADDRESS_SUGGESTIONS_PADDING_PX,
+  ADDRESS_SUGGESTION_ROW_HEIGHT_PX,
+} from '@shared/constants';
 import {
   IpcChannel,
   type AddressSuggestionsSyncPayload,
@@ -52,6 +57,8 @@ export class SuggestionsOverlay {
         nodeIntegration: false,
       },
     });
+    // See-through, so only the list's own rounded box shows: the view itself is a plain rectangle.
+    this.view.setBackgroundColor('#00000000');
 
     // Trusted, app-owned content (same reasoning as a terminal tab's own
     // view — see `TabManager.createTerminalTab`): it should never navigate
@@ -111,7 +118,9 @@ export class SuggestionsOverlay {
       this.isMounted = true;
     }
 
-    const height = payload.suggestions.length * ADDRESS_SUGGESTION_ROW_HEIGHT_PX + 2 * ADDRESS_SUGGESTIONS_PADDING_PX;
+    // As tall as the list, up to `ADDRESS_SUGGESTIONS_MAX_ROWS` rows; a longer list scrolls inside it.
+    const rows = Math.min(payload.suggestions.length, ADDRESS_SUGGESTIONS_MAX_ROWS);
+    const height = rows * ADDRESS_SUGGESTION_ROW_HEIGHT_PX + 2 * (ADDRESS_SUGGESTIONS_PADDING_PX + ADDRESS_SUGGESTIONS_BORDER_PX);
     this.view.setBounds({
       x: Math.round(payload.rect.left),
       y: Math.round(payload.rect.top),

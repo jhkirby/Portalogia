@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-22 */
 
 /* ── TAB BAR ──────────────────────────────────────────────────────────── */
 
@@ -101,7 +101,7 @@
   pointer-events: none;
   animation:
     tab-bar-tab-sink 170ms cubic-bezier(0.5, 0, 0.75, 0) forwards,
-    tab-bar-tab-close 130ms ease-in 170ms forwards;
+    tab-bar-tab-close 240ms cubic-bezier(0.4, 0, 0.2, 1) 170ms forwards;
 }
 
 /* Outlined only while at rest: not the active tab, not part of a multi-selection,
@@ -389,8 +389,11 @@
     transform: translateY(100%);
     clip-path: inset(0 0 100% 0);
   }
+  /* `max-width` as well as `flex-grow`: with room to spare in the row, tabs sit at their max width, and shrinking
+     the grow alone leaves the width pinned there until the very end, so the tabs to the right jumped across. */
   to {
     flex-grow: 0;
+    max-width: 0;
     padding-right: 0;
     padding-left: 0;
     border-width: 0;
@@ -415,5 +418,39 @@
 @keyframes tab-bar-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ── Shimmer ──
+   Every 20 seconds (`useShimmerTick`) a wave runs along the tabs, left to right: each one's icon
+   and name brighten and lift a little, one after another, `--shimmer-index`
+   setting how far along the wave each is. Two identical keyframes taken by
+   turns (`data-shimmer` a/b), since an animation only restarts when its name
+   changes. */
+.tab-bar[data-shimmer='a'] :is(.tab-bar__terminal-icon, .tab-bar__favicon, .tab-bar__title) {
+  animation: tab-shimmer-a 700ms ease-in-out calc(var(--shimmer-index, 0) * 45ms) both;
+}
+
+.tab-bar[data-shimmer='b'] :is(.tab-bar__terminal-icon, .tab-bar__favicon, .tab-bar__title) {
+  animation: tab-shimmer-b 700ms ease-in-out calc(var(--shimmer-index, 0) * 45ms) both;
+}
+
+@keyframes tab-shimmer-a {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes tab-shimmer-b {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-bar[data-shimmer] :is(.tab-bar__terminal-icon, .tab-bar__favicon, .tab-bar__title) {
+    animation: none;
   }
 }

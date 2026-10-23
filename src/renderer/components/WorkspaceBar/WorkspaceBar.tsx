@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-18
+// Last Modified: 2026-10-22
 
-import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
 import { useClickRipples } from '../../hooks/useClickRipples';
@@ -11,6 +11,8 @@ import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon, PencilIcon, WorkspaceImagesIcon } from '../icons';
 import { WorkspaceIcon } from '../WorkspaceIcon';
+import { useShimmerTick } from '../../hooks/useShimmerTick';
+import { useWorkspaceTransitions } from './useWorkspaceTransitions';
 import { useWorkspaceReorder } from './useWorkspaceReorder';
 
 interface WorkspaceBarProps {
@@ -97,7 +99,10 @@ export function WorkspaceBar({
     workspaces.map((workspace) => workspace.id),
     onMove,
   );
+  const { enteringIds, exiting, endEnter, endExit } = useWorkspaceTransitions(workspaces, reorder.displayIds);
   const ripples = useClickRipples();
+  // Every 20 s a shimmer runs down the workspaces' icons and names (the tabs' runs 10 s apart from it).
+  const shimmer = useShimmerTick(0);
 
   // Collapsed (`!sidebarVisible`), these two buttons swap their tooltip
   // from the plain CSS one (tooltip.css) to `TooltipOverlay` — see
@@ -109,6 +114,11 @@ export function WorkspaceBar({
   );
   const newWorkspaceTooltip = useOverlayTooltip(`New workspace (${formatShortcut('Shift+N')})`);
   const imagesTooltip = useOverlayTooltip(`Workspace images (${formatShortcut('Shift+S')})`);
+
+  // Collapsing the sidebar mid-rename drops the rename, for the same reason a double-click can't start one then.
+  if (!sidebarVisible && editingId !== null) {
+    setEditingId(null);
+  }
 
   const startEditing = (workspace: WorkspaceState): void => {
     setEditingId(workspace.id);
@@ -143,6 +153,7 @@ export function WorkspaceBar({
         <div
           ref={listRef}
           className="workspace-bar"
+          data-shimmer={shimmer ?? undefined}
           role="tablist"
           aria-label="Workspaces"
           aria-orientation="vertical"
@@ -203,8 +214,15 @@ export function WorkspaceBar({
                 tabIndex={0}
                 aria-selected={isActive || selectedWorkspaceIds.includes(workspace.id)}
                 data-workspace-id={workspace.id}
-                className={`workspace-bar__pill hover-grow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}`}
-                style={{ order }}
+                className={`workspace-bar__pill hover-grow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}${enteringIds.has(workspace.id) ? ' workspace-bar__pill--entering' : ''}`}
+                onAnimationEnd={(event) => {
+                  // Bubbled up from the ripples and the selected colour too; only the slide-in ends the opening.
+                  if (event.animationName === 'workspace-pill-slide-in') {
+                    endEnter(workspace.id);
+                  }
+                }}
+                // Doubled, leaving the odd places between pills for closed ones still sliding out (below).
+                style={{ order: order * 2, '--shimmer-index': order } as CSSProperties}
                 draggable={!isEditing}
                 onDragStart={(event) => reorder.start(workspace.id, event)}
                 onDragEnd={reorder.end}
@@ -223,7 +241,8 @@ export function WorkspaceBar({
                     onSwitch(workspace.id);
                   }
                 }}
-                onDoubleClick={() => startEditing(workspace)}
+                // Not while collapsed: there's no room for the name box, and focusing it scrolled the whole list sideways.
+                onDoubleClick={sidebarVisible ? () => startEditing(workspace) : undefined}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -319,6 +338,28 @@ export function WorkspaceBar({
               </div>
             );
           })}
+          {/* Closed workspaces, slid left out of the sidebar where they were before their space folds away. No
+              `data-workspace-id`: the reorder measuring must not see them. */}
+          {exiting.map(({ workspace, above }) => (
+            <div
+              key={`exiting-${workspace.id}`}
+              className="workspace-bar__pill workspace-bar__pill--exiting"
+              style={{ order: above * 2 - 1 }}
+              aria-hidden="true"
+              onAnimationEnd={(event) => {
+                if (event.animationName === 'workspace-pill-collapse') {
+                  endExit(workspace.id);
+                }
+              }}
+            >
+              <span className="workspace-bar__icon">
+                <span className="workspace-bar__glyph">
+                  <WorkspaceIcon icon={workspace.icon} color={workspace.color} />
+                </span>
+              </span>
+              <span className="workspace-bar__name">{workspace.name}</span>
+            </div>
+          ))}
         </div>
         <div className="workspace-bar__actions">
         {/* Gone entirely at the workspace limit (main refuses too), back once one is removed. */}

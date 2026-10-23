@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-19 */
+   Last Modified: 2026-10-22 */
 
 /* ── MARKDOWN VIEWER ──────────────────────────────────────────────────── */
 /* `markdown.html`'s whole page — a Markdown tab's own `WebContentsView` (see
@@ -65,6 +65,23 @@ body {
   display: flex;
   align-items: center;
   gap: 3px;
+}
+
+/* The selection's own counts, kept together as one group, in the bar's own colour. */
+.md-status__selection {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-md);
+  /* A thin vertical line sets the selection's counts off from the rest; it's there only while they are. */
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+  border-left: 1px solid var(--color-chrome-border);
+}
+
+/* Where the pointer is (`x×y`): first, in steady-width digits so the bar doesn't shuffle as it moves. */
+.md-status__pointer {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
 }
 
 .md-status__total {

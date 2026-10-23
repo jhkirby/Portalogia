@@ -1,8 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
+import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { AddressSuggestionItem } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
@@ -17,6 +18,8 @@ interface AddressBarProps {
   /** The active tab's current URL; used to keep the field in sync with navigation. */
   readonly url: string;
   readonly isLoading: boolean;
+  /** How far the page's load has got, 0-100, or `null` when there's none to show (see `BrowserTabState.loadProgress`). */
+  readonly loadProgress: number | null;
   /** Called with the raw typed text on submit; normalization happens on the main-process side. */
   readonly onNavigate: (input: string) => void;
   /** Every saved bookmark, filtered locally against the draft to power the suggestions dropdown. */
@@ -31,8 +34,11 @@ interface AddressBarProps {
   readonly onToggleBookmark: () => void;
 }
 
-/** The most suggestions the dropdown shows at once, bookmarks and recent pages together. */
-const MAX_SUGGESTIONS = 10;
+/** Every match, up to a generous limit: the dropdown scrolls through them. */
+const MAX_SUGGESTIONS = SEARCH_SUGGESTIONS_LIMIT;
+
+/** How long the load's progress takes to fade out once it's done. Must match `.address-bar__progress--leaving`. */
+const PROGRESS_FADE_MS = 300;
 
 /** Vertical gap, in CSS pixels, between the address bar's own bottom edge and the suggestions overlay below it. */
 const DROPDOWN_GAP_PX = 6;
@@ -65,6 +71,7 @@ const DROPDOWN_GAP_PX = 6;
 export function AddressBar({
   url,
   isLoading,
+  loadProgress,
   onNavigate,
   bookmarks,
   isBookmarked,
@@ -73,6 +80,21 @@ export function AddressBar({
   onToggleBookmark,
 }: AddressBarProps) {
   const [draft, setDraft] = useState(url);
+
+  // When the load's progress goes (a second after 100%), it fades out rather than vanishing: the last value stays
+  // drawn, marked as leaving, until the fade is done.
+  const [shownProgress, setShownProgress] = useState<{ value: number; leaving: boolean } | null>(
+    loadProgress === null ? null : { value: loadProgress, leaving: false },
+  );
+  useEffect(() => {
+    if (loadProgress !== null) {
+      setShownProgress({ value: loadProgress, leaving: false });
+      return undefined;
+    }
+    setShownProgress((current) => (current ? { ...current, leaving: true } : null));
+    const timer = window.setTimeout(() => setShownProgress(null), PROGRESS_FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [loadProgress]);
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -223,9 +245,25 @@ export function AddressBar({
   // Types itself in once, then its trailing dots loop; the accessible name stays static.
   const placeholder = useAnimatedPlaceholder(draft === '');
   const showBubble = !isFocused && bubbleText !== null;
+  // While a page loads, a line runs around the domain chip; with no chip showing (typing, or an app page), around the
+  // whole bar instead. Nothing is added beside the chip, so it never shifts sideways.
+  const ringOnBubble = isLoading && showBubble;
+  const ringOnBar = isLoading && !showBubble;
 
   return (
-    <form ref={containerRef} className="address-bar" onSubmit={handleSubmit} role="search">
+    <form
+      ref={containerRef}
+      className={`address-bar${ringOnBar ? ' address-bar--loading' : ''}`}
+      onSubmit={handleSubmit}
+      role="search"
+      aria-busy={isLoading}
+    >
+      {/* The load's progress as the bar's own background, filling it from left to right behind everything in it. */}
+      {shownProgress && (
+        <span className={`address-bar__progress${shownProgress.leaving ? ' address-bar__progress--leaving' : ''}`} aria-hidden="true">
+          <span className="address-bar__progress-fill" style={{ width: `${shownProgress.value}%` }} />
+        </span>
+      )}
       <button
         type="button"
         className="address-bar__bookmark hover-grow chrome-tooltip"
@@ -237,7 +275,6 @@ export function AddressBar({
       >
         <BookmarkStarIcon filled={isBookmarked} size={14} />
       </button>
-      {isLoading && <span className="address-bar__spinner" aria-hidden="true" />}
       <span className="address-bar__field">
         <input
           ref={inputRef}
@@ -272,13 +309,26 @@ export function AddressBar({
             the bubble ignores the mouse, so a click lands on the input, focuses it, and the real URL comes back. */}
         {showBubble && (
           <span
-            className={`address-bar__bubble${savedName ? '' : ' address-bar__bubble--domain'}`}
+            className={`address-bar__bubble${savedName ? '' : ' address-bar__bubble--domain'}${ringOnBubble ? ' address-bar__bubble--loading' : ''}`}
             aria-hidden="true"
           >
             {bubbleText}
           </span>
         )}
       </span>
+      {/* …and the same as a number at the bar's right end, held at 100% for a second once the page has loaded. */}
+      {shownProgress && (
+        <span
+          className={`address-bar__percent${shownProgress.leaving ? ' address-bar__progress--leaving' : ''}`}
+          role="progressbar"
+          aria-label="Page loading"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={shownProgress.value}
+        >
+          {shownProgress.value}%
+        </span>
+      )}
     </form>
   );
 }

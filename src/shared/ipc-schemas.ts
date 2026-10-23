@@ -209,6 +209,23 @@ export const pdfGoToPageRequestSchema = z.object({
 });
 
 /** A tab's page asking for a pan's pointer wrap; the tab is the sender, so only the point comes along. */
+const pageCount = z.number().int().min(0).max(100_000_000);
+
+export const pageStatsSchema = z.object({
+  words: pageCount,
+  characters: pageCount,
+  images: pageCount,
+  links: pageCount,
+  bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  elements: pageCount,
+  hovered: z.string().max(200).nullable(),
+  focused: z.string().max(200).nullable(),
+  pointer: z
+    .object({ x: z.number().int().min(-100_000).max(100_000), y: z.number().int().min(-100_000).max(100_000) })
+    .nullable(),
+  selection: z.object({ words: pageCount, characters: pageCount }).nullable(),
+});
+
 export const tabWarpPointerRequestSchema = z.object({
   x: z.number().finite().min(-100_000).max(100_000),
   y: z.number().finite().min(-100_000).max(100_000),
@@ -228,6 +245,12 @@ export const pdfWarpPointerRequestSchema = z.object({
 export const pdfOpenLinkRequestSchema = z.object({
   id: z.string().min(1),
   url: z.string().min(1).max(8192),
+});
+
+export const pdfHistoryInfoRequestSchema = z.object({
+  id: z.string().min(1),
+  canGoBack: z.boolean(),
+  canGoForward: z.boolean(),
 });
 
 export const pdfPageInfoRequestSchema = z.object({

@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-05 */
+   Last Modified: 2026-10-22 */
 
 /* ── SUGGESTIONS OVERLAY ──────────────────────────────────────────────── */
 /* The address bar's suggestions dropdown's whole page (`suggestions.html`)
@@ -37,14 +37,48 @@ body {
   height: 100%;
 }
 
+/* Taller than the view when there are more matches than `ADDRESS_SUGGESTIONS_MAX_ROWS`: then it scrolls, by
+   the wheel or by the arrow keys (`AddressSuggestionsView` keeps the keyboard's row in view), with no scroll bar. */
 .address-bar__suggestions {
   box-sizing: border-box;
   height: 100%;
   margin: 0;
   padding: var(--size-spacing-xs);
+  overflow-y: auto;
+  scrollbar-width: none;
   list-style: none;
 
   background: var(--color-panel-bg);
+  /* Sets the list apart from whatever is behind it. Its width is `ADDRESS_SUGGESTIONS_BORDER_PX`: the view is sized
+     to hold it. */
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+
+  /* Slides down into view as it opens: its view is created at full size, and the list reveals itself from the top
+     edge down, nudged up a little to start. Each opening is a fresh list (`AddressSuggestionsView` draws none while
+     closed), so this plays every time. */
+  animation: suggestions-open 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes suggestions-open {
+  from {
+    clip-path: inset(0 0 100% 0 round var(--size-radius-sm));
+    transform: translateY(-6px);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round var(--size-radius-sm));
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .address-bar__suggestions {
+    animation: none;
+  }
+}
+
+.address-bar__suggestions::-webkit-scrollbar {
+  display: none;
 }
 
 .address-bar__suggestion {
@@ -101,10 +135,9 @@ body {
   color: var(--color-address-placeholder);
 }
 
-/* The "menu" variant: plain option rows, no icon or URL, highlighted in the
-   app's accent color (whatever the color picker has chosen) rather than the
-   neutral selection grey — it's a dropdown, so the highlight reads as the
-   current choice (or the keyboard's row). */
+/* The "menu" variant: plain option rows, no icon or URL, highlighted with the
+   same neutral selection colour as the address bar's own dropdown, so every
+   dropdown in the app looks alike. */
 .address-bar__suggestions--menu .address-bar__suggestion {
   max-width: none;
 }
@@ -113,16 +146,4 @@ body {
   max-width: none;
 }
 
-.address-bar__suggestions--menu .address-bar__suggestion--selected {
-  background: rgb(var(--color-accent-rgb));
-  color: #ffffff;
-}
 
-/* Hover is the neutral grey every other dropdown uses (the base rule above),
-   never the accent: the accent marks the chosen row, and a hovered row that
-   is not chosen must not look chosen. The selected row stays accent under the
-   pointer. */
-.address-bar__suggestions--menu .address-bar__suggestion:hover:not(.address-bar__suggestion--selected) {
-  background: var(--color-button-hover-bg);
-  color: var(--color-tab-text-active);
-}

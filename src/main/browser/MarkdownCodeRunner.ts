@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -236,7 +236,8 @@ export async function runCodeBlock(
   }
   const directory = join(tmpdir(), `northstar-run-${randomUUID()}`);
   try {
-    await mkdir(directory, { recursive: true });
+    // Owner-only, so on a shared POSIX /tmp no other user can read or swap the script before it runs.
+    await mkdir(directory, { recursive: true, mode: 0o700 });
     const file = join(directory, `snippet${language.extension(code)}`);
     await writeFile(file, language.prepare ? language.prepare(code) : code, 'utf-8');
     for (const launcher of language.launchers) {

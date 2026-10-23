@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -43,6 +43,8 @@ import {
   tabWarpPointerRequestSchema,
   pdfWarpPointerRequestSchema,
   pdfOpenBookmarkRequestSchema,
+  pageStatsSchema,
+  pdfHistoryInfoRequestSchema,
   pdfPageInfoRequestSchema,
   pdfSaveAnnotationsRequestSchema,
   pdfRenameRequestSchema,
@@ -367,6 +369,19 @@ export function registerTabIpc(
     resolveTabManager(event).clearHistory(request),
   );
 
+  // Clear History's confirmation asks first how many visits it would delete. The chrome's alone, like the clearing.
+  ipcMain.handle(IpcChannel.HistoryCount, (event, rawRequest: unknown): IpcResult<number> => {
+    const parsed = historyClearRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    try {
+      return { ok: true, data: resolveTabManager(event).countHistory(parsed.data) };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   // Answered only to a chrome window (`resolveTabManager` throws for a tab's own page).
   ipcMain.handle(
     IpcChannel.HistorySearch,
@@ -450,6 +465,28 @@ export function registerTabIpc(
     const manager = resolveTabManagerForTab(parsed.data.id);
     if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
       manager.setPdfPageInfo(parsed.data.id, parsed.data.page, parsed.data.pageCount);
+    }
+  });
+
+  // Fire-and-forget from a browser tab's page as its stats change; the tab is whichever one sent it.
+  ipcMain.on(IpcChannel.TabPageStats, (event, rawRequest: unknown) => {
+    const parsed = pageStatsSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const tab = resolveTabForContents(event.sender);
+    tab?.manager.setPageStats(tab.tabId, parsed.data);
+  });
+
+  // Fire-and-forget from the PDF page whenever its jump history changes.
+  ipcMain.on(IpcChannel.PdfHistoryInfo, (event, rawRequest: unknown) => {
+    const parsed = pdfHistoryInfoRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      manager.setPdfHistory(parsed.data.id, parsed.data.canGoBack, parsed.data.canGoForward);
     }
   });
 

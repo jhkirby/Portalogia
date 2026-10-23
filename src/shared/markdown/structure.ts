@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import type { LineEnding } from './source';
 
@@ -206,6 +206,20 @@ export function countCharacters(text: string): number {
     }
   }
   return text.length - surrogates;
+}
+
+/**
+ * A selection's size, as a stat bar shows it: the lines it touches (a line
+ * break it ends on starts no new line), its words, and its characters.
+ * @param text The selected text.
+ * @returns The three counts; all 0 for empty text.
+ */
+export function countSelection(text: string): { lines: number; words: number; characters: number } {
+  if (text === '') {
+    return { lines: 0, words: 0, characters: 0 };
+  }
+  const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n').length;
+  return { lines, words: wordStarts(text).length, characters: countCharacters(text) };
 }
 
 /**

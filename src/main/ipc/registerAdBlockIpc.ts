@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { ipcMain } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
@@ -16,7 +16,8 @@ import { isChromeSender } from './senderGuards';
  * @param adBlocker The blocker to read and change.
  */
 export function registerAdBlockIpc(adBlocker: AdBlocker): void {
-  ipcMain.handle(IpcChannel.AdBlockGetState, () => adBlocker.getState());
+  // Chrome only, like its setters: the allowlist and per-tab block counts say which sites the user visits.
+  ipcMain.handle(IpcChannel.AdBlockGetState, (event) => (isChromeSender(event) ? adBlocker.getState() : null));
   ipcMain.on(IpcChannel.AdBlockSetEnabled, (event, raw: unknown) => {
     const parsed = adBlockSetEnabledRequestSchema.safeParse(raw);
     if (parsed.success && isChromeSender(event)) {

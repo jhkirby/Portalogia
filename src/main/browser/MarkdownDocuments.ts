@@ -1,10 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
   applyLineEnding,
@@ -12,6 +12,7 @@ import {
   normalizeLineEndings,
   type LineEnding,
 } from '@shared/markdown/source';
+import { readFileCapped } from '../platform/readFileCapped';
 import { MAX_NOTE_BYTES, forgetVaultScans, isMarkdownPath, samePath, toNoteFileName } from './MarkdownVault';
 
 /** One note a Markdown tab has open, as main holds it. */
@@ -280,15 +281,15 @@ export class MarkdownDocuments {
     if (!isMarkdownPath(path)) {
       throw new Error('That file is not a Markdown note (.md or .markdown).');
     }
-    const info = await stat(path);
-    if (!info.isFile()) {
+    const read = await readFileCapped(path, MAX_NOTE_BYTES);
+    if (read.kind === 'not-file') {
       throw new Error('That is not a file.');
     }
-    if (info.size > MAX_NOTE_BYTES) {
+    if (read.kind === 'too-large') {
       throw new Error('That note is too large to open (limit 20 MB).');
     }
-    const raw = stripBom(await readFile(path, 'utf-8'));
-    return { content: normalizeLineEndings(raw), ending: detectLineEnding(raw), mtimeMs: info.mtimeMs };
+    const raw = stripBom(read.data.toString('utf-8'));
+    return { content: normalizeLineEndings(raw), ending: detectLineEnding(raw), mtimeMs: read.mtimeMs };
   }
 
   private install(

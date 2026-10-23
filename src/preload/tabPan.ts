@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import { ipcRenderer, webFrame } from 'electron';
 import { DragPanner } from '../shared/DragPanner';
@@ -48,9 +48,13 @@ function applyCursor(): void {
     styleEl.setAttribute(STYLE_ATTR, 'pan-cursor');
   }
   const cursor = panner.isPanning ? HAND_CLOSED_CURSOR : HAND_OPEN_CURSOR;
-  // Nothing can be selected or dragged out while the hand holds the page.
+  // Nothing can be selected or dragged out while the hand holds the page. Frames and plugins take no pointer input
+  // either: this script doesn't run inside them, so a click there would reach their buttons, links and text boxes
+  // (sign-in buttons, embeds and ads all live in frames). With them out of hit-testing, a press over one lands on
+  // this page, which swallows it and pans. The cost: in Pan mode the wheel scrolls the page, not a frame's inside.
   styleEl.textContent =
-    `html, html * { cursor: ${cursor} !important; user-select: none !important; -webkit-user-drag: none !important; }`;
+    `html, html * { cursor: ${cursor} !important; user-select: none !important; -webkit-user-drag: none !important; }` +
+    ' iframe, frame, embed, object { pointer-events: none !important; }';
   if (!styleEl.isConnected) {
     (document.head ?? document.documentElement).appendChild(styleEl);
   }

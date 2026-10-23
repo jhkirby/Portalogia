@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-22
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -113,6 +113,14 @@ export class HistoryStore {
     }
     this.scheduleSave();
     return true;
+  }
+
+  /**
+   * How many visits were made at or after a moment — what `removeSince` would delete.
+   * @param since Milliseconds since the epoch; `null` counts everything.
+   */
+  public countSince(since: number | null): number {
+    return since === null ? this.entries.length : this.entries.filter((entry) => entry.timestamp >= since).length;
   }
 
   /**

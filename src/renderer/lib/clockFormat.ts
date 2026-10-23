@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
@@ -60,6 +60,20 @@ export function formatClockDate(date: Date): string {
 export function formatClockTime(date: Date): string {
   const pad = (value: number): string => String(value).padStart(2, '0');
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * The time zone's short name, shown after the time: `EDT`, `PST`, `UTC`. Taken
+ * from US English, which has abbreviations for the US zones and UTC; a zone it
+ * names no abbreviation for reads as its offset instead (`GMT+2`). Follows
+ * daylight saving, since it is worked out for the moment given.
+ * @param date The moment to show.
+ * @param timeZone An IANA zone to use instead of the computer's own, for tests.
+ * @returns The abbreviation, or `''` if there is none.
+ */
+export function formatClockTimeZone(date: Date, timeZone?: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', ...(timeZone ? { timeZone } : {}) }).formatToParts(date);
+  return parts.find((part) => part.type === 'timeZoneName')?.value ?? '';
 }
 
 /**

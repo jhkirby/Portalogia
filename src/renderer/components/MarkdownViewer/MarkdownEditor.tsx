@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-22
 
 import { useEffect, useRef } from 'react';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
@@ -26,6 +26,7 @@ import {
 } from '@codemirror/view';
 import { latexCompletionSource, wikiLinkCompletionSource } from '../../lib/markdown/editorCompletions';
 import { editorFindField } from '../../lib/markdown/editorFind';
+import { lineMotionKeymap } from '../../lib/markdown/editorLineMotion';
 import { editorHighlight, editorTheme } from '../../lib/markdown/editorTheme';
 import { livePreview as livePreviewExtension } from '../../lib/markdown/livePreview';
 import { syncRenderedBlocksFocus } from '../../lib/markdown/livePreviewBlocks';
@@ -67,7 +68,9 @@ function previewExtensions(formatted: boolean): Extension {
 function markupDecorations(): Extension {
   const wiki = new MatchDecorator({ regexp: /\[\[[^\]\n]+\]\]/g, decoration: Decoration.mark({ class: 'cm-wikilink' }) });
   const math = new MatchDecorator({
-    regexp: /\$\$[^$]+?\$\$|\$(?!\s)(?:\.|[^$\\n])+?(?<!\s)\$(?!\d)/g,
+    // `\\.` is a backslash escape and `[^$\\\n]` anything but `$`, a backslash or a newline. The two never overlap, so a
+    // long unclosed `$....` can't backtrack exponentially, and math containing the letter `n` is still matched.
+    regexp: /\$\$[^$]+?\$\$|\$(?!\s)(?:\\.|[^$\\\n])+?(?<!\s)\$(?!\d)/g,
     decoration: Decoration.mark({ class: 'cm-math' }),
   });
   return [wiki, math].map((decorator) =>
@@ -104,8 +107,11 @@ interface MarkdownEditorProps {
   readonly readOnly: boolean;
   /** Formatted display: the note is drawn formatted while staying editable, Obsidian-style (see `livePreview`). */
   readonly livePreview: boolean;
-  /** Where the caret is (its offset in the note), whenever it moves or the text under it changes — for the status bar. */
-  readonly onSelection: (head: number) => void;
+  /**
+   * Where the caret is (its offset in the note) and what's selected (`from` to `to`, equal when nothing is), whenever
+   * either moves or the text under them changes — for the status bar.
+   */
+  readonly onSelection: (head: number, from: number, to: number) => void;
 }
 
 /**
@@ -180,6 +186,8 @@ export function MarkdownEditor({
           },
         },
         ...historyKeymap,
+        // Ahead of the default Up/Down, which would step over a whole drawn list or table at once.
+        ...lineMotionKeymap,
         ...defaultKeymap,
         indentWithTab,
       ]),
@@ -201,7 +209,8 @@ export function MarkdownEditor({
           onChangeRef.current(update.state.doc.toString());
         }
         if (update.docChanged || update.selectionSet) {
-          onSelectionRef.current(update.state.selection.main.head);
+          const { head, from, to } = update.state.selection.main;
+          onSelectionRef.current(head, from, to);
         }
       }),
     ];
@@ -222,7 +231,8 @@ export function MarkdownEditor({
     }
     viewRef.current = view;
     onViewRef.current(view);
-    onSelectionRef.current(view.state.selection.main.head);
+    const { head, from, to } = view.state.selection.main;
+    onSelectionRef.current(head, from, to);
     if (!readOnly) {
       view.focus();
     }

@@ -60,7 +60,7 @@ page's preload gives the page's own scripts no API at all.
 A Northstar window is not one web page. It is a stack of native views.
 
 1. **The chrome page.** The `BrowserWindow`'s own `webContents` loads
-   `src/renderer/index.html`. This is the React interface: drag strip, tab
+   `src/renderer/index.html`. This is the React interface: tab
    strip, toolbar, address bar and workspace sidebar. The window is
    frameless (`frame: false`), so the chrome draws its own title bar and
    window buttons.
@@ -110,7 +110,7 @@ loads its own page with its own preload:
 | Path | Responsibility |
 | --- | --- |
 | `src/main/index.ts` | Composition root. Builds every shared store and controller, registers the `northstar:` protocol, the permission handler and all IPC, and creates windows. Also owns cross-window flows: tear-off, the hidden spare window, and opening a tab in a new window. |
-| `src/main/windows/` | `MainWindow` creates a hardened `BrowserWindow`. `WindowDragController` and `snapZones` handle dragging the frameless window and snapping it to screen edges. |
+| `src/main/windows/` | `MainWindow` creates a hardened `BrowserWindow`. The frameless window is moved by the OS, through the chrome's title-bar drag region. |
 | `src/main/browser/TabManager.ts` | One per window. The only code that calls Electron's tab-content APIs. Creates and mounts tab views, lays them out, runs navigation, wires per-tab events, routes keyboard shortcuts, and owns the window's overlays. |
 | `src/main/browser/SharedTabRegistry.ts` | The single set of tabs, workspaces and views shared by every window. `mountOwners` records which window is showing each tab, and `notifyAll()` asks every window to push fresh state. |
 | `src/main/browser/*Store.ts` | Persistence, one store per kind of data (see [Persistence](#persistence)). |

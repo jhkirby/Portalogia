@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-19 */
+   Last Modified: 2026-10-22 */
 
 /* ── APP SHELL ────────────────────────────────────────────────────────── */
 
@@ -107,8 +107,9 @@ body {
   transition: height var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* Entering Focus Mode also puts the window into true OS fullscreen (see
-   `setFocusMode` in TabManager.ts) — must track CHROME_HEIGHT_FOCUSED_PX
+/* Focus Mode leaves the window its own size (not OS fullscreen; see
+   `setFocusMode` in TabManager.ts), so the page fills just this window — must
+   track CHROME_HEIGHT_FOCUSED_PX
    in src/shared/constants.ts (0), which the main process uses to grow the
    page into the space this frees up. */
 .app--focus-mode {
@@ -134,9 +135,10 @@ body {
 
 /* ── TITLEBAR ─────────────────────────────────────────────────────────── */
 /* The frameless window's top row, sharing it between the tab strip and
-   WindowControls. Not an OS drag region: the window is moved only by the
-   grip strip along its top edge (`TitlebarGrip`), so the empty space past the
-   tabs does nothing when pressed or double-clicked. */
+   WindowControls. An OS drag region, as in Chrome: any of it the tabs and
+   buttons don't cover (they opt out with `no-drag`) moves the window, and the
+   OS supplies the rest of a native title bar: double-click to maximize,
+   snapping to a screen edge, and pulling a maximized window back down. */
 .titlebar {
   position: relative;
   display: flex;
@@ -151,41 +153,8 @@ body {
 
   background: var(--color-chrome-bg);
   border-bottom: 1px solid var(--color-chrome-border);
-}
 
-/* The drag strip along the window's top edge (`TitlebarGrip`) — the height of
-   the extra space `--size-tab-bar-height` adds above the tabs. `no-drag` so it
-   receives mouse events (an OS drag region wouldn't), letting it show a pressed
-   color and a grab cursor; main moves the window itself. No hover color: it
-   read as a stray grey bar along the top of the window. */
-.titlebar__grip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  /* 12px: 1.5x the strip's original 8px, so it is easier to hit. Still inside the
-     14px above the tabs (see `.tab-bar__tab`'s height), so the tabs are not moved. */
-  height: 12px;
-  /* Above `.tab-bar`, which spans the whole titlebar height (this strip's rows
-     included) and is positioned, so it would otherwise cover the strip and
-     eat its mouse events. `.window-controls` sits one level higher still. */
-  z-index: 1;
-
-  cursor: grab;
-  -webkit-app-region: no-drag;
-}
-
-/* Maximized (see `TitlebarGrip`): the OS drags the window by this strip, which is
-   what lets it come back to its normal size under the cursor, as in Chrome. An OS
-   drag region receives no mouse events, so the cursor stays the default arrow. */
-.titlebar__grip--native {
-  cursor: default;
   -webkit-app-region: drag;
-}
-
-.titlebar__grip--dragging {
-  background: var(--color-grip-active-bg);
-  cursor: grabbing;
 }
 
 /* The top-right corner, where the clock (`TitlebarClock`) and the window
@@ -196,6 +165,9 @@ body {
   position: relative;
   z-index: 2;
   display: grid;
+  /* Out of the drag region, unlike the rest of the row: an OS drag region gets no mouse events, so pointing at the
+     clock would never count as being on the row (`:hover` below), and the window controls would stay hidden. */
+  -webkit-app-region: no-drag;
   grid-template-rows: 100%;
   flex-shrink: 0;
 }

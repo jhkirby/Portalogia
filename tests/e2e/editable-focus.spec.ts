@@ -1,10 +1,10 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-22
 
 import type { Page } from 'playwright';
-import { test, expect, openInActiveTab } from './fixtures';
+import { test, expect, openInActiveTab, pressInTab } from './fixtures';
 
 /** Which tab (by position) the chrome shows as selected; the editor page is the second, at 1. */
 async function selectedTabIndex(window: Page): Promise<number> {
@@ -25,7 +25,7 @@ test.describe('Ctrl+Left/Right in a web page text box', () => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
     await expect.poll(() => selectedTabIndex(window)).toBe(1);
     await page.locator('#box').click();
-    await page.keyboard.press('Control+ArrowLeft');
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
     await expect.poll(() => selectedTabIndex(window)).toBe(1);
   });
 
@@ -36,7 +36,7 @@ test.describe('Ctrl+Left/Right in a web page text box', () => {
   }) => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
     await page.frameLocator('#frame').locator('body').click();
-    await page.keyboard.press('Control+ArrowLeft');
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
     await page.waitForTimeout(300);
     expect(await selectedTabIndex(window)).toBe(1);
     // The keys reached the frame's editor, which moved its caret: typing lands at the start of a word.
@@ -51,18 +51,38 @@ test.describe('Ctrl+Left/Right in a web page text box', () => {
   }) => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
     await page.frameLocator('#frame').locator('body').click();
-    await page.keyboard.press('Escape');
+    await pressInTab(electronApp, '/editor', 'Escape');
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe('IFRAME');
-    await page.keyboard.press('Control+ArrowLeft');
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
     await expect.poll(() => selectedTabIndex(window)).toBe(0);
   });
 
   test('Escape in a plain text box leaves it too', async ({ electronApp, window, server }) => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
     await page.locator('#box').click();
-    await page.keyboard.press('Escape');
+    await pressInTab(electronApp, '/editor', 'Escape');
     await expect.poll(() => page.evaluate(() => document.activeElement?.id ?? '')).not.toBe('box');
-    await page.keyboard.press('Control+ArrowLeft');
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
+    await expect.poll(() => selectedTabIndex(window)).toBe(0);
+  });
+
+  test('Shift+Escape leaves the frame’s editor even when the page keeps Escape for itself (as Google Docs does)', async ({
+    electronApp,
+    window,
+    server,
+  }) => {
+    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
+    await page.evaluate(() => {
+      const frameWindow = (document.getElementById('frame') as HTMLIFrameElement).contentWindow!;
+      frameWindow.addEventListener('keydown', (event) => event.key === 'Escape' && event.preventDefault(), true);
+    });
+    await page.frameLocator('#frame').locator('body').click();
+    await pressInTab(electronApp, '/editor', 'Escape');
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+    await pressInTab(electronApp, '/editor', 'Shift+Escape');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe('IFRAME');
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
     await expect.poll(() => selectedTabIndex(window)).toBe(0);
   });
 
@@ -73,7 +93,7 @@ test.describe('Ctrl+Left/Right in a web page text box', () => {
   }) => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
     await page.frameLocator('#frame').locator('body').click();
-    await page.keyboard.press('Control+i');
+    await pressInTab(electronApp, '/editor', 'Control+i');
     await page.waitForTimeout(300);
     await expect(window.getByRole('button', { name: 'Turn on laser pointer' })).toHaveAttribute('aria-pressed', 'false');
   });

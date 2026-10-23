@@ -1,9 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-15
+// Last Modified: 2026-10-22
 
-import { test, expect } from './fixtures';
+import { test, expect, pressInTab } from './fixtures';
 
 test.describe('tabs', () => {
   test('the new-tab button opens another tab and focuses the address bar', async ({ window }) => {
@@ -89,5 +89,39 @@ test.describe('tabs', () => {
 
     await window.getByRole('button', { name: 'Home' }).click();
     await expect(addressBar).toHaveValue('');
+  });
+});
+
+test.describe('jumping to a tab by number', () => {
+  test('Ctrl+1 to Ctrl+8 pick that tab, from a page or from the chrome; a number past the last does nothing', async ({
+    electronApp,
+    window,
+  }) => {
+    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
+    for (let count = 2; count <= 3; count += 1) {
+      await window.getByRole('button', { name: 'New tab', exact: true }).click();
+      await expect(tabs).toHaveCount(count);
+    }
+    const selected = (): Promise<number> =>
+      tabs.evaluateAll((all) => all.findIndex((tab) => tab.getAttribute('aria-selected') === 'true'));
+    await expect.poll(selected).toBe(2);
+
+    // From a tab's own page (every tab here is the home page).
+    await pressInTab(electronApp, 'northstar://home', 'Control+1');
+    await expect.poll(selected).toBe(0);
+
+    // From the chrome, through its own input pipeline as a physical key press would arrive.
+    const pressInChrome = (keyCode: string): Promise<void> =>
+      electronApp.evaluate(({ BrowserWindow }, code) => {
+        const win = BrowserWindow.getAllWindows().find((candidate) => candidate.isVisible())!;
+        win.webContents.sendInputEvent({ type: 'keyDown', keyCode: code, modifiers: ['control'] });
+        win.webContents.sendInputEvent({ type: 'keyUp', keyCode: code, modifiers: ['control'] });
+      }, keyCode);
+    await pressInChrome('2');
+    await expect.poll(selected).toBe(1);
+
+    await pressInChrome('8');
+    await window.waitForTimeout(300);
+    expect(await selected()).toBe(1);
   });
 });
