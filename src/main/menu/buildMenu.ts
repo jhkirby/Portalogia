@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -338,6 +338,16 @@ export function buildMenu(
           label: 'Toggle Focus Mode',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => getTabManager()?.toggleFocusMode(),
+        },
+        {
+          label: 'Toggle Side Panel',
+          accelerator: 'CmdOrCtrl+Alt+B',
+          click: () => getTabManager()?.toggleSidePanel(),
+        },
+        {
+          label: 'Edit PDF Sections',
+          accelerator: 'CmdOrCtrl+Alt+E',
+          click: () => getTabManager()?.toggleSectionEditing(),
         },
         // The tools' entries below are display only: `TabManager.handleToolShortcut` dispatches their keys, so that a
         // browser tab in edit mode can leave them to its page — a registered accelerator takes its key first.

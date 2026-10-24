@@ -1,22 +1,18 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-24
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HistoryViewer } from './components/HistoryViewer';
 import { watchAccentColor } from './lib/accentStorage';
+import { followSystemTheme } from './lib/themeFade';
 
-// Separate renderer from the chrome's, so it doesn't inherit `data-theme`
-// — same fix as `pdf-main.tsx`'s `applyTheme`.
-function applyTheme(): void {
-  document.documentElement.dataset.theme = window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
-}
-applyTheme();
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+// A separate renderer from the chrome's, so it doesn't inherit `<html data-theme>` (what colors.css's tokens key off):
+// it follows the system theme, which main sets to the chrome's choice (`nativeTheme.themeSource`), and fades on a
+// switch (`followSystemTheme`).
+followSystemTheme();
 watchAccentColor();
 
 const container = document.getElementById('root');

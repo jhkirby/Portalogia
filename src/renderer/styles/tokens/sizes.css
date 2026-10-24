@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-24 */
 
 :root {
   /* Also the titlebar's own height now that the tab strip and
@@ -61,6 +61,10 @@
 
   --size-font-sm: 12px;
   --size-font-md: 13px;
+  /* A note's or PDF's right-hand panel (`side-panel.css`): in `rem`, so a note's panel grows with its zoom. */
+  --size-side-panel-width: 15rem;
+  /* How far the tab row's and sidebar's glow reaches from the pointer (`.pointer-glow`). */
+  --size-pointer-glow-radius: 200px;
 }
 
 /* Markdown notes (`markdown.html`). */
@@ -71,5 +75,4 @@
   --md-font-ui: -apple-system, 'Segoe UI', Roboto, sans-serif;
   --md-font-body: -apple-system, 'Segoe UI', Roboto, sans-serif;
   --md-font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
-  --md-panel-width: 15rem;
 }

@@ -1,11 +1,18 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
-import type { FindCommand, FindResult, NorthstarPdfApi, PdfOpenResult, PdfToolState } from '@shared/ipc-contract';
+import type {
+  FindCommand,
+  FindResult,
+  MarkdownBacklink,
+  NorthstarPdfApi,
+  PdfOpenResult,
+  PdfToolState,
+} from '@shared/ipc-contract';
 import type { PointerMode } from '@shared/tab-state';
 import type { RGB } from '@shared/color';
 
@@ -25,6 +32,8 @@ const PdfScrollToPage = 'pdf:scroll-to-page';
 const PdfPointerMode = 'pdf:pointer-mode';
 const PdfOpenLink = 'pdf:open-link';
 const PdfWarpPointer = 'pdf:warp-pointer';
+const PdfBacklinks = 'pdf:backlinks';
+const PdfOpenBacklink = 'pdf:open-backlink';
 const FindCommandChannel = 'find:command';
 const FindResultChannel = 'find:result';
 
@@ -173,7 +182,28 @@ ipcRenderer.on(TabFocusMode, (_event, focusMode: unknown) => {
   focusModeListeners.forEach((listener) => listener(latestFocusMode));
 });
 
+// The side panel's shortcut (Ctrl+Alt+B): a menu accelerator in main, which passes it on to the tab showing.
+const TabToggleSidePanel = 'tab:toggle-side-panel';
+const sidePanelListeners = new Set<() => void>();
+ipcRenderer.on(TabToggleSidePanel, () => sidePanelListeners.forEach((listener) => listener()));
+// The sections' edit shortcut (Ctrl+Alt+E), passed on the same way.
+const PdfToggleSectionEditing = 'pdf:toggle-section-editing';
+const sectionEditingListeners = new Set<() => void>();
+ipcRenderer.on(PdfToggleSectionEditing, () => sectionEditingListeners.forEach((listener) => listener()));
+
 const api: NorthstarPdfApi = {
+  onToggleSectionEditing: (listener) => {
+    sectionEditingListeners.add(listener);
+    return () => {
+      sectionEditingListeners.delete(listener);
+    };
+  },
+  onToggleSidePanel: (listener) => {
+    sidePanelListeners.add(listener);
+    return () => {
+      sidePanelListeners.delete(listener);
+    };
+  },
   onFocusMode: (listener) => {
     listener(latestFocusMode);
     focusModeListeners.add(listener);
@@ -214,6 +244,13 @@ const api: NorthstarPdfApi = {
   },
   openLink: (url) => {
     ipcRenderer.send(PdfOpenLink, { id: tabId, url });
+  },
+  getBacklinks: async () => {
+    const result = (await ipcRenderer.invoke(PdfBacklinks, { id: tabId })) as MarkdownBacklink[] | null;
+    return result ?? [];
+  },
+  openBacklink: (target) => {
+    ipcRenderer.send(PdfOpenBacklink, { id: tabId, target });
   },
   warpPointer: (x, y) => {
     ipcRenderer.send(PdfWarpPointer, { id: tabId, x, y });

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { EditorState } from '@codemirror/state';
@@ -42,6 +42,7 @@ import { useMarkdownFind } from './useMarkdownFind';
 import { useMarkdownPan } from './useMarkdownPan';
 import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
 import { FluidBackground } from '../FluidBackground';
+import { SidePanelToggle } from '../SidePanel';
 
 /** Name registered with `CSS.highlights` for the user's highlights, painted by `markdown-viewer.css`. */
 const HIGHLIGHT_NAME = 'northstar-md-highlight';
@@ -124,6 +125,8 @@ export function MarkdownViewer() {
   /** The note file's own line ending, so the status bar's byte count is the file's. */
   const [lineEnding, setLineEnding] = useState<'\n' | '\r\n'>('\n');
   const [panelOpen, setPanelOpen] = useState(false);
+  // Ctrl+Alt+B (main's accelerator) shows or hides the panel too.
+  useEffect(() => window.northstarMarkdown.onToggleSidePanel(() => setPanelOpen((open) => !open)), []);
   const [strokes, setStrokes] = useState<readonly NoteStroke[]>(NO_STROKES);
   const [comments, setComments] = useState<readonly NoteComment[]>([]);
   const [highlights, setHighlights] = useState<readonly NoteHighlight[]>(NO_HIGHLIGHTS);
@@ -954,16 +957,7 @@ export function MarkdownViewer() {
             )}
             {!printing && (
               <>
-                <button
-                  type="button"
-                  className="md-viewer__panel-toggle hover-grow"
-                  aria-pressed={panelOpen}
-                  aria-label={panelOpen ? 'Hide outline and links' : 'Show outline and links'}
-                  title={panelOpen ? 'Hide outline and links' : 'Show outline and links'}
-                  onClick={() => setPanelOpen((open) => !open)}
-                >
-                  ☰
-                </button>
+                <SidePanelToggle open={panelOpen} what="outline and links" onToggle={() => setPanelOpen((open) => !open)} />
                 {panelOpen && (
                   <MarkdownSidePanel
                     headings={structure.headings}

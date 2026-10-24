@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-24 */
 
 /* ── TERMINAL ─────────────────────────────────────────────────────────── */
 /* One terminal tab's whole page (`terminal.html`), a dedicated
@@ -22,8 +22,9 @@ html,
 body {
   height: 100%;
   margin: 0;
-  /* Around the terminal's frame: the chrome's own colour, as around the History table. */
-  background: light-dark(#f1f3f4, #202124);
+  /* None: the margin around the frame shows the chrome's flowing metal behind this see-through page
+     (`MetalBackground`, `TabManager.makePageSeeThrough`). */
+  background: transparent;
   /* This page is a fixed single-terminal layout, never meant to be a
      scrollable document itself — same reasoning as the chrome's own
      `html, body` rule in app.css. Without this, a sub-pixel mismatch

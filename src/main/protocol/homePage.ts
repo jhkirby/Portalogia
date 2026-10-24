@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-15
+// Last Modified: 2026-10-24
 
 const PAGE_STYLE = `
   :root { color-scheme: light dark; }
@@ -10,6 +10,8 @@ const PAGE_STYLE = `
     min-height: 100vh;
     box-sizing: border-box;
     background: light-dark(#ffffff, #202124);
+    /* A light/dark switch fades, like the app's own pages (THEME_FADE_MS), with the fluid moving on through it. */
+    transition: background-color 600ms ease-in-out;
   }
 `;
 

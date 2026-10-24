@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
   app,
   BrowserWindow,
@@ -142,22 +142,23 @@ interface ClosedTab {
   readonly workspaceId: string;
 }
 
-/**
- * The background each app-owned page paints itself (`--color-chrome-bg` or
- * `--color-panel-bg` in colors.css), by theme. The view is given the same
- * color natively, so the frames before the page's first paint aren't white.
- */
 /** How long, in ms, a web page takes to fade away before going to the home page (`navigate`). */
 const HOME_FADE_MS = 250;
 
 /** The home page's background (`homePage.ts`): what a page fades to on its way there. */
 const HOME_BACKGROUND = { light: '#ffffff', dark: '#202124' } as const;
 
-const APP_PAGE_BACKGROUNDS = {
-  pdf: { light: '#f1f3f4', dark: '#202124' },
-  history: { light: '#f1f3f4', dark: '#202124' },
-  markdown: { light: '#ffffff', dark: '#2d2e31' },
-} as const;
+/** How long, in ms, a newly shown tab takes to fade in when switching tabs (`fadeInTab`). */
+const TAB_FADE_MS = 400;
+
+/**
+ * How long, in ms, the tab being left stays on top of the one being shown, so the new one has painted its cover
+ * before it's seen (it would otherwise show its last frame, uncovered, for an instant). The fade waits this long too.
+ */
+const TAB_FADE_COVER_MS = 50;
+
+/** The colour a newly shown tab fades in from: the chrome's own (`--color-chrome-bg`), by theme. */
+const TAB_FADE_COLOR = { light: '#f1f3f4', dark: '#202124' } as const;
 
 /** How many closed tabs `restoreLastClosedTab` can reach back through. */
 const CLOSED_TAB_HISTORY_LIMIT = 20;
@@ -193,6 +194,12 @@ const pdfFilePaths = new Map<string, string>();
 
 /** The annotation key (SHA-256 of the bytes) of the file each PDF tab has open — the only key that tab's page may save marks under. */
 const pdfFileKeys = new Map<string, string>();
+
+/**
+ * The notes the last backlink search found for each PDF tab, by tab id, as absolute paths: the only notes that tab's
+ * page may ask to open (`openPdfBacklink`). Module-level for the same reason as `pdfFilePaths`.
+ */
+const pdfBacklinkPaths = new Map<string, readonly string[]>();
 
 /** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
 const markdownDocuments = new MarkdownDocuments();
@@ -391,7 +398,7 @@ export class TabManager {
     // correct value before the window is ever shown.
     this.activeWorkspaceId = DEFAULT_WORKSPACE_ID;
 
-    nativeTheme.on('updated', this.repaintPageBackgrounds);
+    nativeTheme.on('updated', this.keepPagesSeeThrough);
 
     this.unregisterFromRegistry = registry.registerWindow(window, () => {
       // A window mid-close is still registered until its `closed` event.
@@ -747,6 +754,7 @@ export class TabManager {
     // Trusted, app-owned content (unlike a browser tab's arbitrary page) —
     // it should never navigate away from itself or spawn a bare OS window,
     // same reasoning as the chrome window itself (see MainWindow.ts).
+    this.makePageSeeThrough(view);
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     this.wireSharedInputHandling(id, view.webContents);
@@ -817,7 +825,7 @@ export class TabManager {
     // Trusted, app-owned content — same reasoning as `createTerminalTab`.
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    this.paintPageBackground(view, 'pdf');
+    this.makePageSeeThrough(view);
     this.wireSharedInputHandling(id, view.webContents);
     // A fresh document starts at 100%; re-send whatever zoom this tab holds
     // (a restored/torn-off tab may already have one).
@@ -901,7 +909,7 @@ export class TabManager {
 
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    this.paintPageBackground(view, 'markdown');
+    this.makePageSeeThrough(view);
     this.wireSharedInputHandling(id, view.webContents);
 
     const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
@@ -1640,7 +1648,7 @@ export class TabManager {
     // Trusted, app-owned content — same reasoning as `createTerminalTab`.
     view.webContents.on('will-navigate', (event) => event.preventDefault());
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    this.paintPageBackground(view, 'history');
+    this.makePageSeeThrough(view);
     this.wireSharedInputHandling(id, view.webContents);
     // A fresh page has never been sent the history or its search text. (It's never zoomed either: see `isZoomable`.)
     view.webContents.on('did-finish-load', () => {
@@ -1895,6 +1903,7 @@ export class TabManager {
     }
     pdfFilePaths.delete(id);
     pdfFileKeys.delete(id);
+    pdfBacklinkPaths.delete(id);
     this.states.set(id, {
       ...current,
       title: 'PDF',
@@ -2189,6 +2198,42 @@ export class TabManager {
   }
 
   /**
+   * The notes that link to a PDF tab's file — see `findBacklinks`. Remembered, so the page can then open one.
+   * @param id The PDF tab.
+   * @returns The notes, or none if the tab has no file open.
+   */
+  public async pdfBacklinks(id: string): Promise<MarkdownBacklink[]> {
+    const path = pdfFilePaths.get(id);
+    if (this.states.get(id)?.kind !== 'pdf' || !path) {
+      return [];
+    }
+    const found = await findBacklinks(path);
+    pdfBacklinkPaths.set(
+      id,
+      found.map((link) => resolve(dirname(path), link.target)),
+    );
+    return found;
+  }
+
+  /**
+   * Opens, in a new Markdown tab, a note the PDF tab's last backlink search found. The page names it by the
+   * `target` it was given; anything that search didn't return is refused, so the page can't open other files.
+   * @param id The PDF tab.
+   * @param target The note's path from the PDF's folder.
+   */
+  public openPdfBacklink(id: string, target: string): void {
+    const path = pdfFilePaths.get(id);
+    const state = this.states.get(id);
+    if (state?.kind !== 'pdf' || !path) {
+      return;
+    }
+    const wanted = resolve(dirname(path), target);
+    if ((pdfBacklinkPaths.get(id) ?? []).some((found) => samePath(found, wanted))) {
+      this.createMarkdownTab(state.workspaceId, wanted);
+    }
+  }
+
+  /**
    * Renames a PDF tab's file on disk (in its own folder) and retitles the tab.
    * @param id The PDF tab.
    * @param name The new file name, already validated to end in `.pdf`.
@@ -2288,32 +2333,41 @@ export class TabManager {
     this.colorPickerOverlay.dispose();
     this.exportMenuOverlay.dispose();
     this.laserPointerOverlay.dispose();
+    nativeTheme.removeListener('updated', this.keepPagesSeeThrough);
     this.findOverlay.dispose();
     ipcMain.removeListener(IpcChannel.FindResult, this.onFindResult);
-    nativeTheme.removeListener('updated', this.repaintPageBackgrounds);
     this.unregisterFromRegistry();
   }
 
   /**
-   * Gives an app-owned page's view its page's own background color, natively,
-   * so a new PDF, note or history tab is never a white frame (in dark mode)
-   * before its page first paints.
+   * Makes an app-owned page's view see-through (a note, PDF, History or
+   * terminal page): its page leaves the margin around its frame unpainted,
+   * so the chrome's flowing metal (`MetalBackground`) shows there, as it
+   * does around a web page's view. Before the page first paints, the chrome
+   * shows through too, never a white frame.
    * @param view The tab's view.
-   * @param kind Which page it loads.
    */
-  private paintPageBackground(view: WebContentsView, kind: keyof typeof APP_PAGE_BACKGROUNDS): void {
-    const colors = APP_PAGE_BACKGROUNDS[kind];
-    view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? colors.dark : colors.light);
+  private makePageSeeThrough(view: WebContentsView): void {
+    view.setBackgroundColor('#00000000');
   }
 
-  /** Re-colors every app-owned page's native background after the theme changes. */
-  private readonly repaintPageBackgrounds = (): void => {
-    for (const [id, view] of this.views) {
-      const kind = this.states.get(id)?.kind;
-      if ((kind === 'pdf' || kind === 'markdown' || kind === 'history') && !view.webContents.isDestroyed()) {
-        this.paintPageBackground(view, kind);
+  /**
+   * Makes every app-owned page's view see-through again after a light/dark switch: Chromium gives a view the new
+   * scheme's own opaque background as the scheme changes, which would flash solid over the metal in the margins
+   * while the switch fades. Set again at once and once more as the pages repaint, in case it lands after them.
+   */
+  private readonly keepPagesSeeThrough = (): void => {
+    const apply = (): void => {
+      for (const [id, view] of this.views) {
+        const kind = this.states.get(id)?.kind;
+        if (kind !== 'browser' && !view.webContents.isDestroyed()) {
+          this.makePageSeeThrough(view);
+        }
       }
-    }
+    };
+    apply();
+    setTimeout(apply, 0);
+    setTimeout(apply, 100);
   };
 
   /**
@@ -2819,10 +2873,12 @@ export class TabManager {
       this.teardownSplitView();
     }
 
+    // The tab being left stays on top for a moment while the new one fades in under it (see `fadeInTab`).
+    let leaving: { id: string; view: WebContentsView } | null = null;
     if (this.activeTabId && this.activeTabId !== id) {
       const previous = this.views.get(this.activeTabId);
       if (previous) {
-        this.window.contentView.removeChildView(previous);
+        leaving = { id: this.activeTabId, view: previous };
       }
       this.registry.mountOwners.delete(this.activeTabId);
     }
@@ -2844,6 +2900,11 @@ export class TabManager {
     // that page ever needing to be hidden; see its class doc comment.
     const view = this.views.get(id);
     if (view) {
+      if (this.leavingTab?.view === view) {
+        // Coming straight back to the tab still on its way out: it stays.
+        clearTimeout(this.leavingTab.timer);
+        this.leavingTab = null;
+      }
       this.registry.detachViewFromAllWindows(view);
       this.window.contentView.addChildView(view, 0);
       this.pushFocusModeTo(id);
@@ -2853,6 +2914,11 @@ export class TabManager {
     }
     const previousTabId = this.activeTabId;
     this.activeTabId = id;
+    if (leaving && view) {
+      this.fadeInTab(view, leaving);
+    } else if (leaving) {
+      this.window.contentView.removeChildView(leaving.view);
+    }
     // Sized again now it's the active tab: whether the bottom is kept for the web stat bar depends on its kind.
     view?.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
     this.pushPageStats();
@@ -2984,6 +3050,67 @@ export class TabManager {
     }
     void view.webContents.loadURL(target).catch(() => {});
     return this.getState();
+  }
+
+  /** The tab just left, still mounted over the one fading in, and the timer that takes it down (`fadeInTab`). */
+  private leavingTab: { id: string; view: WebContentsView; timer: ReturnType<typeof setTimeout> } | null = null;
+
+  /**
+   * Fades a newly shown tab in from the chrome's colour, rather than switching at once. A cover over its page starts
+   * opaque and fades away; the tab being left stays mounted on top of it until the cover has painted, then comes
+   * down. A view's own opacity can't be animated, so the page itself carries the cover (like `fadeToHome`'s).
+   * @param view The tab being shown, already mounted under the one being left.
+   * @param leaving The tab being left.
+   */
+  private fadeInTab(view: WebContentsView, leaving: { id: string; view: WebContentsView }): void {
+    // One left before it, still on its way out, goes now.
+    if (this.leavingTab) {
+      clearTimeout(this.leavingTab.timer);
+      this.unmountLeavingTab(this.leavingTab);
+    }
+    const unmount = (): void => {
+      if (this.leavingTab?.view === leaving.view) {
+        this.unmountLeavingTab(this.leavingTab);
+        this.leavingTab = null;
+      }
+    };
+    this.leavingTab = { ...leaving, timer: setTimeout(unmount, TAB_FADE_COVER_MS) };
+    const wc = view.webContents;
+    if (wc.isDestroyed()) {
+      return;
+    }
+    const color = nativeTheme.shouldUseDarkColors ? TAB_FADE_COLOR.dark : TAB_FADE_COLOR.light;
+    // Held opaque while the tab being left is still over it, then faded out, and taken off the page once gone.
+    wc.insertCSS(
+      `@keyframes northstar-tab-fade { from { opacity: 1; } to { opacity: 0; } } ` +
+        `html::before { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
+        `background: ${color}; animation: northstar-tab-fade ${TAB_FADE_MS}ms ease-out ${TAB_FADE_COVER_MS}ms both; }`,
+    )
+      .then((key) => {
+        setTimeout(() => {
+          if (!wc.isDestroyed()) {
+            void wc.removeInsertedCSS(key).catch(() => {});
+          }
+        }, TAB_FADE_COVER_MS + TAB_FADE_MS + 20);
+      })
+      // A page that can't take it (it's mid-navigation) is simply shown, once the tab being left comes down.
+      .catch(() => {});
+  }
+
+  /**
+   * Takes down the tab left by a switch, unless it's being shown again by now (the active tab, a half of split view,
+   * or claimed by another window).
+   * @param leaving The tab left.
+   */
+  private unmountLeavingTab(leaving: { id: string; view: WebContentsView }): void {
+    const showing =
+      this.activeTabId === leaving.id ||
+      this.splitView?.primaryTabId === leaving.id ||
+      this.splitView?.secondaryTabId === leaving.id ||
+      this.registry.mountOwners.has(leaving.id);
+    if (!showing && !this.window.isDestroyed() && !leaving.view.webContents.isDestroyed()) {
+      this.window.contentView.removeChildView(leaving.view);
+    }
   }
 
   /** Tabs whose page is fading away on the way home (`fadeToHome`), so pressing Home again doesn't restart it. */
@@ -4348,6 +4475,29 @@ export class TabManager {
   }
 
   /** Toggles Focus Mode to whichever state it isn't currently in. */
+  /**
+   * Shows or hides the active note's or PDF's side panel (Ctrl+Alt+B). The page keeps whether it's open; a tab of
+   * any other kind has no panel, and the key does nothing there.
+   */
+  public toggleSidePanel(): void {
+    const id = this.activeTabId;
+    const kind = id ? this.states.get(id)?.kind : undefined;
+    const view = id ? this.views.get(id) : undefined;
+    if ((kind === 'markdown' || kind === 'pdf') && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.TabToggleSidePanel);
+    }
+  }
+
+  /** Switches editing the active PDF's sections in its side panel (Ctrl+Alt+E); a PDF tab with no file open, or any other tab, does nothing. */
+  public toggleSectionEditing(): void {
+    const id = this.activeTabId;
+    const state = id ? this.states.get(id) : undefined;
+    const view = id ? this.views.get(id) : undefined;
+    if (state?.kind === 'pdf' && state.fileName !== null && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.PdfToggleSectionEditing);
+    }
+  }
+
   public toggleFocusMode(): BrowserState {
     return this.setFocusMode(!this.focusMode);
   }

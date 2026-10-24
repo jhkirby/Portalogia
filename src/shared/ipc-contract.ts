@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
@@ -128,6 +128,10 @@ export const IpcChannel = {
   PdfPointerMode: 'pdf:pointer-mode',
   /** PDF page → main: a web link in the document was clicked; open it in a new tab. */
   PdfOpenLink: 'pdf:open-link',
+  /** PDF page → main (invoke): the notes that link to the open PDF, for its side panel. */
+  PdfBacklinks: 'pdf:backlinks',
+  /** PDF page → main: open one of those notes (a `target` the last `PdfBacklinks` reply gave) in a new tab. */
+  PdfOpenBacklink: 'pdf:open-backlink',
   /** Main → tab's page: where the pointer is over it (its CSS pixels), or `null`, while the laser overlay hides it from the page. */
   TabPointerPosition: 'tab:pointer-position',
   /** Tab's page → main (sync), before its first paint: whether to start out blurred, having come from another site. */
@@ -142,6 +146,10 @@ export const IpcChannel = {
   PageStatsChanged: 'page-stats:changed',
   /** Main → note or PDF page: whether this window is in Focus Mode (the page then hides its stat bar). */
   TabFocusMode: 'tab:focus-mode',
+  /** Main → note or PDF page: show or hide the side panel (Ctrl+Alt+B). */
+  TabToggleSidePanel: 'tab:toggle-side-panel',
+  /** Main → PDF page: switch editing its sections in the side panel (Ctrl+Alt+E). */
+  PdfToggleSectionEditing: 'pdf:toggle-section-editing',
   /** PDF page → main: whether its jump history has somewhere to step back or forward to. */
   PdfHistoryInfo: 'pdf:history-info',
   /** Main → PDF page: step back (-1) or forward (1) through its jump history. */
@@ -271,9 +279,13 @@ export const IpcChannel = {
   UiFocusAddressBar: 'ui:focus-address-bar',
   /** Main → chrome: the pointer came onto (`true`) or left the tab row, its empty drag space included. */
   UiTitlebarPointer: 'ui:titlebar-pointer',
+  /** Main → chrome: where the pointer is on the tab row (window CSS pixels), pushed as it moves there, for its glow. */
+  UiTitlebarPointerPosition: 'ui:titlebar-pointer-position',
   UiFocusZoom: 'ui:focus-zoom',
   UiToggleTheme: 'ui:toggle-theme',
   ThemeSet: 'theme:set',
+  /** Chrome → main (invoke), just before the theme changes: lay a snapshot of the window over it, to fade from. */
+  ThemePrepareFade: 'theme:prepare-fade',
   // Ad blocking. `AdBlockState` is pushed to every chrome window as it changes;
   // the other three are the chrome's requests (see `registerAdBlockIpc`).
   AdBlockState: 'adblock:state',
@@ -833,6 +845,8 @@ export interface NorthstarApi {
   onFocusAddressBar(listener: (clear: boolean) => void): () => void;
   /** Pushed as the pointer comes onto or leaves the tab row (main watches it: the row's empty space is the OS drag region). */
   onTitlebarPointer(listener: (inside: boolean) => void): () => void;
+  /** Pushed as the pointer moves on the tab row, empty space included: its place in the window's CSS pixels. */
+  onTitlebarPointerPosition(listener: (point: { readonly x: number; readonly y: number }) => void): () => void;
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+0) to focus and select `ZoomControl`'s percent field. */
   onFocusZoom(listener: () => void): () => void;
@@ -841,6 +855,11 @@ export interface NorthstarApi {
   onToggleTheme(listener: () => void): () => void;
   /** Reports the renderer's current theme so main can mirror it onto `nativeTheme.themeSource` — see `ThemePreference`. Fire-and-forget, same as `sendTerminalInput`. */
   setNativeTheme(theme: ThemePreference): void;
+  /**
+   * Asks main to lay a snapshot of this window over it, just before the theme is switched: the switch then fades in
+   * over a second (`ThemeCrossfade`). Resolves once the snapshot is up, or once it's been given up on.
+   */
+  prepareThemeFade(): Promise<void>;
 
   /** Reads the ad blocker's current state — the push channel only fires on change. */
   getAdBlockState(): Promise<AdBlockState | null>;
@@ -1039,6 +1058,10 @@ export interface NorthstarPdfApi {
   reportHistory(canGoBack: boolean, canGoForward: boolean): void;
   /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
   onFocusMode(listener: (focusMode: boolean) => void): () => void;
+  /** Subscribes to the side panel's shortcut (Ctrl+Alt+B), which main owns: it shows or hides the panel. */
+  onToggleSidePanel(listener: () => void): () => void;
+  /** Subscribes to the sections' edit shortcut (Ctrl+Alt+E), which main owns: it opens the panel and switches editing. */
+  onToggleSectionEditing(listener: () => void): () => void;
   /** Main asks to step back (-1) or forward (1) through the jump history (the arrows, or Alt+←/→). */
   onHistoryGo(listener: (direction: 1 | -1) => void): () => void;
   /** Subscribes to requests to scroll to a 1-based page. */
@@ -1047,6 +1070,10 @@ export interface NorthstarPdfApi {
   onPointerMode(listener: (mode: PointerMode) => void): () => void;
   /** Opens a web link from the document in a new tab. Fire-and-forget; main ignores anything but http(s). */
   openLink(url: string): void;
+  /** The notes in the PDF's folder (or vault) that link to it; empty when none, or no file is open. */
+  getBacklinks(): Promise<readonly MarkdownBacklink[]>;
+  /** Opens one of the notes `getBacklinks` found (its `target`) in a new tab. Fire-and-forget. */
+  openBacklink(target: string): void;
   /**
    * Puts the real pointer at a point of this page (viewport CSS pixels): a pan
    * that reaches one edge of the view wraps to the opposite one. Fire-and-forget;
@@ -1142,6 +1169,8 @@ export interface NorthstarMarkdownApi {
   /** Subscribes to the tab's pointer mode (Pan or Select); called immediately with the latest value if one already arrived. */
   /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
   onFocusMode(listener: (focusMode: boolean) => void): () => void;
+  /** Subscribes to the side panel's shortcut (Ctrl+Alt+B), which main owns: it shows or hides the panel. */
+  onToggleSidePanel(listener: () => void): () => void;
   onPointerMode(listener: (mode: PointerMode) => void): () => void;
   /** Asks main to move the OS pointer to a point of this page, for a pan that wraps at an edge. Fire-and-forget. */
   warpPointer(x: number, y: number): void;

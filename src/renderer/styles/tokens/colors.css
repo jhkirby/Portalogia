@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-24 */
 
 /* `useTheme` sets `data-theme` on `<html>` before first paint (see its
    `useLayoutEffect`) reflecting either a stored choice or, on first ever
@@ -31,11 +31,27 @@
   background-color: rgba(var(--color-accent-rgb), 0.4);
 }
 
-/* A focused element's default focus ring: Electron never gives Chromium a colour for it, so it falls back to Blink's
-   orange. The accent instead, at no specificity so a component's own focus style still wins; a web page gets the same
-   rule from main (`pageSelectionAccent.ts`). */
+/* No focus ring on the app's own pages: Chromium's default (`outline: auto`) rings a clicked button in white and
+   colour, which the app never draws. At no specificity, so a component's own focus style (an input's accent border)
+   still wins. A web page keeps its ring, coloured with the accent by main (`pageSelectionAccent.ts`). */
 :where(:focus, :focus-visible) {
-  outline-color: rgb(var(--color-accent-rgb));
+  outline: none;
+}
+
+/* A light/dark switch fades (`themeFade.ts` puts this class on for its length): every colour transitions, on every
+   element, over `THEME_FADE_MS` (600ms). Live, so whatever moves on the page keeps moving through it. */
+:root.theme-fading,
+:root.theme-fading *,
+:root.theme-fading *::before,
+:root.theme-fading *::after {
+  transition:
+    background-color 600ms ease-in-out,
+    color 600ms ease-in-out,
+    border-color 600ms ease-in-out,
+    outline-color 600ms ease-in-out,
+    fill 600ms ease-in-out,
+    stroke 600ms ease-in-out,
+    box-shadow 600ms ease-in-out !important;
 }
 
 :root[data-theme='light'] {
@@ -66,6 +82,8 @@
   --color-address-placeholder: #8a8d91;
 
   --color-button-hover-bg: #e4e6e7;
+  /* Hovering a button that is already filled (switched on): a shade past the hover grey. */
+  --color-button-pressed-hover-bg: #d3d6d8;
   --color-button-disabled-text: #b7b9bb;
   --color-scrollbar-thumb: #c4c7ca;
   --color-scrollbar-thumb-hover: #9aa0a6;
@@ -76,6 +94,8 @@
 
   --color-panel-bg: #ffffff;
   --color-panel-border: #d7d9db;
+  /* An empty note or PDF tab, inside its frame: the same as a browser tab's blank home page (`homePage.ts`). */
+  --color-blank-page-bg: #ffffff;
   --color-overlay-backdrop: rgba(32, 33, 36, 0.35);
   /* A pale tint of the accent rather than a fixed blue, so a selected
      row/pressed button still reads as "accent-colored" no matter what
@@ -115,6 +135,7 @@
   --color-address-placeholder: #9aa0a6;
 
   --color-button-hover-bg: #3c4043;
+  --color-button-pressed-hover-bg: #4d5156;
   --color-button-disabled-text: #5f6368;
   --color-scrollbar-thumb: #4a4d51;
   --color-scrollbar-thumb-hover: #6b6f74;
@@ -125,6 +146,7 @@
 
   --color-panel-bg: #2d2e31;
   --color-panel-border: #5f6368;
+  --color-blank-page-bg: #202124;
   --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
   /* Neutral gray rather than an accent tint, deliberately — unlike the
      light theme's pale-blue selection wash, a pale tint of an arbitrary
@@ -143,8 +165,6 @@
    the callout families, code, and the syntax colours of code blocks and of the editor. Printing swaps
    in the light values whatever the theme (see `markdown-viewer.css`), so a PDF is always dark on white. */
 :root[data-theme='light'] {
-  /* The blank page before a note is open: the same as a browser tab's blank home page (`homePage.ts`). */
-  --md-empty-bg: #ffffff;
   --md-code-bg: #f3f4f6;
   --md-code-color: #8a3b00;
   --md-quote-border: #c4c7ca;
@@ -165,7 +185,6 @@
 }
 
 :root[data-theme='dark'] {
-  --md-empty-bg: #202124;
   --md-code-bg: #26272a;
   --md-code-color: #f0a875;
   --md-quote-border: #5f6368;

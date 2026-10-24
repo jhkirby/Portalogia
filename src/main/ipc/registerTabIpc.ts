@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -39,6 +39,7 @@ import {
   cropRequestSchema,
   pdfGoToPageRequestSchema,
   pdfOpenLinkRequestSchema,
+  pdfOpenBacklinkRequestSchema,
   pointerModeRequestSchema,
   tabWarpPointerRequestSchema,
   pdfWarpPointerRequestSchema,
@@ -540,6 +541,30 @@ export function registerTabIpc(
     const manager = resolveTabManagerForTab(parsed.data.id);
     if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
       manager.openPdfLink(parsed.data.id, parsed.data.url);
+    }
+  });
+
+  // From the PDF page's side panel: the notes that link to its file, and opening one of them.
+  ipcMain.handle(IpcChannel.PdfBacklinks, async (event, rawRequest: unknown) => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    const manager = parsed.success ? resolveTabManagerForTab(parsed.data.id) : undefined;
+    if (!parsed.success || !manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      return [];
+    }
+    try {
+      return await manager.pdfBacklinks(parsed.data.id);
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.on(IpcChannel.PdfOpenBacklink, (event, rawRequest: unknown) => {
+    const parsed = pdfOpenBacklinkRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      manager.openPdfBacklink(parsed.data.id, parsed.data.target);
     }
   });
 

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-24
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ export const EMPTY_PDF_ANNOTATIONS: PdfAnnotations = {
   highlights: [],
   textBoxes: [],
   crops: [],
+  sections: null,
 };
 
 /**
@@ -60,7 +61,8 @@ class PdfAnnotationStore {
       annotations.comments.length === 0 &&
       annotations.highlights.length === 0 &&
       annotations.textBoxes.length === 0 &&
-      annotations.crops.length === 0;
+      annotations.crops.length === 0 &&
+      annotations.sections === null;
     if (isEmpty) {
       delete this.entries[key];
     } else {

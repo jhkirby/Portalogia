@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-24 */
 
 /* ── PDF VIEWER ───────────────────────────────────────────────────────── */
 /* `pdf.html`'s whole page — a PDF tab's own `WebContentsView` (see
@@ -19,7 +19,9 @@ body {
     'Segoe UI',
     Roboto,
     sans-serif;
-  background: var(--color-chrome-bg);
+  /* None: the margin around the frame shows the chrome's flowing metal behind this see-through page
+     (`MetalBackground`, `TabManager.makePageSeeThrough`). */
+  background: transparent;
   color: var(--color-tab-text-active);
 }
 
@@ -109,16 +111,31 @@ body {
 
 /* ── Document area ── */
 
-/* The document (or the empty page before one is open) sits in a rounded, bordered frame, like the History table;
-   the stat bar stays full width below it, and the chrome's colour shows around it. */
-.pdf-viewer__scroll {
+/* The document (or the empty page before one is open) and its side panel sit in a rounded, bordered frame, like the
+   History table; the stat bar stays full width below it, and the chrome's colour shows around it. Positioned for the
+   side panel's toggle in its corner; `min-height: 0` lets it shrink so the document scrolls inside it. */
+.pdf-viewer__body {
+  position: relative;
+  display: flex;
   flex: 1;
+  min-height: 0;
   margin: var(--size-content-frame-y) var(--size-content-frame-x);
-  overflow: auto;
+  overflow: hidden;
 
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
   border-radius: var(--size-content-frame-radius);
+}
+
+/* No document open: the blank page a browser tab shows (`homePage.ts`), not the panel's colour. */
+.pdf-viewer__body--empty {
+  background: var(--color-blank-page-bg);
+}
+
+.pdf-viewer__scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
 
   /* In Pan mode dragging moves the document (Okular's Browse tool), never selects. */
   user-select: none;

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HistoryClearRange, PageStats } from '@shared/ipc-contract';
@@ -13,6 +13,7 @@ import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
 import { HistoryToolbar } from './components/HistoryToolbar';
 import { MarkdownToolbar } from './components/MarkdownToolbar';
+import { MetalBackground } from './components/MetalBackground';
 import { PdfToolbar } from './components/PdfToolbar';
 import { PopupTransition } from './components/PopupTransition';
 import { SplitIndicator } from './components/SplitIndicator';
@@ -27,6 +28,7 @@ import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
+import { usePointerGlow } from './hooks/usePointerGlow';
 
 /** The popups that cover the page, each closed with an animation (see `PopupTransition`). */
 type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory';
@@ -173,6 +175,8 @@ export function App() {
    */
   const [pointerOnTitlebar, setPointerOnTitlebar] = useState(false);
   useEffect(() => window.northstar.onTitlebarPointer(setPointerOnTitlebar), []);
+  const titlebarRef = useRef<HTMLDivElement>(null);
+  usePointerGlow(titlebarRef, true);
   /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
   const [pageStats, setPageStats] = useState<{ readonly tabId: string; readonly stats: PageStats | null } | null>(null);
   useEffect(() => window.northstar.onPageStats((tabId, stats) => setPageStats({ tabId, stats })), []);
@@ -590,7 +594,9 @@ export function App() {
               a native double-click-to-maximize there. Tabs themselves opt
               out of dragging (see tab-bar.css) so clicking and reordering
               them still works. */}
-          <div className={`titlebar${pointerOnTitlebar ? ' titlebar--pointer-inside' : ''}`}>
+          <div ref={titlebarRef} className={`titlebar pointer-glow-host${pointerOnTitlebar ? ' pointer-glow-host--pointer-inside titlebar--pointer-inside' : ''}`}>
+            {/* The accent glowing around the pointer while it's on the row, under the tabs and buttons. */}
+            <div className="pointer-glow" aria-hidden="true" />
             <TabBar
               tabs={workspaceTabs}
               workspaceId={activeWorkspaceId}
@@ -801,6 +807,8 @@ export function App() {
             same area the hidden `WebContentsView` it's standing in for
             would otherwise occupy. */}
         <div className="tab-content">
+          {/* The metal flowing behind every tab, seen in the margin around its frame (and behind the stat bar's strip). */}
+          <MetalBackground />
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
               terminal or History page draws its own frame, and Focus Mode shows none. */}
           {activeTab?.kind === 'browser' && !focusMode && <div className="tab-content__frame" aria-hidden="true" />}

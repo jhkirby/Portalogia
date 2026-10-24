@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { syntaxTree } from '@codemirror/language';
 import { renderedBlocks } from './livePreviewBlocks';
@@ -101,6 +101,38 @@ class BulletWidget extends WidgetType {
     marker.style.listStyleType = BULLET_STYLES[Math.min(this.depth, BULLET_STYLES.length) - 1]!;
     bullet.append(marker);
     return bullet;
+  }
+}
+
+/**
+ * A bullet's raw `-`, `*` or `+` on the caret's line, shown as typed but hanging left of the item's text where the
+ * drawn bullet hangs, so the text stays where it is when formatted. A zero-width holder like `BulletWidget`'s, the
+ * mark moved out of it to the bullet's place. A widget rather than the text itself, so nothing of the editor's own
+ * (its token spans) can give the mark back a width in the line.
+ */
+class RawBulletWidget extends WidgetType {
+  /** @param mark The mark as typed. */
+  public constructor(private readonly mark: string) {
+    super();
+  }
+
+  /**
+   * @param other The widget it would replace.
+   * @returns Whether it shows the same mark.
+   */
+  public override eq(other: RawBulletWidget): boolean {
+    return other instanceof RawBulletWidget && other.mark === this.mark;
+  }
+
+  /** @returns The holder, with the mark hanging to its left (see `.cm-lp-raw-bullet`). */
+  public override toDOM(): HTMLElement {
+    const holder = document.createElement('span');
+    holder.className = 'cm-lp-raw-bullet';
+    const mark = document.createElement('span');
+    mark.className = 'cm-lp-raw-bullet__mark';
+    mark.textContent = this.mark;
+    holder.append(mark);
+    return holder;
   }
 }
 
@@ -244,7 +276,17 @@ function buildDecorations(view: EditorView): DecorationSet {
       }
       return;
     }
-    if (name === 'ListMark' && !isRaw(from)) {
+    if (name === 'ListMark' && isRaw(from)) {
+      // Being edited, a bullet's `-` and the space after it hang in the indent where the drawn bullet would, so the
+      // item's text stays at the same place it has formatted.
+      const mark = state.doc.sliceString(from, to);
+      if (mark === '-' || mark === '*' || mark === '+') {
+        const end = state.doc.sliceString(to, to + 1) === ' ' ? to + 1 : to;
+        ranges.push(Decoration.replace({ widget: new RawBulletWidget(mark) }).range(from, end));
+      }
+      return;
+    }
+    if (name === 'ListMark') {
       const mark = state.doc.sliceString(from, to);
       const nextIsTask = /^\s*\[[ xX]\]/.test(state.doc.sliceString(to, to + 5));
       if (nextIsTask) {
@@ -273,10 +315,11 @@ function buildDecorations(view: EditorView): DecorationSet {
     syntaxTree(state).iterate({ from, to, enter: visit });
   }
 
-  // Lines in a list take the reader's layout: indented by their depth (the source's own leading spaces hidden, as
-  // they'd otherwise add to it), with the reader's room between items, and more where a nested list starts or ends.
-  // The bullet hangs in that indent (`.cm-lp-bullet`), so a line that wraps carries on under its text. The caret's
-  // line keeps its raw text unindented, but the same room above and below, so nothing shifts as the caret moves.
+  // Lines in a list take the reader's indent: by their depth (the source's own leading spaces hidden, as they'd
+  // otherwise add to it), each line the same height as any other, whatever its depth or its neighbours'. The bullet
+  // hangs in that indent (`.cm-lp-bullet`), so a line that wraps carries on under its text. The caret's
+  // line is laid out the same — its leading spaces hidden too, its `- ` hanging where the bullet was — so its text
+  // sits at the depth it's drawn at, and a Tab or Shift+Tab shows as the line moving rather than as spaces.
   const tree = syntaxTree(state);
   /** A line's list depth: 0 for a blank line, one outside any list, or one in a code block. */
   const lineDepth = (number: number): { depth: number; indent: number } => {
@@ -301,13 +344,8 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (depth === 0) {
         continue;
       }
-      // The reader puts 0.8em, not 0.2em, around a nested list (its `ul` margin): here, a line whose depth differs
-      // from the list line before it opens a nested list or follows the end of one.
-      const previous = line.number > 1 ? lineDepth(line.number - 1).depth : 0;
-      const levelChange = previous > 0 && previous !== depth;
-      const classes = `cm-lp-li${levelChange ? ' cm-lp-li--level-change' : ''}${raw.has(line.number) ? ' cm-lp-li--raw' : ''}`;
-      ranges.push(Decoration.line({ class: classes, attributes: { style: `--lp-depth: ${depth}` } }).range(line.from));
-      if (indent > 0 && !raw.has(line.number)) {
+      ranges.push(Decoration.line({ class: 'cm-lp-li', attributes: { style: `--lp-depth: ${depth}` } }).range(line.from));
+      if (indent > 0) {
         ranges.push(HIDDEN.range(line.from, line.from + indent));
       }
     }
@@ -381,13 +419,18 @@ const livePreviewTheme = EditorView.theme({
     fontSize: '0.9em',
     paddingLeft: '0.8em',
   },
-  // A list line, as the reader lays out an item: indented 1.7em a level (its `ul` padding), with 0.2em between items
-  // (its `li` margins, which meet and overlap there) split above and below.
-  '.cm-line.cm-lp-li': { paddingLeft: 'calc(var(--lp-depth) * 1.7em)', paddingTop: '0.1em', paddingBottom: '0.1em' },
-  // Where a nested list starts or ends: 0.8em in all with the 0.1em the line before leaves below it.
-  '.cm-line.cm-lp-li--level-change': { paddingTop: '0.7em' },
-  // The caret's line: its raw text from the left edge, as typed, but the same room above and below as when formatted.
-  '.cm-line.cm-lp-li--raw': { paddingLeft: '0' },
+  // A list line: indented 1.7em a level, as the reader indents an item (its `ul` padding). No room added above or
+  // below, so it's as tall as any other line and indenting it (Tab) never changes its height.
+  '.cm-line.cm-lp-li': { paddingLeft: 'calc(var(--lp-depth) * 1.7em)' },
+  // The caret's line's `-`: a zero-width holder at the start of the item's text, and in it the mark, moved out into
+  // the indent until its middle is where the drawn bullet's is — 1em before the text (measured against Chromium's
+  // outside `disc`/`circle`/`square` markers). Still in the line's flow, so it sits on the line's baseline.
+  '.cm-lp-raw-bullet': { display: 'inline-block', width: '0', whiteSpace: 'pre' },
+  '.cm-lp-raw-bullet__mark': {
+    display: 'inline-block',
+    transform: 'translateX(calc(-50% - 1em))',
+    color: 'var(--color-tab-text)',
+  },
   // A zero-width holder at the start of the item's text, so a wrapped line carries on under the text, not the bullet…
   '.cm-lp-bullet': { display: 'inline-block', width: '0', verticalAlign: 'baseline' },
   // …and in it an empty list item whose marker the browser draws outside, to its left, as it draws the reader's.

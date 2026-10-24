@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -186,6 +186,16 @@ const api: NorthstarApi = {
     ipcRenderer.on(IpcChannel.UiTitlebarPointer, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiTitlebarPointer, handler);
   },
+  onTitlebarPointerPosition: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, point: unknown): void => {
+      const { x, y } = (point ?? {}) as { x?: unknown; y?: unknown };
+      if (typeof x === 'number' && typeof y === 'number') {
+        listener({ x, y });
+      }
+    };
+    ipcRenderer.on(IpcChannel.UiTitlebarPointerPosition, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiTitlebarPointerPosition, handler);
+  },
   onFocusZoom: (listener) => {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.UiFocusZoom, handler);
@@ -197,6 +207,9 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.UiToggleTheme, handler);
   },
   setNativeTheme: (theme) => ipcRenderer.send(IpcChannel.ThemeSet, { theme }),
+  prepareThemeFade: async () => {
+    await ipcRenderer.invoke(IpcChannel.ThemePrepareFade);
+  },
   getAdBlockState: () => ipcRenderer.invoke(IpcChannel.AdBlockGetState),
   onAdBlockState: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: AdBlockState): void => listener(state);

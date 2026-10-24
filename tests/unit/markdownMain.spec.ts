@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -64,6 +64,21 @@ test.describe('vault: finding notes', () => {
     expect(toA[0]?.target).toBe('sub/b.md');
     const toC = await findBacklinks(join(dir, 'sub', 'c.md'));
     expect(toC.map((link) => link.name)).toEqual(['a']);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('a PDF is linked to by name with its extension, by an embed, or by a relative path', async () => {
+    const dir = makeVault();
+    writeFileSync(join(dir, 'sub', 'Paper One.pdf'), '%PDF-1.4');
+    writeFileSync(join(dir, 'reads.md'), 'Read [[Paper One.pdf#page=3|the paper]].\n');
+    writeFileSync(join(dir, 'embeds.md'), '![[paper one.pdf]]\n');
+    writeFileSync(join(dir, 'sub', 'path.md'), 'See [it](Paper%20One.pdf).\n');
+    // Named without the extension it's a note's name, not the PDF's.
+    writeFileSync(join(dir, 'loose.md'), 'Not [[Paper One]], nor [x](Paper One.md).\n');
+    forgetVaultScans();
+    const found = await findBacklinks(join(dir, 'sub', 'Paper One.pdf'));
+    expect(found.map((link) => link.name)).toEqual(['embeds', 'path', 'reads']);
+    expect(found.find((link) => link.name === 'reads')?.target).toBe('../reads.md');
     rmSync(dir, { recursive: true, force: true });
   });
 

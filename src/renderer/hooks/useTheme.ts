@@ -1,10 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-22
+// Last Modified: 2026-10-24
 
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ThemePreference } from '@shared/ipc-contract';
+import { applyTheme } from '../lib/themeFade';
 
 export type Theme = ThemePreference;
 
@@ -39,19 +40,36 @@ function getInitialTheme(): Theme {
  * same reasoning as `onOpenTabSearch`/`onFocusAddressBar`: the chrome
  * window can lose OS focus to whichever tab's `WebContentsView` the user
  * last clicked into, which a renderer-level listener would miss).
+ *
+ * A toggle fades: main first lays a snapshot of the window over it
+ * (`prepareThemeFade`), the theme switches underneath, and the snapshot
+ * fades away. A second toggle while the first is still being prepared is
+ * ignored.
  */
 export function useTheme(): { theme: Theme; toggleTheme: () => void } {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
+  const switchingRef = useRef(false);
   const toggleTheme = useCallback(() => {
-    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+    if (switchingRef.current) {
+      return;
+    }
+    switchingRef.current = true;
+    void window.northstar
+      .prepareThemeFade()
+      .catch(() => {})
+      .finally(() => {
+        switchingRef.current = false;
+        setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+      });
   }, []);
 
   // `useLayoutEffect` rather than `useEffect` so the attribute (and thus
   // the right theme's colors) is in place before the browser paints,
   // rather than flashing the other theme for a frame right after mount.
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    // Faded, not switched at once (`applyTheme`); the first theme, on mount, just applies.
+    applyTheme(theme);
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {

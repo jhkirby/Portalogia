@@ -41,6 +41,9 @@ export const CONTENT_FRAME_INSET_Y_PX = 12;
 export const CONTENT_FRAME_BORDER_PX = 1;
 export const CONTENT_FRAME_RADIUS_PX = 6;
 
+/** How long a light/dark switch takes to fade in, in ms: the window's snapshot (`ThemeCrossfade`) and the metal behind the tabs (`MetalFluid`). */
+export const THEME_FADE_MS = 600;
+
 /**
  * Height, in CSS pixels, of the stat bar along the bottom of a web page's tab
  * (`WebStatusBar`), which the chrome draws below the page: main leaves this

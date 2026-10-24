@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-24 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -223,6 +223,8 @@
   box-sizing: border-box;
   flex-shrink: 0;
 
+  /* None, so the pointer's glow (pointer-glow.css) shows through a pill, under its icon and name; only the selected
+     pill's own fill covers it. */
   background: transparent;
   border-radius: var(--size-radius-sm);
 

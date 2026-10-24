@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-24
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -116,6 +116,22 @@ export const pdfAnnotationsSchema = z.object({
     )
     .max(100000)
     .default([]),
+  /**
+   * The side panel's sections as the user edited them: a name, the page it starts on, and how deep it sits under
+   * the ones above. `null` while they're as read from the file (its outline, or else its headings); defaulted so
+   * stores written before sections could be edited still parse.
+   */
+  sections: z
+    .array(
+      z.object({
+        title: z.string().max(500),
+        page: pageNumberSchema,
+        level: z.number().int().min(0).max(5).default(0),
+      }),
+    )
+    .max(5000)
+    .nullable()
+    .default(null),
 });
 export type PdfAnnotations = z.infer<typeof pdfAnnotationsSchema>;
 
@@ -245,6 +261,11 @@ export const pdfWarpPointerRequestSchema = z.object({
 export const pdfOpenLinkRequestSchema = z.object({
   id: z.string().min(1),
   url: z.string().min(1).max(8192),
+});
+
+export const pdfOpenBacklinkRequestSchema = z.object({
+  id: z.string().min(1),
+  target: z.string().min(1).max(4096),
 });
 
 export const pdfHistoryInfoRequestSchema = z.object({

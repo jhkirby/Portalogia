@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { lookup } from 'node:dns/promises';
 import { readdir, stat } from 'node:fs/promises';
@@ -316,16 +316,21 @@ export async function listNoteNames(currentPath: string): Promise<string[]> {
 }
 
 /**
- * The notes in a note's vault that link to it, by `[[wikilink]]` or by an
- * ordinary relative link.
- * @param currentPath The note to find links to.
+ * The notes in a file's vault that link to it, by `[[wikilink]]` (or `![[embed]]`) or by an ordinary relative link.
+ * The file is a note or any other file a note can link to (a PDF): a note is named without its extension, as
+ * Obsidian writes `[[Note]]`, and any other file with it (`[[Paper.pdf]]`).
+ * @param currentPath The file to find links to.
  * @returns Up to `MAX_BACKLINKS`, each with the path from `currentPath`'s folder that opens it.
  */
 export async function findBacklinks(currentPath: string): Promise<MarkdownBacklink[]> {
   const root = await findVaultRoot(currentPath);
   const notes = (await scanNotes(root)).filter((note) => !samePath(note, currentPath)).slice(0, MAX_BACKLINK_FILES);
-  const stem = noteStem(currentPath).toLowerCase();
+  const isNote = isMarkdownPath(currentPath);
+  const stem = (isNote ? noteStem(currentPath) : basename(currentPath)).toLowerCase();
   const pathFromRoot = toLinkPath(relative(root, currentPath)).replace(MARKDOWN_EXTENSION_PATTERN, '').toLowerCase();
+  // An ordinary link names the file with its extension: `.md`/`.markdown` for a note, the file's own otherwise.
+  const extension = isNote ? '(?:md|markdown)' : extname(currentPath).slice(1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const relativeLinkPattern = new RegExp(`\\]\\(([^)\\s]+\\.${extension})(?:#[^)\\s]*)?\\)`, 'gi');
   const found: MarkdownBacklink[] = [];
 
   const links = (note: string, text: string): boolean => {
@@ -336,7 +341,7 @@ export async function findBacklinks(currentPath: string): Promise<MarkdownBackli
         return true;
       }
     }
-    for (const match of text.matchAll(/\]\(([^)\s]+\.(?:md|markdown))(?:#[^)\s]*)?\)/gi)) {
+    for (const match of text.matchAll(relativeLinkPattern)) {
       const text2 = match[1] ?? '';
       if (!isLocalPathText(text2)) {
         continue;

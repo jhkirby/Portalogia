@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
@@ -11,6 +11,7 @@ import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon, PencilIcon, WorkspaceImagesIcon } from '../icons';
 import { WorkspaceIcon } from '../WorkspaceIcon';
+import { usePointerGlow } from '../../hooks/usePointerGlow';
 import { useShimmerTick } from '../../hooks/useShimmerTick';
 import { useWorkspaceTransitions } from './useWorkspaceTransitions';
 import { useWorkspaceReorder } from './useWorkspaceReorder';
@@ -94,6 +95,8 @@ export function WorkspaceBar({
   /** Whether a dragged tab is currently hovering the "+ New workspace" button — drives its own drop-target highlight, same idea as `dropTargetId` for the pills above it. */
   const [isNewWorkspaceDropTarget, setNewWorkspaceDropTarget] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  usePointerGlow(sidebarRef);
   const reorder = useWorkspaceReorder(
     listRef,
     workspaces.map((workspace) => workspace.id),
@@ -142,8 +145,11 @@ export function WorkspaceBar({
 
   return (
     <aside
-      className={`sidebar${sidebarVisible ? '' : ' sidebar--hidden'}${focusMode ? ' sidebar--focus-mode' : ''}`}
+      ref={sidebarRef}
+      className={`sidebar pointer-glow-host${sidebarVisible ? '' : ' sidebar--hidden'}${focusMode ? ' sidebar--focus-mode' : ''}`}
     >
+      {/* The accent glowing around the pointer while it's over the sidebar, under everything in it. */}
+      <div className="pointer-glow" aria-hidden="true" />
       {/* Everything that actually needs to disappear as the sidebar
           collapses lives in this inner wrapper, which clips to nothing —
           `.sidebar__toggle` below deliberately isn't in here, since it's

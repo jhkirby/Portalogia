@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import {
   useCallback,
@@ -19,15 +19,19 @@ import type { PdfOpenResult, PdfTool, PdfToolState } from '@shared/ipc-contract'
 import type { PointerMode } from '@shared/tab-state';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 import { commentCursor, highlighterCursor, penCursor, textCursor } from '../../lib/toolCursors';
-import { countCharacters, countSelection, wordStarts } from '@shared/markdown/structure';
+import { countSelection } from '@shared/markdown/structure';
+import { sectionsAreValid, type PdfSection } from '@shared/pdf/sections';
 import { PdfPage, type PageHighlight, type PageLink, type PageRect } from './PdfPage';
+import { PdfSidePanel, type EditableSection } from './PdfSidePanel';
 import { PdfStatusBar, type PdfDocumentStats } from './PdfStatusBar';
+import { readPdfStructure, type PdfOutboundLink } from './readPdfStructure';
 import { usePdfFind } from './usePdfFind';
 import type { PagePoint, PdfComment, PdfStroke, PdfTextBoxModel, PdfTextBoxPatch } from './PdfAnnotationLayer';
 import { TEXT_BOX_FONT_SIZE_DEFAULT } from '@shared/constants';
 import { PAN_WRAP_TIMEOUT_MS, wrapTargetAt, type PanWrap } from '@shared/panWrap';
 import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
 import { FluidBackground } from '../FluidBackground';
+import { SidePanelToggle } from '../SidePanel';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -84,9 +88,6 @@ function subtractRects(rect: PageRect, blockers: readonly PageRect[], minWidth: 
 /** A mark tagged with the 1-based page it belongs to. */
 type OnPage<T> = T & { readonly page: number };
 
-/** pdf.js's annotation type for a link (`AnnotationType.LINK`), counted for the stat bar. */
-const LINK_ANNOTATION_TYPE = 2;
-
 /** The undoable marks: what Ctrl+Z / Ctrl+Y step through. */
 interface MarksSnapshot {
   readonly strokes: readonly OnPage<PdfStroke>[];
@@ -101,6 +102,11 @@ const MAX_HISTORY = 200;
 const EMPTY_STROKES: readonly OnPage<PdfStroke>[] = [];
 const EMPTY_HIGHLIGHTS: readonly OnPage<PageHighlight>[] = [];
 const EMPTY_CROPS: readonly OnPage<PageRect>[] = [];
+
+/** Sections as stored (or as read), given the ids the side panel keys its rows by. */
+function withIds(sections: readonly PdfSection[]): EditableSection[] {
+  return sections.map((section) => ({ ...section, id: crypto.randomUUID() }));
+}
 
 interface PageSize {
   readonly width: number;
@@ -182,6 +188,32 @@ export function PdfViewer() {
   const [fileBytes, setFileBytes] = useState(0);
   /** The document's words, characters and links, counted after it opens; `null` while counting. */
   const [docStats, setDocStats] = useState<PdfDocumentStats | null>(null);
+  /** The file's sections as read from it (its outline, or else its headings), and whether from its outline; `null` while reading. */
+  const [readSections, setReadSections] = useState<{ sections: readonly EditableSection[]; fromOutline: boolean } | null>(null);
+  /** The sections as the user edited them, saved with the marks; `null` while they're as read. */
+  const [editedSections, setEditedSections] = useState<readonly EditableSection[] | null>(null);
+  /** The document's links, for the side panel; `null` while reading. */
+  const [outboundLinks, setOutboundLinks] = useState<readonly PdfOutboundLink[] | null>(null);
+  /** The last edit of the sections with nothing marked in red: what's saved while the one on screen has problems. */
+  const savedSectionsRef = useRef<readonly PdfSection[] | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  /** Counts Ctrl+Alt+E presses since the panel opened, for it to switch section editing (see `PdfSidePanel`). */
+  const [editRequest, setEditRequest] = useState(0);
+  const togglePanel = useCallback((): void => {
+    setPanelOpen((open) => !open);
+    setEditRequest(0);
+  }, []);
+  // Ctrl+Alt+B (main's accelerator) shows or hides the panel too.
+  useEffect(() => window.northstarPdf.onToggleSidePanel(togglePanel), [togglePanel]);
+  // Ctrl+Alt+E edits the sections, opening the panel first if it's closed.
+  useEffect(
+    () =>
+      window.northstarPdf.onToggleSectionEditing(() => {
+        setPanelOpen(true);
+        setEditRequest((count) => count + 1);
+      }),
+    [],
+  );
   /** The selected text's words and characters; `null` while nothing in the document is selected. */
   const [selectionStats, setSelectionStats] = useState<{ words: number; characters: number } | null>(null);
   // Back in Pan mode, a selection made in Select mode would be left stranded where nothing can change it.
@@ -281,6 +313,8 @@ export function PdfViewer() {
       setTextBoxes(file.annotations.textBoxes);
       setHighlights(file.annotations.highlights);
       setCrops(file.annotations.crops);
+      savedSectionsRef.current = file.annotations.sections;
+      setEditedSections(file.annotations.sections === null ? null : withIds(file.annotations.sections));
       setOpenCommentId(null);
       setDocKey(file.key);
       scrollRef.current?.scrollTo({ left: 0, top: 0 });
@@ -310,36 +344,23 @@ export function PdfViewer() {
     window.northstarPdf.reportPage(current, pageSizes.length);
   }, [pageSizes]);
 
-  // The document's words, characters and links, for the stat bar: read page by page in the background once it opens
-  // (a long document takes a moment), then shown all at once.
+  // The document's words, characters and links for the stat bar, and its sections and links for the side panel: read
+  // page by page in the background once it opens (a long document takes a moment), then shown all at once.
   useEffect(() => {
     setDocStats(null);
+    setReadSections(null);
+    setOutboundLinks(null);
     if (!doc) {
       return;
     }
     let cancelled = false;
-    void (async () => {
-      let words = 0;
-      let characters = 0;
-      let links = 0;
-      for (let n = 1; n <= doc.numPages && !cancelled; n += 1) {
-        try {
-          const page = await doc.getPage(n);
-          const content = await page.getTextContent();
-          // pdf.js's runs carry their own spaces and mark where a line ends; a line end counts as a space, as it reads.
-          const text = content.items.map((item) => ('str' in item ? item.str + (item.hasEOL ? ' ' : '') : '')).join('');
-          words += wordStarts(text).length;
-          characters += countCharacters(text.trimEnd());
-          const annotations: unknown[] = await page.getAnnotations({ intent: 'display' });
-          links += annotations.filter((raw) => (raw as { annotationType?: number }).annotationType === LINK_ANNOTATION_TYPE).length;
-        } catch {
-          // A page pdf.js can't read adds nothing to the counts.
-        }
+    void readPdfStructure(doc, () => cancelled).then((structure) => {
+      if (!cancelled && structure) {
+        setDocStats(structure.stats);
+        setReadSections({ sections: withIds(structure.sections), fromOutline: structure.fromOutline });
+        setOutboundLinks(structure.links);
       }
-      if (!cancelled) {
-        setDocStats({ words, characters, links });
-      }
-    })();
+    });
     return () => {
       cancelled = true;
     };
@@ -476,6 +497,7 @@ export function PdfViewer() {
           setTextBoxes([]);
           setHighlights(EMPTY_HIGHLIGHTS);
           setCrops(EMPTY_CROPS);
+          setEditedSections(null);
           setOpenCommentId(null);
           setDocKey(null);
           setError(null);
@@ -505,6 +527,12 @@ export function PdfViewer() {
     if (docKey === null) {
       return;
     }
+    // An edit with an empty or repeated name, or a repeated page, isn't kept: the last one without is.
+    if (editedSections === null) {
+      savedSectionsRef.current = null;
+    } else if (sectionsAreValid(editedSections, pageSizes.length)) {
+      savedSectionsRef.current = editedSections.map(({ title, page, level }) => ({ title, page, level }));
+    }
     window.northstarPdf.saveAnnotations(docKey, {
       strokes: strokes.map(({ id, page, points }) => ({ id, page, points: [...points] })),
       comments: comments.filter((c) => c.committed).map(({ id, page, x, y, text }) => ({ id, page, x, y, text })),
@@ -513,8 +541,9 @@ export function PdfViewer() {
         .filter((box) => box.text.trim() !== '')
         .map(({ id, page, x, y, text, size, align }) => ({ id, page, x, y, text, size, align })),
       crops: crops.map(({ page, x, y, w, h }) => ({ page, x, y, w, h })),
+      sections: savedSectionsRef.current === null ? null : [...savedSectionsRef.current],
     });
-  }, [docKey, strokes, comments, textBoxes, highlights, crops]);
+  }, [docKey, strokes, comments, textBoxes, highlights, crops, editedSections, pageSizes]);
 
   const activeTool: PdfTool = tool.tool;
 
@@ -923,97 +952,123 @@ export function PdfViewer() {
   return (
     <div className="pdf-viewer">
       <style>{`::highlight(${PREVIEW_HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, ${PREVIEW_ALPHA}); }`}</style>
-      <div
-        ref={scrollRef}
-        className={`pdf-viewer__scroll load-blur${loadBlur.blurred ? ' load-blur--on' : ''}${closing ? ' content-fading' : ''}${doc && pointerMode === 'pan' ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
-        data-tool={activeTool}
-        data-pointer-mode={pointerMode}
-        style={toolCursor ? ({ '--pdf-tool-cursor': toolCursor } as CSSProperties) : undefined}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endPan}
-        onPointerCancel={() => endPan()}
-      >
-        {doc ? (
-          <div className="pdf-viewer__pages">
-            {pageSizes.map((size, index) => {
-              const page = index + 1;
-              return (
-                <PdfPage
-                  key={`${docVersion}-${index}`}
-                  doc={doc}
-                  pageNumber={page}
-                  width={size.width}
-                  height={size.height}
-                  scale={scale}
-                  renderScale={renderScale}
-                  rootRef={scrollRef}
-                  highlights={highlights.filter((h) => h.page === page)}
-                  hoveredHighlightId={hoveredHighlightId}
-                  highlightColor={tool.color}
-                  cropEditing={activeTool === 'crop'}
-                  crop={crops.find((c) => c.page === page) ?? null}
-                  cropDraft={cropDrag?.pages.includes(page) ? cropDrag.rect : null}
-                  cropMulti={shiftHeld}
-                  onCropDragStart={(shift) => startCropDrag(page, shift)}
-                  onCropDrag={(rect) => setCropDrag((previous) => (previous ? { ...previous, rect } : previous))}
-                  onCropCommit={(next) => commitCrop(page, next)}
-                  onFollowLink={followLink}
-                  annotations={{
-                    tool: activeTool,
-                    color: tool.color,
-                    strokes: strokes.filter((stroke) => stroke.page === page),
-                    comments: comments.filter((comment) => comment.page === page),
-                    textBoxes: textBoxes.filter((box) => box.page === page),
-                    scale,
-                    openCommentId,
-                    onAddStroke: (points: readonly PagePoint[]) =>
-                      setStrokes((previous) => [...previous, { id: crypto.randomUUID(), page, points }]),
-                    onRemoveStroke: (id: string) => setStrokes((previous) => previous.filter((s) => s.id !== id)),
-                    onAddComment: (point: PagePoint) => {
-                      const id = crypto.randomUUID();
-                      setComments((previous) => [
-                        ...previous,
-                        { id, page, x: point.x, y: point.y, text: '', committed: false },
-                      ]);
-                      return id;
-                    },
-                    onChangeComment: (id: string, text: string) =>
-                      setComments((previous) => previous.map((c) => (c.id === id ? { ...c, text } : c))),
-                    onCommitComment: (id: string) =>
-                      setComments((previous) =>
-                        previous.flatMap((c) =>
-                          c.id !== id ? [c] : c.text.trim() === '' ? [] : [{ ...c, committed: true }],
+      {/* The document and its side panel, side by side in the frame, over the stat bar. */}
+      <div className={`pdf-viewer__body${doc ? '' : ' pdf-viewer__body--empty'}`}>
+        <div
+          ref={scrollRef}
+          className={`pdf-viewer__scroll load-blur${loadBlur.blurred ? ' load-blur--on' : ''}${closing ? ' content-fading' : ''}${doc && pointerMode === 'pan' ? ' pdf-viewer__scroll--pannable' : ''}${isPanning ? ' pdf-viewer__scroll--panning' : ''}`}
+          data-tool={activeTool}
+          data-pointer-mode={pointerMode}
+          style={toolCursor ? ({ '--pdf-tool-cursor': toolCursor } as CSSProperties) : undefined}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endPan}
+          onPointerCancel={() => endPan()}
+        >
+          {doc ? (
+            <div className="pdf-viewer__pages">
+              {pageSizes.map((size, index) => {
+                const page = index + 1;
+                return (
+                  <PdfPage
+                    key={`${docVersion}-${index}`}
+                    doc={doc}
+                    pageNumber={page}
+                    width={size.width}
+                    height={size.height}
+                    scale={scale}
+                    renderScale={renderScale}
+                    rootRef={scrollRef}
+                    highlights={highlights.filter((h) => h.page === page)}
+                    hoveredHighlightId={hoveredHighlightId}
+                    highlightColor={tool.color}
+                    cropEditing={activeTool === 'crop'}
+                    crop={crops.find((c) => c.page === page) ?? null}
+                    cropDraft={cropDrag?.pages.includes(page) ? cropDrag.rect : null}
+                    cropMulti={shiftHeld}
+                    onCropDragStart={(shift) => startCropDrag(page, shift)}
+                    onCropDrag={(rect) => setCropDrag((previous) => (previous ? { ...previous, rect } : previous))}
+                    onCropCommit={(next) => commitCrop(page, next)}
+                    onFollowLink={followLink}
+                    annotations={{
+                      tool: activeTool,
+                      color: tool.color,
+                      strokes: strokes.filter((stroke) => stroke.page === page),
+                      comments: comments.filter((comment) => comment.page === page),
+                      textBoxes: textBoxes.filter((box) => box.page === page),
+                      scale,
+                      openCommentId,
+                      onAddStroke: (points: readonly PagePoint[]) =>
+                        setStrokes((previous) => [...previous, { id: crypto.randomUUID(), page, points }]),
+                      onRemoveStroke: (id: string) => setStrokes((previous) => previous.filter((s) => s.id !== id)),
+                      onAddComment: (point: PagePoint) => {
+                        const id = crypto.randomUUID();
+                        setComments((previous) => [
+                          ...previous,
+                          { id, page, x: point.x, y: point.y, text: '', committed: false },
+                        ]);
+                        return id;
+                      },
+                      onChangeComment: (id: string, text: string) =>
+                        setComments((previous) => previous.map((c) => (c.id === id ? { ...c, text } : c))),
+                      onCommitComment: (id: string) =>
+                        setComments((previous) =>
+                          previous.flatMap((c) =>
+                            c.id !== id ? [c] : c.text.trim() === '' ? [] : [{ ...c, committed: true }],
+                          ),
                         ),
-                      ),
-                    onRemoveComment: (id: string) => {
-                      setComments((previous) => previous.filter((c) => c.id !== id));
-                      setOpenCommentId((current) => (current === id ? null : current));
-                    },
-                    onToggleComment: (id: string) => setOpenCommentId((current) => (current === id ? null : id)),
-                    onAddTextBox: (point: PagePoint) => {
-                      const id = crypto.randomUUID();
-                      setTextBoxes((previous) => [
-                        ...previous,
-                        { id, page, x: point.x, y: point.y, text: '', size: TEXT_BOX_FONT_SIZE_DEFAULT, align: 'left' },
-                      ]);
-                      return id;
-                    },
-                    onChangeTextBox: (id: string, patch: PdfTextBoxPatch) =>
-                      setTextBoxes((previous) => previous.map((b) => (b.id === id ? { ...b, ...patch } : b))),
-                    onEndTextBox: (id: string) =>
-                      setTextBoxes((previous) => previous.filter((b) => b.id !== id || b.text.trim() !== '')),
-                    onRemoveTextBox: (id: string) => setTextBoxes((previous) => previous.filter((b) => b.id !== id)),
-                  }}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <div className="pdf-viewer__empty">
-            <FluidBackground />
-            {error && <p className="pdf-viewer__error">{error}</p>}
-          </div>
+                      onRemoveComment: (id: string) => {
+                        setComments((previous) => previous.filter((c) => c.id !== id));
+                        setOpenCommentId((current) => (current === id ? null : current));
+                      },
+                      onToggleComment: (id: string) => setOpenCommentId((current) => (current === id ? null : id)),
+                      onAddTextBox: (point: PagePoint) => {
+                        const id = crypto.randomUUID();
+                        setTextBoxes((previous) => [
+                          ...previous,
+                          { id, page, x: point.x, y: point.y, text: '', size: TEXT_BOX_FONT_SIZE_DEFAULT, align: 'left' },
+                        ]);
+                        return id;
+                      },
+                      onChangeTextBox: (id: string, patch: PdfTextBoxPatch) =>
+                        setTextBoxes((previous) => previous.map((b) => (b.id === id ? { ...b, ...patch } : b))),
+                      onEndTextBox: (id: string) =>
+                        setTextBoxes((previous) => previous.filter((b) => b.id !== id || b.text.trim() !== '')),
+                      onRemoveTextBox: (id: string) => setTextBoxes((previous) => previous.filter((b) => b.id !== id)),
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="pdf-viewer__empty">
+              <FluidBackground />
+              {error && <p className="pdf-viewer__error">{error}</p>}
+            </div>
+          )}
+        </div>
+        {doc && (
+          <>
+            <SidePanelToggle open={panelOpen} what="sections and links" onToggle={togglePanel} />
+            {panelOpen && (
+              <PdfSidePanel
+                sections={editedSections ?? readSections?.sections ?? null}
+                edited={editedSections !== null}
+                fromOutline={readSections?.fromOutline ?? false}
+                links={outboundLinks}
+                pageCount={pageSizes.length}
+                currentPage={visiblePage}
+                docKey={docKey ?? ''}
+                onGoToPage={goToPage}
+                onOpenUrl={(url) => window.northstarPdf.openLink(url)}
+                onChangeSections={setEditedSections}
+                onRevertSections={() =>
+                  setEditedSections(savedSectionsRef.current === null ? null : withIds(savedSectionsRef.current))
+                }
+                editRequest={editRequest}
+              />
+            )}
+          </>
         )}
       </div>
       {doc && error && <p className="pdf-viewer__error pdf-viewer__error--floating">{error}</p>}

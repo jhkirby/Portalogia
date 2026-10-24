@@ -1,26 +1,20 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-24
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ColorPickerOverlayView } from './components/ColorPickerOverlay';
 import { watchAccentColor } from './lib/accentStorage';
+import { followSystemTheme } from './lib/themeFade';
 
-// This page's own document is a separate renderer from the chrome's, so it
-// doesn't inherit `<html data-theme>` the way the chrome's own DOM does
-// (see `useTheme`) — same reasoning and same fix as `suggestions-main.tsx`'s
-// own `applyTheme`.
-function applyTheme(): void {
-  document.documentElement.dataset.theme = window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
-}
-applyTheme();
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+// A separate renderer from the chrome's, so it doesn't inherit `<html data-theme>` (what colors.css's tokens key off):
+// it follows the system theme, which main sets to the chrome's choice (`nativeTheme.themeSource`), and fades on a
+// switch (`followSystemTheme`).
+followSystemTheme();
 
-// Same reasoning as `applyTheme` above, but for the accent color
+// Same reasoning as `followSystemTheme` above, but for the accent color
 // (`.color-picker__field:focus-within`'s border) — see
 // `watchAccentColor`'s own doc comment. Everything else this page draws
 // from the *current* accent (the square's gradient, the ring's thumb)

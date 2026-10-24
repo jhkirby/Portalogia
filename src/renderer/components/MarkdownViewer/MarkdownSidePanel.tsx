@@ -1,16 +1,17 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-24
 
 import { useEffect, useState, type ReactNode } from 'react';
 import type { MarkdownBacklink } from '@shared/ipc-contract';
 import type { NoteHeading, NoteLink } from '@shared/markdown/structure';
+import { SidePanel, type SidePanelTab } from '../SidePanel';
 
 type PanelTab = 'outline' | 'backlinks' | 'outbound';
 
 /** The panel's tabs, in order, with their labels. */
-const PANEL_TABS: readonly { tab: PanelTab; label: string }[] = [
+const PANEL_TABS: readonly SidePanelTab<PanelTab>[] = [
   { tab: 'outline', label: 'Outline' },
   { tab: 'backlinks', label: 'Backlinks' },
   { tab: 'outbound', label: 'Outbound' },
@@ -61,14 +62,14 @@ export function MarkdownSidePanel({ headings, links, noteKey, onGoToHeading, onO
   const renderList = (): ReactNode => {
     if (tab === 'outline') {
       return headings.length === 0 ? (
-        <p className="md-panel__empty">No headings.</p>
+        <p className="side-panel__empty">No headings.</p>
       ) : (
-        <ul className="md-panel__list">
+        <ul className="side-panel__list">
           {headings.map((heading, index) => (
             <li key={`${heading.line}-${heading.text}`}>
               <button
                 type="button"
-                className="md-panel__item"
+                className="side-panel__item"
                 style={{ paddingLeft: `${8 + (heading.level - shallowest) * 12}px` }}
                 title={`${heading.text} (line ${heading.line})`}
                 onClick={() => onGoToHeading(heading, index)}
@@ -82,17 +83,17 @@ export function MarkdownSidePanel({ headings, links, noteKey, onGoToHeading, onO
     }
     if (tab === 'backlinks') {
       if (backlinks === null) {
-        return <p className="md-panel__empty">Looking…</p>;
+        return <p className="side-panel__empty">Looking…</p>;
       }
       return backlinks.length === 0 ? (
-        <p className="md-panel__empty">No notes link here.</p>
+        <p className="side-panel__empty">No notes link here.</p>
       ) : (
-        <ul className="md-panel__list">
+        <ul className="side-panel__list">
           {backlinks.map((link) => (
             <li key={link.target}>
               <button
                 type="button"
-                className="md-panel__item"
+                className="side-panel__item"
                 title={link.target}
                 onClick={(event) => void window.northstarMarkdown.openLink('link', link.target, event.ctrlKey || event.metaKey)}
               >
@@ -104,19 +105,19 @@ export function MarkdownSidePanel({ headings, links, noteKey, onGoToHeading, onO
       );
     }
     return links.length === 0 ? (
-      <p className="md-panel__empty">No links in this note.</p>
+      <p className="side-panel__empty">No links in this note.</p>
     ) : (
-      <ul className="md-panel__list">
+      <ul className="side-panel__list">
         {links.map((link, index) => (
           <li key={`${index}-${link.target}`}>
             <button
               type="button"
-              className="md-panel__item md-panel__item--link"
+              className="side-panel__item side-panel__item--link"
               title={`${link.target} (line ${link.line})`}
               onClick={(event) => onOpenLink(link, event.ctrlKey || event.metaKey)}
             >
-              <span className="md-panel__link-label">{link.label}</span>
-              {link.label !== link.target && <span className="md-panel__link-target">{link.target}</span>}
+              <span className="side-panel__link-label">{link.label}</span>
+              {link.label !== link.target && <span className="side-panel__link-target">{link.target}</span>}
             </button>
           </li>
         ))}
@@ -125,22 +126,8 @@ export function MarkdownSidePanel({ headings, links, noteKey, onGoToHeading, onO
   };
 
   return (
-    <aside className="md-panel" aria-label="Outline and links">
-      <div className="md-panel__tabs" role="tablist">
-        {PANEL_TABS.map(({ tab: name, label }) => (
-          <button
-            key={name}
-            type="button"
-            role="tab"
-            aria-selected={tab === name}
-            className={`md-panel__tab hover-grow${tab === name ? ' md-panel__tab--active' : ''}`}
-            onClick={() => setTab(name)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="md-panel__body">{renderList()}</div>
-    </aside>
+    <SidePanel label="Outline and links" tabs={PANEL_TABS} active={tab} onTab={setTab}>
+      {renderList()}
+    </SidePanel>
   );
 }

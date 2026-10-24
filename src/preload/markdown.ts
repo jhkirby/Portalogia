@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-24
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MarkdownAnnotations } from '@shared/ipc-schemas';
@@ -185,7 +185,18 @@ ipcRenderer.on(TabFocusMode, (_event, focusMode: unknown) => {
   focusModeListeners.forEach((listener) => listener(latestFocusMode));
 });
 
+// The side panel's shortcut (Ctrl+Alt+B): a menu accelerator in main, which passes it on to the tab showing.
+const TabToggleSidePanel = 'tab:toggle-side-panel';
+const sidePanelListeners = new Set<() => void>();
+ipcRenderer.on(TabToggleSidePanel, () => sidePanelListeners.forEach((listener) => listener()));
+
 const api: NorthstarMarkdownApi = {
+  onToggleSidePanel: (listener) => {
+    sidePanelListeners.add(listener);
+    return () => {
+      sidePanelListeners.delete(listener);
+    };
+  },
   onFocusMode: (listener) => {
     listener(latestFocusMode);
     focusModeListeners.add(listener);
