@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-27
 
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
@@ -33,22 +33,29 @@ function readWithNetsh(): Promise<string> {
  * interface: a laptop has one. `netsh` labels its fields in the system's own
  * language, so a non-English Windows reads as `unavailable` and the icon hides.
  * @param output What `netsh wlan show interfaces` printed.
- * @returns The state, and the signal (0-100) while connected.
+ * @returns The state, and the signal (0-100) and network name while connected.
  */
 export function parseWlanInterfaces(output: string): WifiStatus {
+  // Anchored at the line's start, so `SSID` doesn't also match the `AP BSSID` line below it, and kept to one line, so an
+  // empty field (a hidden network's name) doesn't read on into the next one.
   const field = (name: string): string | null => {
-    const match = new RegExp(`^\\s*${name}\\s*:\\s*(.*?)\\s*$`, 'mi').exec(output);
+    const match = new RegExp(`^[ \\t]*${name}[ \\t]*:[ \\t]*(.*?)[ \\t]*\\r?$`, 'mi').exec(output);
     return match ? match[1]! : null;
   };
   const state = field('State');
   if (state === null) {
-    return { state: 'unavailable', signal: 0 };
+    return { state: 'unavailable', signal: 0, ssid: null };
   }
   if (state.toLowerCase() !== 'connected') {
-    return { state: 'disconnected', signal: 0 };
+    return { state: 'disconnected', signal: 0, ssid: null };
   }
   const signal = Number.parseInt(field('Signal') ?? '', 10);
-  return { state: 'connected', signal: Number.isFinite(signal) ? Math.min(100, Math.max(0, signal)) : 0 };
+  return {
+    state: 'connected',
+    signal: Number.isFinite(signal) ? Math.min(100, Math.max(0, signal)) : 0,
+    // A hidden network reports an empty name.
+    ssid: field('SSID') || null,
+  };
 }
 
 /**
@@ -58,7 +65,7 @@ export function parseWlanInterfaces(output: string): WifiStatus {
  * when what it read differs from last time.
  */
 export class WifiMonitor {
-  private status: WifiStatus = { state: 'unavailable', signal: 0 };
+  private status: WifiStatus = { state: 'unavailable', signal: 0, ssid: null };
   private timer: NodeJS.Timeout | null = null;
   private reading = false;
 
@@ -104,11 +111,11 @@ export class WifiMonitor {
       next = parseWlanInterfaces(await this.read());
     } catch {
       // `netsh` exits non-zero with no wireless adapter (or with the WLAN service stopped).
-      next = { state: 'unavailable', signal: 0 };
+      next = { state: 'unavailable', signal: 0, ssid: null };
     } finally {
       this.reading = false;
     }
-    if (next.state !== this.status.state || next.signal !== this.status.signal) {
+    if (next.state !== this.status.state || next.signal !== this.status.signal || next.ssid !== this.status.ssid) {
       this.status = next;
       this.onChange(next);
     }

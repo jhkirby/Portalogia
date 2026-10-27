@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-27 */
 
 /* ── TITLEBAR CLOCK ───────────────────────────────────────────────────── */
 /* Shares the titlebar's top-right corner with WindowControls (see app.css's
@@ -9,7 +9,8 @@
    and fading out as the controls fade in. Never takes the pointer: the
    window-drag strip and the controls beneath it keep their clicks. */
 
-/* One row: the Wi-Fi icon, the battery, the temperature, then the date stacked over the time. */
+/* One row, in sections split by thin rules: Bluetooth and the Wi-Fi network | the battery | the temperature, then the
+   date stacked over the time. */
 .titlebar-clock {
   display: flex;
   align-items: center;
@@ -39,9 +40,33 @@
   align-items: flex-end;
 }
 
-/* A flex box, so the icon centres on the row instead of sitting on a text baseline. */
+/* Flex boxes, so the icons centre on the row instead of sitting on a text baseline; the device count and the network's
+   name sit close beside their icons, as the battery's percent does. */
+.titlebar-clock__bluetooth,
 .titlebar-clock__wifi {
   display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
+/* A long network name would push the clock around; it stops at a set width with an ellipsis. */
+.titlebar-clock__network {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The thin rule between sections: as tall as the date-over-time stack's text, faint so the readings still lead. */
+.titlebar-clock__divider {
+  align-self: center;
+  width: 1px;
+  height: 1.5em;
+
+  background: currentColor;
+  opacity: 0.35;
 }
 
 /* The icon and its percentage, close together as one item. The fill's color is the level's, through the
@@ -53,6 +78,11 @@
 
   font-size: var(--size-font-md);
   font-weight: 600;
+}
+
+/* A little more room than the icon gets, so "54% 3 h" reads as two values rather than one. */
+.titlebar-clock__battery-time {
+  margin-left: var(--size-spacing-xs);
 }
 
 .titlebar-clock__battery[data-level='charging'] {

@@ -1,12 +1,13 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-27
 
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { IpcChannel } from '@shared/ipc-contract';
+import { BluetoothMonitor } from '../platform/BluetoothMonitor';
 import { WeatherMonitor } from '../platform/WeatherMonitor';
 import { WifiMonitor } from '../platform/WifiMonitor';
 import { isChromeSender } from './senderGuards';
@@ -52,26 +53,41 @@ function findBattery(): Promise<boolean | null> {
 }
 
 /**
- * Starts following the Wi-Fi connection and the outside temperature, for the
- * titlebar's status corner (`TitlebarClock`), and answers the chrome's
- * requests for their current state. One of each for the whole app, pushed to
- * every window. Only the chrome may ask: a tab's page has no business knowing.
+ * Starts following the Wi-Fi connection, the connected Bluetooth devices and
+ * the outside temperature, for the titlebar's status corner (`TitlebarClock`),
+ * and answers the chrome's requests for their current state. One of each for
+ * the whole app, pushed to every window. Only the chrome may ask: a tab's page
+ * has no business knowing.
  *
  * Call this exactly once for the app's lifetime, same as `registerTabIpc`.
  */
 export function registerStatusIpc(): void {
-  const wifi = new WifiMonitor((status) => broadcast(IpcChannel.StatusWifiChanged, status));
   const weather = new WeatherMonitor((state) => broadcast(IpcChannel.StatusWeatherChanged, state));
+  const bluetooth = new BluetoothMonitor((status) => broadcast(IpcChannel.StatusBluetoothChanged, status));
+  // The network the weather was last fetched over; joining another sends the weather to look again (see
+  // `WeatherMonitor.networkChanged`). The first reading is the network the app started on, not a change.
+  let network: string | null | undefined;
+  const wifi = new WifiMonitor((status) => {
+    broadcast(IpcChannel.StatusWifiChanged, status);
+    const next = status.state === 'connected' ? (status.ssid ?? '') : null;
+    if (network !== undefined && next !== null && next !== network) {
+      weather.networkChanged();
+    }
+    network = next;
+  });
 
   ipcMain.handle(IpcChannel.StatusWifiGet, (event) => (isChromeSender(event) ? wifi.current : null));
+  ipcMain.handle(IpcChannel.StatusBluetoothGet, (event) => (isChromeSender(event) ? bluetooth.current : null));
   ipcMain.handle(IpcChannel.StatusWeatherGet, (event) => (isChromeSender(event) ? weather.current : null));
   const batteryPresent = findBattery();
   ipcMain.handle(IpcChannel.StatusBatteryPresentGet, (event) => (isChromeSender(event) ? batteryPresent : null));
 
   wifi.start();
+  bluetooth.start();
   weather.start();
   app.on('before-quit', () => {
     wifi.stop();
+    bluetooth.stop();
     weather.stop();
   });
 }

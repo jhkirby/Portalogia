@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-27
 
 import { test, expect } from '@playwright/test';
 import {
@@ -135,9 +135,24 @@ test.describe('findSectionProblems', () => {
       { title: 'Ends', page: 0, level: 0 },
     ];
     const problems = findSectionProblems(sections, 5);
-    expect([...problems.titles].sort()).toEqual([0, 1, 2]);
-    expect([...problems.pages].sort()).toEqual([2, 3, 4, 5]);
+    // Of a repeat, only the later one is marked: the first keeps the name (or page).
+    expect([...problems.titles].sort()).toEqual([1, 2]);
+    expect([...problems.pages].sort()).toEqual([3, 4, 5]);
     expect(sectionsAreValid(sections, 5)).toBe(false);
+  });
+
+  test('the box last typed in is the duplicate, not the one it now matches', () => {
+    const sections = [
+      { title: 'Intro', page: 1, level: 0 },
+      { title: 'intro', page: 1, level: 0 },
+    ];
+    const typedFirst = findSectionProblems(sections, 5, { index: 0, field: 'title' });
+    expect([...typedFirst.titles]).toEqual([0]);
+    // The page wasn't the box typed in, so of the two pages the later is marked.
+    expect([...typedFirst.pages]).toEqual([1]);
+    const typedPage = findSectionProblems(sections, 5, { index: 0, field: 'page' });
+    expect([...typedPage.pages]).toEqual([0]);
+    expect([...typedPage.titles]).toEqual([1]);
   });
 
   test('distinct names on distinct pages in the document are valid', () => {

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-26
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -18,7 +18,9 @@ import {
   renameWorkspaceImageRequestSchema,
   addressSuggestionsSyncRequestSchema,
   bookmarkIdRequestSchema,
+  bookmarksSetModeRequestSchema,
   colorPickerSyncRequestSchema,
+  contentSnapshotShownRequestSchema,
   commentToolRequestSchema,
   createTabRequestSchema,
   createWorkspaceRequestSchema,
@@ -232,6 +234,18 @@ export function registerTabIpc(
     }
   });
 
+  ipcMain.on(IpcChannel.ContentSnapshotShown, (event, rawRequest: unknown) => {
+    const parsed = contentSnapshotShownRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).contentSnapshotShown(parsed.data.id);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
+
   handle(IpcChannel.FocusModeSet, focusModeRequestSchema, (request, event) =>
     resolveTabManager(event).setFocusMode(request.enabled),
   );
@@ -335,6 +349,22 @@ export function registerTabIpc(
     }
   });
 
+  ipcMain.handle(IpcChannel.TabsCreateBookmarks, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).createBookmarksTab() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
+  ipcMain.handle(IpcChannel.TabsCreateSecrets, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).createSecretsTab() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   ipcMain.handle(IpcChannel.TabsCreatePdf, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).createPdfTab() };
@@ -413,6 +443,68 @@ export function registerTabIpc(
     }
     try {
       resolveTabManager(event).setHistoryRange(parsed.data.id, parsed.data.range);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
+
+  // The Bookmarks toolbar's search text and View/Edit switch: the chrome's alone, like the History toolbar's.
+  ipcMain.on(IpcChannel.BookmarksSetQuery, (event, rawRequest: unknown) => {
+    const parsed = historyQueryRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).setBookmarksQuery(parsed.data.id, parsed.data.query);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
+
+  ipcMain.on(IpcChannel.BookmarksSetMode, (event, rawRequest: unknown) => {
+    const parsed = bookmarksSetModeRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).setBookmarksMode(parsed.data.id, parsed.data.mode);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
+
+  // The Secrets toolbar's search text and View/Edit switch: the chrome's alone, like the Bookmarks toolbar's.
+  ipcMain.on(IpcChannel.SecretsSetQuery, (event, rawRequest: unknown) => {
+    const parsed = historyQueryRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).setSecretsQuery(parsed.data.id, parsed.data.query);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
+
+  ipcMain.on(IpcChannel.SecretsSetMode, (event, rawRequest: unknown) => {
+    const parsed = bookmarksSetModeRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).setSecretsMode(parsed.data.id, parsed.data.mode);
+    } catch {
+      // Not from a chrome window: ignored.
+    }
+  });
+
+  ipcMain.on(IpcChannel.SecretsAddRow, (event, rawRequest: unknown) => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    try {
+      resolveTabManager(event).addSecretRow(parsed.data.id);
     } catch {
       // Not from a chrome window: ignored.
     }

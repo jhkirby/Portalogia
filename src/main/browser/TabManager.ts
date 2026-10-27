@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-27
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import {
   app,
   BrowserWindow,
@@ -51,6 +51,7 @@ import { DEFAULT_WORKSPACE_ICON, isWorkspaceIconId } from '@shared/workspaceIcon
 import {
   IpcChannel,
   type AddressSuggestionsSyncPayload,
+  type BookmarkUpdateResult,
   type ColorPickerSyncPayload,
   type ExportMenuAction,
   type ExportMenuSyncPayload,
@@ -66,6 +67,7 @@ import {
   type PdfOpenResult,
   type TooltipSyncPayload,
   type PageStats,
+  type SecretPromptOffer,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
 import type {
@@ -103,6 +105,9 @@ import {
   toNoteFileName,
 } from './MarkdownVault';
 import type { BookmarkStore } from './BookmarkStore';
+import type { BookmarksController } from './BookmarksController';
+import type { SecretsController } from './SecretsController';
+import { SecretPromptOverlay } from './SecretPromptOverlay';
 import type { CommentController } from './CommentController';
 import type { TextBoxController } from './TextBoxController';
 import type { HistoryController } from './HistoryController';
@@ -122,6 +127,7 @@ import { getCurrentAccent, trackPageSelectionAccent } from './pageSelectionAccen
 import type { SessionSnapshot, SessionStore } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
+import { ContentSnapshot } from './ContentSnapshot';
 import { TooltipOverlay } from './TooltipOverlay';
 import type { TerminalManager } from '../terminal/TerminalManager';
 import { cursorWarper } from '../platform/CursorWarper';
@@ -159,6 +165,9 @@ const TAB_FADE_COVER_MS = 50;
 
 /** The colour a newly shown tab fades in from: the chrome's own (`--color-chrome-bg`), by theme. */
 const TAB_FADE_COLOR = { light: '#f1f3f4', dark: '#202124' } as const;
+
+/** How far past the window's right edge a view waits out the sidebar's slide (`slideSidebar`): wholly out of sight. */
+const PARKED_OFFSET_PX = 1000;
 
 /** How many closed tabs `restoreLastClosedTab` can reach back through. */
 const CLOSED_TAB_HISTORY_LIMIT = 20;
@@ -270,6 +279,10 @@ export class TabManager {
   private readonly historyQueries = new Map<string, string>();
   /** The time range each History tab's table shows, by tab id (all time until its toolbar says otherwise). */
   private readonly historyRanges = new Map<string, HistoryClearRange>();
+  /** The search text each Bookmarks tab's table is filtered by — same reasoning as `historyQueries`. */
+  private readonly bookmarksQueries = new Map<string, string>();
+  /** The search text each Secrets tab's table is filtered by — same reasoning as `historyQueries`. */
+  private readonly secretsQueries = new Map<string, string>();
   private activeTabId: string | null = null;
   private activeWorkspaceId: string;
   private splitView: SplitViewState | null = null;
@@ -304,6 +317,10 @@ export class TabManager {
   private boundsAnimationToken = 0;
   /** Set for the duration of an in-flight bounds animation (see `animateBoundsInset`) — lets `updateBounds` defer to the animation's own frames instead of fighting them with a one-off instant jump, e.g. from the native 'resize' event `setFullScreen` fires when Focus Mode toggles. */
   private isAnimatingBounds = false;
+  /** Set from a sidebar toggle until its slide is done (`slideSidebar`); a toggle meanwhile is ignored. */
+  private sidebarSliding = false;
+  /** The picture of the pages the chrome slides with the sidebar, in their place (`slideSidebar`). */
+  private readonly contentSnapshot: ContentSnapshot;
   /** The tab whose page is fullscreen (see `setHtmlFullScreen`), if any. */
   private htmlFullScreenTabId: string | null = null;
   /** Whether the window was already OS-fullscreen (Focus Mode) when a page went fullscreen, so leaving doesn't pull it out. */
@@ -313,6 +330,8 @@ export class TabManager {
   private readonly tooltipOverlay: TooltipOverlay;
   private readonly colorPickerOverlay: ColorPickerOverlay;
   private readonly exportMenuOverlay: ExportMenuOverlay;
+  /** The "save this login?" prompt in the page area's top-right corner — see `offerSecret`. */
+  private readonly secretPrompt: SecretPromptOverlay;
   private readonly laserPointerOverlay: LaserPointerOverlay;
   private readonly findOverlay: FindOverlay;
   /** Unregisters this window from `registry` — call once, when the window closes (see `dispose`). */
@@ -356,6 +375,11 @@ export class TabManager {
    * @param historyController The browsing history — recording, serving and
    *   clearing it — shared the same way, since a History tab can move
    *   between windows. See `HistoryController`'s own class doc comment.
+   * @param bookmarksController Serves the bookmarks to every Bookmarks tab, shared
+   *   the same way `historyController` is. See its own class doc comment.
+   * @param secretsController Serves the secrets to every Secrets tab, offers to
+   *   save a login a page sends, and fills pages in — shared the same way. See
+   *   its own class doc comment.
    * @param adBlocker The app-wide ad blocker; asked whether a page's popup
    *   should be dropped.
    */
@@ -371,6 +395,8 @@ export class TabManager {
     private readonly penController: PenController,
     private readonly textBoxController: TextBoxController,
     private readonly historyController: HistoryController,
+    private readonly bookmarksController: BookmarksController,
+    private readonly secretsController: SecretsController,
     private readonly adBlocker: AdBlocker,
     private readonly workspaceImages: WorkspaceImageStore,
   ) {
@@ -434,6 +460,8 @@ export class TabManager {
       (action) => this.runExportAction(action),
       () => this.window.webContents.send(IpcChannel.ExportMenuCloseRequested),
     );
+    this.secretPrompt = new SecretPromptOverlay(this.window, (answer) => this.secretsController.answer(answer));
+    this.contentSnapshot = new ContentSnapshot(this.window);
     this.findOverlay = new FindOverlay(this.window, {
       onInput: (query, options) => {
         this.findQuery = query;
@@ -574,7 +602,11 @@ export class TabManager {
               ? this.createMarkdownTab(workspaceId, tab.url === '' ? undefined : tab.url)
               : tab.kind === 'history'
                 ? this.createHistoryTab(workspaceId)
-                : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
+                : tab.kind === 'bookmarks'
+                  ? this.createBookmarksTab(workspaceId)
+                  : tab.kind === 'secrets'
+                    ? this.createSecretsTab(workspaceId)
+                    : this.createTab(isNavigableUrl(tab.url) ? tab.url : undefined, workspaceId);
       if (tab.active) {
         activeId = state.activeTabId;
       }
@@ -1185,7 +1217,7 @@ export class TabManager {
     if (newPath !== oldPath) {
       this.bookmarkStore.renameMarkdown(oldPath, newPath);
       markdownAnnotationStore.move(oldPath, newPath);
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
     }
     this.states.set(id, { ...current, title: this.markdownTabTitle(newPath), fileName: name, filePath: newPath });
     this.emitState();
@@ -1573,7 +1605,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.addMarkdown(name, path);
-    this.historyController.pushBookmarksToAll();
+    this.bookmarksChanged();
     this.syncFileTabTitles();
     this.emitState();
     return this.getState();
@@ -1591,7 +1623,7 @@ export class TabManager {
       await Promise.all(paths.map(async (path) => ((await stat(path).then(() => true, () => false)) ? null : path)))
     ).filter((path): path is string => path !== null);
     if (this.bookmarkStore.removeMarkdownPaths(missing)) {
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
       this.syncFileTabTitles();
       this.emitState();
     }
@@ -1610,7 +1642,7 @@ export class TabManager {
     }
     if (!(await stat(bookmark.path).then(() => true, () => false))) {
       this.bookmarkStore.remove(bookmark.id);
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
       this.syncFileTabTitles();
       this.emitState();
       return;
@@ -1775,6 +1807,321 @@ export class TabManager {
   public clearHistory(range: HistoryClearRange): BrowserState {
     this.historyController.clear(range);
     return this.getState();
+  }
+
+  /**
+   * Opens a new Bookmarks tab (the toolbar's bookmarks button, or File > New
+   * Bookmarks Tab) and makes it active, in view mode. Built like
+   * `createHistoryTab`: its own `WebContentsView` loading `bookmarks.html?id=`
+   * through its own narrow preload, which carries the bookmark list in and a
+   * row's edit, delete or open out.
+   * @param workspaceId Workspace to create it in; defaults to the active workspace.
+   * @returns The full browser state after the tab is created.
+   */
+  public createBookmarksTab(workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: join(__dirname, '../preload/bookmarks.cjs'),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+      },
+    });
+
+    // Trusted, app-owned content — same reasoning as `createTerminalTab`.
+    view.webContents.on('will-navigate', (event) => event.preventDefault());
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.makePageSeeThrough(view);
+    this.wireSharedInputHandling(id, view.webContents);
+    // A fresh page has never been sent the bookmarks, its search text or its mode. (Never zoomed: see `isZoomable`.)
+    view.webContents.on('did-finish-load', () => {
+      this.bookmarksController.pushTo(id);
+      const state = this.states.get(id);
+      view.webContents.send(IpcChannel.BookmarksPageQuery, this.bookmarksQueries.get(id) ?? '');
+      view.webContents.send(IpcChannel.BookmarksPageMode, state?.kind === 'bookmarks' ? state.mode : 'view');
+    });
+
+    this.views.set(id, view);
+    this.states.set(id, {
+      kind: 'bookmarks',
+      id,
+      title: 'Bookmarks',
+      mode: 'view',
+      workspaceId: workspaceId ?? this.activeWorkspaceId,
+    });
+    this.activateTab(id);
+
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+    if (!app.isPackaged && devServerUrl) {
+      void view.webContents.loadURL(`${devServerUrl}/bookmarks.html?id=${id}`);
+    } else {
+      void view.webContents.loadFile(join(__dirname, '../renderer/bookmarks.html'), { query: { id } });
+    }
+
+    return this.getState();
+  }
+
+  /**
+   * Sets the search text a Bookmarks tab's table filters by — typed in the
+   * chrome's toolbar, so it travels through here, as `setHistoryQuery`'s does.
+   * @param id The Bookmarks tab. A no-op if it isn't one.
+   * @param query The text to filter by; empty shows everything.
+   */
+  public setBookmarksQuery(id: string, query: string): void {
+    if (this.states.get(id)?.kind === 'bookmarks') {
+      this.bookmarksQueries.set(id, query);
+      const view = this.views.get(id);
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.send(IpcChannel.BookmarksPageQuery, query);
+      }
+    }
+  }
+
+  /**
+   * Switches a Bookmarks tab between viewing and editing its table (the
+   * toolbar's View/Edit switch). Kept in the tab's state, so the switch shows
+   * it and main can refuse a viewed table's edits (`BookmarksController`).
+   * @param id The Bookmarks tab. A no-op if it isn't one.
+   * @param mode `'view'` or `'edit'`.
+   */
+  public setBookmarksMode(id: string, mode: 'view' | 'edit'): void {
+    const state = this.states.get(id);
+    if (state?.kind !== 'bookmarks' || state.mode === mode) {
+      return;
+    }
+    this.states.set(id, { ...state, mode });
+    this.emitState();
+    const view = this.views.get(id);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.BookmarksPageMode, mode);
+    }
+  }
+
+  /**
+   * Renames a bookmark and points it somewhere else — a Bookmarks tab's edit.
+   * The reference must be of the bookmark's own kind: an address a tab may
+   * load for a page, or an existing file with the right extension for a PDF
+   * or note (a missing file's bookmark would only be dropped on the next
+   * check, `refreshPdfBookmarks`). The store then refuses a name or reference
+   * another bookmark already has.
+   * @param id The bookmark.
+   * @param title Its new name.
+   * @param reference Its new URL or path.
+   * @returns Whether it was kept, or the field refused and why.
+   */
+  public async updateBookmark(id: string, title: string, reference: string): Promise<BookmarkUpdateResult> {
+    const bookmark = this.bookmarkStore.find(id);
+    if (!bookmark) {
+      return { ok: false, field: 'title', message: 'That bookmark no longer exists' };
+    }
+    const target = reference.trim();
+    if (bookmark.kind === 'page') {
+      if (!isNavigableUrl(target)) {
+        return { ok: false, field: 'reference', message: 'Not a web address a tab can open' };
+      }
+    } else {
+      const extensions = bookmark.kind === 'pdf' ? ['.pdf'] : ['.md', '.markdown'];
+      if (!isAbsolute(target) || !extensions.includes(extname(target).toLowerCase())) {
+        return {
+          ok: false,
+          field: 'reference',
+          message: `Needs a full path to a ${bookmark.kind === 'pdf' ? 'PDF (.pdf)' : 'note (.md or .markdown)'} file`,
+        };
+      }
+      if (!(await stat(target).then((info) => info.isFile(), () => false))) {
+        return { ok: false, field: 'reference', message: 'No file at this path' };
+      }
+    }
+    const result = this.bookmarkStore.update(id, title, target);
+    if (result.ok) {
+      this.bookmarksChanged();
+      this.syncFileTabTitles();
+      this.emitState();
+    }
+    return result;
+  }
+
+  /**
+   * Opens a bookmark from the Bookmarks tab in a new tab of its own kind: a
+   * page as a browser tab, a PDF in a PDF tab, a note in a Markdown tab —
+   * where main's own record says it points. Does nothing for a page whose
+   * address isn't one a tab may load, or when the workspace is full (the
+   * Bookmarks tab then stays active, and the open calls refuse it).
+   * @param id The bookmark.
+   */
+  public openBookmarkInNewTab(id: string): void {
+    const bookmark = this.bookmarkStore.find(id);
+    if (!bookmark) {
+      return;
+    }
+    if (bookmark.kind === 'page') {
+      if (isNavigableUrl(bookmark.url)) {
+        this.createTab(bookmark.url);
+      }
+      return;
+    }
+    if (bookmark.kind === 'pdf') {
+      const { activeTabId } = this.createPdfTab();
+      if (activeTabId) {
+        void this.openPdfBookmark(activeTabId, id);
+      }
+      return;
+    }
+    const { activeTabId } = this.createMarkdownTab();
+    if (activeTabId) {
+      void this.openMarkdownBookmark(activeTabId, id);
+    }
+  }
+
+  /** Tells every page that lists bookmarks — the History table's Bookmark column, every Bookmarks tab — that they changed. */
+  private bookmarksChanged(): void {
+    this.historyController.pushBookmarksToAll();
+    this.bookmarksController.pushToAll();
+  }
+
+  /**
+   * Opens a new Secrets tab (the toolbar's lock button, or File > New Secrets
+   * Tab) and makes it active, in view mode. Built like `createBookmarksTab`:
+   * its own `WebContentsView` loading `secrets.html?id=` through its own
+   * narrow preload, which carries the secrets in and a row's edit, delete or
+   * copy out.
+   * @param workspaceId Workspace to create it in; defaults to the active workspace.
+   * @returns The full browser state after the tab is created.
+   */
+  public createSecretsTab(workspaceId?: string): BrowserState {
+    if (this.isWorkspaceFull(workspaceId ?? this.activeWorkspaceId)) {
+      return this.getState();
+    }
+    const id = randomUUID();
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: join(__dirname, '../preload/secrets.cjs'),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+      },
+    });
+
+    // Trusted, app-owned content — same reasoning as `createTerminalTab`.
+    view.webContents.on('will-navigate', (event) => event.preventDefault());
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.makePageSeeThrough(view);
+    this.wireSharedInputHandling(id, view.webContents);
+    // A fresh page has never been sent the secrets, its search text or its mode. (Never zoomed: see `isZoomable`.)
+    view.webContents.on('did-finish-load', () => {
+      this.secretsController.pushTo(id);
+      const state = this.states.get(id);
+      view.webContents.send(IpcChannel.SecretsPageQuery, this.secretsQueries.get(id) ?? '');
+      view.webContents.send(IpcChannel.SecretsPageMode, state?.kind === 'secrets' ? state.mode : 'view');
+    });
+
+    this.views.set(id, view);
+    this.states.set(id, {
+      kind: 'secrets',
+      id,
+      title: 'Secrets',
+      mode: 'view',
+      workspaceId: workspaceId ?? this.activeWorkspaceId,
+    });
+    this.activateTab(id);
+
+    const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+    if (!app.isPackaged && devServerUrl) {
+      void view.webContents.loadURL(`${devServerUrl}/secrets.html?id=${id}`);
+    } else {
+      void view.webContents.loadFile(join(__dirname, '../renderer/secrets.html'), { query: { id } });
+    }
+
+    return this.getState();
+  }
+
+  /**
+   * Sets the search text a Secrets tab's table filters by — typed in the
+   * chrome's toolbar, so it travels through here, as `setBookmarksQuery`'s does.
+   * @param id The Secrets tab. A no-op if it isn't one.
+   * @param query The text to filter by; empty shows everything.
+   */
+  public setSecretsQuery(id: string, query: string): void {
+    if (this.states.get(id)?.kind === 'secrets') {
+      this.secretsQueries.set(id, query);
+      const view = this.views.get(id);
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.send(IpcChannel.SecretsPageQuery, query);
+      }
+    }
+  }
+
+  /**
+   * Switches a Secrets tab between viewing and editing its table (the
+   * toolbar's View/Edit switch). Kept in the tab's state, so the switch shows
+   * it and main can refuse a viewed table's edits (`SecretsController`).
+   * @param id The Secrets tab. A no-op if it isn't one.
+   * @param mode `'view'` or `'edit'`.
+   */
+  public setSecretsMode(id: string, mode: 'view' | 'edit'): void {
+    const state = this.states.get(id);
+    if (state?.kind !== 'secrets' || state.mode === mode) {
+      return;
+    }
+    this.states.set(id, { ...state, mode });
+    this.emitState();
+    const view = this.views.get(id);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.SecretsPageMode, mode);
+    }
+  }
+
+  /**
+   * Starts a new, empty row in a Secrets tab's table for a secret typed in by
+   * hand (the toolbar's Add button). Adding is a change, so the tab switches
+   * to editing first, which is also what lets main keep the row.
+   * @param id The Secrets tab. A no-op if it isn't one.
+   */
+  public addSecretRow(id: string): void {
+    if (this.states.get(id)?.kind !== 'secrets') {
+      return;
+    }
+    this.setSecretsMode(id, 'edit');
+    const view = this.views.get(id);
+    if (view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.SecretsPageAddRow);
+    }
+  }
+
+  /**
+   * Puts up the "save this login?" prompt for a tab whose page just sent a
+   * login (`SecretsController`). Only over the tab on show: a login sent from
+   * a tab in the background (or the other half of a split) is let go, since
+   * a prompt over another page would offer the wrong site's secrets.
+   * @param tabId The tab the login was typed into.
+   * @param offer What to offer saving.
+   */
+  public offerSecret(tabId: string, offer: SecretPromptOffer): void {
+    if (tabId !== this.activeTabId || this.splitView) {
+      this.secretsController.discard(offer.id);
+      return;
+    }
+    this.dismissSecretPrompt();
+    this.secretPrompt.show(tabId, offer, this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
+  }
+
+  /** Takes the save prompt down unanswered, letting its login go. */
+  private dismissSecretPrompt(): void {
+    const offerId = this.secretPrompt.offerId;
+    if (offerId) {
+      this.secretPrompt.clear();
+      this.secretsController.discard(offerId);
+    }
   }
 
   /**
@@ -2260,7 +2607,7 @@ export class TabManager {
       await rename(oldPath, newPath);
       pdfFilePaths.set(id, newPath);
       this.bookmarkStore.renamePdf(oldPath, newPath);
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
     }
     this.states.set(id, { ...current, title: this.pdfTabTitle(newPath), fileName: name, filePath: newPath });
     this.emitState();
@@ -2332,6 +2679,8 @@ export class TabManager {
     this.tooltipOverlay.dispose();
     this.colorPickerOverlay.dispose();
     this.exportMenuOverlay.dispose();
+    this.dismissSecretPrompt();
+    this.secretPrompt.dispose();
     this.laserPointerOverlay.dispose();
     nativeTheme.removeListener('updated', this.keepPagesSeeThrough);
     this.findOverlay.dispose();
@@ -2642,6 +2991,8 @@ export class TabManager {
       this.highlighter.disposeTab(memberId);
       this.historyQueries.delete(memberId);
       this.historyRanges.delete(memberId);
+      this.bookmarksQueries.delete(memberId);
+      this.secretsQueries.delete(memberId);
       this.commentController.disposeTab(memberId);
       this.textBoxController.disposeTab(memberId);
       this.penController.disposeTab(memberId);
@@ -2690,6 +3041,11 @@ export class TabManager {
     this.highlighter.disposeTab(id);
     this.historyQueries.delete(id);
     this.historyRanges.delete(id);
+    this.bookmarksQueries.delete(id);
+    this.secretsQueries.delete(id);
+    if (this.secretPrompt.tabId === id) {
+      this.dismissSecretPrompt();
+    }
     this.commentController.disposeTab(id);
     this.textBoxController.disposeTab(id);
     this.penController.disposeTab(id);
@@ -2752,13 +3108,17 @@ export class TabManager {
     const wasActive = this.activeTabId === id;
 
     if (view) {
-      this.window.contentView.removeChildView(view);
+      // The active tab's page stays up over the tab shown in its place while that fades in (`closingTab`).
+      if (!wasActive) {
+        this.window.contentView.removeChildView(view);
+      }
       this.views.delete(id);
     }
     this.states.delete(id);
 
     if (wasActive) {
       this.activeTabId = null;
+      this.closingTab = view ? { id, view } : null;
       const sameWorkspaceRemaining = remainingIds.filter(
         (tabId) => this.states.get(tabId)?.workspaceId === closedWorkspaceId,
       );
@@ -2769,6 +3129,11 @@ export class TabManager {
         this.createTab(undefined, closedWorkspaceId);
       } else {
         this.createTab();
+      }
+      // Nothing took it over (no tab came up in its place): it goes now.
+      if (this.closingTab) {
+        this.window.contentView.removeChildView(this.closingTab.view);
+        this.closingTab = null;
       }
     } else {
       this.emitState();
@@ -2864,6 +3229,11 @@ export class TabManager {
     }
     const id = this.resolveViewForThisWindow(requestedId);
 
+    // The save prompt belongs to the page it offers a login from: going to another tab lets it go.
+    if (this.secretPrompt.tabId !== null && this.secretPrompt.tabId !== id) {
+      this.dismissSecretPrompt();
+    }
+
     const owner = this.registry.mountOwners.get(id);
     if (owner && owner !== this) {
       owner.releaseTab(id);
@@ -2881,6 +3251,11 @@ export class TabManager {
         leaving = { id: this.activeTabId, view: previous };
       }
       this.registry.mountOwners.delete(this.activeTabId);
+    }
+    if (leaving === null && this.closingTab) {
+      // The tab just closed, fading out the same way.
+      leaving = this.closingTab;
+      this.closingTab = null;
     }
 
     // Every tab, browser or terminal, has its own `WebContentsView` (see
@@ -3051,6 +3426,9 @@ export class TabManager {
     void view.webContents.loadURL(target).catch(() => {});
     return this.getState();
   }
+
+  /** The active tab just closed (`closeSingleTab`), still mounted, for the tab shown in its place to fade in under. */
+  private closingTab: { id: string; view: WebContentsView } | null = null;
 
   /** The tab just left, still mounted over the one fading in, and the timer that takes it down (`fadeInTab`). */
   private leavingTab: { id: string; view: WebContentsView; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -3260,7 +3638,11 @@ export class TabManager {
             ? this.createMarkdownTab(state.workspaceId, state.filePath ?? undefined)
             : state.kind === 'history'
               ? this.createHistoryTab(state.workspaceId)
-              : this.createTab(state.url, state.workspaceId);
+              : state.kind === 'bookmarks'
+                ? this.createBookmarksTab(state.workspaceId)
+                : state.kind === 'secrets'
+                  ? this.createSecretsTab(state.workspaceId)
+                  : this.createTab(state.url, state.workspaceId);
     if (newState.activeTabId) {
       // `createTab`/`createTerminalTab` both append at the end of the
       // workspace's own tabs and activate it; this repositions it next to
@@ -3300,6 +3682,8 @@ export class TabManager {
       !state ||
       state.kind === 'pdf' ||
       state.kind === 'history' ||
+      state.kind === 'bookmarks' ||
+      state.kind === 'secrets' ||
       (state.kind === 'browser' && state.url === HOME_URL)
     ) {
       return null;
@@ -3763,6 +4147,10 @@ export class TabManager {
         this.createTerminalTab(id);
       } else if (tab.kind === 'history') {
         this.createHistoryTab(id);
+      } else if (tab.kind === 'bookmarks') {
+        this.createBookmarksTab(id);
+      } else if (tab.kind === 'secrets') {
+        this.createSecretsTab(id);
       } else if (tab.kind === 'markdown') {
         this.createMarkdownTab(id, tab.value !== '' && existsSync(tab.value) ? tab.value : undefined);
       } else {
@@ -4169,7 +4557,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.add(title, url);
-    this.historyController.pushBookmarksToAll();
+    this.bookmarksChanged();
     this.emitState();
     return this.getState();
   }
@@ -4177,7 +4565,7 @@ export class TabManager {
   /** Removes a bookmark by id. */
   public removeBookmark(id: string): BrowserState {
     this.bookmarkStore.remove(id);
-    this.historyController.pushBookmarksToAll();
+    this.bookmarksChanged();
     this.syncFileTabTitles();
     this.emitState();
     return this.getState();
@@ -4204,7 +4592,7 @@ export class TabManager {
         return this.getState();
       }
       this.bookmarkStore.togglePdf(path);
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
       this.syncFileTabTitles();
       this.emitState();
       return this.getState();
@@ -4216,7 +4604,7 @@ export class TabManager {
         return this.getState();
       }
       this.bookmarkStore.toggleMarkdown(path);
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
       this.syncFileTabTitles();
       this.emitState();
       return this.getState();
@@ -4225,7 +4613,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.toggle(state.title, state.url);
-    this.historyController.pushBookmarksToAll();
+    this.bookmarksChanged();
     this.emitState();
     return this.getState();
   }
@@ -4243,7 +4631,7 @@ export class TabManager {
       return this.getState();
     }
     this.bookmarkStore.addPdf(name, path);
-    this.historyController.pushBookmarksToAll();
+    this.bookmarksChanged();
     this.syncFileTabTitles();
     this.emitState();
     return this.getState();
@@ -4279,7 +4667,7 @@ export class TabManager {
       await Promise.all(paths.map(async (path) => ((await stat(path).then(() => true, () => false)) ? null : path)))
     ).filter((path): path is string => path !== null);
     if (this.bookmarkStore.removePdfPaths(missing)) {
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
       this.syncFileTabTitles();
       this.emitState();
     }
@@ -4298,7 +4686,7 @@ export class TabManager {
     }
     if (!(await stat(bookmark.path).then(() => true, () => false))) {
       this.bookmarkStore.remove(bookmark.id);
-      this.historyController.pushBookmarksToAll();
+      this.bookmarksChanged();
       this.syncFileTabTitles();
       this.emitState();
       return;
@@ -4333,6 +4721,8 @@ export class TabManager {
     if (!view || !state || id !== this.activeTabId) {
       return null;
     }
+    // A popup is coming up over the page: the save prompt, a view of its own, would sit on top of it.
+    this.dismissSecretPrompt();
 
     let dataUrl: string | null = null;
     try {
@@ -4525,11 +4915,13 @@ export class TabManager {
       return false;
     }
     if (tool === 'laser') {
-      return active.kind !== 'history';
+      return active.kind !== 'history' && active.kind !== 'bookmarks' && active.kind !== 'secrets';
     }
     if (
       active.kind === 'terminal' ||
       active.kind === 'history' ||
+      active.kind === 'bookmarks' ||
+      active.kind === 'secrets' ||
       (active.kind === 'pdf' && active.fileName === null) ||
       // A note takes marks only as the formatted, read-only reader: not while editable, and not as raw text.
       (active.kind === 'markdown' &&
@@ -5296,9 +5688,10 @@ export class TabManager {
   /**
    * @param deltaPercent `±ZOOM_PERCENT_STEP`.
    */
-  /** Whether a tab can be zoomed: every kind but the History tab, whose page is a fixed-size table with no zoom control. */
+  /** Whether a tab can be zoomed: every kind but the History, Bookmarks and Secrets tabs, whose pages are fixed-size tables with no zoom control. */
   private isZoomable(id: string): boolean {
-    return this.states.get(id)?.kind !== 'history';
+    const kind = this.states.get(id)?.kind;
+    return kind !== 'history' && kind !== 'bookmarks' && kind !== 'secrets';
   }
 
   private adjustZoom(deltaPercent: number): void {
@@ -5370,18 +5763,108 @@ export class TabManager {
    *   itself keeps running past this point; bounds settle asynchronously).
    */
   public toggleSidebar(): BrowserState {
+    if (this.sidebarSliding) {
+      return this.getState();
+    }
+    this.sidebarSliding = true;
+    void this.slideSidebar().finally(() => {
+      this.sidebarSliding = false;
+    });
+    return this.getState();
+  }
+
+  /**
+   * The chrome has a sidebar slide's snapshot on screen (`ContentSnapshotShown`).
+   * @param id The snapshot's id.
+   */
+  public contentSnapshotShown(id: number): void {
+    this.contentSnapshot.shown(id);
+  }
+
+  /**
+   * Shows or hides the sidebar (`toggleSidebar`). The chrome slides it by
+   * CSS; the pages beside it are native views, which don't animate. So a
+   * picture of them goes up in the chrome's own tab area first, which its
+   * layout moves in step with the sidebar, while the live views lay out at
+   * their new size out of sight; once the slide is done they come back,
+   * already painted, over the picture. Without a picture (nothing on show,
+   * or the capture failed), the views are resized frame by frame instead
+   * (`animateBoundsInset`).
+   */
+  private async slideSidebar(): Promise<void> {
     // Captured before flipping the flag below, same reasoning as
     // `setFocusMode`'s own `fromLeft` — whatever the sidebar is actually
     // showing right now (which, mid-Focus-Mode, is 0 regardless of
-    // `sidebarVisible` — see `targetLeftInset`), not assumed from the old
-    // `sidebarVisible` value alone the way this used to (wrongly animating
-    // from `SIDEBAR_WIDTH_PX`/0 even while Focus Mode already had it at 0).
+    // `sidebarVisible` — see `targetLeftInset`).
     const fromLeft = this.targetLeftInset();
+    const top = this.targetTopInset();
+    const willMove = !this.focusMode && this.htmlFullScreenTabId === null;
+    const panes = willMove ? this.panesOnShow(fromLeft, top) : [];
+    // Owns the views' bounds from here: a resize meanwhile waits for the slide.
+    const token = ++this.boundsAnimationToken;
+    this.isAnimatingBounds = true;
+    const area = this.computeMainBounds(fromLeft, top);
+    const [width = 0, height = 0] = this.window.getContentSize();
+    const snapshotId =
+      panes.length > 0
+        ? await this.contentSnapshot.cover(
+            panes,
+            area,
+            { left: area.x - fromLeft, top: area.y - top, right: width - area.x - area.width, bottom: height - area.y - area.height },
+            this.framesActiveView() ? CONTENT_FRAME_RADIUS_PX - CONTENT_FRAME_BORDER_PX : 0,
+          )
+        : null;
+    if (token !== this.boundsAnimationToken || this.window.isDestroyed()) {
+      // Superseded while capturing (Focus Mode toggled): that animation owns the bounds now.
+      if (snapshotId !== null) {
+        this.contentSnapshot.uncover(snapshotId, 0);
+      }
+      return;
+    }
     this.sidebarVisible = !this.sidebarVisible;
     this.emitState();
-    const top = this.targetTopInset();
-    this.animateBoundsInset(fromLeft, this.targetLeftInset(), top, top);
-    return this.getState();
+    const toLeft = this.targetLeftInset();
+    if (snapshotId === null) {
+      this.animateBoundsInset(fromLeft, toLeft, top, top);
+      return;
+    }
+    // Out of sight but still drawn (a hidden page wouldn't paint), at the size the slide ends on.
+    this.applyBounds(toLeft, top);
+    for (const { view } of panes) {
+      const bounds = view.getBounds();
+      view.setBounds({ ...bounds, x: bounds.x + width + PARKED_OFFSET_PX });
+    }
+    await new Promise((resolve) => setTimeout(resolve, SIDEBAR_TOGGLE_DURATION_MS));
+    if (this.window.isDestroyed()) {
+      return;
+    }
+    if (token === this.boundsAnimationToken) {
+      this.isAnimatingBounds = false;
+      this.applyBounds(toLeft, top);
+    }
+    this.contentSnapshot.uncover(snapshotId);
+  }
+
+  /**
+   * The views the tab area shows for a sidebar/chrome inset: the active tab's,
+   * or a split pair, each with where it sits.
+   * @param left Horizontal inset, in CSS pixels.
+   * @param top Vertical inset, in CSS pixels.
+   */
+  private panesOnShow(left: number, top: number): { view: WebContentsView; bounds: Rect }[] {
+    const main = this.computeMainBounds(left, top);
+    const panes: { view: WebContentsView | undefined; bounds: Rect }[] = [];
+    if (this.splitView) {
+      const { primary, secondary } = this.computeSplitBoundsFor(main);
+      panes.push({ view: this.views.get(this.splitView.primaryTabId), bounds: primary });
+      panes.push({ view: this.views.get(this.splitView.secondaryTabId), bounds: secondary });
+    } else if (this.activeTabId) {
+      panes.push({ view: this.views.get(this.activeTabId), bounds: main });
+    }
+    return panes.filter(
+      (pane): pane is { view: WebContentsView; bounds: Rect } =>
+        pane.view !== undefined && !pane.view.webContents.isDestroyed() && pane.view.getVisible(),
+    );
   }
 
   /**
@@ -6131,6 +6614,7 @@ export class TabManager {
     const main = this.computeMainBounds(left, top);
     this.laserPointerOverlay.setActive(this.laserPointerActive && this.activeTabId !== null, main);
     this.syncFindOverlay();
+    this.secretPrompt.layout(main);
     if (this.splitView) {
       const { primary, secondary } = this.computeSplitBoundsFor(main);
       this.views.get(this.splitView.primaryTabId)?.setBounds(primary);
@@ -6238,6 +6722,8 @@ export class TabManager {
         this.textBoxController.restoreFor(id, state.url);
         this.penController.restoreFor(id, state.url);
       }
+      // The secrets saved for this site go into their boxes (the page fills only what's still empty).
+      this.secretsController.fill(wc);
     });
 
     wc.on('page-title-updated', (_event, title) => this.patchState(id, { title }));

@@ -1,11 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-27
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { historyCutoff } from '@shared/history';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
+import { compareText, sortRows } from '../../lib/tableSort';
+import { CheckIcon, CopyIcon, OpenInNewTabIcon } from '../icons';
+import { SortHeader, useTableSort } from '../SortHeader';
 import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry } from '@shared/ipc-contract';
 
 /** The most rows drawn at once — thousands of rows would slow the page, and nobody reads past the newest few hundred; the search narrows the rest. */
@@ -51,56 +54,28 @@ function statusClass(status: number): string {
   return '';
 }
 
+/** The table's sortable columns. */
+type HistoryColumn = 'time' | 'type' | 'bookmark' | 'route' | 'method' | 'status';
+
+/** What the Type column shows for a visit. */
+function typeLabel(entry: HistoryEntry): string {
+  return entry.type === 'pdf' ? 'PDF' : entry.type === 'markdown' ? 'MD' : 'URL';
+}
+
 /** The name of the bookmark a route is saved under, or `null` if it isn't bookmarked. */
 function bookmarkNameFor(entry: HistoryEntry, bookmarks: HistoryBookmarkIndex): string | null {
   return (entry.type === 'url' ? bookmarks.urls[entry.url] : bookmarks.pdfs[entry.url.toLowerCase()]) ?? null;
 }
 
-function CopyIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M10.5 3.5v-.2a1.3 1.3 0 0 0-1.3-1.3H3.8a1.3 1.3 0 0 0-1.3 1.3v5.4a1.3 1.3 0 0 0 1.3 1.3h.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/** A tab with a plus beside it: open the row in a new tab. */
-function OpenInNewTabIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M2 13.5V5.3a1.3 1.3 0 0 1 1.3-1.3h3.4l1.2 1.5h5.8a1.3 1.3 0 0 1 1.3 1.3v6.7"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-      <path d="M1.5 13.5h13M8 8v4M6 10h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="m3.5 8.5 3 3 6-6.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+/** The table's headings, in order, with each column's width class. */
+const COLUMNS: readonly { readonly column: HistoryColumn; readonly label: string; readonly className: string }[] = [
+  { column: 'time', label: 'Date & Time', className: 'history__th history__th--time' },
+  { column: 'type', label: 'Type', className: 'history__th history__th--type' },
+  { column: 'bookmark', label: 'Bookmark', className: 'history__th history__th--bookmark' },
+  { column: 'route', label: 'Route', className: 'history__th' },
+  { column: 'method', label: 'Method', className: 'history__th history__th--method' },
+  { column: 'status', label: 'Status', className: 'history__th history__th--status' },
+];
 
 /**
  * The whole of `history.html`'s page: the browsing history as a table — when
@@ -108,7 +83,8 @@ function CheckIcon() {
  * disk (`PDF`), the name of the bookmark the route is saved under (`None` if
  * it isn't), the route (the URL, or the file's path), and the status code a
  * page came back with. Hovering a row reveals a button to copy its
- * route and one to delete it.
+ * route and one to delete it. Clicking a heading sorts by that column
+ * (`SortHeader`); with no column sorted, the newest visit comes first.
  *
  * The controls — the search box, and the range "Clear History" clears — live
  * in the chrome's toolbar (`HistoryToolbar`), where a browser tab has its
@@ -158,7 +134,28 @@ export function HistoryViewer() {
         DATE_TIME_FORMAT.format(entry.timestamp).toLowerCase().includes(needle),
     );
   }, [entries, bookmarks, query, range]);
-  const shown = matches.slice(0, MAX_ROWS);
+  const sort = useTableSort<HistoryColumn>();
+  const sorted = useMemo(
+    () =>
+      sortRows(matches, sort.keys, (first, second, column) => {
+        switch (column) {
+          case 'time':
+            return first.timestamp - second.timestamp;
+          case 'type':
+            return compareText(typeLabel(first), typeLabel(second));
+          case 'bookmark':
+            return compareText(bookmarkNameFor(first, bookmarks) ?? '', bookmarkNameFor(second, bookmarks) ?? '');
+          case 'route':
+            return compareText(first.url, second.url);
+          case 'method':
+            return compareText(first.method, second.method);
+          case 'status':
+            return first.status - second.status;
+        }
+      }),
+    [matches, sort.keys, bookmarks],
+  );
+  const shown = sorted.slice(0, MAX_ROWS);
 
   // Rows whose visits were just deleted (Clear History, or a row's own ×) stay a moment, fading out where they were,
   // rather than vanishing. Only a deletion does this: rows a search or the range hides simply go.
@@ -237,12 +234,15 @@ export function HistoryViewer() {
           <table className="history__table">
             <thead ref={headRef}>
               <tr>
-                <th className="history__th history__th--time">Date &amp; Time</th>
-                <th className="history__th history__th--type">Type</th>
-                <th className="history__th history__th--bookmark">Bookmark</th>
-                <th className="history__th">Route</th>
-                <th className="history__th history__th--method">Method</th>
-                <th className="history__th history__th--status">Status</th>
+                {COLUMNS.map(({ column, label, className }) => (
+                  <SortHeader
+                    key={column}
+                    label={label}
+                    className={className}
+                    direction={sort.directionOf(column)}
+                    onToggle={() => sort.toggle(column)}
+                  />
+                ))}
                 <th className="history__th history__th--actions" aria-label="Actions" />
               </tr>
             </thead>
@@ -266,7 +266,7 @@ export function HistoryViewer() {
                   >
                     <td className="history__cell history__cell--time">{DATE_TIME_FORMAT.format(entry.timestamp)}</td>
                     <td className="history__cell history__cell--type">
-                      {entry.type === 'pdf' ? 'PDF' : entry.type === 'markdown' ? 'MD' : 'URL'}
+                      {typeLabel(entry)}
                     </td>
                     <td
                       className={`history__cell history__cell--bookmark${
@@ -331,7 +331,8 @@ export function HistoryViewer() {
 
       {matches.length > MAX_ROWS && (
         <p className="history__note">
-          Showing the newest {MAX_ROWS} of {matches.length} — search to narrow it down.
+          Showing the {sort.keys.length === 0 ? 'newest' : 'first'} {MAX_ROWS} of {matches.length} — search to narrow it
+          down.
         </p>
       )}
     </div>

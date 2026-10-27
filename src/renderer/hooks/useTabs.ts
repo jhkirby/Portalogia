@@ -154,6 +154,14 @@ export function useTabs() {
     void window.northstar.createHistoryTab().then(logIfFailed);
   }, []);
 
+  const createBookmarksTab = useCallback(() => {
+    void window.northstar.createBookmarksTab().then(logIfFailed);
+  }, []);
+
+  const createSecretsTab = useCallback(() => {
+    void window.northstar.createSecretsTab().then(logIfFailed);
+  }, []);
+
   const openPdfFile = useCallback((id: string) => {
     void window.northstar.openPdfFile(id).then(logIfFailed);
   }, []);
@@ -387,6 +395,8 @@ export function useTabs() {
     createTerminalTab,
     createPdfTab,
     createHistoryTab,
+    createBookmarksTab,
+    createSecretsTab,
     openPdfFile,
     goToPdfPage,
     setPointerMode,

@@ -1,11 +1,13 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-24 */
+   Last Modified: 2026-10-27 */
 
 /* ── HISTORY VIEWER ───────────────────────────────────────────────────── */
 /* `history.html`'s whole page — a History tab's own `WebContentsView` (see
-   `TabManager.createHistoryTab`), so none of the chrome's stylesheets reach it. */
+   `TabManager.createHistoryTab`), so none of the chrome's stylesheets reach it.
+   `bookmarks.html` loads it too: the Bookmarks tab's table is this one's, with
+   its own columns and edit boxes on top (`bookmarks-viewer.css`). */
 
 html,
 body {
@@ -93,16 +95,17 @@ body {
   width: 200px;
 }
 
+/* The narrow columns leave room for their heading's sort mark beside the name (`SortHeader`). */
 .history__th--type {
-  width: 56px;
+  width: 72px;
 }
 
 .history__th--method {
-  width: 84px;
+  width: 96px;
 }
 
 .history__th--status {
-  width: 72px;
+  width: 88px;
 }
 
 .history__th--bookmark {

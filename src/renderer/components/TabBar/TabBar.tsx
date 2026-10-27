@@ -10,7 +10,7 @@ import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import { previewTabOrder } from '../../lib/previewTabOrder';
 import { tabDropTargetAt } from '../../lib/tabDropTarget';
 import { formatShortcut } from '../../lib/shortcuts';
-import { GlobeIcon, HistoryIcon } from '../icons';
+import { BookmarksIcon, GlobeIcon, HistoryIcon, LockIcon } from '../icons';
 import { SHIMMER_PERIOD_MS, useShimmerTick } from '../../hooks/useShimmerTick';
 import { useTabTransitions } from './useTabTransitions';
 import { useActiveTabSlide } from './useActiveTabSlide';
@@ -577,6 +577,14 @@ function Tab({
       ) : tab.kind === 'history' ? (
         <span className="tab-bar__terminal-icon tab-bar__history-icon" aria-hidden="true">
           <HistoryIcon size={13} />
+        </span>
+      ) : tab.kind === 'bookmarks' ? (
+        <span className="tab-bar__terminal-icon tab-bar__history-icon" aria-hidden="true">
+          <BookmarksIcon size={13} />
+        </span>
+      ) : tab.kind === 'secrets' ? (
+        <span className="tab-bar__terminal-icon tab-bar__history-icon" aria-hidden="true">
+          <LockIcon size={13} />
         </span>
       ) : tab.isLoading ? (
         <span className="tab-bar__spinner" aria-hidden="true" />

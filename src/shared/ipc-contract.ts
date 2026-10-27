@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-26
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
 import type { MarkdownAnnotations, PdfAnnotations } from '@shared/ipc-schemas';
-import type { BrowserState, MarkdownDisplay, PointerMode } from '@shared/tab-state';
+import type { BookmarkState, BrowserState, MarkdownDisplay, PointerMode } from '@shared/tab-state';
 
 /**
  * Every IPC channel name in the app, enumerated once. Both main and
@@ -35,6 +35,8 @@ export const IpcChannel = {
   TabsCreateTerminal: 'tabs:create-terminal',
   TabsCreatePdf: 'tabs:create-pdf',
   TabsCreateHistory: 'tabs:create-history',
+  TabsCreateBookmarks: 'tabs:create-bookmarks',
+  TabsCreateSecrets: 'tabs:create-secrets',
   TabsCreateMarkdown: 'tabs:create-markdown',
   /** Chrome → main: open or close this window's find bar. */
   FindSet: 'find:set',
@@ -82,6 +84,56 @@ export const IpcChannel = {
   HistorySetRange: 'history:set-range',
   /** Main → history page: the time range to show. */
   HistoryRange: 'history:range',
+  /** Chrome → main: the Bookmarks toolbar's search text for a Bookmarks tab. */
+  BookmarksSetQuery: 'bookmarks:set-query',
+  /** Chrome → main: switch a Bookmarks tab between viewing and editing. */
+  BookmarksSetMode: 'bookmarks:set-mode',
+  /** Main → bookmarks page: every saved bookmark, in the order they were added. */
+  BookmarksPageList: 'bookmarks-page:list',
+  /** Main → bookmarks page: the search text to filter the table by. */
+  BookmarksPageQuery: 'bookmarks-page:query',
+  /** Main → bookmarks page: whether the table is being viewed or edited. */
+  BookmarksPageMode: 'bookmarks-page:mode',
+  /** Bookmarks page → main: rename and/or re-point one bookmark; answers whether it was kept. */
+  BookmarksPageUpdate: 'bookmarks-page:update',
+  /** Bookmarks page → main: delete one bookmark. */
+  BookmarksPageDelete: 'bookmarks-page:delete',
+  /** Bookmarks page → main: open one bookmark in a new tab of its kind. */
+  BookmarksPageOpen: 'bookmarks-page:open',
+  /** Bookmarks page → main: copy one bookmark's stored URL (or file path) to the clipboard. */
+  BookmarksPageCopy: 'bookmarks-page:copy',
+  /** Chrome → main: the Secrets toolbar's search text for a Secrets tab. */
+  SecretsSetQuery: 'secrets:set-query',
+  /** Chrome → main: switch a Secrets tab between viewing and editing. */
+  SecretsSetMode: 'secrets:set-mode',
+  /** Chrome → main: the toolbar's Add button — start a new, empty row in a Secrets tab's table. */
+  SecretsAddRow: 'secrets:add-row',
+  /** Main → secrets page: put a new, empty row at the top of the table to type a secret into. */
+  SecretsPageAddRow: 'secrets-page:add-row',
+  /** Secrets page → main: keep a secret typed in by hand; answers whether it was kept. */
+  SecretsPageAdd: 'secrets-page:add',
+  /** Main → secrets page: every saved secret, in the order they were saved. */
+  SecretsPageList: 'secrets-page:list',
+  /** Main → secrets page: the search text to filter the table by. */
+  SecretsPageQuery: 'secrets-page:query',
+  /** Main → secrets page: whether the table is being viewed or edited. */
+  SecretsPageMode: 'secrets-page:mode',
+  /** Secrets page → main: rename, re-point and/or change one secret; answers whether it was kept. */
+  SecretsPageUpdate: 'secrets-page:update',
+  /** Secrets page → main: delete one secret. */
+  SecretsPageDelete: 'secrets-page:delete',
+  /** Secrets page → main: copy one secret's stored value to the clipboard. */
+  SecretsPageCopy: 'secrets-page:copy',
+  /** Web page → main: a login was just sent (a username and/or password typed in), to offer saving. */
+  TabSecretsCaptured: 'tab-secrets:captured',
+  /** Main → web page: the saved secrets for this page's site, to fill into their elements. */
+  TabSecretsFill: 'tab-secrets:fill',
+  /** Main → save prompt: what to offer saving, or `null` to clear. */
+  SecretPromptShow: 'secret-prompt:show',
+  /** Save prompt → main: the answer — save under these names, or not. */
+  SecretPromptAnswer: 'secret-prompt:answer',
+  /** Save prompt → main: how tall its card is, so its view is sized to it and covers no more of the page. */
+  SecretPromptHeight: 'secret-prompt:height',
   PdfOpenFile: 'pdf:open-file',
   PdfRename: 'pdf:rename',
   /** PDF page → main: the marks drawn on the open document, to persist. */
@@ -273,6 +325,10 @@ export const IpcChannel = {
   // `contents.zoomLevel` from main.
   ZoomApply: 'zoom:apply',
   SidebarToggle: 'sidebar:toggle',
+  /** Main → chrome: put up (or take down) the picture of the tab's pages that slides with the sidebar. */
+  UiContentSnapshot: 'ui:content-snapshot',
+  /** Chrome → main: that picture is on screen, so the live pages can step away for the slide. */
+  ContentSnapshotShown: 'content-snapshot:shown',
   UiOpenTabSearch: 'ui:open-tab-search',
   UiEditWorkspace: 'ui:edit-workspace',
   UiOpenWorkspaceImages: 'ui:open-workspace-images',
@@ -301,6 +357,10 @@ export const IpcChannel = {
   StatusWifiChanged: 'status:wifi-changed',
   /** Chrome → main: the Wi-Fi connection now. */
   StatusWifiGet: 'status:wifi-get',
+  /** Main → chrome: Bluetooth's connected devices changed. */
+  StatusBluetoothChanged: 'status:bluetooth-changed',
+  /** Chrome → main: Bluetooth's connected devices now. */
+  StatusBluetoothGet: 'status:bluetooth-get',
   /** Chrome → main: whether the computer has a battery at all (`null` while still finding out). */
   StatusBatteryPresentGet: 'status:battery-present-get',
   /** Main → chrome: the outside temperature changed. */
@@ -357,6 +417,42 @@ export interface PageStats {
   readonly selection: { readonly words: number; readonly characters: number } | null;
 }
 
+/** Where the sidebar slide's snapshot sits in the chrome's tab area (`.tab-content`), as insets in CSS pixels. */
+export interface ContentSnapshotInsets {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/** A picture of one pane (a view on show) for the sidebar slide's snapshot. */
+export interface ContentSnapshotPiece {
+  /** The picture as raw BGRA (a `Buffer` from main, a `Uint8Array` by the chrome). */
+  readonly bitmap: Uint8Array;
+  readonly pixelWidth: number;
+  readonly pixelHeight: number;
+  /** The pane's size in CSS pixels. */
+  readonly width: number;
+  readonly height: number;
+  /** Where the pane sits in the snapshot's area, and how much of it it takes, as fractions of it. */
+  readonly x: number;
+  readonly y: number;
+  readonly fractionWidth: number;
+  readonly fractionHeight: number;
+}
+
+/** Main → chrome (`UiContentSnapshot`): put the slide's snapshot up, or take it down. */
+export type ContentSnapshotMessage =
+  | {
+      readonly kind: 'show';
+      readonly id: number;
+      readonly insets: ContentSnapshotInsets;
+      /** The panes' corner radius, in CSS pixels. */
+      readonly radius: number;
+      readonly pieces: readonly ContentSnapshotPiece[];
+    }
+  | { readonly kind: 'clear'; readonly id: number };
+
 /** Pushed whenever the frameless window's maximized state changes, so `WindowControls` can swap its maximize/restore icon. */
 export interface WindowState {
   readonly isMaximized: boolean;
@@ -368,6 +464,19 @@ export interface WifiStatus {
   readonly state: 'connected' | 'disconnected' | 'unavailable';
   /** Signal quality, 0-100; 0 unless connected. */
   readonly signal: number;
+  /** The network's name, or `null` unless connected (or when the network hides its name). */
+  readonly ssid: string | null;
+}
+
+/** The computer's Bluetooth, for the titlebar's status icon. */
+export interface BluetoothStatus {
+  /**
+   * `on`: the radio is on (with or without devices connected). `off`: it is turned off.
+   * `unavailable`: no Bluetooth adapter, or its devices couldn't be read; the icon hides.
+   */
+  readonly state: 'on' | 'off' | 'unavailable';
+  /** How many devices are connected; 0 unless `on`. */
+  readonly devices: number;
 }
 
 /** The outside temperature where the computer is, for the titlebar. */
@@ -552,6 +661,20 @@ export interface NorthstarApi {
   createPdfTab(): Promise<IpcResult<BrowserState>>;
   /** Opens a new History tab (the toolbar's history button, Ctrl+Shift+H, or File > New History Tab). */
   createHistoryTab(): Promise<IpcResult<BrowserState>>;
+  /** Opens a new Bookmarks tab (the toolbar's bookmarks button, or File > New Bookmarks Tab). */
+  createBookmarksTab(): Promise<IpcResult<BrowserState>>;
+  /** Sets the search text a Bookmarks tab's table filters by — typed in the toolbar, shown in the tab's page. Fire-and-forget. */
+  setBookmarksQuery(id: string, query: string): void;
+  /** Switches a Bookmarks tab between viewing and editing its table (the toolbar's View/Edit switch). Fire-and-forget. */
+  setBookmarksMode(id: string, mode: 'view' | 'edit'): void;
+  /** Opens a new Secrets tab (the toolbar's lock button, or File > New Secrets Tab). */
+  createSecretsTab(): Promise<IpcResult<BrowserState>>;
+  /** Sets the search text a Secrets tab's table filters by — typed in the toolbar, shown in the tab's page. Fire-and-forget. */
+  setSecretsQuery(id: string, query: string): void;
+  /** Switches a Secrets tab between viewing and editing its table (the toolbar's View/Edit switch). Fire-and-forget. */
+  setSecretsMode(id: string, mode: 'view' | 'edit'): void;
+  /** Starts a new, empty row in a Secrets tab's table to type a secret into, switching it to editing (the toolbar's Add button). Fire-and-forget. */
+  addSecretRow(id: string): void;
   /** Opens or closes this window's find bar (the toolbar's find button, or Ctrl+F). Browser, PDF (with a file open) and terminal tabs only. */
   setFind(enabled: boolean): Promise<IpcResult<BrowserState>>;
   /** Sets the search text a History tab's table filters by — typed in the toolbar, shown in the tab's page. Fire-and-forget. */
@@ -838,6 +961,11 @@ export interface NorthstarApi {
   /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+S) to open the workspace images popup. */
   onOpenWorkspaceImages(listener: () => void): () => void;
 
+  /** Subscribes to main's requests to put up or take down the picture of the tab's pages that slides with the sidebar. */
+  onContentSnapshot(listener: (message: ContentSnapshotMessage) => void): () => void;
+  /** Tells main the snapshot `id` is on screen. */
+  reportContentSnapshotShown(id: number): void;
+
   /** Subscribes to the menu/accelerator-driven request to open the tab search overlay. */
   onOpenTabSearch(listener: () => void): () => void;
 
@@ -900,6 +1028,10 @@ export interface NorthstarApi {
   getBatteryPresent(): Promise<boolean | null>;
   /** Pushed whenever the Wi-Fi connection or its signal changes. Returns an unsubscribe function. */
   onWifiStatusChanged(listener: (status: WifiStatus) => void): () => void;
+  /** Bluetooth's connected devices now (`null` if asked from anywhere but the chrome). */
+  getBluetoothStatus(): Promise<BluetoothStatus | null>;
+  /** Pushed whenever a Bluetooth device connects or disconnects. Returns an unsubscribe function. */
+  onBluetoothStatusChanged(listener: (status: BluetoothStatus) => void): () => void;
   /** The outside temperature now (`null` if asked from anywhere but the chrome). */
   getWeather(): Promise<WeatherState | null>;
   /** Pushed whenever the outside temperature changes. Returns an unsubscribe function. */
@@ -1274,6 +1406,144 @@ export interface NorthstarHistoryApi {
   onQuery(listener: (query: string) => void): () => void;
   /** Subscribes to the time range the table shows (the toolbar's number and unit); called immediately with the latest if one already arrived. */
   onRange(listener: (range: HistoryClearRange) => void): () => void;
+}
+
+/** Which of a bookmark's editable fields an update is refused over. */
+export type BookmarkField = 'title' | 'reference';
+
+/** What main says of a Bookmarks page's edit: kept, or refused over one field and why. */
+export type BookmarkUpdateResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly field: BookmarkField; readonly message: string };
+
+/**
+ * The narrower API surface exposed to a Bookmarks tab's own `WebContentsView`
+ * (`src/preload/bookmarks.ts`, `bookmarks.html`). See `TabManager.createBookmarksTab`.
+ */
+export interface NorthstarBookmarksApi {
+  /** Subscribes to the saved bookmarks (in the order added); called immediately with the latest list if one already arrived. */
+  onBookmarks(listener: (bookmarks: readonly BookmarkState[]) => void): () => void;
+  /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
+  onQuery(listener: (query: string) => void): () => void;
+  /** Subscribes to whether the table is viewed or edited (the toolbar's switch); called immediately with the latest if one already arrived. */
+  onMode(listener: (mode: 'view' | 'edit') => void): () => void;
+  /**
+   * Renames a bookmark and points it somewhere else: a page's URL, or a PDF's or note's path. Main checks both (no
+   * name or reference another bookmark has, a reference of the bookmark's own kind) before keeping either.
+   */
+  update(id: string, title: string, reference: string): Promise<BookmarkUpdateResult>;
+  /** Deletes one bookmark. Fire-and-forget. */
+  remove(id: string): void;
+  /** Opens one bookmark in a new tab of its kind. Main reads where it points from its own record. Fire-and-forget. */
+  open(id: string): void;
+  /** Copies one bookmark's URL (a file's path) to the clipboard — main reads it from its own record, so the page can't put arbitrary text there. Fire-and-forget. */
+  copy(id: string): void;
+}
+
+/**
+ * One saved secret: a username or a password, kept for filling in on a
+ * website. Sent only to a Secrets tab's own page (`secrets.html`), never to
+ * the chrome or a web page.
+ */
+export interface SecretState {
+  readonly id: string;
+  /** What it's called in the table (`example.com - Password` unless renamed). */
+  readonly name: string;
+  /** The page it's for (origin and path, see `secretSourceOf`); it's filled into pages of the same origin. */
+  readonly source: string;
+  /** The element it's filled into on that page, as a CSS selector (`input#password`). */
+  readonly element: string;
+  /** The username or password itself. */
+  readonly secret: string;
+}
+
+/** Which of a secret's fields an edit or an addition is refused over (the element is typed only when adding one by hand). */
+export type SecretField = 'name' | 'source' | 'element' | 'secret';
+
+/** What main says of a Secrets page's edit: kept, or refused over one field and why. */
+export type SecretUpdateResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly field: SecretField; readonly message: string };
+
+/**
+ * The narrower API surface exposed to a Secrets tab's own `WebContentsView`
+ * (`src/preload/secrets.ts`, `secrets.html`). See `TabManager.createSecretsTab`.
+ */
+export interface NorthstarSecretsApi {
+  /** Subscribes to the saved secrets (in the order saved); called immediately with the latest list if one already arrived. */
+  onSecrets(listener: (secrets: readonly SecretState[]) => void): () => void;
+  /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
+  onQuery(listener: (query: string) => void): () => void;
+  /** Subscribes to whether the table is viewed or edited (the toolbar's switch); called immediately with the latest if one already arrived. */
+  onMode(listener: (mode: 'view' | 'edit') => void): () => void;
+  /** Renames a secret, points it at another page and/or changes its value. Main checks all three before keeping any. */
+  update(id: string, name: string, source: string, secret: string): Promise<SecretUpdateResult>;
+  /** Subscribes to the toolbar's Add button: start a new, empty row. Only presses after subscribing arrive. */
+  onAddRow(listener: () => void): () => void;
+  /** Keeps a secret typed in by hand: all four of its fields. Main checks them before keeping it. */
+  add(name: string, source: string, element: string, secret: string): Promise<SecretUpdateResult>;
+  /** Deletes one secret. Fire-and-forget. */
+  remove(id: string): void;
+  /** Copies one secret's value to the clipboard — main reads it from its own record. Fire-and-forget. */
+  copy(id: string): void;
+}
+
+/** One field of a login a web page reports (`TabSecretsCaptured`): what was typed, and the element it was typed into. */
+export interface CapturedSecretField {
+  readonly value: string;
+  /** The element, as a CSS selector that finds it again on the page. */
+  readonly element: string;
+}
+
+/** A login a web page reports as it's sent: the password, and the username typed with it if there was one. */
+export interface CapturedLogin {
+  readonly username: CapturedSecretField | null;
+  readonly password: CapturedSecretField;
+}
+
+/** One secret main sends a web page to fill in (`TabSecretsFill`). */
+export interface SecretFill {
+  readonly element: string;
+  readonly value: string;
+}
+
+/** What main sends a web page to fill in: only for the origin it was sent for, which the page checks it's still on. */
+export interface SecretFillPayload {
+  readonly origin: string;
+  readonly fills: readonly SecretFill[];
+}
+
+/**
+ * What the save prompt offers (`SecretPromptShow`): the login's page, what
+ * was typed, and the names each secret starts with. Sent only to the prompt's
+ * own app page, which shows the password as dots until it's hovered.
+ */
+export interface SecretPromptOffer {
+  /** Identifies this offer; the answer names it, so a late answer to a replaced one is dropped. */
+  readonly id: string;
+  /** The page the login is for. */
+  readonly source: string;
+  /** The username typed, shown as typed; `null` when the login had only a password. */
+  readonly username: string | null;
+  readonly usernameName: string;
+  readonly passwordName: string;
+  /** The password typed, revealed when its dots are hovered. */
+  readonly password: string;
+}
+
+/** The save prompt's answer (`SecretPromptAnswer`): save under the names typed, or not. */
+export type SecretPromptAnswer =
+  | { readonly id: string; readonly accept: true; readonly usernameName: string; readonly passwordName: string }
+  | { readonly id: string; readonly accept: false };
+
+/** The API exposed to the save prompt's own `WebContentsView` (`src/preload/secretPrompt.ts`, `secret-prompt.html`). */
+export interface NorthstarSecretPromptApi {
+  /** Subscribes to the offer to show (`null` to clear); called immediately with the latest if one already arrived. */
+  onOffer(listener: (offer: SecretPromptOffer | null) => void): () => void;
+  /** Answers the offer. Fire-and-forget. */
+  answer(answer: SecretPromptAnswer): void;
+  /** Tells main how tall the card is, in CSS pixels, whenever that changes. Fire-and-forget. */
+  reportHeight(height: number): void;
 }
 
 /** What a tab's page reports back about a search: how many matches, and which one is current. */

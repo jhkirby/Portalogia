@@ -10,7 +10,7 @@ import type { WorkspaceImageState } from '@shared/tab-state';
 
 /** The kinds of tab an image can reopen. */
 const imageTabSchema = z.object({
-  kind: z.enum(['browser', 'terminal', 'pdf', 'markdown', 'history']),
+  kind: z.enum(['browser', 'terminal', 'pdf', 'markdown', 'history', 'bookmarks', 'secrets']),
   /** A page's address, or a PDF's or note's path; `''` for a terminal or History tab, and for a PDF or note tab with nothing open. */
   value: z.string().max(4096),
 });

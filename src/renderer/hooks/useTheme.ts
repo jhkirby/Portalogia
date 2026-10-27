@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-26
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ThemePreference } from '@shared/ipc-contract';
@@ -68,8 +68,8 @@ export function useTheme(): { theme: Theme; toggleTheme: () => void } {
   // the right theme's colors) is in place before the browser paints,
   // rather than flashing the other theme for a frame right after mount.
   useLayoutEffect(() => {
-    // Faded, not switched at once (`applyTheme`); the first theme, on mount, just applies.
-    applyTheme(theme);
+    // Crossfaded, not switched at once (`applyTheme`); the first theme, on mount, just applies.
+    applyTheme(theme, { snapshot: true });
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {

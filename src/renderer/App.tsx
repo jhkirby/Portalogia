@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-26
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HistoryClearRange, PageStats } from '@shared/ipc-contract';
@@ -9,9 +9,12 @@ import { HOME_URL } from '@shared/constants';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { ClearHistoryPopup } from './components/ClearHistoryPopup';
+import { ContentSnapshot } from './components/ContentSnapshot';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
 import { HistoryToolbar } from './components/HistoryToolbar';
+import { BookmarksToolbar } from './components/BookmarksToolbar';
+import { SecretsToolbar } from './components/SecretsToolbar';
 import { MarkdownToolbar } from './components/MarkdownToolbar';
 import { MetalBackground } from './components/MetalBackground';
 import { PdfToolbar } from './components/PdfToolbar';
@@ -105,6 +108,8 @@ export function App() {
     stop,
     createPdfTab,
     createHistoryTab,
+    createBookmarksTab,
+    createSecretsTab,
     openPdfFile,
     setPointerMode,
     toggleEditMode,
@@ -304,13 +309,15 @@ export function App() {
   ]);
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
-  // Find searches a page, a terminal's buffer, or a PDF or note that has a file open — not the History tab (it has its own search) or an empty PDF or note.
+  // Find searches a page, a terminal's buffer, or a PDF or note that has a file open — not a History, Bookmarks or Secrets tab (each has its own search) or an empty PDF or note.
   const canFind =
     activeTab?.kind === 'browser' ||
     activeTab?.kind === 'terminal' ||
     ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName !== null);
-  // A terminal or History tab is an app page, not a document: none of the page-marking tools apply to it.
-  const isAppPage = activeTab?.kind === 'terminal' || activeTab?.kind === 'history';
+  // The History, Bookmarks and Secrets tabs are fixed tables: no zoom, laser pointer or export.
+  const isTablePage = activeTab?.kind === 'history' || activeTab?.kind === 'bookmarks' || activeTab?.kind === 'secrets';
+  // A terminal or a table tab is an app page, not a document: none of the page-marking tools apply to it.
+  const isAppPage = activeTab?.kind === 'terminal' || isTablePage;
   const isHome = browserTab?.url === HOME_URL;
   // The tab kinds with the Pan and Select pointer modes.
   const pointerModeTab =
@@ -655,6 +662,10 @@ export function App() {
               />
             ) : activeTab?.kind === 'history' ? (
               <HistoryToolbar key={activeTab.id} tab={activeTab} onRequestClear={openClearHistory} />
+            ) : activeTab?.kind === 'bookmarks' ? (
+              <BookmarksToolbar key={activeTab.id} tab={activeTab} />
+            ) : activeTab?.kind === 'secrets' ? (
+              <SecretsToolbar key={activeTab.id} tab={activeTab} />
             ) : activeTab?.kind === 'terminal' ? (
               // Empty on purpose — occupies the same flex space
               // NavControls + AddressBar would, so PageActions stays
@@ -734,20 +745,22 @@ export function App() {
                 activeTabId !== null &&
                 !isHome &&
                 activeTab?.kind !== 'pdf' &&
-                activeTab?.kind !== 'history' &&
+                !isTablePage &&
                 !(activeTab?.kind === 'markdown' && activeTab.fileName === null)
               }
               canExportDocuments={browserTab !== null && !isHome}
-              showExportMenu={activeTab?.kind !== 'pdf' && activeTab?.kind !== 'history'}
+              showExportMenu={activeTab?.kind !== 'pdf' && !isTablePage}
               showCommentTool={!isAppPage}
-              showLaserPointer={activeTab?.kind !== 'history'}
-              showZoom={activeTab?.kind !== 'history'}
+              showLaserPointer={!isTablePage}
+              showZoom={!isTablePage}
               showTextTool={!isAppPage && activeTab?.kind !== 'markdown'}
               showPen={!isAppPage}
               showHighlighter={!isAppPage}
               showRevert={!isAppPage}
               onNewTerminal={createTerminalTab}
               onOpenHistory={createHistoryTab}
+              onOpenBookmarks={createBookmarksTab}
+              onOpenSecrets={createSecretsTab}
               onOpenTabSearch={openTabSearch}
               findOpen={findOpen}
               canFind={canFind}
@@ -812,6 +825,8 @@ export function App() {
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
               terminal or History page draws its own frame, and Focus Mode shows none. */}
           {activeTab?.kind === 'browser' && !focusMode && <div className="tab-content__frame" aria-hidden="true" />}
+          {/* The tab's pages in picture, standing in for them while the sidebar slides. */}
+          <ContentSnapshot />
           {/* In the strip main keeps free below a web page; a note or PDF draws its own, and Focus Mode shows none. */}
           {activeTab?.kind === 'browser' && !focusMode && (
             <WebStatusBar stats={pageStats?.tabId === activeTab.id ? pageStats.stats : null} />

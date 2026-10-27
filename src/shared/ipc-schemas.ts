@@ -1,10 +1,16 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-27
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
+import {
+  MAX_SECRET_ELEMENT_CHARS,
+  MAX_SECRET_NAME_CHARS,
+  MAX_SECRET_SOURCE_CHARS,
+  MAX_SECRET_VALUE_CHARS,
+} from './secrets';
 import { isWorkspaceIconId } from './workspaceIcons';
 
 // Every ipcMain.handle validates its payload against one of these before
@@ -203,6 +209,61 @@ export const historyQueryRequestSchema = z.object({
   id: z.string().min(1),
   query: z.string().max(500),
 });
+
+export const bookmarksSetModeRequestSchema = z.object({
+  id: z.string().min(1),
+  mode: z.enum(['view', 'edit']),
+});
+
+/** A Bookmarks page's edit of one bookmark. Bounded like the stores they land in; main checks the rest (`BookmarkStore.update`). */
+export const bookmarkUpdateRequestSchema = z.object({
+  id: z.string().min(1).max(64),
+  title: z.string().max(500),
+  reference: z.string().max(4096),
+});
+
+/** A Secrets page's edit of one secret. Bounded like the store they land in; main checks the rest (`SecretStore.update`). */
+export const secretUpdateRequestSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().max(MAX_SECRET_NAME_CHARS),
+  source: z.string().max(MAX_SECRET_SOURCE_CHARS),
+  secret: z.string().max(MAX_SECRET_VALUE_CHARS),
+});
+
+/** A Secrets page's secret typed in by hand. Bounded like an edit; main checks the rest (`SecretStore.add`). */
+export const secretAddRequestSchema = z.object({
+  name: z.string().max(MAX_SECRET_NAME_CHARS),
+  source: z.string().max(MAX_SECRET_SOURCE_CHARS),
+  element: z.string().max(MAX_SECRET_ELEMENT_CHARS),
+  secret: z.string().max(MAX_SECRET_VALUE_CHARS),
+});
+
+export const secretIdRequestSchema = z.object({
+  id: z.string().min(1).max(64),
+});
+
+/** One field of a login a web page reports. A page is untrusted: everything is bounded, and an empty value is no field. */
+const capturedSecretFieldSchema = z.object({
+  value: z.string().min(1).max(MAX_SECRET_VALUE_CHARS),
+  element: z.string().min(1).max(MAX_SECRET_ELEMENT_CHARS),
+});
+
+/** A login a web page reports as it's sent (`tabSecrets.ts`). Which page it's for main reads from the sender, never from here. */
+export const capturedLoginSchema = z.object({
+  username: capturedSecretFieldSchema.nullable(),
+  password: capturedSecretFieldSchema,
+});
+
+/** The save prompt's answer. Names are bounded and trimmed; an accepted one needs both. */
+export const secretPromptAnswerSchema = z.discriminatedUnion('accept', [
+  z.object({
+    id: z.string().min(1).max(64),
+    accept: z.literal(true),
+    usernameName: z.string().trim().min(1).max(MAX_SECRET_NAME_CHARS),
+    passwordName: z.string().trim().min(1).max(MAX_SECRET_NAME_CHARS),
+  }),
+  z.object({ id: z.string().min(1).max(64), accept: z.literal(false) }),
+]);
 
 export const historySearchRequestSchema = z.object({
   type: z.enum(['url', 'pdf', 'markdown']),
@@ -645,3 +706,6 @@ export const adBlockSetSiteAllowedRequestSchema = z.object({
   allowed: z.boolean(),
 });
 export type AdBlockSetSiteAllowedRequest = z.infer<typeof adBlockSetSiteAllowedRequestSchema>;
+
+/** The chrome's word that a sidebar-slide snapshot is on screen (`ContentSnapshotShown`). */
+export const contentSnapshotShownRequestSchema = z.object({ id: z.number().int().positive() });

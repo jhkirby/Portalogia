@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-24 */
+   Last Modified: 2026-10-26 */
 
 /* `useTheme` sets `data-theme` on `<html>` before first paint (see its
    `useLayoutEffect`) reflecting either a stored choice or, on first ever
@@ -52,6 +52,19 @@
     fill 600ms ease-in-out,
     stroke 600ms ease-in-out,
     box-shadow 600ms ease-in-out !important;
+}
+
+/* The chrome's light/dark switch (`applyTheme`'s `snapshot`): the old theme's picture and the live page in the new
+   one crossfade on the compositor, over `THEME_FADE_MS`. The pointer passes through to the live page beneath, so a
+   click mid-fade still lands. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 600ms;
+  animation-timing-function: ease-in-out;
 }
 
 :root[data-theme='light'] {

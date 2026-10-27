@@ -4,13 +4,14 @@
 // Last Modified: 2026-10-22
 
 import { join } from 'node:path';
-import { app, BrowserWindow, ipcMain, protocol, screen, session } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, safeStorage, screen, session } from 'electron';
 import { NORTHSTAR_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
 import { dropRegionsRequestSchema, tearOffTabEndRequestSchema, tearOffTabRequestSchema } from '@shared/ipc-schemas';
 import { AdBlocker } from './adblock/AdBlocker';
 import { AdBlockStore } from './adblock/AdBlockStore';
 import { BookmarkStore } from './browser/BookmarkStore';
+import { BookmarksController } from './browser/BookmarksController';
 import { CommentController } from './browser/CommentController';
 import { CommentStore } from './browser/CommentStore';
 import { HighlighterController } from './browser/HighlighterController';
@@ -25,6 +26,8 @@ import { WorkspaceImageStore } from './browser/WorkspaceImageStore';
 import { markdownAnnotationStore } from './browser/MarkdownAnnotationStore';
 import { pdfAnnotationStore } from './browser/PdfAnnotationStore';
 import { PenStore } from './browser/PenStore';
+import { SecretsController } from './browser/SecretsController';
+import { SecretStore } from './browser/SecretStore';
 import { SessionStore } from './browser/SessionStore';
 import { SharedTabRegistry } from './browser/SharedTabRegistry';
 import { TabManager } from './browser/TabManager';
@@ -116,6 +119,24 @@ app.on('before-quit', () => textBoxController.flush());
 const historyStore = new HistoryStore(join(app.getPath('userData'), 'history.json'));
 const historyController = new HistoryController(sharedRegistry, historyStore, () => bookmarkStore.list());
 app.on('before-quit', () => historyController.flush());
+
+// Bookmarks Tabs move between windows too: one controller serves them all.
+const bookmarksController = new BookmarksController(sharedRegistry, bookmarkStore);
+
+// Secrets, likewise one for every window — but made once the app is ready, since `safeStorage` (which keeps the file
+// encrypted, on Windows with the user's own DPAPI key) can't encrypt before then.
+let secretsController: SecretsController | null = null;
+function getSecretsController(): SecretsController {
+  secretsController ??= new SecretsController(
+    sharedRegistry,
+    new SecretStore(join(app.getPath('userData'), 'secrets.json'), {
+      isAvailable: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (plainText) => safeStorage.encryptString(plainText),
+      decrypt: (data) => safeStorage.decryptString(data),
+    }),
+  );
+  return secretsController;
+}
 
 // Pen strokes aren't scoped to a window either — same reasoning as
 // `highlightStore`/`highlighterController` just above.
@@ -215,6 +236,7 @@ void app.whenReady().then(() => {
   });
 
   trackEditableFocus();
+  getSecretsController();
   registerTabIpc(resolveTabManagerForEvent, resolveTabManagerForTab, resolveTabForContents);
   registerMarkdownIpc(resolveTabManagerForEvent, resolveTabManagerForTab);
   registerWindowIpc();
@@ -358,6 +380,8 @@ function launchWindow(
     penController,
     textBoxController,
     historyController,
+    bookmarksController,
+    getSecretsController(),
     adBlocker,
     workspaceImageStore,
   );

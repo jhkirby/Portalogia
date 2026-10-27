@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-27
 
 import type { WeatherState } from '@shared/ipc-contract';
 
@@ -20,6 +20,10 @@ const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const REFRESH_MS = 10 * 60 * 1000;
 /** How soon, in ms, a failed fetch (offline, say) is tried again. */
 const RETRY_MS = 60 * 1000;
+/** How soon, in ms, a failed fetch is tried again while there's no temperature to show at all. */
+const FIRST_RETRY_MS = 10 * 1000;
+/** How long, in ms, after the network changes before fetching: a fresh connection takes a moment to resolve names. */
+const NETWORK_SETTLE_MS = 3000;
 /** How long, in ms, a found location is trusted before it is looked up again (a laptop travels). */
 const LOCATION_TTL_MS = 60 * 60 * 1000;
 
@@ -83,6 +87,7 @@ export class WeatherMonitor {
   private state: WeatherState = { temperatureF: null };
   private location: { coordinates: Coordinates; foundAt: number } | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private active = false;
 
   /**
    * @param onChange Called with the new state whenever it changes.
@@ -102,21 +107,49 @@ export class WeatherMonitor {
 
   /** Fetches the temperature now, then every `REFRESH_MS` (sooner after a failure) until `stop`. */
   public start(): void {
-    if (this.timer) {
+    if (this.active) {
       return;
     }
-    const run = async (): Promise<void> => {
-      const succeeded = await this.refresh();
-      this.timer = setTimeout(() => void run(), succeeded ? REFRESH_MS : RETRY_MS);
-    };
-    this.timer = setTimeout(() => void run(), 0);
+    this.active = true;
+    this.schedule(0);
   }
 
   /** Stops fetching. */
   public stop(): void {
+    this.active = false;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
+    }
+  }
+
+  /**
+   * The computer joined a network (or another one): looks the location up again, since a new network can mean a new
+   * place, and fetches shortly, rather than waiting out a retry left from a fetch the change cut off.
+   */
+  public networkChanged(): void {
+    if (this.location) {
+      this.location = { ...this.location, foundAt: Number.NEGATIVE_INFINITY };
+    }
+    if (this.active) {
+      this.schedule(NETWORK_SETTLE_MS);
+    }
+  }
+
+  /** Fetches after `delay` ms, replacing whatever fetch was waiting. */
+  private schedule(delay: number): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
+    this.timer = setTimeout(() => void this.run(), delay);
+  }
+
+  /** Fetches once, then waits for the next, unless `networkChanged` or `stop` has stepped in meanwhile. */
+  private async run(): Promise<void> {
+    this.timer = null;
+    const succeeded = await this.refresh();
+    if (this.active && this.timer === null) {
+      this.schedule(succeeded ? REFRESH_MS : this.state.temperatureF === null ? FIRST_RETRY_MS : RETRY_MS);
     }
   }
 

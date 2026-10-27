@@ -1,0 +1,47 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-27 */
+
+/* ── SORT HEADER ──────────────────────────────────────────────────────── */
+/* A table column's heading that sorts it (`SortHeader`): the History and Bookmarks tables. The `<th>` keeps its
+   table's own look; this is the button filling it — its name, then the mark for how it sorts. */
+
+.sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sort-header__label {
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sort-header:hover,
+.sort-header:focus-visible {
+  color: var(--color-tab-text-active);
+}
+
+.sort-header__mark {
+  flex: none;
+
+  /* The unsorted dot recedes; a sorted column's triangle is the accent, so the active sort reads at a glance. */
+  color: var(--color-address-placeholder);
+}
+
+.sort-header--sorted .sort-header__mark {
+  color: var(--color-accent-text);
+}

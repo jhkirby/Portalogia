@@ -93,6 +93,36 @@ export interface HistoryTabState {
 }
 
 /**
+ * The saved bookmarks: a table of every page, PDF and note bookmarked,
+ * rendered in its own `WebContentsView` (`bookmarks.html`) — see
+ * `TabManager.createBookmarksTab` and `BookmarksController`. Like a History
+ * tab, no URL, favicon, or navigation state applies.
+ */
+export interface BookmarksTabState {
+  readonly kind: 'bookmarks';
+  readonly id: string;
+  readonly title: string;
+  /** Whether the table can be changed: `'view'` only lists (and opens) them, `'edit'` renames, re-points and deletes. */
+  readonly mode: 'view' | 'edit';
+  readonly workspaceId: string;
+}
+
+/**
+ * The saved secrets: a table of every username and password kept for filling
+ * in on websites, rendered in its own `WebContentsView` (`secrets.html`) — see
+ * `TabManager.createSecretsTab` and `SecretsController`. Like a Bookmarks tab,
+ * it's viewed or edited, and no URL, favicon, or navigation state applies.
+ */
+export interface SecretsTabState {
+  readonly kind: 'secrets';
+  readonly id: string;
+  readonly title: string;
+  /** Whether the table can be changed: `'view'` only lists (and copies) them, `'edit'` renames, re-points, changes and deletes. */
+  readonly mode: 'view' | 'edit';
+  readonly workspaceId: string;
+}
+
+/**
  * A Markdown note, viewed rendered or edited as source in its own
  * `WebContentsView` (`markdown.html`) — see `TabManager.createMarkdownTab`
  * and `MarkdownController`. No URL or favicon applies; `title` is the open
@@ -126,8 +156,15 @@ export interface MarkdownTabState {
 /** A Markdown tab's display — see `MarkdownTabState.display`. */
 export type MarkdownDisplay = 'formatted' | 'raw';
 
-/** Everything the chrome UI needs to render one tab: browser, terminal, PDF, Markdown or history. */
-export type TabState = BrowserTabState | TerminalTabState | PdfTabState | MarkdownTabState | HistoryTabState;
+/** Everything the chrome UI needs to render one tab: browser, terminal, PDF, Markdown, history, bookmarks or secrets. */
+export type TabState =
+  | BrowserTabState
+  | TerminalTabState
+  | PdfTabState
+  | MarkdownTabState
+  | HistoryTabState
+  | BookmarksTabState
+  | SecretsTabState;
 
 /** A named, colored group that a tab belongs to (see `WorkspaceBar`). */
 export interface WorkspaceState {

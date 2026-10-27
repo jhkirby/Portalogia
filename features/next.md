@@ -1,3 +1,0 @@
-- Fix the focus on webpages for ctrl+leftarrow/rightarrow
-- Add partition stats below history tab.
-- Add stats for other tabs too.

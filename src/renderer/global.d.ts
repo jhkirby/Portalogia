@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-27
 
 import type {
   NorthstarAddressSuggestionsApi,
@@ -10,8 +10,11 @@ import type {
   NorthstarExportMenuApi,
   NorthstarFindApi,
   NorthstarHistoryApi,
+  NorthstarBookmarksApi,
   NorthstarMarkdownApi,
   NorthstarPdfApi,
+  NorthstarSecretPromptApi,
+  NorthstarSecretsApi,
   NorthstarTerminalApi,
   NorthstarTooltipApi,
 } from '@shared/ipc-contract';
@@ -36,6 +39,12 @@ declare global {
     readonly northstarMarkdown: NorthstarMarkdownApi;
     /** The bridge exposed by a History tab's own preload script (`src/preload/history.ts`). Only present in `history.html`'s page. */
     readonly northstarHistory: NorthstarHistoryApi;
+    /** The bridge exposed by a Bookmarks tab's own preload script (`src/preload/bookmarks.ts`). Only present in `bookmarks.html`'s page. */
+    readonly northstarBookmarks: NorthstarBookmarksApi;
+    /** The bridge exposed by a Secrets tab's own preload script (`src/preload/secrets.ts`). Only present in `secrets.html`'s page. */
+    readonly northstarSecrets: NorthstarSecretsApi;
+    /** The bridge exposed by the save prompt's own preload script (`src/preload/secretPrompt.ts`). Only present in `secret-prompt.html`'s page. */
+    readonly northstarSecretPrompt: NorthstarSecretPromptApi;
     /** The bridge exposed by the find bar's own preload script (`src/preload/find.ts`). Only present in `find.html`'s page. */
     readonly northstarFind: NorthstarFindApi;
   }

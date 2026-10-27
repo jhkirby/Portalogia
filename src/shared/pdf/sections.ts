@@ -1,7 +1,9 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-27
+
+import { findDuplicates } from '../duplicates';
 
 /** A section of a PDF, as its side panel lists it: a name, the 1-based page it starts on, and how deep it sits. */
 export interface PdfSection {
@@ -205,41 +207,45 @@ export interface SectionProblems {
   readonly pages: ReadonlySet<number>;
 }
 
+/** The section last edited, and in which box: that box is the one marked when it repeats another's value. */
+export interface LastSectionEdit {
+  readonly index: number;
+  readonly field: 'title' | 'page';
+}
+
 /**
  * Checks an edit of the sections: every name must be filled in and differ from
  * the others (ignoring case and surrounding spaces), and every page must be one
- * the document has and no other section's.
+ * the document has and no other section's. Of a repeated name or page, one
+ * section keeps it and only the others are marked (`findDuplicates`).
  * @param sections The sections, as edited.
  * @param pageCount How many pages the document has.
+ * @param lastEdit The box last typed in, which is the duplicate if it matches another; `null` marks the later ones.
  */
-export function findSectionProblems(sections: readonly PdfSection[], pageCount: number): SectionProblems {
-  const titles = new Set<number>();
-  const pages = new Set<number>();
-  const byTitle = new Map<string, number[]>();
-  const byPage = new Map<number, number[]>();
+export function findSectionProblems(
+  sections: readonly PdfSection[],
+  pageCount: number,
+  lastEdit: LastSectionEdit | null = null,
+): SectionProblems {
+  const isPage = (page: number): boolean => Number.isInteger(page) && page >= 1 && page <= pageCount;
+  const titles = findDuplicates(
+    sections,
+    (section) => section.title.trim().toLowerCase() || null,
+    lastEdit?.field === 'title' ? lastEdit.index : null,
+  );
+  const pages = findDuplicates(
+    sections,
+    (section) => (isPage(section.page) ? section.page : null),
+    lastEdit?.field === 'page' ? lastEdit.index : null,
+  );
   sections.forEach((section, index) => {
-    const title = section.title.trim().toLowerCase();
-    if (title === '') {
+    if (section.title.trim() === '') {
       titles.add(index);
-    } else {
-      byTitle.set(title, [...(byTitle.get(title) ?? []), index]);
     }
-    if (!Number.isInteger(section.page) || section.page < 1 || section.page > pageCount) {
+    if (!isPage(section.page)) {
       pages.add(index);
-    } else {
-      byPage.set(section.page, [...(byPage.get(section.page) ?? []), index]);
     }
   });
-  for (const indexes of byTitle.values()) {
-    if (indexes.length > 1) {
-      indexes.forEach((index) => titles.add(index));
-    }
-  }
-  for (const indexes of byPage.values()) {
-    if (indexes.length > 1) {
-      indexes.forEach((index) => pages.add(index));
-    }
-  }
   return { titles, pages };
 }
 

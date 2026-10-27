@@ -1,24 +1,27 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-27
 
 import { useEffect, useState } from 'react';
-import type { WeatherState, WifiStatus } from '@shared/ipc-contract';
+import type { BluetoothStatus, WeatherState, WifiStatus } from '@shared/ipc-contract';
 
 /** What the titlebar shows beside the clock. */
 export interface SystemStatus {
   readonly wifi: WifiStatus;
+  readonly bluetooth: BluetoothStatus;
   readonly weather: WeatherState;
 }
 
 /**
- * The Wi-Fi connection and outside temperature, as main follows them (see
- * `registerStatusIpc`): read once, then kept current from main's pushes.
+ * The Wi-Fi connection, the connected Bluetooth devices and the outside
+ * temperature, as main follows them (see `registerStatusIpc`): read once, then
+ * kept current from main's pushes.
  * @returns The latest of each.
  */
 export function useSystemStatus(): SystemStatus {
-  const [wifi, setWifi] = useState<WifiStatus>({ state: 'unavailable', signal: 0 });
+  const [wifi, setWifi] = useState<WifiStatus>({ state: 'unavailable', signal: 0, ssid: null });
+  const [bluetooth, setBluetooth] = useState<BluetoothStatus>({ state: 'unavailable', devices: 0 });
   const [weather, setWeather] = useState<WeatherState>({ temperatureF: null });
 
   useEffect(() => {
@@ -28,21 +31,28 @@ export function useSystemStatus(): SystemStatus {
         setWifi(status);
       }
     });
+    void window.northstar.getBluetoothStatus().then((status) => {
+      if (!cancelled && status) {
+        setBluetooth(status);
+      }
+    });
     void window.northstar.getWeather().then((state) => {
       if (!cancelled && state) {
         setWeather(state);
       }
     });
     const stopWifi = window.northstar.onWifiStatusChanged(setWifi);
+    const stopBluetooth = window.northstar.onBluetoothStatusChanged(setBluetooth);
     const stopWeather = window.northstar.onWeatherChanged(setWeather);
     return () => {
       cancelled = true;
       stopWifi();
+      stopBluetooth();
       stopWeather();
     };
   }, []);
 
-  return { wifi, weather };
+  return { wifi, bluetooth, weather };
 }
 
 /**

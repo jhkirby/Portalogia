@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { TabState, WorkspaceState } from '@shared/tab-state';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
-import { GlobeIcon, HistoryIcon } from '../icons';
+import { BookmarksIcon, GlobeIcon, HistoryIcon, LockIcon } from '../icons';
 import { WorkspaceIcon } from '../WorkspaceIcon';
 
 interface TabSearchPopupProps {
@@ -27,7 +27,7 @@ function searchableText(tab: TabState, workspaceName: string): string {
   return `${tab.title} ${url} ${workspaceName}`.toLowerCase();
 }
 
-/** The little mark at the start of a row: the same per-kind symbol the tab strip uses (globe, `>_`, `PDF`, history clock). */
+/** The little mark at the start of a row: the same per-kind symbol the tab strip uses (globe, `>_`, `PDF`, history clock, bookmarks ribbon, secrets lock). */
 function TabKindMark({ tab }: { readonly tab: TabState }) {
   return (
     <span className="tab-search__kind" aria-hidden="true">
@@ -39,6 +39,10 @@ function TabKindMark({ tab }: { readonly tab: TabState }) {
         'MD'
       ) : tab.kind === 'history' ? (
         <HistoryIcon size={13} />
+      ) : tab.kind === 'bookmarks' ? (
+        <BookmarksIcon size={13} />
+      ) : tab.kind === 'secrets' ? (
+        <LockIcon size={13} />
       ) : (
         <GlobeIcon size={13} />
       )}

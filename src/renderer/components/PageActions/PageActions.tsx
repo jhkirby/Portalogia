@@ -16,8 +16,10 @@ import {
   HandIcon,
   HighlighterIcon,
   HistoryIcon,
+  BookmarksIcon,
   KeyboardIcon,
   LaserPointerIcon,
+  LockIcon,
   OpenInNewWindowIcon,
   PenIcon,
   RevertIcon,
@@ -104,6 +106,10 @@ interface PageActionsProps {
   readonly onNewTerminal: () => void;
   /** Opens a new History tab. */
   readonly onOpenHistory: () => void;
+  /** Opens a new Bookmarks tab. */
+  readonly onOpenBookmarks: () => void;
+  /** Opens a new Secrets tab. */
+  readonly onOpenSecrets: () => void;
   readonly onOpenTabSearch: () => void;
   /** Whether the find bar is open. */
   readonly findOpen: boolean;
@@ -183,6 +189,8 @@ export function PageActions({
   showRevert,
   onNewTerminal,
   onOpenHistory,
+  onOpenBookmarks,
+  onOpenSecrets,
   onOpenTabSearch,
   findOpen,
   canFind,
@@ -407,6 +415,24 @@ export function PageActions({
         data-tooltip={`Open history (${formatShortcut('Shift+H')})`}
       >
         <HistoryIcon />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button hover-grow chrome-tooltip"
+        onClick={onOpenBookmarks}
+        aria-label="Open bookmarks"
+        data-tooltip="Open bookmarks"
+      >
+        <BookmarksIcon />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button hover-grow chrome-tooltip"
+        onClick={onOpenSecrets}
+        aria-label="Open secrets"
+        data-tooltip="Open secrets"
+      >
+        <LockIcon />
       </button>
       <button
         type="button"

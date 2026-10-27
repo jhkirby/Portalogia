@@ -106,6 +106,14 @@ export function buildMenu(
           click: () => getTabManager()?.createHistoryTab(),
         },
         {
+          label: 'New Bookmarks Tab',
+          click: () => getTabManager()?.createBookmarksTab(),
+        },
+        {
+          label: 'New Secrets Tab',
+          click: () => getTabManager()?.createSecretsTab(),
+        },
+        {
           // Does nothing unless the active tab is a PDF viewer (`openPdfFile` ignores other tabs).
           label: 'Open PDF',
           accelerator: 'CmdOrCtrl+O',

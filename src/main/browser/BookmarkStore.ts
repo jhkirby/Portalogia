@@ -1,13 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-27
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import type { BookmarkUpdateResult } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 
 /** Shape validated on every read — a bookmarks file is untrusted input, like any other file on disk. */
@@ -25,6 +26,11 @@ const bookmarkFileSchema = z.array(
 /** Windows paths are case-insensitive, so two spellings of one file must match. */
 function samePath(a: string, b: string): boolean {
   return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+/** How two names are compared for being the same one: as the PDF sections' are, ignoring case and outer spaces. */
+function nameKey(title: string): string {
+  return title.trim().toLowerCase();
 }
 
 /**
@@ -65,7 +71,7 @@ export class BookmarkStore {
     }
     this.bookmarks = [
       ...this.bookmarks,
-      { id: randomUUID(), title: title.trim() || url, url, kind: 'page', path: null },
+      { id: randomUUID(), title: this.uniqueTitle(title.trim() || url), url, kind: 'page', path: null },
     ];
     this.persist();
     return this.bookmarks;
@@ -124,7 +130,13 @@ export class BookmarkStore {
     }
     this.bookmarks = [
       ...this.bookmarks,
-      { id: randomUUID(), title: title.trim() || basename(path), url: pathToFileURL(path).href, kind: 'markdown', path },
+      {
+        id: randomUUID(),
+        title: this.uniqueTitle(title.trim() || basename(path)),
+        url: pathToFileURL(path).href,
+        kind: 'markdown',
+        path,
+      },
     ];
     this.persist();
     return this.bookmarks;
@@ -175,7 +187,7 @@ export class BookmarkStore {
       bookmark.id === existing.id
         ? {
             ...bookmark,
-            title: followsFileName ? basename(newPath) : bookmark.title,
+            title: followsFileName ? this.uniqueTitle(basename(newPath), existing.id) : bookmark.title,
             path: newPath,
             url: pathToFileURL(newPath).href,
           }
@@ -208,7 +220,13 @@ export class BookmarkStore {
     }
     this.bookmarks = [
       ...this.bookmarks,
-      { id: randomUUID(), title: title.trim() || basename(path), url: pathToFileURL(path).href, kind: 'pdf', path },
+      {
+        id: randomUUID(),
+        title: this.uniqueTitle(title.trim() || basename(path)),
+        url: pathToFileURL(path).href,
+        kind: 'pdf',
+        path,
+      },
     ];
     this.persist();
     return this.bookmarks;
@@ -261,13 +279,84 @@ export class BookmarkStore {
       bookmark.id === existing.id
         ? {
             ...bookmark,
-            title: followsFileName ? basename(newPath) : bookmark.title,
+            title: followsFileName ? this.uniqueTitle(basename(newPath), existing.id) : bookmark.title,
             path: newPath,
             url: pathToFileURL(newPath).href,
           }
         : bookmark,
     );
     this.persist();
+  }
+
+  /**
+   * Renames a bookmark and points it somewhere else — the Bookmarks tab's
+   * edit mode. No two bookmarks may share a name (ignoring case and outer
+   * spaces, as the PDF sections' names) or a reference (a page's URL, a file's
+   * path), so either clash refuses the whole edit — unless the field is left
+   * as it was: a clash saved before names had to differ is the other field's
+   * edit's to keep, not to be refused over. The reference's own form
+   * (a URL a tab may load, a file of the bookmark's kind) is the caller's to
+   * check first.
+   * @param id The bookmark.
+   * @param title Its new name.
+   * @param reference Its new URL (a page) or path on disk (a PDF or note).
+   * @returns Whether it was kept, or the field refused and why.
+   */
+  public update(id: string, title: string, reference: string): BookmarkUpdateResult {
+    const existing = this.bookmarks.find((bookmark) => bookmark.id === id);
+    if (!existing) {
+      return { ok: false, field: 'title', message: 'That bookmark no longer exists' };
+    }
+    const name = title.trim();
+    if (!name) {
+      return { ok: false, field: 'title', message: 'A bookmark needs a name' };
+    }
+    const others = this.bookmarks.filter((bookmark) => bookmark.id !== id);
+    const nameChanged = nameKey(name) !== nameKey(existing.title);
+    if (nameChanged && others.some((bookmark) => nameKey(bookmark.title) === nameKey(name))) {
+      return { ok: false, field: 'title', message: 'Another bookmark already has this name' };
+    }
+    const isPage = existing.kind === 'page';
+    const referenceChanged = isPage ? reference !== existing.url : !samePath(reference, existing.path ?? '');
+    const clashes = referenceChanged && others.some((bookmark) =>
+      isPage
+        ? bookmark.kind === 'page' && bookmark.url === reference
+        : bookmark.path !== null && samePath(bookmark.path, reference),
+    );
+    if (clashes) {
+      return { ok: false, field: 'reference', message: `Another bookmark already points at this ${isPage ? 'URL' : 'path'}` };
+    }
+    this.bookmarks = this.bookmarks.map((bookmark) =>
+      bookmark.id !== id
+        ? bookmark
+        : isPage
+          ? { ...bookmark, title: name, url: reference }
+          : { ...bookmark, title: name, path: reference, url: pathToFileURL(reference).href },
+    );
+    this.persist();
+    return { ok: true };
+  }
+
+  /** @returns The bookmark with this id, if there is one. */
+  public find(id: string): BookmarkState | undefined {
+    return this.bookmarks.find((bookmark) => bookmark.id === id);
+  }
+
+  /**
+   * A name no other bookmark has: `title` itself, or else it numbered — "Name (2)", "Name (3)", … — the way an
+   * added PDF section's "New section" is, so a bookmark saved under a taken name never repeats one.
+   * @param title The name wanted.
+   * @param exceptId A bookmark whose own name doesn't count (one being renamed).
+   */
+  private uniqueTitle(title: string, exceptId?: string): string {
+    const taken = new Set(
+      this.bookmarks.filter((bookmark) => bookmark.id !== exceptId).map((bookmark) => nameKey(bookmark.title)),
+    );
+    let unique = title;
+    for (let n = 2; taken.has(nameKey(unique)); n += 1) {
+      unique = `${title} (${n})`;
+    }
+    return unique;
   }
 
   /** @returns The bookmarks loaded from disk, or an empty list if the file is missing or corrupt. */

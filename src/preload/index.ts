@@ -1,13 +1,15 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-27
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IpcChannel,
   type AdBlockState,
+  type BluetoothStatus,
   type ColorPickerColorChangedPayload,
+  type ContentSnapshotMessage,
   type IpcResult,
   type NorthstarApi,
   type PageStats,
@@ -59,6 +61,13 @@ const api: NorthstarApi = {
   createTerminalTab: () => invoke(IpcChannel.TabsCreateTerminal),
   createPdfTab: () => invoke(IpcChannel.TabsCreatePdf),
   createHistoryTab: () => invoke(IpcChannel.TabsCreateHistory),
+  createBookmarksTab: () => invoke(IpcChannel.TabsCreateBookmarks),
+  setBookmarksQuery: (id, query) => ipcRenderer.send(IpcChannel.BookmarksSetQuery, { id, query }),
+  setBookmarksMode: (id, mode) => ipcRenderer.send(IpcChannel.BookmarksSetMode, { id, mode }),
+  createSecretsTab: () => invoke(IpcChannel.TabsCreateSecrets),
+  setSecretsQuery: (id, query) => ipcRenderer.send(IpcChannel.SecretsSetQuery, { id, query }),
+  setSecretsMode: (id, mode) => ipcRenderer.send(IpcChannel.SecretsSetMode, { id, mode }),
+  addSecretRow: (id) => ipcRenderer.send(IpcChannel.SecretsAddRow, { id }),
   setFind: (enabled) => invoke(IpcChannel.FindSet, { enabled }),
   setHistoryQuery: (id, query) => ipcRenderer.send(IpcChannel.HistorySetQuery, { id, query }),
   setHistoryRange: (id, range) => ipcRenderer.send(IpcChannel.HistorySetRange, { id, range }),
@@ -170,6 +179,12 @@ const api: NorthstarApi = {
     ipcRenderer.on(IpcChannel.UiOpenWorkspaceImages, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiOpenWorkspaceImages, handler);
   },
+  onContentSnapshot: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, message: ContentSnapshotMessage): void => listener(message);
+    ipcRenderer.on(IpcChannel.UiContentSnapshot, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiContentSnapshot, handler);
+  },
+  reportContentSnapshotShown: (id) => ipcRenderer.send(IpcChannel.ContentSnapshotShown, { id }),
   onOpenTabSearch: (listener) => {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.UiOpenTabSearch, handler);
@@ -246,6 +261,14 @@ const api: NorthstarApi = {
     };
     ipcRenderer.on(IpcChannel.StatusWifiChanged, handler);
     return () => ipcRenderer.removeListener(IpcChannel.StatusWifiChanged, handler);
+  },
+  getBluetoothStatus: () => ipcRenderer.invoke(IpcChannel.StatusBluetoothGet),
+  onBluetoothStatusChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: BluetoothStatus): void => {
+      listener(status);
+    };
+    ipcRenderer.on(IpcChannel.StatusBluetoothChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.StatusBluetoothChanged, handler);
   },
   getWeather: () => ipcRenderer.invoke(IpcChannel.StatusWeatherGet),
   onWeatherChanged: (listener) => {

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-27
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MarkdownBacklink } from '@shared/ipc-contract';
@@ -99,12 +99,21 @@ export function PdfSidePanel({
     };
   }, [tab, docKey]);
 
+  /** The box last typed in: of a repeated name or page, that box is the one marked, not the one it now matches. */
+  const [lastEdit, setLastEdit] = useState<{ readonly id: string; readonly field: 'title' | 'page' } | null>(null);
+
   // Another document starts out of edit mode.
   useEffect(() => {
     setEditing(false);
+    setLastEdit(null);
   }, [docKey]);
 
-  const problems = findSectionProblems(sections ?? [], pageCount);
+  const lastEditIndex = lastEdit ? (sections ?? []).findIndex((section) => section.id === lastEdit.id) : -1;
+  const problems = findSectionProblems(
+    sections ?? [],
+    pageCount,
+    lastEdit && lastEditIndex >= 0 ? { index: lastEditIndex, field: lastEdit.field } : null,
+  );
   const hasProblems = editing && (problems.titles.size > 0 || problems.pages.size > 0);
 
   /**
@@ -153,13 +162,19 @@ export function PdfSidePanel({
                 <TitleField
                   title={section.title}
                   invalid={problems.titles.has(index)}
-                  onChange={(title) => patch(section.id, { title })}
+                  onChange={(title) => {
+                    setLastEdit({ id: section.id, field: 'title' });
+                    patch(section.id, { title });
+                  }}
                 />
                 <PageField
                   page={section.page}
                   pageCount={pageCount}
                   invalid={problems.pages.has(index)}
-                  onChange={(page) => patch(section.id, { page })}
+                  onChange={(page) => {
+                    setLastEdit({ id: section.id, field: 'page' });
+                    patch(section.id, { page });
+                  }}
                 />
                 <button
                   type="button"

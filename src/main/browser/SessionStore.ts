@@ -14,7 +14,7 @@ import { z } from 'zod';
  * for the current run.
  */
 const sessionTabSchema = z.object({
-  kind: z.enum(['browser', 'terminal', 'pdf', 'markdown', 'history']),
+  kind: z.enum(['browser', 'terminal', 'pdf', 'markdown', 'history', 'bookmarks', 'secrets']),
   // A browser tab's address, or a Markdown tab's note path ('' once none is open).
   // Meaningless for a terminal tab — kept on every entry anyway rather
   // than splitting this into two schema variants, since restoring one is
