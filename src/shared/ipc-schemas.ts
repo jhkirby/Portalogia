@@ -288,6 +288,9 @@ export const pdfGoToPageRequestSchema = z.object({
 /** A tab's page asking for a pan's pointer wrap; the tab is the sender, so only the point comes along. */
 const pageCount = z.number().int().min(0).max(100_000_000);
 
+/** What a note's, PDF's or terminal's own stat bar shows, item by item (`TabStatItems`). */
+export const statItemsSchema = z.array(z.string().max(400)).max(40);
+
 export const pageStatsSchema = z.object({
   words: pageCount,
   characters: pageCount,
@@ -601,6 +604,8 @@ export type CropRequest = z.infer<typeof cropRequestSchema>;
 // that lands on a clamped result instead of a rejection.
 export const zoomSetRequestSchema = z.object({
   percent: z.number(),
+  /** The split's right side, zoomed from its own half of the toolbar; the active tab when left out. */
+  tabId: z.string().min(1).optional(),
 });
 export type ZoomSetRequest = z.infer<typeof zoomSetRequestSchema>;
 

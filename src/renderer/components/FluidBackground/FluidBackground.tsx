@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import { accentFluidPalette, startFluid, type FluidColor } from '@shared/dom/fluidSim';
+import { startWindFog } from '@shared/dom/windFog';
 import '../../styles/components/fluid-background.css';
 import { ACCENT_STORAGE_KEY, DEFAULT_ACCENT, readStoredAccent } from '../../lib/accentStorage';
 
@@ -17,7 +18,8 @@ function storedAccent(): FluidColor {
 /**
  * The fluid filling an empty note or PDF tab (`startFluid`): stirred by the pointer, rippling where it's clicked, in
  * the accent's colour. Fills its positioned parent, behind whatever else is in it. Only while the page has the keyboard
- * (its frame lit in the accent): otherwise it fades away and leaves the pointer alone.
+ * (its frame lit in the accent): otherwise it fades away and leaves the pointer alone. Under it, always, a light grey
+ * fog drifts through on its own (`startWindFog`).
  */
 export function FluidBackground() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -41,9 +43,12 @@ export function FluidBackground() {
       events: host.parentElement ?? host,
       active: () => document.hasFocus(),
     });
+    // Under it, a light grey fog drifting through on its own, focus or not (put first, so the fluid paints over it).
+    const stopFog = startWindFog(host);
     return () => {
       window.removeEventListener('storage', onStorage);
       stop();
+      stopFog();
     };
   }, []);
 

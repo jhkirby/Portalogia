@@ -89,6 +89,13 @@ interface TabBarProps {
   readonly onTearOffEnd: (id: string, accepted: boolean) => void;
   /** Called when a tab drag starts, with the window's other drop targets (workspace pills, "+ New workspace") — see `NorthstarApi.reportDropRegions`. */
   readonly onReportDropRegions: (rects: readonly { x: number; y: number; width: number; height: number }[]) => void;
+  /**
+   * Which side of a split screen each of two tabs is on, by tab id: shown as "L" or "R" just left of its close button
+   * — while the split-screen button is hovered with two tabs selected, and all the while it's split.
+   */
+  readonly splitSides: Readonly<Record<string, 'L' | 'R'>>;
+  /** While split, the two tabs on screen: both look active, as both are being shown. */
+  readonly splitTabIds: readonly string[];
 }
 
 /** Which half of a tab the dragged tab is currently hovering over — drives which side of it `beforeId` resolves to on drop. */
@@ -116,6 +123,8 @@ export function TabBar({
   onDragOutOfWindow,
   onTearOffEnd,
   onReportDropRegions,
+  splitSides,
+  splitTabIds,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   // Set once the drag has already torn off into its own window, so the
@@ -285,6 +294,7 @@ export function TabBar({
     >
       {(ghostTab ? [...tabs, ghostTab] : tabs).map((tab) => (
         <Tab
+          splitSide={splitSides[tab.id]}
           key={tab.id}
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
@@ -293,7 +303,7 @@ export function TabBar({
           isEntering={enteringIds.has(tab.id)}
           isExiting={false}
           onTransitionEnd={() => endEnter(tab.id)}
-          isActive={tab.id === activeTabId}
+          isActive={tab.id === activeTabId || splitTabIds.includes(tab.id)}
           isSelected={selectedTabIds.includes(tab.id)}
           onToggleSelect={onToggleSelect}
           onSelectRange={onSelectRange}
@@ -377,6 +387,7 @@ export function TabBar({
       ))}
       {exiting.map(({ tab, slot }) => (
         <Tab
+          splitSide={splitSides[tab.id]}
           key={`exiting-${tab.id}`}
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
@@ -411,6 +422,8 @@ export function TabBar({
 
 interface TabProps {
   readonly tab: TabState;
+  /** The split-screen side this tab is on ("L" or "R"), shown beside its close button, or none. */
+  readonly splitSide: 'L' | 'R' | undefined;
   /** What the tab shows instead of its page title (saved name or domain), or `null` to show the title. */
   readonly label: string | null;
   readonly isActive: boolean;
@@ -446,6 +459,7 @@ interface TabProps {
 /** One tab. A `div[role=tab]` rather than a `<button>` because it hosts its own close `<button>`. */
 function Tab({
   tab,
+  splitSide,
   label,
   isActive,
   isSelected,
@@ -465,6 +479,15 @@ function Tab({
   isExiting,
   onTransitionEnd,
 }: TabProps) {
+  // The split-side badge as drawn: kept, marked leaving, while it fades out after `splitSide` goes.
+  const [badgeSide, setBadgeSide] = useState(splitSide);
+  const [badgeLeaving, setBadgeLeaving] = useState(false);
+  if (splitSide && (splitSide !== badgeSide || badgeLeaving)) {
+    setBadgeSide(splitSide);
+    setBadgeLeaving(false);
+  } else if (!splitSide && badgeSide && !badgeLeaving) {
+    setBadgeLeaving(true);
+  }
   const activate = (): void => onActivate(tab.id);
   const ripples = useClickRipples();
   const titleText = label ?? (tab.title || 'New Tab');
@@ -607,6 +630,22 @@ function Tab({
       <span className="tab-bar__title" title={tab.title || undefined}>
         {titleText}
       </span>
+      {/* Which side of a split screen this tab is on (or will be), just left of the close button; it fades in, and
+          out again keeping its letter until it's gone. */}
+      {badgeSide && (
+        <span
+          className={`tab-bar__split-side${badgeLeaving ? ' tab-bar__split-side--leaving' : ''}`}
+          aria-label={badgeSide === 'L' ? 'Left side' : 'Right side'}
+          onAnimationEnd={() => {
+            if (badgeLeaving) {
+              setBadgeSide(undefined);
+              setBadgeLeaving(false);
+            }
+          }}
+        >
+          {badgeSide}
+        </span>
+      )}
       <button
         type="button"
         className="tab-bar__close hover-glow chrome-tooltip"

@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-29 */
 
 /* ── FIND BAR ─────────────────────────────────────────────────────────── */
 /* `find.html`'s whole page — the find bar's own small `WebContentsView` (see
@@ -58,10 +58,17 @@ body {
   font: inherit;
   font-size: var(--size-font-md);
   color: var(--color-address-text);
+
+  /* Its hover and focus borders fade in and out rather than switching at once. */
+  transition: border-color 180ms ease-out;
 }
 
 .find-bar__input::placeholder {
   color: var(--color-address-placeholder);
+}
+
+.find-bar__input:hover {
+  border-color: var(--color-address-border-hover);
 }
 
 .find-bar__input:focus {

@@ -11,6 +11,7 @@ import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
 import {
   CommentIcon,
   CropIcon,
+  ExportIcon,
   HandIcon,
   HighlighterIcon,
   KeyboardIcon,
@@ -22,6 +23,7 @@ import {
   TextSelectIcon,
 } from '../icons';
 import { Mist } from '../Mist';
+import { useExportMenu } from '../ExportMenu';
 
 interface ToolsBarProps {
   /** Whether it's shown in full, rather than as a rail of its tools' icons. */
@@ -71,6 +73,30 @@ interface ToolsBarProps {
   readonly canRevert: boolean;
   /** Takes every mark off the page — a one-off action, not a tool that stays on. */
   readonly onRevertPage: () => void;
+  /** Whether Export is shown at all — not on a PDF or a table page, which have nothing to export. */
+  readonly showExport: boolean;
+  /** Whether there's something to export: an active tab other than the home page or an empty note. */
+  readonly canExport: boolean;
+  /** Whether the active tab has HTML/CSS/JS to save — web pages only. */
+  readonly canExportDocuments: boolean;
+  /** Whether the active tab is a note, whose export menu lists PDF, `.md` and `.txt`. */
+  readonly exportMarkdown: boolean;
+  /**
+   * A PDF's or note's own file actions (New, Open, Close, Delete; a PDF's Export too), in a section of their own after
+   * the tools — Export's menu, where shown, right after them. Empty for any other tab.
+   */
+  readonly fileActions: readonly ToolsBarAction[];
+}
+
+/** One of a file's actions in the Tools sidebar: a row like a tool's, never "on". */
+export interface ToolsBarAction {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: ReactNode;
+  readonly disabled: boolean;
+  /** Its tooltip: what a click does, with its shortcut. */
+  readonly tooltip: string;
+  readonly onClick: () => void;
 }
 
 /** One row of the list: what it's called, its icon, and what it does. */
@@ -108,6 +134,35 @@ export function ToolsBar(props: ToolsBarProps) {
   usePointerGlow(sidebarRef);
   const ripples = useClickRipples();
   const tools = toolsFor(props);
+  const { fileActions } = props;
+  // Export opens its menu (its own overlay, beside the sidebar) rather than turning on.
+  const exportMenu = useExportMenu({
+    canExport: props.canExport,
+    canExportDocuments: props.canExportDocuments,
+    markdown: props.exportMarkdown,
+  });
+
+  /** The ripples drawn under one row, its own id's. */
+  const rippleLayer = (ownerId: string): ReactNode => (
+    <span className="tools-sidebar__effects" aria-hidden="true">
+      <span className="tools-sidebar__on-fill" />
+      {ripples.ripples
+        .filter((ripple) => ripple.ownerId === ownerId)
+        .map((ripple) => (
+          <span
+            key={ripple.id}
+            className="click-ripple"
+            style={{
+              left: ripple.x - ripple.size / 2,
+              top: ripple.y - ripple.size / 2,
+              width: ripple.size,
+              height: ripple.size,
+            }}
+            onAnimationEnd={() => ripples.remove(ripple.id)}
+          />
+        ))}
+    </span>
+  );
 
   return (
     <aside
@@ -155,24 +210,7 @@ export function ToolsBar(props: ToolsBarProps) {
                 data-tooltip={tool.tooltip}
               >
                 {/* Under the row's content: the "on" colour, grown in like the selected workspace's, and the ripples. */}
-                <span className="tools-sidebar__effects" aria-hidden="true">
-                  <span className="tools-sidebar__on-fill" />
-                  {ripples.ripples
-                    .filter((ripple) => ripple.ownerId === tool.id)
-                    .map((ripple) => (
-                      <span
-                        key={ripple.id}
-                        className="click-ripple"
-                        style={{
-                          left: ripple.x - ripple.size / 2,
-                          top: ripple.y - ripple.size / 2,
-                          width: ripple.size,
-                          height: ripple.size,
-                        }}
-                        onAnimationEnd={() => ripples.remove(ripple.id)}
-                      />
-                    ))}
-                </span>
+                {rippleLayer(tool.id)}
                 <span className="tools-sidebar__name">{tool.name}</span>
                 <span className="tools-sidebar__icon" aria-hidden="true">
                   {tool.icon}
@@ -184,6 +222,54 @@ export function ToolsBar(props: ToolsBarProps) {
               )}
             </Fragment>
           ))}
+          {/* The file's own actions, then Export: a section of their own, as they act on the file rather than mark it. */}
+          {tools.length > 0 && (fileActions.length > 0 || props.showExport) && (
+            <span className="tools-sidebar__divider" role="separator" aria-hidden="true" />
+          )}
+          {fileActions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              className="tools-sidebar__tool hover-glow chrome-tooltip"
+              onClick={(event) => {
+                ripples.add(action.id, event);
+                action.onClick();
+              }}
+              disabled={action.disabled}
+              aria-label={action.name}
+              data-tooltip={action.tooltip}
+            >
+              {rippleLayer(action.id)}
+              <span className="tools-sidebar__name">{action.name}</span>
+              <span className="tools-sidebar__icon" aria-hidden="true">
+                {action.icon}
+              </span>
+            </button>
+          ))}
+          {props.showExport && (
+            <>
+              <button
+                ref={exportMenu.anchorRef}
+                type="button"
+                className={`tools-sidebar__tool hover-glow chrome-tooltip${exportMenu.isOpen ? ' tools-sidebar__tool--on' : ''}`}
+                onClick={(event) => {
+                  ripples.add('export', event);
+                  exportMenu.toggle();
+                }}
+                disabled={!props.canExport}
+                aria-haspopup="menu"
+                aria-expanded={exportMenu.isOpen}
+                aria-label="Export"
+                data-tooltip="Export"
+              >
+                {rippleLayer('export')}
+                <span className="tools-sidebar__name">Export</span>
+                <span className="tools-sidebar__icon" aria-hidden="true">
+                  <ExportIcon />
+                </span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </aside>

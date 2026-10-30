@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-29
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -422,12 +422,8 @@ export function buildMenu(
           label: 'Revert Annotations',
           accelerator: 'CmdOrCtrl+Shift+R',
           registerAccelerator: false,
-          click: () => {
-            const id = getActiveTabId();
-            if (id) {
-              getTabManager()?.revertPage(id);
-            }
-          },
+          // Confirmed first, as the Tools sidebar's Revert is: the chrome asks for "REVERT" to be typed.
+          click: () => getTabManager()?.requestRevert(),
         },
         {
           label: 'Toggle Theme',
@@ -435,8 +431,11 @@ export function buildMenu(
           click: () => getTabManager()?.requestToggleTheme(),
         },
         {
-          label: 'Exit Split View',
-          click: () => getTabManager()?.exitSplitView(),
+          // The two selected tabs side by side, or back to one; the key itself is handled in `handleWindowShortcut`.
+          label: 'Split Screen',
+          accelerator: 'CmdOrCtrl+Alt+S',
+          registerAccelerator: false,
+          click: () => getTabManager()?.toggleSplitScreen(),
         },
         { type: 'separator' },
         {

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
@@ -10,6 +10,7 @@ import {
   ADDRESS_SUGGESTIONS_MAX_ROWS,
   ADDRESS_SUGGESTIONS_PADDING_PX,
   ADDRESS_SUGGESTION_ROW_HEIGHT_PX,
+  MENU_FADE_MS,
 } from '@shared/constants';
 import {
   IpcChannel,
@@ -37,6 +38,8 @@ import { addressSuggestionSelectRequestSchema } from '@shared/ipc-schemas';
 export class SuggestionsOverlay {
   private readonly view: WebContentsView;
   private isMounted = false;
+  /** Set while the list fades out (`hide`): its view comes off the window when it fires. */
+  private unmountTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * @param window The chrome window this overlay's view mounts into/out of.
@@ -110,6 +113,8 @@ export class SuggestionsOverlay {
       return;
     }
 
+    // Reopened while fading out: it stays up, and fades back in.
+    this.cancelUnmount();
     if (!this.isMounted) {
       // No index given, so it lands at the end of the child-view stack —
       // i.e. on top — same as re-adding an already-present view always
@@ -131,16 +136,38 @@ export class SuggestionsOverlay {
     this.view.webContents.send(IpcChannel.AddressSuggestionsSync, payload);
   }
 
-  /** Unmounts the overlay's view, if currently shown. A no-op otherwise. */
-  private hide(): void {
-    if (this.isMounted) {
-      this.window.contentView.removeChildView(this.view);
-      this.isMounted = false;
+  /**
+   * Takes the list off the window once its page has faded it out (`MENU_FADE_MS`), rather than at once.
+   * @param immediate Skip the fade, e.g. when the window is closing.
+   */
+  private hide(immediate = false): void {
+    if (!this.isMounted) {
+      return;
     }
+    if (immediate) {
+      this.unmount();
+    } else if (this.unmountTimer === null) {
+      this.unmountTimer = setTimeout(() => this.unmount(), MENU_FADE_MS);
+    }
+  }
+
+  private cancelUnmount(): void {
+    if (this.unmountTimer !== null) {
+      clearTimeout(this.unmountTimer);
+      this.unmountTimer = null;
+    }
+  }
+
+  private unmount(): void {
+    this.cancelUnmount();
+    if (this.isMounted && !this.window.isDestroyed()) {
+      this.window.contentView.removeChildView(this.view);
+    }
+    this.isMounted = false;
   }
 
   /** Removes the overlay's view for good — call this when the owning window closes. */
   public dispose(): void {
-    this.hide();
+    this.hide(true);
   }
 }

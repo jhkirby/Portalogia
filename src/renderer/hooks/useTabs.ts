@@ -24,8 +24,11 @@ const EMPTY_STATE: BrowserState = {
   canRevert: false,
   grabbedTabId: null,
   selectedTabIds: [],
+  tabSelectionOrder: [],
+  focusedTabId: null,
   selectedWorkspaceIds: [],
   zoomPercent: ZOOM_PERCENT_DEFAULT,
+  splitZoomPercent: ZOOM_PERCENT_DEFAULT,
   laserPointerActive: false,
   highlighterActive: false,
   commentToolActive: false,
@@ -305,6 +308,12 @@ export function useTabs() {
     void window.northstar.exitSplitView().then(logIfFailed);
   }, []);
 
+  const toggleSplitScreen = useCallback(() => {
+    void window.northstar.toggleSplitScreen().then(logIfFailed);
+  }, []);
+  const swapSplitSides = useCallback(() => {
+    void window.northstar.swapSplitSides().then(logIfFailed);
+  }, []);
   const toggleToolsSidebar = useCallback(() => {
     void window.northstar.toggleToolsSidebar().then(logIfFailed);
   }, []);
@@ -358,8 +367,8 @@ export function useTabs() {
   const zoomOut = useCallback(() => {
     void window.northstar.zoomOut().then(logIfFailed);
   }, []);
-  const setZoom = useCallback((percent: number) => {
-    void window.northstar.setZoom(percent).then(logIfFailed);
+  const setZoom = useCallback((percent: number, tabId?: string) => {
+    void window.northstar.setZoom(percent, tabId).then(logIfFailed);
   }, []);
 
   return {
@@ -381,6 +390,8 @@ export function useTabs() {
     canRevert: state.canRevert,
     grabbedTabId: state.grabbedTabId,
     selectedTabIds: state.selectedTabIds,
+    tabSelectionOrder: state.tabSelectionOrder,
+    focusedTabId: state.focusedTabId,
     selectedWorkspaceIds: state.selectedWorkspaceIds,
 
     createTab,
@@ -451,9 +462,12 @@ export function useTabs() {
 
     toggleSidebar,
     toggleToolsSidebar,
+    toggleSplitScreen,
+    swapSplitSides,
 
     setFocusMode,
     zoomPercent: state.zoomPercent,
+    splitZoomPercent: state.splitZoomPercent,
     zoomIn,
     zoomOut,
     setZoom,

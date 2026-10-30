@@ -47,6 +47,7 @@ import {
   pdfWarpPointerRequestSchema,
   pdfOpenBookmarkRequestSchema,
   pageStatsSchema,
+  statItemsSchema,
   pdfHistoryInfoRequestSchema,
   pdfLoadProgressRequestSchema,
   pdfPageInfoRequestSchema,
@@ -245,6 +246,21 @@ export function registerTabIpc(
     }
   });
 
+  ipcMain.handle(IpcChannel.SplitSwap, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).swapSplitSides() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+  ipcMain.handle(IpcChannel.SplitToggle, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).toggleSplitScreen() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   ipcMain.handle(IpcChannel.ToolsSidebarToggle, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).toggleToolsSidebar() };
@@ -306,6 +322,15 @@ export function registerTabIpc(
     return { ok: true, data: null };
   });
 
+  ipcMain.handle(IpcChannel.PdfDeleteFile, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    await chromeManagerForTab(event, parsed.data.id)?.deletePdfFile(parsed.data.id);
+    return { ok: true, data: null };
+  });
+
   ipcMain.handle(IpcChannel.PdfExport, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
     const parsed = tabIdRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
@@ -341,7 +366,7 @@ export function registerTabIpc(
     }
   });
   handle(IpcChannel.ZoomSet, zoomSetRequestSchema, (request, event) =>
-    resolveTabManager(event).setZoom(request.percent),
+    resolveTabManager(event).setZoom(request.percent, request.tabId),
   );
 
   ipcMain.handle(IpcChannel.TabsGetState, (event): IpcResult<BrowserState> => {
@@ -598,6 +623,16 @@ export function registerTabIpc(
     if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
       manager.setPdfLoadProgress(parsed.data.id, parsed.data.percent);
     }
+  });
+
+  // Fire-and-forget from a note's, PDF's or terminal's page as its own stat bar changes; the tab is the sender.
+  ipcMain.on(IpcChannel.TabStatItems, (event, rawRequest: unknown) => {
+    const parsed = statItemsSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const tab = resolveTabForContents(event.sender);
+    tab?.manager.setStatItems(tab.tabId, parsed.data);
   });
 
   // Fire-and-forget from a browser tab's page as its stats change; the tab is whichever one sent it.

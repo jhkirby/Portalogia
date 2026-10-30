@@ -1,1 +1,0 @@
-export { SplitIndicator } from './SplitIndicator';

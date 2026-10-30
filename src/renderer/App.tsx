@@ -3,18 +3,21 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { HistoryClearRange, PageStats } from '@shared/ipc-contract';
-import { HOME_URL } from '@shared/constants';
+import { HOME_URL, ZOOM_PERCENT_STEP } from '@shared/constants';
+import type { TabState } from '@shared/tab-state';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { ClearHistoryPopup } from './components/ClearHistoryPopup';
 import { ConfirmWordPopup } from './components/ConfirmWordPopup';
 import { Mist } from './components/Mist';
-import { ToolsBar } from './components/ToolsBar';
+import { ToolsBar, type ToolsBarAction } from './components/ToolsBar';
+import { ExportIcon, FileCloseIcon, FileNewIcon, FileOpenIcon, TrashIcon } from './components/icons';
+import { formatShortcut } from './lib/shortcuts';
 import { ContentSnapshot } from './components/ContentSnapshot';
 import { NavControls } from './components/NavControls';
-import { PageActions } from './components/PageActions';
+import { PageActions, TabActions } from './components/PageActions';
 import { HistoryToolbar } from './components/HistoryToolbar';
 import { BookmarksToolbar } from './components/BookmarksToolbar';
 import { SecretsToolbar } from './components/SecretsToolbar';
@@ -22,14 +25,13 @@ import { MarkdownToolbar } from './components/MarkdownToolbar';
 import { MetalBackground } from './components/MetalBackground';
 import { PdfToolbar } from './components/PdfToolbar';
 import { PopupTransition } from './components/PopupTransition';
-import { SplitIndicator } from './components/SplitIndicator';
 import { TabBar } from './components/TabBar';
 import { TitlebarClock } from './components/TitlebarClock';
 import { TabSearchPopup } from './components/TabSearchPopup';
 import { WorkspaceEditPopup } from './components/WorkspaceEditPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
-import { WebStatusBar } from './components/WebStatusBar';
+import { ItemsStatusBar, WebStatusBar } from './components/WebStatusBar';
 import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
@@ -85,7 +87,11 @@ export function App() {
     bookmarks,
     workspaceImages,
     savedWorkspaceImages,
-    secondaryTab,
+    splitView,
+    tabSelectionOrder,
+    focusedTabId,
+    toggleSplitScreen,
+    swapSplitSides,
     focusMode,
     contentFocused,
     sidebarVisible,
@@ -146,10 +152,10 @@ export function App() {
     openPdfPath,
     beginTabPreview,
     endTabPreview,
-    exitSplitView,
     toggleSidebar,
     setFocusMode,
     zoomPercent,
+    splitZoomPercent,
     zoomIn,
     zoomOut,
     setZoom,
@@ -183,8 +189,12 @@ export function App() {
   const titlebarRef = useRef<HTMLDivElement>(null);
   usePointerGlow(titlebarRef, true);
   /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
-  const [pageStats, setPageStats] = useState<{ readonly tabId: string; readonly stats: PageStats | null } | null>(null);
-  useEffect(() => window.northstar.onPageStats((tabId, stats) => setPageStats({ tabId, stats })), []);
+  const [pageStats, setPageStats] = useState<{
+    readonly tabId: string;
+    readonly stats: PageStats | null;
+    readonly items: readonly string[] | null;
+  } | null>(null);
+  useEffect(() => window.northstar.onPageStats((tabId, stats, items) => setPageStats({ tabId, stats, items })), []);
   /** Popups playing their closing motion; each one's real close waits in `popupFinishers` until it ends. */
   const [closingPopups, setClosingPopups] = useState<ReadonlySet<PopupName>>(() => new Set());
   const popupFinishers = useRef(new Map<PopupName, () => void>());
@@ -347,79 +357,69 @@ export function App() {
   // The tab kinds with the Pan and Select pointer modes.
   const pointerModeTab =
     activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown' || activeTab?.kind === 'browser' ? activeTab : null;
-  const adBlockSite = hostOfUrl(browserTab?.url);
-  const adBlockSiteAllowed = adBlockSite !== null && adBlock.allowedSites.includes(adBlockSite);
   // PDF bookmarks are files, not pages: the address bar and tab labels only ever deal in the page ones.
   const pageBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'page'), [bookmarks]);
-  const activeBookmark = useMemo(
-    () => (browserTab ? (pageBookmarks.find((bookmark) => bookmark.url === browserTab.url) ?? null) : null),
-    [browserTab, pageBookmarks],
-  );
   const pdfBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'pdf'), [bookmarks]);
   const markdownBookmarks = useMemo(() => bookmarks.filter((bookmark) => bookmark.kind === 'markdown'), [bookmarks]);
-  const markdownBookmarked =
-    activeTab?.kind === 'markdown' &&
-    activeTab.filePath !== null &&
-    bookmarks.some((bookmark) => bookmark.kind === 'markdown' && bookmark.path === activeTab.filePath);
-  const pdfBookmarked =
-    activeTab?.kind === 'pdf' &&
-    activeTab.filePath !== null &&
-    bookmarks.some((bookmark) => bookmark.kind === 'pdf' && bookmark.path === activeTab.filePath);
-  const handleReloadOrStop = (): void => {
-    if (!activeTabId) {
+  // Whether a PDF's or note's file is bookmarked.
+  const isFileBookmarked = (kind: 'pdf' | 'markdown', path: string | null): boolean =>
+    path !== null && bookmarks.some((bookmark) => bookmark.kind === kind && bookmark.path === path);
+  const handleReloadOrStop = (tab: TabState | null | undefined): void => {
+    if (tab?.kind !== 'browser') {
       return;
     }
-    if (browserTab?.isLoading) {
-      stop(activeTabId);
+    if (tab.isLoading) {
+      stop(tab.id);
     } else {
-      reload(activeTabId);
+      reload(tab.id);
     }
   };
 
   // Already-bookmarked stays an instant toggle (no popup, nothing to
   // confirm) — the popup is only for the "not yet bookmarked" case, where
   // there's a real name/URL choice to make before committing.
-  const handleToggleBookmark = (): void => {
+  const handleToggleBookmark = (tab: TabState | null | undefined): void => {
     // The blank default page has no address to save.
-    if (!browserTab || !activeTabId || isHome) {
+    if (tab?.kind !== 'browser' || tab.url === HOME_URL) {
       return;
     }
-    if (activeBookmark) {
-      removeBookmark(activeBookmark.id);
+    const bookmark = pageBookmarks.find((candidate) => candidate.url === tab.url);
+    if (bookmark) {
+      removeBookmark(bookmark.id);
       return;
     }
-    const tabId = activeTabId;
+    const { id: tabId, url, title } = tab;
     void beginTabPreview(tabId).then((previewImage) => {
-      setBookmarkPopup({ tabId, variant: 'page', url: browserTab.url, title: browserTab.title, previewImage });
+      setBookmarkPopup({ tabId, variant: 'page', url, title, previewImage });
     });
   };
 
   // The same shape as the page star: an already-bookmarked PDF un-bookmarks instantly; otherwise the
   // popup asks for the name first, with the file's path where a page shows its URL.
-  const handleTogglePdfBookmark = (): void => {
-    if (activeTab?.kind !== 'pdf' || activeTab.filePath === null || activeTab.fileName === null) {
+  const handleTogglePdfBookmark = (tab: TabState): void => {
+    if (tab.kind !== 'pdf' || tab.filePath === null || tab.fileName === null) {
       return;
     }
-    if (pdfBookmarked) {
-      toggleBookmark(activeTab.id);
+    if (isFileBookmarked('pdf', tab.filePath)) {
+      toggleBookmark(tab.id);
       return;
     }
-    const { id: tabId, filePath, fileName } = activeTab;
+    const { id: tabId, filePath, fileName } = tab;
     void beginTabPreview(tabId).then((previewImage) => {
       setBookmarkPopup({ tabId, variant: 'pdf', url: filePath, title: withoutExtension(fileName), previewImage });
     });
   };
 
   // The same again for a note: the popup asks for the name, with the file's path where a page shows its URL.
-  const handleToggleMarkdownBookmark = (): void => {
-    if (activeTab?.kind !== 'markdown' || activeTab.filePath === null || activeTab.fileName === null) {
+  const handleToggleMarkdownBookmark = (tab: TabState): void => {
+    if (tab.kind !== 'markdown' || tab.filePath === null || tab.fileName === null) {
       return;
     }
-    if (markdownBookmarked) {
-      toggleBookmark(activeTab.id);
+    if (isFileBookmarked('markdown', tab.filePath)) {
+      toggleBookmark(tab.id);
       return;
     }
-    const { id: tabId, filePath, fileName } = activeTab;
+    const { id: tabId, filePath, fileName } = tab;
     void beginTabPreview(tabId).then((previewImage) => {
       setBookmarkPopup({ tabId, variant: 'markdown', url: filePath, title: withoutExtension(fileName), previewImage });
     });
@@ -460,9 +460,8 @@ export function App() {
     readonly previewImage: string | null;
   } | null>(null);
 
-  const openClearHistory = (range: HistoryClearRange): void => {
-    const tabId = activeTabId;
-    if (clearHistoryPopup || !tabId) {
+  const openClearHistory = (range: HistoryClearRange, tabId: string): void => {
+    if (clearHistoryPopup) {
       return;
     }
     setClearHistoryPopup({ tabId, range, count: null, previewImage: null });
@@ -489,20 +488,233 @@ export function App() {
     });
   };
 
-  // A note's Delete: confirmed the same way as Clear History (typing "delete"), over the note's tab, before its file
-  // goes to the Recycle Bin.
+  /**
+   * The toolbar's tools for one tab — the active tab's, or in split screen each side's: a PDF's or note's file bar
+   * and buttons, a table tab's search, or a web page's navigation and address bar.
+   */
+  const tabToolsFor = (tab: TabState | null | undefined): ReactNode => {
+    if (tab?.kind === 'pdf') {
+      return (
+        <PdfToolbar
+          key={tab.id}
+          tab={tab}
+          isBookmarked={isFileBookmarked('pdf', tab.filePath)}
+          onToggleBookmark={() => handleTogglePdfBookmark(tab)}
+          pdfBookmarks={pdfBookmarks}
+          onOpenBookmark={openPdfBookmark}
+          onOpenPdfPath={openPdfPath}
+          onNavigate={(id, direction) => (direction === -1 ? goBack(id) : goForward(id))}
+          onRename={renamePdfFile}
+        />
+      );
+    }
+    if (tab?.kind === 'markdown') {
+      return (
+        <MarkdownToolbar
+          key={tab.id}
+          tab={tab}
+          isBookmarked={isFileBookmarked('markdown', tab.filePath)}
+          onToggleBookmark={() => handleToggleMarkdownBookmark(tab)}
+          markdownBookmarks={markdownBookmarks}
+          onOpenBookmark={openMarkdownBookmark}
+          onOpenPath={openMarkdownPath}
+          onSetMode={setMarkdownMode}
+          onSetDisplay={setMarkdownDisplay}
+          onNavigate={navigateMarkdownHistory}
+          onRename={renameMarkdownFile}
+        />
+      );
+    }
+    if (tab?.kind === 'history') {
+      return <HistoryToolbar key={tab.id} tab={tab} onRequestClear={(range) => openClearHistory(range, tab.id)} />;
+    }
+    if (tab?.kind === 'bookmarks') {
+      return <BookmarksToolbar key={tab.id} tab={tab} />;
+    }
+    if (tab?.kind === 'secrets') {
+      return <SecretsToolbar key={tab.id} tab={tab} />;
+    }
+    if (tab?.kind === 'terminal') {
+      // Empty on purpose — occupies the same flex space NavControls + AddressBar would, so the page tools stay
+      // right-aligned, without showing the tab's title text.
+      return <span key={tab.id} className="toolbar__terminal-label" />;
+    }
+    const pageTab = tab?.kind === 'browser' ? tab : null;
+    const pageIsHome = pageTab?.url === HOME_URL;
+    const pageBookmark = pageTab ? (pageBookmarks.find((bookmark) => bookmark.url === pageTab.url) ?? null) : null;
+    return (
+      <>
+        <NavControls
+          canGoBack={pageTab?.canGoBack ?? false}
+          canGoForward={pageTab?.canGoForward ?? false}
+          isLoading={pageTab?.isLoading ?? false}
+          onBack={() => tab && goBack(tab.id)}
+          onForward={() => tab && goForward(tab.id)}
+          onReloadOrStop={() => handleReloadOrStop(tab)}
+          onHome={() => tab && navigate(tab.id, HOME_URL)}
+        />
+        {/* Remounted per tab (via key) so its draft text never leaks between tabs. */}
+        <AddressBar
+          key={tab?.id ?? 'none'}
+          url={pageIsHome ? '' : (pageTab?.url ?? '')}
+          isLoading={pageTab?.isLoading ?? false}
+          loadProgress={pageTab?.loadProgress ?? null}
+          onNavigate={(input) => tab && navigate(tab.id, input)}
+          bookmarks={pageBookmarks}
+          isBookmarked={pageBookmark !== null}
+          canBookmark={pageTab !== null && !pageIsHome}
+          bookmarkName={pageBookmark?.title ?? null}
+          onToggleBookmark={() => handleToggleBookmark(tab)}
+        />
+      </>
+    );
+  };
+
+  /**
+   * One tab's own page tools (`TabActions`): the ad blocker for its site, and its zoom.
+   * @param tab The tab.
+   * @param zoom Its zoom and how to change it: the active tab's, or the split's right side's.
+   * @param inStrip Whether they sit in `PageActions`' strip, rather than at the end of one half of a split's toolbar.
+   */
+  const tabActionsFor = (
+    tab: TabState | null | undefined,
+    zoom: { readonly percent: number; readonly zoomIn: () => void; readonly zoomOut: () => void; readonly set: (percent: number) => void },
+    inStrip: boolean,
+  ): ReactNode => {
+    const pageTab = tab?.kind === 'browser' ? tab : null;
+    const site = hostOfUrl(pageTab?.url);
+    const siteAllowed = site !== null && adBlock.allowedSites.includes(site);
+    const tablePage = tab?.kind === 'history' || tab?.kind === 'bookmarks' || tab?.kind === 'secrets';
+    return (
+      <TabActions
+        showAdBlock={site !== null && pageTab?.url !== HOME_URL}
+        adBlockActive={adBlock.enabled && !siteAllowed}
+        adBlockGloballyOff={!adBlock.enabled}
+        adBlockBlockedCount={tab ? (adBlock.blockedByTab[tab.id] ?? 0) : 0}
+        adBlockSite={site ?? ''}
+        onToggleAdBlock={() => site && window.northstar.setAdBlockSiteAllowed(site, !siteAllowed)}
+        showZoom={!tablePage}
+        canZoom={tab !== undefined}
+        zoomPercent={zoom.percent}
+        onZoomOut={zoom.zoomOut}
+        onZoomIn={zoom.zoomIn}
+        onSetZoom={zoom.set}
+        inStrip={inStrip}
+      />
+    );
+  };
+  const activeZoom = { percent: zoomPercent, zoomIn, zoomOut, set: (percent: number) => setZoom(percent) };
+
+  // Split screen: the two sides' tabs, each with its own half of the toolbar.
+  const splitLeftTab = splitView ? tabs.find((tab) => tab.id === splitView.primaryTabId) : undefined;
+  const splitRightTab = splitView ? tabs.find((tab) => tab.id === splitView.secondaryTabId) : undefined;
+  // A side's zoom: the active side's is the active tab's; the other side's is its own (`splitZoomPercent`).
+  const zoomFor = (tab: TabState) =>
+    tab.id === activeTabId
+      ? activeZoom
+      : {
+          percent: splitZoomPercent,
+          zoomIn: () => setZoom(splitZoomPercent + ZOOM_PERCENT_STEP, tab.id),
+          zoomOut: () => setZoom(splitZoomPercent - ZOOM_PERCENT_STEP, tab.id),
+          set: (percent: number) => setZoom(percent, tab.id),
+        };
+
+  // The frames move with the split: the two come apart from one (`entering`), or the one left widens back out of
+  // its half as they come back together — out of the left half, or the right if that side was kept.
+  const [shownSplit, setShownSplit] = useState(splitView);
+  const [frameMotion, setFrameMotion] = useState<'entering' | 'joining-left' | 'joining-right' | null>(null);
+  if (shownSplit?.primaryTabId !== splitView?.primaryTabId || shownSplit?.secondaryTabId !== splitView?.secondaryTabId) {
+    if ((shownSplit === null) !== (splitView === null)) {
+      setFrameMotion(splitView ? 'entering' : shownSplit?.secondaryTabId === activeTabId ? 'joining-right' : 'joining-left');
+    }
+    setShownSplit(splitView);
+  }
+
+  // A note's or PDF's own file actions, in the Tools sidebar: a note's New, Open, Close and Delete (its Export menu
+  // follows them); a PDF's Open, Close, Delete and Export.
+  const fileActions = ((): readonly ToolsBarAction[] => {
+    if (activeTab?.kind !== 'markdown' && activeTab?.kind !== 'pdf') {
+      return [];
+    }
+    const { id, kind } = activeTab;
+    const noFile = activeTab.fileName === null;
+    const what = kind === 'pdf' ? 'PDF' : 'note';
+    const actions: ToolsBarAction[] = [];
+    if (kind === 'markdown') {
+      actions.push({
+        id: 'file-new',
+        name: 'New',
+        icon: <FileNewIcon />,
+        disabled: false,
+        tooltip: 'Create a new note',
+        onClick: () => newMarkdownFile(id),
+      });
+    }
+    actions.push(
+      {
+        id: 'file-open',
+        name: 'Open',
+        icon: <FileOpenIcon />,
+        disabled: false,
+        tooltip: `Open a ${what} (${formatShortcut('O')})`,
+        onClick: () => (kind === 'pdf' ? openPdfFile(id) : openMarkdownFile(id)),
+      },
+      {
+        id: 'file-close',
+        name: 'Close',
+        icon: <FileCloseIcon />,
+        disabled: noFile,
+        tooltip: `Close the open ${what} (${formatShortcut('Shift+C')})`,
+        onClick: () => (kind === 'pdf' ? closePdfFile(id) : closeMarkdownFile(id)),
+      },
+      {
+        id: 'file-delete',
+        name: 'Delete',
+        icon: <TrashIcon />,
+        disabled: noFile,
+        tooltip: `Delete the open ${what}`,
+        onClick: () => openDeleteNote(id),
+      },
+    );
+    if (kind === 'pdf') {
+      actions.push({
+        id: 'file-export',
+        name: 'Export',
+        icon: <ExportIcon />,
+        disabled: noFile,
+        tooltip: 'Export a copy with crops, drawings, text boxes and highlights',
+        onClick: () => exportPdfFile(id),
+      });
+    }
+    return actions;
+  })();
+
+  // Split screen: while its button is hovered with two tabs selected, the tab row marks them "L" and "R" (the first
+  // selected goes on the left); while split, the two sides stay marked.
+  const [splitHover, setSplitHover] = useState(false);
+  const splitSides = useMemo((): Readonly<Record<string, 'L' | 'R'>> => {
+    if (splitView) {
+      return { [splitView.primaryTabId]: 'L', [splitView.secondaryTabId]: 'R' };
+    }
+    const [left, right, ...more] = tabSelectionOrder;
+    return splitHover && left && right && more.length === 0 ? { [left]: 'L', [right]: 'R' } : {};
+  }, [splitView, tabSelectionOrder, splitHover]);
+
+  // A note's or PDF's Delete: confirmed the same way as Clear History (typing "delete"), over its tab, before its
+  // file goes to the Recycle Bin.
   const [deleteNotePopup, setDeleteNotePopup] = useState<{
     readonly tabId: string;
+    readonly kind: 'markdown' | 'pdf';
     readonly fileName: string;
     readonly previewImage: string | null;
   } | null>(null);
 
   const openDeleteNote = (tabId: string): void => {
     const tab = tabs.find((candidate) => candidate.id === tabId);
-    if (deleteNotePopup || tab?.kind !== 'markdown' || tab.fileName === null) {
+    if (deleteNotePopup || (tab?.kind !== 'markdown' && tab?.kind !== 'pdf') || tab.fileName === null) {
       return;
     }
-    setDeleteNotePopup({ tabId, fileName: tab.fileName, previewImage: null });
+    setDeleteNotePopup({ tabId, kind: tab.kind, fileName: tab.fileName, previewImage: null });
     void beginTabPreview(tabId).then((previewImage) => {
       setDeleteNotePopup((current) => (current ? { ...current, previewImage } : current));
     });
@@ -547,12 +759,12 @@ export function App() {
     if (!deleteNotePopup) {
       return;
     }
-    const { tabId } = deleteNotePopup;
+    const { tabId, kind } = deleteNotePopup;
     closePopupAnimated('deleteNote', () => {
       endTabPreview(tabId);
       setDeleteNotePopup(null);
       if (confirmed) {
-        void window.northstar.deleteMarkdownFile(tabId);
+        void (kind === 'pdf' ? window.northstar.deletePdfFile(tabId) : window.northstar.deleteMarkdownFile(tabId));
       }
     });
   };
@@ -714,113 +926,45 @@ export function App() {
               onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
               onTearOffEnd={tearOffTabEnd}
               onReportDropRegions={reportDropRegions}
+              splitSides={splitSides}
+              splitTabIds={splitView ? [splitView.primaryTabId, splitView.secondaryTabId] : []}
             />
             <div className="titlebar__corner">
               <TitlebarClock />
               <WindowControls />
             </div>
           </div>
-          <div className="toolbar">
-            {activeTab?.kind === 'pdf' ? (
-              <PdfToolbar
-                key={activeTab.id}
-                tab={activeTab}
-                isBookmarked={pdfBookmarked}
-                onToggleBookmark={handleTogglePdfBookmark}
-                pdfBookmarks={pdfBookmarks}
-                onOpenBookmark={openPdfBookmark}
-                onOpenPdfPath={openPdfPath}
-                onOpen={openPdfFile}
-                onNavigate={(id, direction) => (direction === -1 ? goBack(id) : goForward(id))}
-                onExport={exportPdfFile}
-                onClose={closePdfFile}
-                onRename={renamePdfFile}
-              />
-            ) : activeTab?.kind === 'markdown' ? (
-              <MarkdownToolbar
-                key={activeTab.id}
-                tab={activeTab}
-                isBookmarked={markdownBookmarked}
-                onToggleBookmark={handleToggleMarkdownBookmark}
-                markdownBookmarks={markdownBookmarks}
-                onOpenBookmark={openMarkdownBookmark}
-                onOpenPath={openMarkdownPath}
-                onNew={newMarkdownFile}
-                onOpen={openMarkdownFile}
-                onClose={closeMarkdownFile}
-                onDelete={openDeleteNote}
-                onSetMode={setMarkdownMode}
-                onSetDisplay={setMarkdownDisplay}
-                onNavigate={navigateMarkdownHistory}
-                onRename={renameMarkdownFile}
-              />
-            ) : activeTab?.kind === 'history' ? (
-              <HistoryToolbar key={activeTab.id} tab={activeTab} onRequestClear={openClearHistory} />
-            ) : activeTab?.kind === 'bookmarks' ? (
-              <BookmarksToolbar key={activeTab.id} tab={activeTab} />
-            ) : activeTab?.kind === 'secrets' ? (
-              <SecretsToolbar key={activeTab.id} tab={activeTab} />
-            ) : activeTab?.kind === 'terminal' ? (
-              // Empty on purpose — occupies the same flex space
-              // NavControls + AddressBar would, so PageActions stays
-              // right-aligned, without showing the tab's title text.
-              <span className="toolbar__terminal-label" />
-            ) : (
+          <div className={`toolbar${splitLeftTab && splitRightTab ? ' toolbar--split' : ''}`}>
+            {splitLeftTab && splitRightTab ? (
+              // Split screen: each side's tools in its own half, a line between them; the window's own after.
               <>
-                <NavControls
-                  canGoBack={browserTab?.canGoBack ?? false}
-                  canGoForward={browserTab?.canGoForward ?? false}
-                  isLoading={browserTab?.isLoading ?? false}
-                  onBack={() => activeTabId && goBack(activeTabId)}
-                  onForward={() => activeTabId && goForward(activeTabId)}
-                  onReloadOrStop={handleReloadOrStop}
-                  onHome={() => activeTabId && navigate(activeTabId, HOME_URL)}
-                />
-                {/* Remounted per tab (via key) so its draft text never leaks between tabs. */}
-                <AddressBar
-                  key={activeTabId ?? 'none'}
-                  url={isHome ? '' : (browserTab?.url ?? '')}
-                  isLoading={browserTab?.isLoading ?? false}
-                  loadProgress={browserTab?.loadProgress ?? null}
-                  onNavigate={(input) => activeTabId && navigate(activeTabId, input)}
-                  bookmarks={pageBookmarks}
-                  isBookmarked={activeBookmark !== null}
-                  canBookmark={browserTab !== null && !isHome}
-                  bookmarkName={activeBookmark?.title ?? null}
-                  onToggleBookmark={handleToggleBookmark}
-                />
+                <div className="toolbar__side">
+                  {tabToolsFor(splitLeftTab)}
+                  <div className="page-actions page-actions--side">{tabActionsFor(splitLeftTab, zoomFor(splitLeftTab), false)}</div>
+                </div>
+                <span className="toolbar__split-divider" role="separator" aria-hidden="true" />
+                <div className="toolbar__side">
+                  {tabToolsFor(splitRightTab)}
+                  <div className="page-actions page-actions--side">{tabActionsFor(splitRightTab, zoomFor(splitRightTab), false)}</div>
+                </div>
+                <span className="page-actions__divider" role="separator" aria-hidden="true" />
               </>
+            ) : (
+              tabToolsFor(activeTab)
             )}
-            {secondaryTab && <SplitIndicator secondaryTab={secondaryTab} onExit={exitSplitView} />}
             <PageActions
-              canZoom={activeTabId !== null}
-              zoomPercent={zoomPercent}
+              tabActions={splitLeftTab && splitRightTab ? null : tabActionsFor(activeTab, activeZoom, true)}
               focusMode={focusMode}
               theme={theme}
-              showAdBlock={adBlockSite !== null && !isHome}
-              adBlockActive={adBlock.enabled && !adBlockSiteAllowed}
-              adBlockGloballyOff={!adBlock.enabled}
-              adBlockBlockedCount={activeTabId ? (adBlock.blockedByTab[activeTabId] ?? 0) : 0}
-              adBlockSite={adBlockSite ?? ''}
-              onToggleAdBlock={() => adBlockSite && window.northstar.setAdBlockSiteAllowed(adBlockSite, !adBlockSiteAllowed)}
-              markdownExport={activeTab?.kind === 'markdown'}
-              canExportMenu={
-                activeTabId !== null &&
-                !isHome &&
-                activeTab?.kind !== 'pdf' &&
-                !isTablePage &&
-                !(activeTab?.kind === 'markdown' && activeTab.fileName === null)
-              }
-              canExportDocuments={browserTab !== null && !isHome}
-              showExportMenu={activeTab?.kind !== 'pdf' && !isTablePage}
-              showZoom={!isTablePage}
+              splitActive={splitView !== null}
+              canSplit={tabSelectionOrder.length === 2}
+              onToggleSplit={toggleSplitScreen}
+              onSwapSplit={swapSplitSides}
+              onSplitHover={setSplitHover}
               onOpenTabSearch={openTabSearch}
               findOpen={findOpen}
               canFind={canFind}
               onToggleFind={() => setFind(!findOpen)}
-              onZoomOut={zoomOut}
-              onZoomIn={zoomIn}
-              onSetZoom={setZoom}
               onOpenWorkspaceInNewWindow={openWorkspaceInNewWindow}
               onToggleFocusMode={() => setFocusMode(!focusMode)}
               onToggleTheme={toggleTheme}
@@ -870,14 +1014,53 @@ export function App() {
           <MetalBackground />
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
               terminal or History page draws its own frame, and Focus Mode shows none. */}
-          {activeTab?.kind === 'browser' && !focusMode && (
-            <div className={`tab-content__frame${contentFocused ? ' tab-content__frame--focused' : ''}`} aria-hidden="true" />
-          )}
+          {!focusMode &&
+            (splitView ? (
+              // Split screen: a frame for each side showing a web page (a note, PDF or terminal draws its own), lit on
+              // whichever side has the keyboard.
+              ([
+                [splitView.primaryTabId, 'left'],
+                [splitView.secondaryTabId, 'right'],
+              ] as const).map(([tabId, side]) =>
+                tabs.find((tab) => tab.id === tabId)?.kind === 'browser' ? (
+                  <div
+                    key={side}
+                    className={`tab-content__frame tab-content__frame--split-${side}${focusedTabId === tabId ? ' tab-content__frame--focused' : ''}${frameMotion === 'entering' ? ' tab-content__frame--entering' : ''}`}
+                    aria-hidden="true"
+                    onAnimationEnd={() => setFrameMotion(null)}
+                  />
+                ) : null,
+              )
+            ) : (
+              activeTab?.kind === 'browser' && (
+                <div
+                  className={`tab-content__frame${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
+                  aria-hidden="true"
+                  onAnimationEnd={() => setFrameMotion(null)}
+                />
+              )
+            ))}
           {/* The tab's pages in picture, standing in for them while the sidebar slides. */}
           <ContentSnapshot />
-          {/* In the strip main keeps free below a web page; a note or PDF draws its own, and Focus Mode shows none. */}
+          {/* In the strip main keeps free below a web page; a note, PDF or terminal draws its own — except in split
+              screen, where this one bar runs the whole way across with the stats of the side used last. Focus Mode
+              shows none. */}
           {activeTab?.kind === 'browser' && !focusMode && (
             <WebStatusBar stats={pageStats?.tabId === activeTab.id ? pageStats.stats : null} />
+          )}
+          {activeTab && activeTab.kind !== 'browser' && splitView && !focusMode && (
+            <ItemsStatusBar
+              items={pageStats?.tabId === activeTab.id ? pageStats.items : null}
+              label={
+                activeTab.kind === 'pdf'
+                  ? 'PDF statistics'
+                  : activeTab.kind === 'markdown'
+                    ? 'Note statistics'
+                    : activeTab.kind === 'terminal'
+                      ? 'Terminal statistics'
+                      : 'Statistics'
+              }
+            />
           )}
           {bookmarkPopup && (
             <PopupTransition closing={closingPopups.has('bookmark')} onExited={() => finishPopupClose('bookmark')}>
@@ -929,9 +1112,13 @@ export function App() {
             <PopupTransition closing={closingPopups.has('deleteNote')} onExited={() => finishPopupClose('deleteNote')}>
               <ConfirmWordPopup
                 title={`Delete ${deleteNotePopup.fileName}?`}
-                detail="The file goes to the Recycle Bin, and its marks are removed."
+                detail={
+                  deleteNotePopup.kind === 'pdf'
+                    ? 'The file goes to the Recycle Bin.'
+                    : 'The file goes to the Recycle Bin, and its marks are removed.'
+                }
                 word="DELETE"
-                dialogLabel="Delete note"
+                dialogLabel={deleteNotePopup.kind === 'pdf' ? 'Delete PDF' : 'Delete note'}
                 previewImage={deleteNotePopup.previewImage}
                 onConfirm={() => closeDeleteNote(true)}
                 onClose={() => closeDeleteNote(false)}
@@ -1009,6 +1196,17 @@ export function App() {
           onToggleCrop={() => setCrop(!cropActive)}
           showRevert={!isAppPage}
           canRevert={canRevert}
+          showExport={activeTab?.kind !== 'pdf' && !isTablePage}
+          canExport={
+            activeTabId !== null &&
+            !isHome &&
+            activeTab?.kind !== 'pdf' &&
+            !isTablePage &&
+            !(activeTab?.kind === 'markdown' && activeTab.fileName === null)
+          }
+          canExportDocuments={browserTab !== null && !isHome}
+          exportMarkdown={activeTab?.kind === 'markdown'}
+          fileActions={fileActions}
           onRevertPage={openRevert}
         />
       </div>

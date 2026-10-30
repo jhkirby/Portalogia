@@ -3,4 +3,4 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-export { ToolsBar } from './ToolsBar';
+export { ToolsBar, type ToolsBarAction } from './ToolsBar';

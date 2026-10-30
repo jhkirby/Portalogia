@@ -19,8 +19,8 @@ interface PdfStatusBarProps {
   readonly pageCount: number;
   /** Counted in the background after the document opens; `null` until then. */
   readonly stats: PdfDocumentStats | null;
-  /** The file's size, in bytes. */
-  readonly bytes: number;
+  /** The file's size, in bytes, or `null` with no file open. */
+  readonly bytes: number | null;
   /** What's selected, counted; `null` while nothing is, which hides those fields. */
   readonly selection: { readonly words: number; readonly characters: number } | null;
   /** Jumps to a page (clamped to the document), as a jump Back can return from. */
@@ -54,7 +54,9 @@ export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToP
           className="pdf-status__field"
           aria-label="Current page"
           title="Page: type a number and press Enter to jump"
-          value={draft ?? String(page)}
+          // No file, no page: a dash, and nothing to type.
+          disabled={pageCount === 0}
+          value={pageCount === 0 ? '–' : (draft ?? String(page))}
           // Just wide enough for the largest page number, so it sits snug against the "/".
           style={{ width: `${Math.max(2, String(pageCount).length) + 1}ch` }}
           onFocus={(event) => event.currentTarget.select()}
@@ -81,7 +83,7 @@ export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToP
       <span className="pdf-status__item">{counted(stats?.words, 'word', 'words')}</span>
       <span className="pdf-status__item">{counted(stats?.characters, 'character', 'characters')}</span>
       <span className="pdf-status__item">{counted(stats?.links, 'link', 'links')}</span>
-      <span className="pdf-status__item">{count(bytes)} bytes</span>
+      <span className="pdf-status__item">{bytes === null ? '… bytes' : `${count(bytes)} bytes`}</span>
       {selection && (
         <span className="pdf-status__selection" aria-label="Selection">
           <span className="pdf-status__item">Selected:</span>

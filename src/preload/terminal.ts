@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { FindCommand, FindResult, NorthstarTerminalApi } from '@shared/ipc-contract';
@@ -135,3 +135,49 @@ const api: NorthstarTerminalApi = {
 };
 
 contextBridge.exposeInMainWorld('northstarTerminal', api satisfies NorthstarTerminalApi);
+
+// The page's own stat bar, read out for the chrome: in split screen the chrome draws the one bar along the window's
+// bottom, with the stats of whichever side was used last, and this page's own is hidden
+// (`TabManager.syncSplitStatBars`). Repeated in each preload with a stat bar: two entries can't share a module (see
+// the note on `tabZoom.ts`'s imports).
+const TabStatItems = 'tab:stat-items';
+{
+  let sent = '';
+  let queued = false;
+  // An item's words, a jump box's number included (an input's value isn't in its text).
+  const textOf = (node: Node): string =>
+    node instanceof HTMLInputElement
+      ? node.value
+      : node.nodeType === Node.TEXT_NODE
+        ? (node.textContent ?? '')
+        : Array.from(node.childNodes, textOf).join('');
+  const send = (): void => {
+    queued = false;
+    const bar = document.querySelector('footer.md-status, footer.pdf-status, footer.terminal-status');
+    const items = bar
+      ? Array.from(bar.querySelectorAll('[class*="status__item"]'), (item) => textOf(item).replace(/\s+/g, ' ').trim()).filter(
+          (text) => text !== '',
+        )
+      : [];
+    const key = JSON.stringify(items);
+    if (key !== sent) {
+      sent = key;
+      ipcRenderer.send(TabStatItems, items);
+    }
+  };
+  const queue = (): void => {
+    if (!queued) {
+      queued = true;
+      requestAnimationFrame(send);
+    }
+  };
+  window.addEventListener('DOMContentLoaded', () => {
+    new MutationObserver(queue).observe(document.body, { subtree: true, childList: true, characterData: true });
+    queue();
+  });
+  // A jump box's number changes as a property, which no mutation shows: whatever can move it reads the bar again.
+  for (const type of ['input', 'keyup', 'pointerup', 'selectionchange']) {
+    document.addEventListener(type, queue, true);
+  }
+  setInterval(queue, 1000);
+}

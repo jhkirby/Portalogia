@@ -1,10 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AddressSuggestionsSyncPayload } from '@shared/ipc-contract';
+import { useMenuFade } from '../../hooks/useMenuFade';
 import { BookmarkStarIcon, HistoryIcon } from '../icons';
 
 /**
@@ -37,7 +38,9 @@ import { BookmarkStarIcon, HistoryIcon } from '../icons';
  * this same press triggers has a chance to catch up.
  */
 export function AddressSuggestionsView() {
-  const [payload, setPayload] = useState<AddressSuggestionsSyncPayload | null>(null);
+  const [synced, setPayload] = useState<AddressSuggestionsSyncPayload | null>(null);
+  // Fades out as it closes (main keeps the view up meanwhile), as it fades in opening.
+  const { shown: payload, closing } = useMenuFade(synced, (sync) => sync.open && sync.suggestions.length > 0);
 
   useEffect(() => window.northstarSuggestions.onSync(setPayload), []);
 
@@ -51,14 +54,14 @@ export function AddressSuggestionsView() {
     }
   }, [selectedIndex, payload]);
 
-  if (!payload || !payload.open) {
+  if (!payload) {
     return null;
   }
 
   const isMenu = payload.variant === 'menu';
 
   return (
-    <ul ref={listRef} className={`address-bar__suggestions${isMenu ? ' address-bar__suggestions--menu' : ''}`} role="listbox">
+    <ul ref={listRef} className={`address-bar__suggestions${isMenu ? ' address-bar__suggestions--menu' : ''}${closing ? ' address-bar__suggestions--closing' : ''}`} role="listbox">
       {payload.suggestions.map((item, index) => (
         <li
           key={item.id}

@@ -260,10 +260,20 @@ export interface BrowserState {
    * workspace, Ctrl+W) act on all of them. Window-local, like `activeTabId`.
    */
   readonly selectedTabIds: readonly string[];
+  /**
+   * The same multi-selected tabs in the order they were selected — the active one first, then each as it was
+   * Ctrl+clicked (a Shift+click range from the active one outward) — empty unless two or more are. Split screen puts
+   * the first on the left and the second on the right.
+   */
+  readonly tabSelectionOrder: readonly string[];
+  /** The tab whose page has the keyboard — the active one, or in split screen whichever side has it — or `null`. */
+  readonly focusedTabId: string | null;
   /** The workspaces multi-selected with Ctrl/Shift+click, active one included — empty unless two or more are selected. Ctrl+Alt+W removes them all. */
   readonly selectedWorkspaceIds: readonly string[];
   /** The active tab's own zoom, as a whole percent (25–200, 100 = native size) — never the chrome's, which is never zoomed. */
   readonly zoomPercent: number;
+  /** In split screen, the right side's own zoom, as `zoomPercent` is the left's (the active tab's). */
+  readonly splitZoomPercent: number;
   /** Whether the laser pointer overlay is currently on (Ctrl+I, or the toolbar button) — see `LaserPointerOverlay`. */
   readonly laserPointerActive: boolean;
   /** Whether the highlighter tool is currently on (Ctrl+J, or the toolbar button) — see `HighlighterController`. */

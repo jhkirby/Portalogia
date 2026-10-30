@@ -33,6 +33,7 @@ import {
   MARKDOWN_PRINT_GLOBAL,
   SIDEBAR_COLLAPSED_WIDTH_PX,
   SIDEBAR_TOGGLE_DURATION_MS,
+  SPLIT_ANIMATION_MS,
   SIDEBAR_WIDTH_PX,
   TOOLS_SIDEBAR_WIDTH_PX,
   TERMINAL_PREPARE_PRINT_GLOBAL,
@@ -40,6 +41,7 @@ import {
   ZOOM_PERCENT_DEFAULT,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
+  ZOOM_PERCENT_STEP,
   ZOOM_PERCENT_WHEEL_STEP,
   ZOOM_PERCENT_WHEEL_STEP_COARSE,
   STATUS_BAR_HEIGHT_PX,
@@ -173,6 +175,9 @@ const TAB_FADE_COVER_MS = 50;
 /** The colour a newly shown tab fades in from: the chrome's own (`--color-chrome-bg`), by theme. */
 const TAB_FADE_COLOR = { light: '#f1f3f4', dark: '#202124' } as const;
 
+/** How long each of the split's two pages takes to fade out, and then back in, as the sides swap (`swapSplitSides`). */
+const SPLIT_SWAP_FADE_MS = 160;
+
 /** How far past the window's right edge a view waits out the sidebar's slide (`slideSidebar`): wholly out of sight. */
 const PARKED_OFFSET_PX = 1000;
 
@@ -196,8 +201,6 @@ const SPACE_HOLD_GRACE_MS = 600;
  */
 const GRAB_MAX_DURATION_MS = 15_000;
 
-/** How many percentage points `zoomIn`/`zoomOut` (buttons, Ctrl+=/-, menu) move per press — `ZOOM_PERCENT_MIN`/`MAX`/`DEFAULT` themselves live in `@shared/constants`, shared with the renderer's `ZoomPercentInput`. */
-const ZOOM_PERCENT_STEP = 10;
 
 /** Largest PDF `openPdfFile` will read into memory and push over IPC. */
 const MAX_PDF_BYTES = 512 * 1024 * 1024;
@@ -248,6 +251,13 @@ const pageHadKeyboard = new Map<string, boolean>();
 const PAGE_FOCUS_SETTLE_MS = 1000;
 
 /**
+ * In split screen, the side margin a page that draws its own frame (a note, PDF, terminal, History…) keeps around it:
+ * half the gap between the two frames, so the two pages meet in the middle of it. A web page's frame is the chrome's,
+ * so it needs none. See `TabManager.computeSplitPanes`.
+ */
+const SPLIT_PAGE_MARGIN_PX = CONTENT_FRAME_INSET_X_PX / 2;
+
+/**
  * Each PDF or Markdown tab's file load, for its file bar's progress (see `FileLoadProgress`). Module-level for the same
  * reason as `pdfFilePaths`: a tab can move between windows' managers while a file loads.
  */
@@ -261,6 +271,9 @@ const NOTE_READ_SHARE_PERCENT = 90;
 
 /** Each web page's latest stats, from its own page (`setPageStats`); shared, since a tab can move between windows. */
 const pageStatsByTab = new Map<string, PageStats>();
+
+/** What each note's, PDF's or terminal's own stat bar last showed, item by item (`setStatItems`). */
+const statItemsByTab = new Map<string, readonly string[]>();
 
 /** Markdown tabs whose page has finished loading — a note sent before then would have nobody listening, so it waits for `did-finish-load`. */
 const markdownPagesReady = new Set<string>();
@@ -329,6 +342,26 @@ export class TabManager {
   private activeTabId: string | null = null;
   private activeWorkspaceId: string;
   private splitView: SplitViewState | null = null;
+  /**
+   * How far apart the split's two sides are, 0 (one screen, the left tab's) to 1 (side by side): below 1 only while
+   * `animateSplit` moves them.
+   */
+  private splitProgress = 1;
+  /** Bumped by each split animation, so one that's superseded (or a split taken down meanwhile) stops. */
+  private splitAnimationToken = 0;
+  /** Whether the split is coming back together (`exitSplitView`): the chrome already shows one screen. */
+  private splitClosing = false;
+  /** Whether the split's sides are trading places (`swapSplitSides`), faded out and back in. */
+  private splitSwapping = false;
+  /** The split each workspace was showing when it was left, by workspace id: shown again on coming back. */
+  private readonly splitByWorkspace = new Map<string, SplitViewState>();
+  /**
+   * The style hiding the stat bar of a page that draws its own (a note, PDF or terminal) while it's the split's other
+   * side, by tab: the bottom row shows one set of stats, the active side's (`syncSplitStatBars`).
+   */
+  private readonly splitHiddenStatBars = new Map<string, Promise<string>>();
+  /** The style each self-framing page in the split was given for its narrower margins (`SPLIT_PAGE_MARGIN_PX`), by tab. */
+  private readonly splitMarginStyles = new Map<string, Promise<string>>();
   private focusMode = false;
   private sidebarVisible = true;
   /** Whether the Tools sidebar on the right is shown in full (`toggleToolsSidebar`), rather than as its rail of icons. */
@@ -1297,6 +1330,32 @@ export class TabManager {
       const openPath = markdownDocuments.pathOf(tabId);
       if (state.kind === 'markdown' && this.views.has(tabId) && openPath !== undefined && samePath(openPath, path)) {
         this.closeMarkdownFile(tabId);
+      }
+    }
+  }
+
+  /**
+   * Deletes a PDF tab's open file: it goes to the Recycle Bin (where it can still be restored from), and every tab of
+   * this window that had it open goes back to empty. Its marks are kept: they're filed under the file's contents, which
+   * a copy elsewhere may share, and come back with it if it's restored. The chrome has already had the user confirm
+   * it. A failure is reported in a native error box, like opening one.
+   * @param id The PDF tab. A no-op if it isn't one or has no file open.
+   */
+  public async deletePdfFile(id: string): Promise<void> {
+    const path = this.states.get(id)?.kind === 'pdf' ? pdfFilePaths.get(id) : undefined;
+    if (!path) {
+      return;
+    }
+    try {
+      await shell.trashItem(path);
+    } catch (error) {
+      dialog.showErrorBox('Could not delete PDF', error instanceof Error ? error.message : String(error));
+      return;
+    }
+    for (const [tabId, state] of this.states) {
+      const openPath = pdfFilePaths.get(tabId);
+      if (state.kind === 'pdf' && this.views.has(tabId) && openPath !== undefined && samePath(openPath, path)) {
+        this.closePdfFile(tabId);
       }
     }
   }
@@ -2328,7 +2387,7 @@ export class TabManager {
     }
     // Only a pan moves the pointer, and only in a tab on screen: a page (or a compromised one) can't otherwise take
     // hold of the user's mouse, or move it from a tab in the background.
-    const onScreen = id === this.activeTabId || id === this.splitView?.secondaryTabId;
+    const onScreen = id === this.activeTabId || id === this.splitOtherTabId();
     if (!state || !('pointerMode' in state) || state.pointerMode !== 'pan' || !onScreen) {
       return;
     }
@@ -2605,13 +2664,38 @@ export class TabManager {
     }
   }
 
-  /** Sends the chrome the active tab's stats (`null` before its page has counted, or for any other kind of tab). */
+  /**
+   * Records what a note's, PDF's or terminal's own stat bar shows (from its page), and hands it to the chrome if it's
+   * this window's active tab: in split screen the chrome's bar shows it, the page's own being hidden.
+   * @param id The tab.
+   * @param items Its bar's items, as text.
+   */
+  public setStatItems(id: string, items: readonly string[]): void {
+    const kind = this.states.get(id)?.kind;
+    if (kind !== 'markdown' && kind !== 'pdf' && kind !== 'terminal') {
+      return;
+    }
+    statItemsByTab.set(id, items);
+    const owner = this.registry.mountOwners.get(id) ?? this;
+    if (owner.activeTabId === id) {
+      owner.pushPageStats();
+    }
+  }
+
+  /**
+   * Sends the chrome the active tab's stats: a web page's counts, or a note's, PDF's or terminal's bar items (each
+   * `null` before its page has said, or for the other kind of tab).
+   */
   private pushPageStats(): void {
     const id = this.activeTabId;
     if (!id || this.window.isDestroyed()) {
       return;
     }
-    this.window.webContents.send(IpcChannel.PageStatsChanged, { tabId: id, stats: pageStatsByTab.get(id) ?? null });
+    this.window.webContents.send(IpcChannel.PageStatsChanged, {
+      tabId: id,
+      stats: pageStatsByTab.get(id) ?? null,
+      items: statItemsByTab.get(id) ?? null,
+    });
   }
 
   /**
@@ -2674,7 +2758,7 @@ export class TabManager {
 
   /** `syncPagePointerMode` for every tab this window shows: the active one and a split view's other half. */
   private syncMountedPagePointerModes(): void {
-    for (const id of [this.activeTabId, this.splitView?.secondaryTabId]) {
+    for (const id of [this.activeTabId, this.splitOtherTabId()]) {
       if (id) {
         this.syncPagePointerMode(id);
       }
@@ -3034,10 +3118,12 @@ export class TabManager {
       this.grabbedTabId = null;
     }
 
-    if (this.splitView?.secondaryTabId === id) {
+    if (this.splitView && this.splitOtherTabId() === id) {
       if (view) {
         this.window.contentView.removeChildView(view);
       }
+      this.restoreSplitMargins();
+      this.showAllStatBars();
       this.splitView = null;
       relocate();
       this.updateBounds();
@@ -3045,8 +3131,10 @@ export class TabManager {
       return this.getState();
     }
 
-    if (this.splitView?.primaryTabId === id) {
-      const secondaryId = this.splitView.secondaryTabId;
+    if (this.splitView && this.activeTabId === id) {
+      const secondaryId = this.splitOtherTabId() ?? this.splitView.secondaryTabId;
+      this.restoreSplitMargins();
+      this.showAllStatBars();
       this.splitView = null;
       if (view) {
         this.window.contentView.removeChildView(view);
@@ -3278,20 +3366,24 @@ export class TabManager {
       retireView(view);
     }
 
-    if (this.splitView?.secondaryTabId === id) {
+    if (this.splitView && this.splitOtherTabId() === id) {
       if (view) {
         releaseView(view, this.window);
       }
       this.views.delete(id);
       this.states.delete(id);
+      this.restoreSplitMargins();
+      this.showAllStatBars();
       this.splitView = null;
       this.updateBounds();
       this.emitState();
       return this.getState();
     }
 
-    if (this.splitView?.primaryTabId === id) {
-      const secondaryId = this.splitView.secondaryTabId;
+    if (this.splitView && this.activeTabId === id) {
+      const secondaryId = this.splitOtherTabId() ?? this.splitView.secondaryTabId;
+      this.restoreSplitMargins();
+      this.showAllStatBars();
       this.splitView = null;
       if (view) {
         releaseView(view, this.window);
@@ -3444,6 +3536,14 @@ export class TabManager {
       owner.releaseTab(id);
     }
 
+    if (this.splitView && !this.splitClosing && (id === this.splitView.primaryTabId || id === this.splitView.secondaryTabId)) {
+      // Either side of a split: it stays split, with this side the active one, and its page takes the keyboard.
+      const sideView = this.views.get(id);
+      if (sideView && !sideView.webContents.isDestroyed()) {
+        sideView.webContents.focus();
+      }
+      return this.focusSplitSide(id);
+    }
     if (this.splitView) {
       this.teardownSplitView();
     }
@@ -3546,25 +3646,29 @@ export class TabManager {
    * @param id The tab being taken over by a different window.
    */
   public releaseTab(id: string): void {
-    if (this.splitView?.secondaryTabId === id) {
+    if (this.splitView && this.splitOtherTabId() === id) {
       const view = this.views.get(id);
       if (view) {
         this.window.contentView.removeChildView(view);
       }
       this.registry.mountOwners.delete(id);
+      this.restoreSplitMargins();
+      this.showAllStatBars();
       this.splitView = null;
       this.updateBounds();
       this.emitState();
       return;
     }
 
-    if (this.splitView?.primaryTabId === id) {
-      const secondaryId = this.splitView.secondaryTabId;
+    if (this.splitView && this.activeTabId === id) {
+      const secondaryId = this.splitOtherTabId() ?? this.splitView.secondaryTabId;
       const view = this.views.get(id);
       if (view) {
         this.window.contentView.removeChildView(view);
       }
       this.registry.mountOwners.delete(id);
+      this.restoreSplitMargins();
+      this.showAllStatBars();
       this.splitView = null;
       this.activeTabId = null;
       if (this.states.has(secondaryId)) {
@@ -4022,6 +4126,19 @@ export class TabManager {
     return selected.length >= 2 ? selected : [];
   }
 
+  /**
+   * The multi-selected tabs in the order they were selected (`BrowserState.tabSelectionOrder`) — empty unless two or
+   * more still are, in this workspace.
+   */
+  private tabSelectionInOrder(): string[] {
+    if (this.selectedTabIds.size < 2) {
+      return [];
+    }
+    const listed = this.listedTabIds(this.activeWorkspaceId);
+    const ordered = [...this.selectedTabIds].filter((tabId) => listed.includes(tabId));
+    return ordered.length >= 2 ? ordered : [];
+  }
+
   /** The multi-selected workspaces, in sidebar order, active one included — empty unless two or more still exist. */
   private currentWorkspaceSelection(): string[] {
     if (this.selectedWorkspaceIds.size === 0) {
@@ -4043,7 +4160,8 @@ export class TabManager {
     if (!active || id === active || !listed.includes(id) || !listed.includes(active)) {
       return this.getState();
     }
-    const selection = new Set(this.currentTabSelection());
+    // Kept in the order they were selected: split screen puts the first on the left.
+    const selection = new Set(this.tabSelectionInOrder());
     if (selection.size === 0) {
       selection.add(active);
       selection.add(id);
@@ -4065,7 +4183,8 @@ export class TabManager {
     if (from === -1 || to === -1) {
       return this.getState();
     }
-    const range = listed.slice(Math.min(from, to), Math.max(from, to) + 1);
+    // From the active tab outward, so it comes first in the selection's order (split screen's left).
+    const range = from <= to ? listed.slice(from, to + 1) : listed.slice(to, from + 1).reverse();
     this.selectedTabIds = range.length >= 2 ? new Set(range) : new Set();
     this.emitState();
     return this.getState();
@@ -4491,9 +4610,23 @@ export class TabManager {
     if (!this.workspaces.has(id) || id === this.activeWorkspaceId) {
       return this.getState();
     }
+    // A split stays with its workspace: put away on leaving, shown again on coming back.
+    if (this.splitView && !this.splitClosing) {
+      this.splitByWorkspace.set(this.activeWorkspaceId, this.splitView);
+    } else {
+      this.splitByWorkspace.delete(this.activeWorkspaceId);
+    }
     this.activeWorkspaceId = id;
     this.selectedWorkspaceIds.clear();
-    this.focusWorkspaceDefaultTab(id);
+    const split = this.splitByWorkspace.get(id);
+    this.splitByWorkspace.delete(id);
+    const inWorkspace = (tabId: string): boolean => this.states.get(tabId)?.workspaceId === id;
+    if (split && inWorkspace(split.primaryTabId) && inWorkspace(split.secondaryTabId)) {
+      this.activateTab(split.primaryTabId);
+      this.enterSplitView(split.secondaryTabId);
+    } else {
+      this.focusWorkspaceDefaultTab(id);
+    }
     return this.getState();
   }
 
@@ -4930,6 +5063,16 @@ export class TabManager {
     // A popup is coming up over the page: the save prompt, a view of its own, would sit on top of it.
     this.dismissSecretPrompt();
 
+    // Split: both sides go behind the popup, as one still of the whole area.
+    const otherId = this.splitOtherTabId();
+    const otherView = otherId ? this.views.get(otherId) : undefined;
+    if (otherId && otherView) {
+      const still = await this.captureSplitStill([view, otherView]);
+      this.window.contentView.removeChildView(view);
+      this.window.contentView.removeChildView(otherView);
+      return still;
+    }
+
     let dataUrl: string | null = null;
     try {
       const image = await view.webContents.capturePage();
@@ -4955,20 +5098,290 @@ export class TabManager {
     if (view && id === this.activeTabId) {
       // Index 0 — see `activateTab`'s own `addChildView` call for why.
       this.window.contentView.addChildView(view, 0);
-      view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
+      // Split: the other side comes back too, and both go back to their halves.
+      const otherView = this.splitOtherTabId() ? this.views.get(this.splitOtherTabId() ?? '') : undefined;
+      if (otherView) {
+        this.window.contentView.addChildView(otherView, 0);
+        this.updateBounds();
+      } else {
+        view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
+      }
       this.giveKeyboardAsLeft(id, view);
     }
     return this.getState();
   }
 
+  /**
+   * One still of the split's two pages where they sit, for a popup's blurred backdrop: an SVG the size of the tab area
+   * with each page's capture at its own place in it (the gaps between them left clear, the background showing).
+   * @param views The two sides' views.
+   * @returns The still as a data URL, or `null` if neither could be captured.
+   */
+  private async captureSplitStill(views: readonly WebContentsView[]): Promise<string | null> {
+    const left = this.targetLeftInset();
+    const top = this.targetTopInset();
+    const [width = 0, height = 0] = this.window.getContentSize();
+    const areaWidth = Math.max(1, Math.round(width - left - this.rightInsetNow));
+    const areaHeight = Math.max(1, Math.round(height - top));
+    const images = await Promise.all(
+      views.map(async (view) => {
+        const bounds = view.getBounds();
+        try {
+          const image = await view.webContents.capturePage();
+          return (
+            `<image x="${bounds.x - left}" y="${bounds.y - top}" width="${bounds.width}" height="${bounds.height}" ` +
+            `preserveAspectRatio="none" href="${image.toDataURL()}"/>`
+          );
+        } catch {
+          return '';
+        }
+      }),
+    );
+    if (images.every((image) => image === '')) {
+      return null;
+    }
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${areaWidth}" height="${areaHeight}" ` +
+      `viewBox="0 0 ${areaWidth} ${areaHeight}">${images.join('')}</svg>`;
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  }
+
   // ── Split view ───────────────────────────────────────────────────────
 
   /**
-   * Puts the active tab and one other tab side by side. A no-op if either
-   * id is invalid, they're the same tab, or either is a terminal tab —
-   * split view is browser-tab-only by product decision (the renderer's own
-   * tab/split pickers already exclude terminal tabs; this is the same rule
-   * enforced on the main-process side too).
+   * Split screen (the toolbar's button, Ctrl+Alt+S): the two selected tabs side by side, the first selected on the
+   * left (`tabSelectionInOrder`); or, while split, back to one screen showing the side the keyboard was in last (the
+   * active tab). A no-op unless exactly two
+   * tabs are selected or it's already split.
+   * @returns The full browser state after the change.
+   */
+  public toggleSplitScreen(): BrowserState {
+    if (this.splitView) {
+      return this.exitSplitView();
+    }
+    const [left, right, ...more] = this.tabSelectionInOrder();
+    if (!left || !right || more.length > 0) {
+      return this.getState();
+    }
+    // Showing the left tab ends the selection; the split keeps which side each is on.
+    if (this.activeTabId !== left) {
+      this.activateTab(left);
+    }
+    return this.enterSplitView(right);
+  }
+
+  /**
+   * Asks the chrome to confirm Revert annotations (the menu's entry, its shortcut): it opens the popup that asks for
+   * "REVERT" to be typed, then reverts.
+   */
+  public requestRevert(): void {
+    if (this.activeTabId && !this.window.isDestroyed()) {
+      this.window.webContents.send(IpcChannel.TabsRevertRequested);
+    }
+  }
+
+  /** In split screen, the side that isn't the active tab (the side the keyboard was in less lately), or `null`. */
+  private splitOtherTabId(): string | null {
+    const split = this.splitView;
+    if (!split) {
+      return null;
+    }
+    return split.primaryTabId === this.activeTabId ? split.secondaryTabId : split.primaryTabId;
+  }
+
+  /**
+   * In split screen, makes one side the active tab without leaving the split: the side the keyboard last went to (its
+   * page clicked, or its tab in the row). The Tools sidebar, Find, the zoom shortcuts and the rest act on it, its
+   * tools are the ones shown, and it's the side kept on going back to one screen. A no-op for any other tab.
+   * @param id The side's tab.
+   * @returns The full browser state after the change.
+   */
+  public focusSplitSide(id: string): BrowserState {
+    const split = this.splitView;
+    if (!split || this.splitClosing || id === this.activeTabId || (id !== split.primaryTabId && id !== split.secondaryTabId)) {
+      return this.getState();
+    }
+    const previousTabId = this.activeTabId;
+    this.activeTabId = id;
+    // The side left keeps none of the tools on: they're the active side's.
+    if (previousTabId) {
+      this.highlighter.syncState(previousTabId, false);
+      this.commentController.syncState(previousTabId, false);
+      this.textBoxController.syncState(previousTabId, false);
+      this.penController.syncState(previousTabId, false);
+      const previousView = this.views.get(previousTabId);
+      if (previousView && !previousView.webContents.isDestroyed() && this.states.get(previousTabId)?.kind === 'pdf') {
+        previousView.webContents.send(IpcChannel.PdfCropState, { active: false });
+      }
+    }
+    this.pushPageStats();
+    this.selectedTabIds.clear();
+    this.releaseUnavailableTools();
+    this.pushHighlighterState();
+    this.pushCommentToolState();
+    this.pushTextToolState();
+    this.pushPenState();
+    this.pushCropState();
+    this.refreshFindAfterTabChange(previousTabId);
+    const workspaceId = this.states.get(id)?.workspaceId;
+    if (workspaceId) {
+      this.lastActiveTabIdByWorkspace.set(workspaceId, id);
+    }
+    // The laser pointer and the find bar sit over the active side's area.
+    this.updateBounds();
+    this.syncSplitStatBars();
+    this.emitState();
+    return this.getState();
+  }
+
+  /**
+   * Split screen's swap button: the two sides trade places. Both pages fade out to the tab background, change sides
+   * out of sight, and fade back in. The active side stays the active one, wherever it now is.
+   * @returns The full browser state after the change.
+   */
+  public swapSplitSides(): BrowserState {
+    const split = this.splitView;
+    if (!split || this.splitClosing || this.splitSwapping) {
+      return this.getState();
+    }
+    this.splitSwapping = true;
+    const color = nativeTheme.shouldUseDarkColors ? TAB_FADE_COLOR.dark : TAB_FADE_COLOR.light;
+    const cover = (from: number, to: number, easing: string): string =>
+      `@keyframes northstar-split-swap-${from} { from { opacity: ${from}; } to { opacity: ${to}; } } ` +
+      `html::after { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
+      `background: ${color}; animation: northstar-split-swap-${from} ${SPLIT_SWAP_FADE_MS}ms ${easing} forwards; }`;
+    const contents = [split.primaryTabId, split.secondaryTabId]
+      .map((tabId) => this.views.get(tabId)?.webContents)
+      .filter((wc): wc is WebContents => wc !== undefined && !wc.isDestroyed());
+    const removeLater = (wc: WebContents, key: Promise<string | null>, delay: number): void => {
+      void key.then((resolved) => {
+        setTimeout(() => {
+          if (resolved !== null && !wc.isDestroyed()) {
+            void wc.removeInsertedCSS(resolved).catch(() => {});
+          }
+        }, delay);
+      });
+    };
+    // Faded out: a cover over each page, from clear to the tab background.
+    const outKeys = contents.map((wc) => ({ wc, key: wc.insertCSS(cover(0, 1, 'ease-in')).catch(() => null) }));
+    setTimeout(() => {
+      this.splitSwapping = false;
+      const current = this.splitView;
+      if (current !== split || this.window.isDestroyed()) {
+        // Taken down (or another split shown) meanwhile: just take the covers off.
+        for (const { wc, key } of outKeys) {
+          removeLater(wc, key, 0);
+        }
+        return;
+      }
+      this.splitView = { primaryTabId: split.secondaryTabId, secondaryTabId: split.primaryTabId };
+      this.updateBounds();
+      this.emitState();
+      // In again: an opaque cover fading to clear goes on first, then the one that faded out comes off under it.
+      for (const { wc, key } of outKeys) {
+        const inKey = wc.insertCSS(cover(1, 0, 'ease-out')).catch(() => null);
+        void inKey.then(() => removeLater(wc, key, 0));
+        removeLater(wc, inKey, SPLIT_SWAP_FADE_MS + 20);
+      }
+    }, SPLIT_SWAP_FADE_MS);
+    return this.getState();
+  }
+
+  /** The tab whose page has the keyboard: the active one, or the split's other side — `BrowserState.focusedTabId`. */
+  private focusedPageTabId(): string | null {
+    for (const tabId of [this.activeTabId, this.splitOtherTabId()]) {
+      const view = tabId ? this.views.get(tabId) : undefined;
+      if (tabId && view && !view.webContents.isDestroyed() && view.webContents.isFocused()) {
+        return tabId;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Gives each self-framing page in the split (a note, PDF, terminal…) narrower side margins, so the two pages meet in
+   * the middle of the gap between the frames (`computeSplitPanes`). Its own frame then sits exactly where the
+   * layout puts it. A web page needs none: the chrome draws its frame.
+   */
+  private narrowSplitMargins(): void {
+    if (!this.splitView) {
+      return;
+    }
+    for (const tabId of [this.splitView.primaryTabId, this.splitView.secondaryTabId]) {
+      const view = this.views.get(tabId);
+      if (this.states.get(tabId)?.kind === 'browser' || !view || view.webContents.isDestroyed() || this.splitMarginStyles.has(tabId)) {
+        continue;
+      }
+      this.splitMarginStyles.set(
+        tabId,
+        view.webContents.insertCSS(`:root:root { --size-content-frame-x: ${SPLIT_PAGE_MARGIN_PX}px; }`),
+      );
+    }
+  }
+
+  /**
+   * In split screen the chrome draws the one bar along the window's bottom, the whole way across, with the stats of
+   * the side used last (`setStatItems`, `pushPageStats`): each side that draws its own stat bar (a note, PDF or
+   * terminal) has it hidden, and ends above the chrome's (`computeSplitPanes`). Out of split, every page's is shown.
+   */
+  private syncSplitStatBars(): void {
+    const split = this.splitClosing ? null : this.splitView;
+    const hidden = new Set(
+      (split ? [split.primaryTabId, split.secondaryTabId] : []).filter((tabId) => this.states.get(tabId)?.kind !== 'browser'),
+    );
+    for (const [tabId, styleKey] of this.splitHiddenStatBars) {
+      if (hidden.has(tabId)) {
+        continue;
+      }
+      this.splitHiddenStatBars.delete(tabId);
+      const view = this.views.get(tabId);
+      void styleKey.then((key) => {
+        if (view && !view.webContents.isDestroyed()) {
+          void view.webContents.removeInsertedCSS(key).catch(() => {});
+        }
+      });
+    }
+    for (const tabId of hidden) {
+      const view = this.views.get(tabId);
+      if (view && !view.webContents.isDestroyed() && !this.splitHiddenStatBars.has(tabId)) {
+        // Taken out of the page's layout: its frame reaches down to the chrome's bar, as a web page's does.
+        const key = view.webContents.insertCSS('.md-status, .pdf-status, .terminal-status { display: none !important; }');
+        key.catch(() => {});
+        this.splitHiddenStatBars.set(tabId, key);
+      }
+    }
+  }
+
+  /** Shows every stat bar `syncSplitStatBars` hid: the split has ended. */
+  private showAllStatBars(): void {
+    for (const [tabId, styleKey] of this.splitHiddenStatBars) {
+      const view = this.views.get(tabId);
+      void styleKey.then((key) => {
+        if (view && !view.webContents.isDestroyed()) {
+          void view.webContents.removeInsertedCSS(key).catch(() => {});
+        }
+      });
+    }
+    this.splitHiddenStatBars.clear();
+  }
+
+  /** Gives every page `narrowSplitMargins` narrowed its own margins back. */
+  private restoreSplitMargins(): void {
+    for (const [tabId, styleKey] of this.splitMarginStyles) {
+      const view = this.views.get(tabId);
+      void styleKey.then((key) => {
+        if (view && !view.webContents.isDestroyed()) {
+          void view.webContents.removeInsertedCSS(key);
+        }
+      });
+    }
+    this.splitMarginStyles.clear();
+  }
+
+  /**
+   * Puts the active tab (the left) and one other tab (the right) side by side, each in a frame of its own
+   * (`computeSplitPanes`). Any kind of tab may go on either side. A no-op if either id is invalid or they're the
+   * same tab.
    * @param secondaryId The tab to show alongside the current active tab —
    *   stolen from whichever other window currently has it mounted, if
    *   any, same as `activateTab`.
@@ -4983,35 +5396,69 @@ export class TabManager {
     if (!secondaryView || !this.views.has(primaryId)) {
       return this.getState();
     }
-    if (this.states.get(primaryId)?.kind !== 'browser' || this.states.get(secondaryId)?.kind !== 'browser') {
-      return this.getState();
-    }
-
     const owner = this.registry.mountOwners.get(secondaryId);
     if (owner && owner !== this) {
       owner.releaseTab(secondaryId);
     }
 
     this.teardownSplitView();
+    this.splitClosing = false;
+    this.splitSwapping = false;
     this.splitView = { primaryTabId: primaryId, secondaryTabId: secondaryId };
     this.registry.detachViewFromAllWindows(secondaryView);
     // Index 0 — see `activateTab`'s own `addChildView` call for why.
     this.window.contentView.addChildView(secondaryView, 0);
     this.registry.mountOwners.set(secondaryId, this);
-    this.updateBounds();
+    this.narrowSplitMargins();
+    this.syncSplitStatBars();
+    this.animateSplit(0, 1);
     this.emitState();
     return this.getState();
   }
 
-  /** Exits split view, leaving the primary tab shown at full width. */
+  /** Exits split view: the two sides come back together, leaving the active side (the one focused last) at full width. */
   public exitSplitView(): BrowserState {
-    if (!this.splitView) {
+    if (!this.splitView || this.splitClosing) {
       return this.getState();
     }
-    this.teardownSplitView();
-    this.updateBounds();
+    // The chrome shows one screen at once (`getState`), its frame widening in step as the views move.
+    this.splitClosing = true;
+    this.syncSplitStatBars();
+    this.animateSplit(this.splitProgress, 0, () => {
+      this.teardownSplitView();
+      this.updateBounds();
+      this.emitState();
+    });
     this.emitState();
     return this.getState();
+  }
+
+  /**
+   * Moves the split's two sides apart or together (`splitProgress`), frame by frame over `SPLIT_ANIMATION_MS`
+   * with an ease-out cubic — the same curve as the chrome's frames (app.css). Stops if superseded or the split is
+   * taken down meanwhile (`teardownSplitView`).
+   * @param from Where it starts, 0 (one screen) to 1 (side by side).
+   * @param to Where it settles.
+   * @param onDone Called once it settles, unless it was stopped.
+   */
+  private animateSplit(from: number, to: number, onDone?: () => void): void {
+    const token = ++this.splitAnimationToken;
+    const start = Date.now();
+    const step = (): void => {
+      if (token !== this.splitAnimationToken || this.window.isDestroyed()) {
+        return;
+      }
+      const t = Math.min(1, (Date.now() - start) / SPLIT_ANIMATION_MS);
+      this.splitProgress = from + (to - from) * (1 - (1 - t) ** 3);
+      this.updateBounds();
+      if (t < 1) {
+        setTimeout(step, 16);
+      } else {
+        this.splitProgress = 1;
+        onDone?.();
+      }
+    };
+    step();
   }
 
   // ── Focus mode ───────────────────────────────────────────────────────
@@ -5534,8 +5981,8 @@ export class TabManager {
       this.findOverlay.hide();
       return;
     }
-    const main = this.computeMainBounds(this.targetLeftInset(), this.targetTopInset());
-    this.findOverlay.show(this.splitView ? this.computeSplitBoundsFor(main).primary : main);
+    // Where it is in one screen, split or not; it finds in the active side.
+    this.findOverlay.show(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
     this.pushFindState();
   }
 
@@ -5806,11 +6253,8 @@ export class TabManager {
     if (!view) {
       return;
     }
-    const main = this.computeMainBounds(this.targetLeftInset(), this.targetTopInset());
-    // `activeTabId` is always the primary (left) pane during split view —
-    // see this class's own doc comment — so there's no case where it's
-    // showing in the secondary pane instead.
-    const bounds = this.splitView ? this.computeSplitBoundsFor(main).primary : main;
+    // Wherever the active tab's view is: the whole area, or its side of a split.
+    const bounds = view.getBounds();
     const cursor = screen.getCursorScreenPoint();
     const contentBounds = this.window.getContentBounds();
     const x = cursor.x - contentBounds.x - bounds.x;
@@ -5858,11 +6302,15 @@ export class TabManager {
    * input itself already restricts what a person can type to digits within
    * range (see that component), but this is the actual enforcement point.
    * @param percent The requested zoom percent.
+   * @param tabId The tab to zoom, if not the active one: the split's right side (its own zoom in the toolbar). Any
+   *   other tab is left be.
    * @returns The full browser state after the change.
    */
-  public setZoom(percent: number): BrowserState {
-    if (this.activeTabId && this.isZoomable(this.activeTabId)) {
-      this.setZoomPercent(this.activeTabId, clampZoomPercent(percent));
+  public setZoom(percent: number, tabId?: string): BrowserState {
+    const target = tabId ?? this.activeTabId;
+    const onScreen = target === this.activeTabId || target === this.splitOtherTabId();
+    if (target && onScreen && this.isZoomable(target)) {
+      this.setZoomPercent(target, clampZoomPercent(percent));
     }
     return this.getState();
   }
@@ -6076,7 +6524,7 @@ export class TabManager {
     const main = this.computeMainBounds(left, top);
     const panes: { view: WebContentsView | undefined; bounds: Rect }[] = [];
     if (this.splitView) {
-      const { primary, secondary } = this.computeSplitBoundsFor(main);
+      const { primary, secondary } = this.computeSplitPanes(left, top);
       panes.push({ view: this.views.get(this.splitView.primaryTabId), bounds: primary });
       panes.push({ view: this.views.get(this.splitView.secondaryTabId), bounds: secondary });
     } else if (this.activeTabId) {
@@ -6304,14 +6752,17 @@ export class TabManager {
     if (input.type !== 'keyDown' || input.isAutoRepeat || !(input.control || input.meta) || !input.alt || input.shift) {
       return false;
     }
-    if (input.code !== 'KeyM' && input.code !== 'Enter') {
+    if (input.code !== 'KeyM' && input.code !== 'Enter' && input.code !== 'KeyS') {
       return false;
     }
     event.preventDefault();
     if (this.window.isDestroyed()) {
       return true;
     }
-    if (input.code === 'KeyM') {
+    if (input.code === 'KeyS') {
+      // Split screen: the two selected tabs side by side, or back to one.
+      this.toggleSplitScreen();
+    } else if (input.code === 'KeyM') {
       this.window.minimize();
     } else if (this.window.isMaximized()) {
       this.window.unmaximize();
@@ -6443,7 +6894,7 @@ export class TabManager {
       case 'r':
         // Confirmed first, as the Tools sidebar's Revert is: the chrome asks for "REVERT" to be typed, then reverts.
         if (tabId) {
-          this.window.webContents.send(IpcChannel.TabsRevertRequested);
+          this.requestRevert();
         }
         break;
       default:
@@ -6747,7 +7198,7 @@ export class TabManager {
       bookmarks: this.bookmarkStore.list(),
       workspaceImages: this.workspaceImages.listStates(),
       savedWorkspaceImages: this.savedWorkspaceImages(),
-      splitView: this.splitView,
+      splitView: this.splitClosing ? null : this.splitView,
       focusMode: this.focusMode,
       contentFocused: this.isContentFocused(),
       sidebarVisible: this.sidebarVisible,
@@ -6755,9 +7206,14 @@ export class TabManager {
       canRevert: this.canRevertActiveTab(),
       grabbedTabId: this.grabbedTabId,
       selectedTabIds: this.currentTabSelection(),
+      tabSelectionOrder: this.tabSelectionInOrder(),
+      focusedTabId: this.focusedPageTabId(),
       selectedWorkspaceIds: this.currentWorkspaceSelection(),
       zoomPercent: this.activeTabId
         ? (this.registry.zoomPercentByTabId.get(this.activeTabId) ?? ZOOM_PERCENT_DEFAULT)
+        : ZOOM_PERCENT_DEFAULT,
+      splitZoomPercent: this.splitOtherTabId()
+        ? (this.registry.zoomPercentByTabId.get(this.splitOtherTabId() ?? '') ?? ZOOM_PERCENT_DEFAULT)
         : ZOOM_PERCENT_DEFAULT,
       laserPointerActive: this.laserPointerActive,
       highlighterActive: this.highlighterActive,
@@ -6811,16 +7267,23 @@ export class TabManager {
     }
   }
 
-  /** Unmounts the secondary split-view pane, if any, and clears split state. The primary pane is left mounted. */
+  /** Unmounts the split's other side (not the active tab), if split, and clears split state. The active side stays mounted. */
   private teardownSplitView(): void {
     if (!this.splitView) {
       return;
     }
-    const secondaryView = this.views.get(this.splitView.secondaryTabId);
-    if (secondaryView) {
-      this.window.contentView.removeChildView(secondaryView);
+    this.restoreSplitMargins();
+    this.splitClosing = true;
+    this.syncSplitStatBars();
+    ++this.splitAnimationToken;
+    this.splitProgress = 1;
+    this.splitClosing = false;
+    const otherId = this.splitOtherTabId() ?? this.splitView.secondaryTabId;
+    const otherView = this.views.get(otherId);
+    if (otherView) {
+      this.window.contentView.removeChildView(otherView);
     }
-    this.registry.mountOwners.delete(this.splitView.secondaryTabId);
+    this.registry.mountOwners.delete(otherId);
     this.splitView = null;
   }
 
@@ -6899,6 +7362,73 @@ export class TabManager {
     };
   }
 
+  /**
+   * Where the split's two views go: two frames side by side over the background, with the same gap between them as
+   * between a single frame and the sidebar (`CONTENT_FRAME_INSET_X_PX`), at the height a single frame has. A web
+   * page's view sits just inside its frame (the chrome draws the frame, `.tab-content__frame--split-*`); a page that
+   * draws its own frame gets its frame's area plus the margins it keeps around it (`narrowSplitMargins`), down to the
+   * window's bottom, where it draws its own stat bar. In Focus Mode or a page's own fullscreen there are no frames:
+   * the two just share the area (`computeSplitBoundsFor`).
+   * @param left Horizontal inset, in CSS pixels.
+   * @param top Vertical inset, in CSS pixels.
+   */
+  private computeSplitPanes(left: number, top: number): { primary: Rect; secondary: Rect } {
+    const settled = this.settledSplitPanes(left, top);
+    if (this.splitProgress >= 1) {
+      return settled;
+    }
+    // Coming apart (or together): the active side grows out of one whole screen (or back into it), the other side out
+    // of its own edge of the area (or back into it).
+    const main = this.computeMainBounds(left, top);
+    const p = this.splitProgress;
+    const lerp = (from: Rect, to: Rect): Rect => ({
+      x: Math.round(from.x + (to.x - from.x) * p),
+      y: Math.round(from.y + (to.y - from.y) * p),
+      width: Math.max(0, Math.round(from.width + (to.width - from.width) * p)),
+      height: Math.max(0, Math.round(from.height + (to.height - from.height) * p)),
+    });
+    const leftActive = this.splitView?.primaryTabId === this.activeTabId;
+    return {
+      primary: lerp(leftActive ? main : { ...settled.primary, x: main.x, width: 0 }, settled.primary),
+      secondary: lerp(leftActive ? { ...settled.secondary, x: main.x + main.width, width: 0 } : main, settled.secondary),
+    };
+  }
+
+  /** Where the split's two views settle (`computeSplitPanes`, once they've come apart). */
+  private settledSplitPanes(left: number, top: number): { primary: Rect; secondary: Rect } {
+    const split = this.splitView;
+    if (!split || this.focusMode || this.htmlFullScreenTabId !== null) {
+      return this.computeSplitBoundsFor(this.computeMainBounds(left, top));
+    }
+    const [width = 0, height = 0] = this.window.getContentSize();
+    const gap = CONTENT_FRAME_INSET_X_PX;
+    const areaWidth = Math.max(0, width - left - this.rightInsetNow);
+    const frameWidth = Math.max(0, (areaWidth - 3 * gap) / 2);
+    const frameTop = top + CONTENT_FRAME_INSET_Y_PX;
+    const frameHeight = Math.max(0, height - top - STATUS_BAR_HEIGHT_PX - 2 * CONTENT_FRAME_INSET_Y_PX);
+    const pane = (tabId: string, frameLeft: number): Rect => {
+      if (this.states.get(tabId)?.kind === 'browser') {
+        return {
+          x: Math.round(frameLeft + CONTENT_FRAME_BORDER_PX),
+          y: Math.round(frameTop + CONTENT_FRAME_BORDER_PX),
+          width: Math.max(0, Math.round(frameWidth - 2 * CONTENT_FRAME_BORDER_PX)),
+          height: Math.max(0, Math.round(frameHeight - 2 * CONTENT_FRAME_BORDER_PX)),
+        };
+      }
+      // Down to the bar along the window's bottom, which the chrome draws in split screen (its own bar hidden).
+      return {
+        x: Math.round(frameLeft - SPLIT_PAGE_MARGIN_PX),
+        y: Math.round(top),
+        width: Math.max(0, Math.round(frameWidth + 2 * SPLIT_PAGE_MARGIN_PX)),
+        height: Math.max(0, Math.round(height - top - STATUS_BAR_HEIGHT_PX)),
+      };
+    };
+    return {
+      primary: pane(split.primaryTabId, left + gap),
+      secondary: pane(split.secondaryTabId, left + 2 * gap + frameWidth),
+    };
+  }
+
   /** @returns The bounds the primary (left) and secondary (right) split-view panes should occupy, for a single-view `main` rect. */
   private computeSplitBoundsFor(main: Rect): { primary: Rect; secondary: Rect } {
     const dividerPx = 1;
@@ -6939,7 +7469,7 @@ export class TabManager {
     this.syncFindOverlay();
     this.secretPrompt.layout(main);
     if (this.splitView) {
-      const { primary, secondary } = this.computeSplitBoundsFor(main);
+      const { primary, secondary } = this.computeSplitPanes(left, top);
       this.views.get(this.splitView.primaryTabId)?.setBounds(primary);
       this.views.get(this.splitView.secondaryTabId)?.setBounds(secondary);
       return;
@@ -7216,7 +7746,11 @@ export class TabManager {
     wc.on('blur', () => owningManager().releaseGrabbedTab());
 
     // The page's keyboard focus, remembered for when its tab is next shown (`pageHadKeyboard`).
-    wc.on('focus', () => pageHadKeyboard.set(id, true));
+    wc.on('focus', () => {
+      pageHadKeyboard.set(id, true);
+      // In split screen, the side the keyboard goes to becomes the active one (its tools shown, Find in it).
+      owningManager().focusSplitSide(id);
+    });
     wc.on('blur', () => {
       setTimeout(() => {
         const owner = owningManager();

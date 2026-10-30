@@ -3,51 +3,36 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { ExportMenu } from '../ExportMenu';
-import { FindIcon, OpenInNewWindowIcon, SearchIcon, ShieldIcon } from '../icons';
-import { ZoomControl } from '../ZoomControl';
+import { FindIcon, OpenInNewWindowIcon, SearchIcon, SplitScreenIcon, SwapSidesIcon } from '../icons';
 
 interface PageActionsProps {
-  /** Whether the export dropdown is usable: there's an active tab, and it isn't the built-in home page, which has no real content to export. */
-  readonly canExportMenu: boolean;
-  /** Whether the active tab has HTML/CSS/JS to save — browser tabs only. */
-  readonly canExportDocuments: boolean;
-  /** Whether the export dropdown is shown at all — hidden on a PDF tab, which has nothing to export. */
-  readonly showExportMenu: boolean;
-  /** Whether the zoom control is shown — hidden on a History tab, which doesn't zoom. */
-  readonly showZoom: boolean;
-  readonly canZoom: boolean;
-  /** The active tab's current zoom, within its range. */
-  readonly zoomPercent: number;
+  /** Whether the screen is split (two tabs side by side): the split button then goes back to one. */
+  readonly splitActive: boolean;
+  /** Whether exactly two tabs are selected, which the split button splits; otherwise it's disabled (unless split). */
+  readonly canSplit: boolean;
+  /** Splits the two selected tabs side by side, or goes back to one screen. */
+  readonly onToggleSplit: () => void;
+  /** While split, the two sides trade places. */
+  readonly onSwapSplit: () => void;
+  /** The pointer came onto the split button (`true`) or left it: the tab row marks the two tabs "L" and "R" meanwhile. */
+  readonly onSplitHover: (hovering: boolean) => void;
+  /**
+   * The active tab's own tools (`TabActions`: the ad blocker, zoom), after Find — or `null` in split screen, where
+   * each half of the toolbar has its side's instead.
+   */
+  readonly tabActions: ReactNode;
   readonly focusMode: boolean;
   readonly theme: Theme;
-  /** Whether the ad blocker button is shown — web pages only (not the home page, a PDF, a terminal or History). */
-  readonly showAdBlock: boolean;
-  /** Whether the ad blocker is blocking on the active page: on globally, and not turned off for this site. */
-  readonly adBlockActive: boolean;
-  /** Whether the ad blocker is switched off everywhere — the button then can't turn it on per site. */
-  readonly adBlockGloballyOff: boolean;
-  /** Requests, popups and elements blocked since the page began loading. */
-  readonly adBlockBlockedCount: number;
-  /** The active page's hostname, for the button's accessible label. */
-  readonly adBlockSite: string;
-  /** Turns blocking off or back on for the active page's site. */
-  readonly onToggleAdBlock: () => void;
-  /** Whether the active tab is a Markdown note, whose export menu lists PDF, `.md` and `.txt`. */
-  readonly markdownExport: boolean;
   readonly onOpenTabSearch: () => void;
   /** Whether the find bar is open. */
   readonly findOpen: boolean;
   /** Whether find can search the active tab: a page, a terminal, or a PDF with a file open — not the History tab or an empty PDF. */
   readonly canFind: boolean;
   readonly onToggleFind: () => void;
-  readonly onZoomOut: () => void;
-  readonly onZoomIn: () => void;
-  readonly onSetZoom: (percent: number) => void;
   readonly onOpenWorkspaceInNewWindow: () => void;
   readonly onToggleFocusMode: () => void;
   readonly onToggleTheme: () => void;
@@ -64,28 +49,18 @@ interface PageActionsProps {
  * row's "+" menu (`NewTabMenu`).
  */
 export function PageActions({
-  canZoom,
-  zoomPercent,
+  tabActions,
   focusMode,
   theme,
-  showAdBlock,
-  adBlockActive,
-  adBlockGloballyOff,
-  adBlockBlockedCount,
-  adBlockSite,
-  onToggleAdBlock,
-  markdownExport,
-  canExportMenu,
-  canExportDocuments,
-  showExportMenu,
-  showZoom,
+  splitActive,
+  canSplit,
+  onToggleSplit,
+  onSwapSplit,
+  onSplitHover,
   onOpenTabSearch,
   findOpen,
   canFind,
   onToggleFind,
-  onZoomOut,
-  onZoomIn,
-  onSetZoom,
   onOpenWorkspaceInNewWindow,
   onToggleFocusMode,
   onToggleTheme,
@@ -115,7 +90,38 @@ export function PageActions({
 
   return (
     <div ref={stripRef} className="page-actions">
-      {showExportMenu && <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} markdown={markdownExport} />}
+      {/* While split: the two sides trade places. */}
+      {splitActive && (
+        <button
+          type="button"
+          className="page-actions__button hover-grow chrome-tooltip"
+          onClick={onSwapSplit}
+          aria-label="Swap sides"
+          data-tooltip="Swap sides"
+        >
+          <SwapSidesIcon />
+        </button>
+      )}
+      {/* Split screen: the two selected tabs side by side (the first selected on the left), or back to one. */}
+      <button
+        type="button"
+        className="page-actions__button hover-grow chrome-tooltip"
+        onClick={onToggleSplit}
+        onMouseEnter={() => onSplitHover(true)}
+        onMouseLeave={() => onSplitHover(false)}
+        disabled={!splitActive && !canSplit}
+        aria-pressed={splitActive}
+        aria-label={splitActive ? 'Back to one screen' : 'Split screen'}
+        data-tooltip={
+          splitActive
+            ? `Back to one screen, the side last used (${formatShortcut('Alt+S')})`
+            : canSplit
+              ? `Split screen: the two selected tabs side by side (${formatShortcut('Alt+S')})`
+              : `Split screen: select two tabs first, with Ctrl+click (${formatShortcut('Alt+S')})`
+        }
+      >
+        <SplitScreenIcon split={splitActive} />
+      </button>
       <button
         type="button"
         className="page-actions__button hover-grow chrome-tooltip"
@@ -136,39 +142,7 @@ export function PageActions({
       >
         <FindIcon />
       </button>
-      {showAdBlock && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow page-actions__button--adblock chrome-tooltip"
-          onClick={onToggleAdBlock}
-          disabled={adBlockGloballyOff}
-          // Lit while the blocker is *off* here, so the default (blocking) state stays quiet.
-          aria-pressed={!adBlockActive}
-          aria-label={adBlockActive ? `Turn off ad blocker for ${adBlockSite}` : `Turn on ad blocker for ${adBlockSite}`}
-          data-tooltip={
-            adBlockGloballyOff
-              ? 'Ad blocker is off (View menu)'
-              : adBlockActive
-                ? `${adBlockBlockedCount} ${adBlockBlockedCount === 1 ? 'ad' : 'ads'} blocked (${formatShortcut('Shift+B')})`
-                : `Ads allowed on this site (${formatShortcut('Shift+B')})`
-          }
-        >
-          <ShieldIcon off={!adBlockActive} />
-        </button>
-      )}
-      <span className="page-actions__divider" role="separator" aria-hidden="true" />
-      {showZoom && (
-        <>
-          <ZoomControl
-            percent={zoomPercent}
-            canZoom={canZoom}
-            onZoomOut={onZoomOut}
-            onZoomIn={onZoomIn}
-            onSetZoom={onSetZoom}
-          />
-          <span className="page-actions__divider" role="separator" aria-hidden="true" />
-        </>
-      )}
+      {tabActions ?? <span className="page-actions__divider" role="separator" aria-hidden="true" />}
       <button
         type="button"
         className="page-actions__button hover-grow chrome-tooltip"

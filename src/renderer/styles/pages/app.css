@@ -135,6 +135,76 @@ body {
     box-shadow 160ms ease-out;
 }
 
+/* Split screen: a frame for each side showing a web page, the gap between them the same as between a single frame
+   and the sidebar (`--size-content-frame-x`). Main lays the two views out to match (`TabManager.computeSplitPanes`). */
+.tab-content__frame--split-left,
+.tab-content__frame--split-right {
+  width: calc((100% - 3 * var(--size-content-frame-x)) / 2);
+}
+
+.tab-content__frame--split-left {
+  right: auto;
+}
+
+.tab-content__frame--split-right {
+  left: auto;
+}
+
+/* Coming apart, in step with main moving the views (`TabManager.animateSplit`, SPLIT_ANIMATION_MS, the same
+   ease-out cubic): the left frame narrows out of the one whole frame, the right grows in from the right edge. */
+.tab-content__frame--split-left.tab-content__frame--entering {
+  animation: split-frame-left 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.tab-content__frame--split-right.tab-content__frame--entering {
+  animation: split-frame-right 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+/* Coming back together: the one frame left widens back out of its half — the left, or the right if that was kept. */
+.tab-content__frame--joining {
+  animation: split-frame-join 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.tab-content__frame--joining-right {
+  animation: split-frame-join-right 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+@keyframes split-frame-left {
+  from {
+    width: calc(100% - 2 * var(--size-content-frame-x));
+  }
+}
+
+@keyframes split-frame-right {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+/* The left half's right edge: one gap in from the middle of the area. */
+@keyframes split-frame-join {
+  from {
+    right: calc((100% + var(--size-content-frame-x)) / 2);
+  }
+}
+
+/* The right half's left edge: the same distance in from the area's left. */
+@keyframes split-frame-join-right {
+  from {
+    left: calc((100% + var(--size-content-frame-x)) / 2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-content__frame--split-left,
+  .tab-content__frame--split-right,
+  .tab-content__frame--joining,
+  .tab-content__frame--joining-right {
+    animation: none;
+  }
+}
+
 /* The page has the keyboard (`BrowserState.contentFocused`): the frame lights up in the accent. */
 .tab-content__frame--focused {
   border-color: var(--color-accent-text);
@@ -269,6 +339,35 @@ body {
 
   background: var(--color-chrome-bg);
   border-bottom: 1px solid var(--color-chrome-border);
+}
+
+/* Split screen: each side's tools in a half of the row of its own, a full-height line between the two halves, and the
+   window's own tools (`PageActions`) after them. */
+.toolbar__side {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  gap: var(--size-spacing-sm);
+}
+
+/* Half the room each: an address or file bar gives way further before the tools beside it do. */
+.toolbar__side :is(.address-bar, .file-bar) {
+  min-width: 120px;
+}
+
+/* A side's ad blocker and zoom stay whole; the address bar beside them takes up the slack. */
+.page-actions--side {
+  flex: none;
+}
+
+.toolbar__split-divider {
+  align-self: stretch;
+  flex: none;
+  width: 1px;
+  margin: 6px 0;
+
+  background: var(--color-chrome-border);
 }
 
 /* Stands in for NavControls + AddressBar while a terminal tab is active —

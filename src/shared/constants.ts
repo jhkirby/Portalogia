@@ -105,6 +105,13 @@ export const TOOLS_SIDEBAR_WIDTH_PX = 180;
  */
 export const SIDEBAR_TOGGLE_DURATION_MS = 220;
 
+/**
+ * How long split screen takes to come apart into its two sides, or back together, in milliseconds. Main animates the
+ * views' bounds (`TabManager.animateSplit`) and the chrome its frames (`.tab-content__frame--split-*`, app.css)
+ * over exactly this long, with the same ease-out.
+ */
+export const SPLIT_ANIMATION_MS = 320;
+
 /** Internal scheme serving Northstar's own pages (currently just the home page). */
 export const NORTHSTAR_SCHEME = 'northstar';
 
@@ -177,6 +184,8 @@ export const SEARCH_SUGGESTIONS_LIMIT = 500;
 export const ZOOM_PERCENT_MIN = 50;
 export const ZOOM_PERCENT_MAX = 200;
 export const ZOOM_PERCENT_DEFAULT = 100;
+/** How many percentage points zoom in/out (buttons, Ctrl+=/-, menu) move per press. */
+export const ZOOM_PERCENT_STEP = 10;
 /** How far one Ctrl+mouse-wheel tick moves a tab's zoom, in percentage points — applies to browser, terminal and PDF tabs alike. */
 export const ZOOM_PERCENT_WHEEL_STEP = 5;
 /** How far one Ctrl+Shift+mouse-wheel tick moves it: the coarse step, for getting somewhere fast. */
@@ -257,12 +266,18 @@ export const EXPORT_MENU_HEIGHT_PX = 74;
 export const EXPORT_MENU_MARKDOWN_HEIGHT_PX = 106;
 
 /**
- * Size of the tab row's "+" menu (`NewTabMenu`, drawn by the same overlay as the export menu): a new tab, a rule,
- * then the six other kinds of tab. Height = 7 x 32px rows + a 9px rule (1px line, 4px either side) + 2 x 4px padding +
- * 2 x 1px border; must match export-menu.css.
+ * Size of the tab row's "+" menu (`NewTabMenu`, drawn by the same overlay as the export menu): a new tab, then the
+ * six other kinds of tab. Height = 7 x 32px rows + 2 x 4px padding + 2 x 1px border; must match export-menu.css.
  */
 export const NEW_TAB_MENU_WIDTH_PX = 224;
-export const NEW_TAB_MENU_HEIGHT_PX = 243;
+export const NEW_TAB_MENU_HEIGHT_PX = 234;
+
+/**
+ * How long a dropdown drawn in a view of its own (the export and "+" menus, the address suggestions, the History
+ * unit list) takes to fade in or out. Its page plays the fade (`useMenuFade`, `.menu-fade` in the menus' CSS) and
+ * main takes the view off the window only once the fade out is done.
+ */
+export const MENU_FADE_MS = 150;
 
 /**
  * The name of the function a Markdown tab's own page defines on `window`

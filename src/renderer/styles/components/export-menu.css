@@ -42,6 +42,36 @@ body {
   cursor: default;
 }
 
+/* Fades in as it opens and out as it closes (`useMenuFade`): MENU_FADE_MS each way, main keeping the view up until
+   the fade out is done. Closing, it takes no more clicks. */
+.menu-fade {
+  animation: menu-fade-in 150ms ease-out both;
+}
+
+.menu-fade--out {
+  animation: menu-fade-out 150ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes menu-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes menu-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-fade,
+  .menu-fade--out {
+    animation: none;
+  }
+}
+
 .export-menu__item {
   flex: 0 0 32px;
   display: flex;
@@ -96,12 +126,4 @@ body {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
-}
-
-/* Between "Open New Tab" and the other kinds of tab: 1px, with 4px either side (9px in all). */
-.new-tab-menu__divider {
-  flex: 0 0 1px;
-  margin: 4px var(--size-spacing-sm);
-
-  background: var(--color-panel-border);
 }

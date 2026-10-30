@@ -17,26 +17,6 @@
   min-width: min-content;
 }
 
-.markdown-toolbar__button {
-  height: 28px;
-  padding: 0 var(--size-spacing-md);
-
-  background: transparent;
-  border: 1px solid var(--color-chrome-border);
-  border-radius: var(--size-radius-sm);
-
-  font: inherit;
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text-active);
-
-  cursor: pointer;
-}
-
-.markdown-toolbar__button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 /* View | Edit: one bordered pill split in two, the side in use filled with the accent tint. */
 .markdown-toolbar__modes {
   /* Equal columns: both sides of a switch are as wide as its longer label, so neither reads as the default. */

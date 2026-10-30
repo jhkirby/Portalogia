@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-29 */
 
 /* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
 
@@ -22,6 +22,9 @@
   /* Its own stacking layer, so the load progress (`z-index: -1`) paints above this background but below everything
      else in the bar, and never escapes behind the toolbar. */
   isolation: isolate;
+
+  /* Its hover and focus borders fade in and out rather than switching at once. */
+  transition: border-color 180ms ease-out;
 }
 
 .address-bar:hover {

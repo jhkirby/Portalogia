@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-29 */
 
 /* ── SUGGESTIONS OVERLAY ──────────────────────────────────────────────── */
 /* The address bar's suggestions dropdown's whole page (`suggestions.html`)
@@ -60,10 +60,24 @@ body {
   animation: suggestions-open 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
+/* Closing (`useMenuFade`): fades out over MENU_FADE_MS, main keeping the view up until it's done, and takes no
+   more clicks meanwhile. */
+.address-bar__suggestions--closing {
+  animation: suggestions-close 150ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes suggestions-close {
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes suggestions-open {
   from {
     clip-path: inset(0 0 100% 0 round var(--size-radius-sm));
     transform: translateY(-6px);
+    opacity: 0;
   }
   to {
     clip-path: inset(0 0 0 0 round var(--size-radius-sm));
@@ -72,7 +86,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .address-bar__suggestions {
+  .address-bar__suggestions,
+  .address-bar__suggestions--closing {
     animation: none;
   }
 }

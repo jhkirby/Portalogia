@@ -54,6 +54,15 @@ export class TooltipOverlay {
     // menu's overlay does the same, for the same reason).
     this.view.setBackgroundColor('#00000000');
 
+    // A native view takes the pointer wherever it is, and a tooltip below the tab row lies over the top of the
+    // toolbar's buttons: the moment the pointer comes onto it (or presses it), it goes, so what's beneath can be
+    // hovered and clicked as if it weren't there.
+    this.view.webContents.on('input-event', (_event, input) => {
+      if (input.type === 'mouseMove' || input.type === 'mouseDown' || input.type === 'mouseEnter') {
+        this.hide();
+      }
+    });
+
     const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
     if (!app.isPackaged && devServerUrl) {
       void this.view.webContents.loadURL(`${devServerUrl}/tooltip.html`);

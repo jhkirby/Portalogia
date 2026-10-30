@@ -146,6 +146,7 @@ export const IpcChannel = {
   PdfRedo: 'pdf:redo',
   /** Chrome → main: close the tab's open PDF (the tab stays, empty). */
   PdfCloseFile: 'pdf:close-file',
+  PdfDeleteFile: 'pdf:delete-file',
   /** Main → PDF page: the open file was closed; show the empty page. */
   PdfClosed: 'pdf:closed',
   /** Main → PDF page: the file the user just opened. */
@@ -196,6 +197,8 @@ export const IpcChannel = {
   TabAccentChanged: 'tab:accent-changed',
   /** Browser tab's page → main: its words, characters, images, links and elements, hovered element and selection. */
   TabPageStats: 'tab:page-stats',
+  /** A note's, PDF's or terminal's page: what its own stat bar shows, item by item, for the chrome's bar in split screen. */
+  TabStatItems: 'tab:stat-items',
   /** Main → chrome: the active web page's stats changed (or another page became the active one). */
   PageStatsChanged: 'page-stats:changed',
   /** Main → note or PDF page: whether this window is in Focus Mode (the page then hides its stat bar). */
@@ -335,6 +338,9 @@ export const IpcChannel = {
   // `contents.zoomLevel` from main.
   ZoomApply: 'zoom:apply',
   SidebarToggle: 'sidebar:toggle',
+  /** Chrome → main: split the two selected tabs side by side, or go back to one (the split-screen button, Ctrl+Alt+S). */
+  SplitToggle: 'split:toggle',
+  SplitSwap: 'split:swap',
   /** Chrome → main: show the Tools sidebar in full, or hide it to its rail of icons. */
   ToolsSidebarToggle: 'tools-sidebar:toggle',
   /** Chrome → main: Escape in the chrome, with nothing there using it — the active tab's page takes the keyboard. */
@@ -911,6 +917,13 @@ export interface NorthstarApi {
 
   /** Shows or hides the workspace sidebar — `WorkspaceBar`'s own `.sidebar__toggle` button doing the same thing Ctrl+L already does. */
   toggleSidebar(): Promise<IpcResult<BrowserState>>;
+  /**
+   * Split screen: shows the two selected tabs side by side — the first selected on the left — or, while split, goes
+   * back to one screen, the side focused last. A no-op unless exactly two tabs are selected or it's already split.
+   */
+  toggleSplitScreen(): Promise<IpcResult<BrowserState>>;
+  /** Split screen: the two sides trade places, fading out and back in. A no-op unless split. */
+  swapSplitSides(): Promise<IpcResult<BrowserState>>;
   /** Shows the Tools sidebar in full, or hides it to its rail of icons; the page beside it resizes to match. */
   toggleToolsSidebar(): Promise<IpcResult<BrowserState>>;
   /** Hands the keyboard to the active tab's page (a web page, PDF, note or terminal): Escape pressed in the chrome. */
@@ -959,6 +972,8 @@ export interface NorthstarApi {
   setCrop(enabled: boolean): Promise<IpcResult<BrowserState>>;
   /** Closes the tab's open PDF, leaving the tab empty. */
   closePdfFile(id: string): Promise<IpcResult<null>>;
+  /** Moves a PDF tab's open file to the Recycle Bin and empties the tabs that had it open. The chrome confirms first. */
+  deletePdfFile(id: string): Promise<IpcResult<null>>;
   /** Saves a copy of the tab's PDF with its crop boxes applied (asks where in a native dialog). */
   exportPdfFile(id: string): Promise<IpcResult<null>>;
 
@@ -1012,8 +1027,11 @@ export interface NorthstarApi {
   zoomIn(): Promise<IpcResult<BrowserState>>;
   zoomOut(): Promise<IpcResult<BrowserState>>;
   resetZoom(): Promise<IpcResult<BrowserState>>;
-  /** Sets the active tab's zoom to an exact percent (`ZoomPercentInput`, typing directly) — clamped to 25–200 on the main-process side regardless of what's passed. */
-  setZoom(percent: number): Promise<IpcResult<BrowserState>>;
+  /**
+   * Sets the active tab's zoom to an exact percent (`ZoomPercentInput`, typing directly) — clamped to 25–200 on the
+   * main-process side regardless of what's passed — or, given `tabId`, the split's right side's.
+   */
+  setZoom(percent: number, tabId?: string): Promise<IpcResult<BrowserState>>;
 
   /** Subscribes to the menu/accelerator-driven request (Ctrl+Shift+E) to edit the active workspace. */
   onEditWorkspace(listener: () => void): () => void;
@@ -1081,7 +1099,11 @@ export interface NorthstarApi {
   /** Reads whether this window is maximized right now (the push channel above only fires on a change). */
   getWindowState(): Promise<WindowState>;
   /** Pushed whenever the active web page's stats change: its tab, and the stats (`null` before it has counted). */
-  onPageStats(listener: (tabId: string, stats: PageStats | null) => void): () => void;
+  /**
+   * The active tab's stats, as they change: a web page's counts, or what a note's, PDF's or terminal's own stat bar
+   * shows, item by item (`items`, `null` for a web page or before its page has said).
+   */
+  onPageStats(listener: (tabId: string, stats: PageStats | null, items: readonly string[] | null) => void): () => void;
   /** The Wi-Fi connection now (`null` if asked from anywhere but the chrome). */
   getWifiStatus(): Promise<WifiStatus | null>;
   /** Whether the computer has a battery, as Windows reports it; `null` while that's still being asked. */

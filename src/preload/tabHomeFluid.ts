@@ -5,6 +5,7 @@
 
 import { ipcRenderer } from 'electron';
 import { accentFluidPalette, startFluid, type FluidColor } from '@shared/dom/fluidSim';
+import { startWindFog } from '@shared/dom/windFog';
 
 // Hardcoded rather than imported from `@shared/ipc-contract` — see `tabZoom.ts`'s own comment on `ZoomApply`.
 const TabAccent = 'tab:accent';
@@ -52,6 +53,8 @@ if (window.location.href === HOME_URL) {
       });
       // Only while the page has the keyboard, as an empty note's or PDF's: otherwise it fades away.
       startFluid(host, { palette: () => palette, events: window, active: () => document.hasFocus() });
+      // Under it, a light grey fog drifting through on its own, focus or not (put first, so the fluid paints over it).
+      startWindFog(host);
     },
     { once: true },
   );

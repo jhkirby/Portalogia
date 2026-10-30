@@ -9,6 +9,7 @@ import {
   EXPORT_MENU_HEIGHT_PX,
   EXPORT_MENU_MARKDOWN_HEIGHT_PX,
   EXPORT_MENU_WIDTH_PX,
+  MENU_FADE_MS,
   NEW_TAB_MENU_HEIGHT_PX,
   NEW_TAB_MENU_WIDTH_PX,
 } from '@shared/constants';
@@ -26,6 +27,8 @@ import { exportMenuSelectRequestSchema } from '@shared/ipc-schemas';
 export class ExportMenuOverlay {
   private readonly view: WebContentsView;
   private isMounted = false;
+  /** Set while the menu fades out (`hide`): its view comes off the window when it fires. */
+  private unmountTimer: ReturnType<typeof setTimeout> | null = null;
   private watchedTabView: WebContentsView | null = null;
   private readonly handleActiveViewFocused: () => void;
 
@@ -91,6 +94,8 @@ export class ExportMenuOverlay {
       return;
     }
 
+    // Reopened while fading out: it stays up, and fades back in.
+    this.cancelUnmount();
     if (!this.isMounted) {
       // No index: lands on top of the stack, above every tab view.
       this.window.contentView.addChildView(this.view);
@@ -126,16 +131,39 @@ export class ExportMenuOverlay {
     view?.webContents.on('focus', this.handleActiveViewFocused);
   }
 
-  private hide(): void {
-    if (this.isMounted) {
-      this.window.contentView.removeChildView(this.view);
-      this.isMounted = false;
+  /**
+   * Takes the menu off the window once its page has faded it out (`MENU_FADE_MS`), rather than at once.
+   * @param immediate Skip the fade, e.g. when the window is closing.
+   */
+  private hide(immediate = false): void {
+    if (!this.isMounted) {
+      return;
     }
+    if (immediate) {
+      this.unmount();
+    } else if (this.unmountTimer === null) {
+      this.unmountTimer = setTimeout(() => this.unmount(), MENU_FADE_MS);
+    }
+  }
+
+  private cancelUnmount(): void {
+    if (this.unmountTimer !== null) {
+      clearTimeout(this.unmountTimer);
+      this.unmountTimer = null;
+    }
+  }
+
+  private unmount(): void {
+    this.cancelUnmount();
+    if (this.isMounted && !this.window.isDestroyed()) {
+      this.window.contentView.removeChildView(this.view);
+    }
+    this.isMounted = false;
   }
 
   /** Removes the overlay's view for good — call when the owning window closes. */
   public dispose(): void {
-    this.hide();
+    this.hide(true);
     this.watchActiveView(null);
   }
 }

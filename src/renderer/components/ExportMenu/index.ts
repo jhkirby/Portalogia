@@ -1,1 +1,1 @@
-export { ExportMenu } from './ExportMenu';
+export { useExportMenu } from './ExportMenu';

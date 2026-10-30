@@ -16,26 +16,6 @@
   min-width: min-content;
 }
 
-.pdf-toolbar__button {
-  height: 28px;
-  padding: 0 var(--size-spacing-md);
-
-  background: transparent;
-  border: 1px solid var(--color-chrome-border);
-  border-radius: var(--size-radius-sm);
-
-  font: inherit;
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text-active);
-
-  cursor: pointer;
-}
-
-.pdf-toolbar__button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 .pdf-toolbar__error {
   flex-shrink: 0;
 
@@ -54,6 +34,9 @@
 .pdf-search__input {
   width: 100%;
   min-width: 0;
+
+  /* Its hover and focus borders fade in and out rather than switching at once. */
+  transition: border-color 180ms ease-out;
   height: 26px;
   padding: 0 var(--size-spacing-sm);
 

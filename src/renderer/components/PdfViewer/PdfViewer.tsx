@@ -1089,12 +1089,13 @@ export function PdfViewer() {
         )}
       </div>
       {doc && error && <p className="pdf-viewer__error pdf-viewer__error--floating">{error}</p>}
-      {doc && !focusMode && (
+      {/* With no file open too: every count waiting, as a web page's are before its page has counted. */}
+      {!focusMode && (
         <PdfStatusBar
           page={visiblePage}
-          pageCount={pageSizes.length}
-          stats={docStats}
-          bytes={fileBytes}
+          pageCount={doc ? pageSizes.length : 0}
+          stats={doc ? docStats : null}
+          bytes={doc ? fileBytes : null}
           selection={selectionStats}
           onGoToPage={goToPage}
         />

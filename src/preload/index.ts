@@ -166,6 +166,8 @@ const api: NorthstarApi = {
 
   toggleSidebar: () => invoke(IpcChannel.SidebarToggle),
   toggleToolsSidebar: () => invoke(IpcChannel.ToolsSidebarToggle),
+  toggleSplitScreen: () => invoke(IpcChannel.SplitToggle),
+  swapSplitSides: () => invoke(IpcChannel.SplitSwap),
   focusContent: () => invoke(IpcChannel.TabsFocusContent),
 
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
@@ -176,12 +178,13 @@ const api: NorthstarApi = {
   setPen: (enabled) => invoke(IpcChannel.PenSet, { enabled }),
   setCrop: (enabled) => invoke(IpcChannel.CropSet, { enabled }),
   closePdfFile: (id) => invoke(IpcChannel.PdfCloseFile, { id }),
+  deletePdfFile: (id) => invoke(IpcChannel.PdfDeleteFile, { id }),
   exportPdfFile: (id) => invoke(IpcChannel.PdfExport, { id }),
 
   zoomIn: () => invoke(IpcChannel.ZoomIn),
   zoomOut: () => invoke(IpcChannel.ZoomOut),
   resetZoom: () => invoke(IpcChannel.ZoomReset),
-  setZoom: (percent) => invoke(IpcChannel.ZoomSet, { percent }),
+  setZoom: (percent, tabId) => invoke(IpcChannel.ZoomSet, tabId === undefined ? { percent } : { percent, tabId }),
 
   onEditWorkspace: (listener) => {
     const handler = (): void => listener();
@@ -262,8 +265,11 @@ const api: NorthstarApi = {
     return () => ipcRenderer.removeListener(IpcChannel.WindowStateChanged, handler);
   },
   onPageStats: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, payload: { tabId: string; stats: PageStats | null }): void => {
-      listener(payload.tabId, payload.stats);
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: { tabId: string; stats: PageStats | null; items: readonly string[] | null },
+    ): void => {
+      listener(payload.tabId, payload.stats, payload.items);
     };
     ipcRenderer.on(IpcChannel.PageStatsChanged, handler);
     return () => ipcRenderer.removeListener(IpcChannel.PageStatsChanged, handler);

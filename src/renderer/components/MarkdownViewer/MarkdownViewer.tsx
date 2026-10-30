@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-29
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { EditorState } from '@codemirror/state';
@@ -848,9 +848,29 @@ export function MarkdownViewer() {
     >
       <style>{`::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, 0.55); }`}</style>
       {!hasNote ? (
-        <div className="md-viewer__empty">
-          <FluidBackground />
-        </div>
+        <>
+          <div className="md-viewer__empty">
+            <FluidBackground />
+          </div>
+          {/* The bar, every count at nothing and no caret, as a web page's shows before its page has counted. */}
+          {!printing && !focusMode && (
+            <MarkdownStatusBar
+              line={null}
+              lineCount={0}
+              column={null}
+              word={null}
+              wordCount={0}
+              indent={null}
+              indentMax={0}
+              characters={0}
+              links={0}
+              selection={null}
+              onGoToLine={() => {}}
+              onGoToColumn={() => {}}
+              onGoToWord={() => {}}
+            />
+          )}
+        </>
       ) : (
         <>
           {/* The note and its panel side by side, over the status bar. */}

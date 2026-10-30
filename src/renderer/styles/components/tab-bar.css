@@ -248,6 +248,54 @@
   text-overflow: ellipsis;
 }
 
+/* Which side of a split screen this tab is on, "L" or "R", just left of its close button: while the split-screen
+   button is hovered with two tabs selected, and all the while it's split. A small accent badge, so it reads at a
+   glance without crowding the title. */
+.tab-bar__split-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+
+  background: var(--color-selection-bg);
+  border: 1px solid var(--color-accent-text);
+  border-radius: var(--size-radius-sm);
+
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-accent-text);
+
+  animation: split-side-in 160ms ease-out both;
+}
+
+/* Going: faded out, then taken away (`Tab` drops it at the animation's end). */
+.tab-bar__split-side--leaving {
+  animation: split-side-out 160ms ease-in both;
+}
+
+@keyframes split-side-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes split-side-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Next to instant, rather than none: the badge leaves at its animation's end. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-bar__split-side,
+  .tab-bar__split-side--leaving {
+    animation-duration: 1ms;
+  }
+}
+
 .tab-bar__close {
   display: flex;
   align-items: center;

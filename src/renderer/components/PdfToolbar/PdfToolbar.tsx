@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import type { BookmarkState, PdfTabState } from '@shared/tab-state';
-import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
+import { formatAltShortcut } from '../../lib/shortcuts';
 import { FileBar } from '../FileBar';
 import { PdfSearchBox } from './PdfSearchBox';
 
@@ -24,13 +24,8 @@ interface PdfToolbarProps {
   readonly onOpenBookmark: (id: string, bookmarkId: string) => void;
   /** Opens a PDF from the history, by path, in the tab. */
   readonly onOpenPdfPath: (id: string, path: string) => void;
-  readonly onOpen: (id: string) => void;
   /** Steps back (-1) or forward (1) through the jumps made in the document. */
   readonly onNavigate: (id: string, direction: 1 | -1) => void;
-  /** Saves a copy of the open file with its crops, drawings, text boxes and highlights applied. */
-  readonly onExport: (id: string) => void;
-  /** Closes the open file, leaving the tab empty. */
-  readonly onClose: (id: string) => void;
   /** Renames the file on disk; resolves to an error message, or `null` on success. */
   readonly onRename: (id: string, name: string) => Promise<string | null>;
 }
@@ -38,11 +33,12 @@ interface PdfToolbarProps {
 /**
  * The PDF tab's controls, shown in the main toolbar where a browser tab has
  * its address bar: Back/Forward through the jumps made in the document
- * (followed links, the page box), Open, Close and Export, and the file bar
+ * (followed links, the page box), and the file bar
  * (`FileBar`): the bookmark star and the file name (an editable text box — or,
  * while no file is open, a search over the bookmarked PDFs), with the file's
  * progress while it opens. The
- * page counter is in the PDF page's own stat bar (`PdfStatusBar`).
+ * page counter is in the PDF page's own stat bar (`PdfStatusBar`); Open, Close, Delete and Export are in the Tools
+ * sidebar (`ToolsBar`).
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
 export function PdfToolbar({
@@ -52,10 +48,7 @@ export function PdfToolbar({
   pdfBookmarks,
   onOpenBookmark,
   onOpenPdfPath,
-  onOpen,
   onNavigate,
-  onExport,
-  onClose,
   onRename,
 }: PdfToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
@@ -102,32 +95,6 @@ export function PdfToolbar({
           ›
         </button>
       </div>
-      <button
-        type="button"
-        className="pdf-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onOpen(tab.id)}
-        data-tooltip={`Open PDF (${formatShortcut('O')})`}
-      >
-        Open
-      </button>
-      <button
-        type="button"
-        className="pdf-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onClose(tab.id)}
-        disabled={fileName === null}
-        data-tooltip={`Close the open PDF (${formatShortcut('Shift+C')})`}
-      >
-        Close
-      </button>
-      <button
-        type="button"
-        className="pdf-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onExport(tab.id)}
-        disabled={fileName === null}
-        data-tooltip="Export a copy with crops, drawings, text boxes and highlights"
-      >
-        Export
-      </button>
       <FileBar
         isBookmarked={isBookmarked}
         canBookmark={fileName !== null}

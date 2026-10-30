@@ -23,12 +23,6 @@ interface MarkdownToolbarProps {
   readonly onOpenBookmark: (id: string, bookmarkId: string) => void;
   /** Opens a note from the history, by path, in the tab. */
   readonly onOpenPath: (id: string, path: string) => void;
-  readonly onNew: (id: string) => void;
-  readonly onOpen: (id: string) => void;
-  /** Closes the open note, leaving the tab empty. */
-  readonly onClose: (id: string) => void;
-  /** Asks to delete the open note (its file goes to the Recycle Bin): `App` confirms with the user first. */
-  readonly onDelete: (id: string) => void;
   readonly onSetMode: (id: string, mode: 'view' | 'edit') => void;
   /** Switches between the formatted note and its raw text. */
   readonly onSetDisplay: (id: string, display: MarkdownDisplay) => void;
@@ -40,13 +34,13 @@ interface MarkdownToolbarProps {
 
 /**
  * The Markdown tab's controls, shown in the main toolbar where a browser tab
- * has its address bar: Back/Forward through followed links, New and Open,
- * Close and Delete, the View/Edit switch (read-only or editable), the
+ * has its address bar: Back/Forward through followed links, the View/Edit
+ * switch (read-only or editable), the
  * Raw/Formatted switch (exact characters or the drawn note), and the file bar
  * (`FileBar`): the bookmark star and the file name (an editable text box — or,
  * while no note is open, a search over the bookmarked and recent notes), with
- * the note's progress while it opens. Export lives in the
- * toolbar's export menu; the page itself only draws the note.
+ * the note's progress while it opens. New, Open, Close, Delete and Export are
+ * in the Tools sidebar (`ToolsBar`); the page itself only draws the note.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
 export function MarkdownToolbar({
@@ -56,10 +50,6 @@ export function MarkdownToolbar({
   markdownBookmarks,
   onOpenBookmark,
   onOpenPath,
-  onNew,
-  onOpen,
-  onClose,
-  onDelete,
   onSetMode,
   onSetDisplay,
   onNavigate,
@@ -107,40 +97,6 @@ export function MarkdownToolbar({
           ›
         </button>
       </div>
-      <button
-        type="button"
-        className="markdown-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onNew(tab.id)}
-        data-tooltip="Create a new note"
-      >
-        New
-      </button>
-      <button
-        type="button"
-        className="markdown-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onOpen(tab.id)}
-        data-tooltip={`Open a note (${formatShortcut('O')})`}
-      >
-        Open
-      </button>
-      <button
-        type="button"
-        className="markdown-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onClose(tab.id)}
-        disabled={fileName === null}
-        data-tooltip={`Close the open note (${formatShortcut('Shift+C')})`}
-      >
-        Close
-      </button>
-      <button
-        type="button"
-        className="markdown-toolbar__button hover-grow chrome-tooltip"
-        onClick={() => onDelete(tab.id)}
-        disabled={fileName === null}
-        data-tooltip="Delete the open note"
-      >
-        Delete
-      </button>
       {/* One switch with both sides showing; the side in use is filled. */}
       <div
         className="markdown-toolbar__modes chrome-tooltip"

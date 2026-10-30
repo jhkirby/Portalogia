@@ -3,13 +3,16 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-import { useEffect, useRef, useState } from 'react';
-import { ExportIcon } from '../icons';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { EXPORT_MENU_HEIGHT_PX, EXPORT_MENU_MARKDOWN_HEIGHT_PX, EXPORT_MENU_WIDTH_PX } from '@shared/constants';
 
-/** Vertical gap, in CSS pixels, between the button's bottom edge and the menu — same as `ColorPicker`'s. */
+/** Horizontal gap, in CSS pixels, between the menu and the row it opens from. */
 const DROPDOWN_GAP_PX = 6;
 
-interface ExportMenuProps {
+/** The least room, in CSS pixels, kept between the menu and the window's edges. */
+const EDGE_MARGIN_PX = 8;
+
+interface ExportMenuOptions {
   /** Whether there's an active tab to export at all. */
   readonly canExport: boolean;
   /** Whether the active tab has web documents to save — false for a terminal tab. */
@@ -19,29 +22,40 @@ interface ExportMenuProps {
 }
 
 /**
- * The toolbar's export button. The dropdown itself lives in its own
- * `WebContentsView` (`export-menu.html`, see `ExportMenuOverlay`) so it can
- * paint over the live page; this component owns the open state, measures
- * where the menu goes, and syncs both down — same split as `ColorPicker`.
+ * The export menu's open state, for the Tools sidebar's Export row. The menu
+ * itself lives in its own `WebContentsView` (`export-menu.html`, see
+ * `ExportMenuOverlay`) so it can paint over the live page; this hook owns
+ * whether it's open, measures where it goes — to the left of the row, beside
+ * the sidebar, level with the row and moved up if it would run off the window
+ * — and syncs both down.
+ * @returns The ref for the row the menu opens from, whether it's open, and the row's click.
  */
-export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMenuProps) {
+export function useExportMenu({ canExport, canExportDocuments, markdown }: ExportMenuOptions): {
+  readonly anchorRef: RefObject<HTMLButtonElement | null>;
+  readonly isOpen: boolean;
+  readonly toggle: () => void;
+} {
   const [isOpen, setIsOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
       window.northstar.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments, markdown });
-      return;
+      return undefined;
     }
     const updateSync = (): void => {
-      const rect = buttonRef.current?.getBoundingClientRect();
+      const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) {
         return;
       }
+      const height = markdown ? EXPORT_MENU_MARKDOWN_HEIGHT_PX : EXPORT_MENU_HEIGHT_PX;
       window.northstar.syncExportMenu({
         kind: 'export',
         open: true,
-        rect: { top: rect.bottom + DROPDOWN_GAP_PX, left: Math.max(8, rect.left) },
+        rect: {
+          top: Math.max(EDGE_MARGIN_PX, Math.min(rect.top, window.innerHeight - height - EDGE_MARGIN_PX)),
+          left: Math.max(EDGE_MARGIN_PX, rect.left - DROPDOWN_GAP_PX - EXPORT_MENU_WIDTH_PX),
+        },
         canExportDocuments,
         markdown,
       });
@@ -51,7 +65,7 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
     return () => window.removeEventListener('resize', updateSync);
   }, [isOpen, canExportDocuments, markdown]);
 
-  // Belt-and-suspenders close on unmount, same as `ColorPicker`.
+  // Closed on unmount too, so the menu isn't left over the page.
   useEffect(
     () => () =>
       window.northstar.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments: false, markdown: false }),
@@ -71,7 +85,7 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
   // Escape and outside clicks while focus is still in the chrome.
   useEffect(() => {
     if (!isOpen) {
-      return;
+      return undefined;
     }
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
@@ -79,7 +93,7 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
       }
     };
     const handlePointerDown = (event: MouseEvent): void => {
-      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
+      if (anchorRef.current && !anchorRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -91,20 +105,5 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
     };
   }, [isOpen]);
 
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      className="page-actions__button hover-grow chrome-tooltip"
-      onClick={() => setIsOpen((open) => !open)}
-      disabled={!canExport}
-      aria-haspopup="menu"
-      aria-expanded={isOpen}
-      aria-pressed={isOpen}
-      aria-label="Export"
-      data-tooltip="Export"
-    >
-      <ExportIcon />
-    </button>
-  );
+  return { anchorRef, isOpen, toggle: () => setIsOpen((open) => !open) };
 }

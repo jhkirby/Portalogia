@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-29 */
 
 /* ── TAB SEARCH POPUP ─────────────────────────────────────────────────── */
 
@@ -55,6 +55,9 @@
   font: inherit;
   font-size: 15px;
   color: var(--color-address-text);
+
+  /* Its hover and focus borders fade in and out rather than switching at once. */
+  transition: border-color 180ms ease-out;
 }
 
 .tab-search__input::placeholder {
