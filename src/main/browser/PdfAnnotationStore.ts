@@ -1,11 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-29
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import { pdfAnnotationsSchema, type PdfAnnotations } from '@shared/ipc-schemas';
+import { notifyAnnotationsChanged } from './annotationChanges';
 
 const storeFileSchema = z.record(z.string(), pdfAnnotationsSchema);
 
@@ -72,6 +73,8 @@ class PdfAnnotationStore {
       clearTimeout(this.timer);
     }
     this.timer = setTimeout(() => this.flush(), PdfAnnotationStore.SAVE_DEBOUNCE_MS);
+    // Whoever shows whether there are marks hears of it.
+    notifyAnnotationsChanged();
   }
 
   /** Writes any pending change to disk now. */

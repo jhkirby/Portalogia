@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { test, expect, openInActiveTab, pressInTab } from './fixtures';
 
@@ -34,7 +34,7 @@ test.describe('edit mode', () => {
   test('is kept per tab: another tab still has its tool shortcuts', async ({ electronApp, window, server }) => {
     await openInActiveTab(electronApp, window, server.url('/editor'));
     await window.getByRole('button', { name: 'Turn on edit mode' }).click();
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     await expect(window.getByRole('button', { name: 'Turn on edit mode' })).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -83,7 +83,7 @@ test.describe('edit mode', () => {
   });
 
   test('is not offered on a note, which has no web page to hand keys to', async ({ window }) => {
-    await window.getByRole('button', { name: 'Open Markdown notes' }).click();
+    await window.evaluate(() => window.northstar.createMarkdownTab());
     await expect(window.getByRole('button', { name: /edit mode/ })).toHaveCount(0);
   });
 });

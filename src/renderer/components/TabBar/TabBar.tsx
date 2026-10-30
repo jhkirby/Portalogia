@@ -15,13 +15,20 @@ import { SHIMMER_PERIOD_MS, useShimmerTick } from '../../hooks/useShimmerTick';
 import { useTabTransitions } from './useTabTransitions';
 import { useActiveTabSlide } from './useActiveTabSlide';
 import { useClickRipples } from '../../hooks/useClickRipples';
-import { useFitText } from '../../hooks/useFitText';
+import { NewTabMenu } from '../NewTabMenu';
+import { useSharedFitText } from '../../hooks/useFitText';
 
 /** A tab title's full size, in px: the tab row's own (`--size-font-md`). */
 const TITLE_FONT_PX = 13;
 
 /** The smallest a tab's title shrinks to as tabs narrow; below this it would be hard to read, so the ellipsis takes over. */
 const TITLE_MIN_FONT_PX = 10;
+
+/** Every tab's title, all sized together. */
+const TITLE_SELECTOR = '.tab-bar__title';
+
+/** The titles whose fit decides that size: tabs at rest, not still opening or closing (an animation squeezes them). */
+const RESTING_TITLE_SELECTOR = '.tab-bar__tab:not(.tab-bar__tab--entering):not(.tab-bar__tab--exiting) .tab-bar__title';
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
 // element following the cursor by default; over this chrome's mix of HTML
@@ -67,8 +74,6 @@ interface TabBarProps {
   readonly onReorder: (id: string, beforeId: string | null) => void;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it — see `TabManager.grabTabForReorder`), or `null` when nothing is grabbed. Shares the mouse-drag's `--dragging` highlight. */
   readonly grabbedTabId: string | null;
-  /** Called when the user clicks the "new tab" button. */
-  readonly onNewTab: () => void;
   /**
    * Called when a tab drag ends without landing on any drop target this
    * chrome itself recognizes (an in-bar reorder, or a `WorkspaceBar` pill)
@@ -107,7 +112,6 @@ export function TabBar({
   onClose,
   onReorder,
   grabbedTabId,
-  onNewTab,
   onDragEndOutside,
   onDragOutOfWindow,
   onTearOffEnd,
@@ -130,6 +134,16 @@ export function TabBar({
   const ghostTab = draggedId !== null && !draggedTab ? draggedTabRef.current : null;
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
+  // Every title shrinks together as the tabs narrow, rather than ending in "…", down to a size still easy to read: the
+  // size the most crowded title needs.
+  useSharedFitText(
+    tabBarRef,
+    TITLE_SELECTOR,
+    RESTING_TITLE_SELECTOR,
+    tabs.map((tab) => `${tab.kind}:${tab.title}`).join('\n'),
+    TITLE_FONT_PX,
+    TITLE_MIN_FONT_PX,
+  );
 
   const endDrag = (): void => {
     tornOffRef.current = false;
@@ -388,19 +402,9 @@ export function TabBar({
       {foreignInsertAt !== null && (
         <div className="tab-bar__placeholder" style={{ order: slotOrder(foreignInsertAt) }} aria-hidden="true" />
       )}
-      {/* At the per-workspace limit the "+" goes away entirely (main enforces it too) and returns once a tab closes. */}
-      {tabs.length < MAX_TABS_PER_WORKSPACE && (
-        <button
-          type="button"
-          className="tab-bar__new hover-glow chrome-tooltip"
-          style={{ order: slotOrder(displayIds.length + 2) }}
-          aria-label="New tab"
-          onClick={onNewTab}
-          data-tooltip={`New tab (${formatShortcut('N')})`}
-        >
-          +
-        </button>
-      )}
+      {/* At the per-workspace limit the "+" goes away entirely (main enforces it too) and returns once a tab closes. It
+          opens the menu of what a new tab can be (`NewTabMenu`). */}
+      {tabs.length < MAX_TABS_PER_WORKSPACE && <NewTabMenu style={{ order: slotOrder(displayIds.length + 2) }} />}
     </div>
   );
 }
@@ -463,10 +467,7 @@ function Tab({
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
   const ripples = useClickRipples();
-  // The title shrinks with the tab, rather than ending in "…", down to a size still easy to read.
   const titleText = label ?? (tab.title || 'New Tab');
-  const titleRef = useRef<HTMLSpanElement>(null);
-  useFitText(titleRef, titleText, TITLE_FONT_PX, TITLE_MIN_FONT_PX);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -603,7 +604,7 @@ function Tab({
           <GlobeIcon size={13} />
         </span>
       )}
-      <span ref={titleRef} className="tab-bar__title" title={tab.title || undefined}>
+      <span className="tab-bar__title" title={tab.title || undefined}>
         {titleText}
       </span>
       <button

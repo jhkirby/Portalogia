@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-27
+// Last Modified: 2026-10-29
 
 import { ipcMain, type WebContents } from 'electron';
 import { z } from 'zod';
@@ -169,6 +169,14 @@ export class PenController {
    * tab id, and outlive the tab that made them for whenever that page is
    * opened again.
    */
+  /**
+   * @param url A page's address.
+   * @returns Whether that page has any saved pen strokes — what Revert would take off it.
+   */
+  public hasMarksFor(url: string): boolean {
+    return this.store.listFor(url).length > 0;
+  }
+
   public disposeTab(tabId: string): void {
     this.tabs.delete(tabId);
   }

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useEffect, useRef } from 'react';
 import { accentFluidPalette, startFluid, type FluidColor } from '@shared/dom/fluidSim';
@@ -16,7 +16,8 @@ function storedAccent(): FluidColor {
 
 /**
  * The fluid filling an empty note or PDF tab (`startFluid`): stirred by the pointer, rippling where it's clicked, in
- * the accent's colour. Fills its positioned parent, behind whatever else is in it.
+ * the accent's colour. Fills its positioned parent, behind whatever else is in it. Only while the page has the keyboard
+ * (its frame lit in the accent): otherwise it fades away and leaves the pointer alone.
  */
 export function FluidBackground() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -35,7 +36,11 @@ export function FluidBackground() {
     };
     window.addEventListener('storage', onStorage);
     // The pointer comes from the whole empty page, not this layer, which lets it through to what's above.
-    const stop = startFluid(host, { palette: () => palette, events: host.parentElement ?? host });
+    const stop = startFluid(host, {
+      palette: () => palette,
+      events: host.parentElement ?? host,
+      active: () => document.hasFocus(),
+    });
     return () => {
       window.removeEventListener('storage', onStorage);
       stop();

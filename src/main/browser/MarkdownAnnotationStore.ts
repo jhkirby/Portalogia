@@ -1,11 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-29
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import { markdownAnnotationsSchema, type MarkdownAnnotations } from '@shared/ipc-schemas';
+import { notifyAnnotationsChanged } from './annotationChanges';
 
 const storeFileSchema = z.record(z.string(), markdownAnnotationsSchema);
 
@@ -88,6 +89,8 @@ class MarkdownAnnotationStore {
   }
 
   private scheduleSave(): void {
+    // Every change comes through here: whoever shows whether there are marks hears of it.
+    notifyAnnotationsChanged();
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }

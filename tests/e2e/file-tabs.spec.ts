@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,7 +31,7 @@ test.describe('a PDF tab', () => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog;
     }, pdfPath);
 
-    await window.getByRole('button', { name: 'Open PDF viewer' }).click();
+    await window.evaluate(() => window.northstar.createPdfTab());
     const toolbar = window.locator('.pdf-toolbar');
     await toolbar.getByRole('button', { name: /^Open/ }).first().click();
     // The page box is in the PDF page's own stat bar.

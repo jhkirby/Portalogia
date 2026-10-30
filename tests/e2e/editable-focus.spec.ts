@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import type { Page } from 'playwright';
 import { test, expect, openInActiveTab, pressInTab } from './fixtures';
@@ -17,7 +17,7 @@ async function selectedTabIndex(window: Page): Promise<number> {
 test.describe('Ctrl+Left/Right in a web page text box', () => {
   // Two tabs, the editor page active and last, so a tab switch would be plain to see.
   test.beforeEach(async ({ window }) => {
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     await expect(window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab')).toHaveCount(2);
   });
 

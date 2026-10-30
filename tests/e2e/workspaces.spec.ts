@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { test, expect } from './fixtures';
 
@@ -22,7 +22,7 @@ test.describe('workspaces', () => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
 
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     await expect(tabs).toHaveCount(2);
 
     await window.getByRole('button', { name: 'New workspace' }).click();

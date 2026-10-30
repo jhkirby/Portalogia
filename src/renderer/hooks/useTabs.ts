@@ -20,6 +20,8 @@ const EMPTY_STATE: BrowserState = {
   focusMode: false,
   contentFocused: false,
   sidebarVisible: true,
+  toolsSidebarVisible: true,
+  canRevert: false,
   grabbedTabId: null,
   selectedTabIds: [],
   selectedWorkspaceIds: [],
@@ -303,6 +305,9 @@ export function useTabs() {
     void window.northstar.exitSplitView().then(logIfFailed);
   }, []);
 
+  const toggleToolsSidebar = useCallback(() => {
+    void window.northstar.toggleToolsSidebar().then(logIfFailed);
+  }, []);
   const toggleSidebar = useCallback(() => {
     void window.northstar.toggleSidebar().then(logIfFailed);
   }, []);
@@ -372,6 +377,8 @@ export function useTabs() {
     focusMode: state.focusMode,
     contentFocused: state.contentFocused,
     sidebarVisible: state.sidebarVisible,
+    toolsSidebarVisible: state.toolsSidebarVisible,
+    canRevert: state.canRevert,
     grabbedTabId: state.grabbedTabId,
     selectedTabIds: state.selectedTabIds,
     selectedWorkspaceIds: state.selectedWorkspaceIds,
@@ -443,6 +450,7 @@ export function useTabs() {
     exitSplitView,
 
     toggleSidebar,
+    toggleToolsSidebar,
 
     setFocusMode,
     zoomPercent: state.zoomPercent,

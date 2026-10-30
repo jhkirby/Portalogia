@@ -10,7 +10,7 @@
    shows only in the empty space around them.
 
    Each wisp is a large, soft ellipse of light grey, barely there, drifting on a slow loop of its own. The row's wisps
-   move along it and the sidebar's up and down it, on different durations, so the two areas never move in step. Only
+   move along it and each sidebar's up and down it, on different durations, so no two areas move in step. Only
    transforms animate, so the drift costs the compositor and nothing else. */
 
 .mist {
@@ -55,24 +55,24 @@
 
 .mist--row .mist__wisp--1 {
   --mist-path: mist-row-a;
-  --mist-duration: 47s;
-  --mist-delay: -12s;
+  --mist-duration: 21s;
+  --mist-delay: -5s;
 
   left: -10%;
 }
 
 .mist--row .mist__wisp--2 {
   --mist-path: mist-row-b;
-  --mist-duration: 61s;
-  --mist-delay: -33s;
+  --mist-duration: 27s;
+  --mist-delay: -15s;
 
   left: 30%;
 }
 
 .mist--row .mist__wisp--3 {
   --mist-path: mist-row-a;
-  --mist-duration: 73s;
-  --mist-delay: -51s;
+  --mist-duration: 33s;
+  --mist-delay: -23s;
 
   left: 62%;
 }
@@ -99,7 +99,8 @@
 
 /* ── The sidebar: tall wisps drifting up and down it ── */
 
-.mist--rail .mist__wisp {
+.mist--rail .mist__wisp,
+.mist--tools .mist__wisp {
   left: -45%;
   width: 190%;
   height: 34%;
@@ -107,24 +108,24 @@
 
 .mist--rail .mist__wisp--1 {
   --mist-path: mist-rail-a;
-  --mist-duration: 53s;
-  --mist-delay: -7s;
+  --mist-duration: 23s;
+  --mist-delay: -3s;
 
   top: -5%;
 }
 
 .mist--rail .mist__wisp--2 {
   --mist-path: mist-rail-b;
-  --mist-duration: 67s;
-  --mist-delay: -29s;
+  --mist-duration: 29s;
+  --mist-delay: -13s;
 
   top: 35%;
 }
 
 .mist--rail .mist__wisp--3 {
   --mist-path: mist-rail-a;
-  --mist-duration: 79s;
-  --mist-delay: -44s;
+  --mist-duration: 35s;
+  --mist-delay: -20s;
 
   top: 70%;
 }
@@ -147,6 +148,33 @@
   to {
     transform: translate(-10%, -40%) scale(0.9, 0.95);
   }
+}
+
+/* ── The Tools sidebar: the workspace sidebar's wisps and paths, on timings of its own, so the two never move in
+   step ── */
+
+.mist--tools .mist__wisp--1 {
+  --mist-path: mist-rail-b;
+  --mist-duration: 25s;
+  --mist-delay: -9s;
+
+  top: 0;
+}
+
+.mist--tools .mist__wisp--2 {
+  --mist-path: mist-rail-a;
+  --mist-duration: 31s;
+  --mist-delay: -21s;
+
+  top: 40%;
+}
+
+.mist--tools .mist__wisp--3 {
+  --mist-path: mist-rail-b;
+  --mist-duration: 37s;
+  --mist-delay: -4s;
+
+  top: 72%;
 }
 
 /* ── RESPONSIVE ───────────────────────────────────────────────────────── */

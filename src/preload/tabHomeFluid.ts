@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { ipcRenderer } from 'electron';
 import { accentFluidPalette, startFluid, type FluidColor } from '@shared/dom/fluidSim';
@@ -50,7 +50,8 @@ if (window.location.href === HOME_URL) {
           palette = accentFluidPalette(color);
         }
       });
-      startFluid(host, { palette: () => palette, events: window });
+      // Only while the page has the keyboard, as an empty note's or PDF's: otherwise it fades away.
+      startFluid(host, { palette: () => palette, events: window, active: () => document.hasFocus() });
     },
     { once: true },
   );

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { test, expect, pressInTab } from './fixtures';
 
@@ -10,7 +10,7 @@ test.describe('tabs', () => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     await expect(tabs).toHaveCount(1);
 
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
 
     await expect(tabs).toHaveCount(2);
     await expect(window.getByLabel('Search the internet...')).toBeFocused();
@@ -18,7 +18,7 @@ test.describe('tabs', () => {
 
   test('closing a tab removes it and leaves the other active', async ({ window }) => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     await expect(tabs).toHaveCount(2);
 
     await tabs.last().getByRole('button', { name: /Close/ }).click();
@@ -99,7 +99,7 @@ test.describe('jumping to a tab by number', () => {
   }) => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     for (let count = 2; count <= 3; count += 1) {
-      await window.getByRole('button', { name: 'New tab', exact: true }).click();
+      await window.evaluate(() => window.northstar.createTab());
       await expect(tabs).toHaveCount(count);
     }
     const selected = (): Promise<number> =>

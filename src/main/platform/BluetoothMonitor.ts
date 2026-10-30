@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
@@ -57,17 +57,17 @@ function readWithPnputil(): Promise<string> {
  * Classic and LE, under its name on each) counts once.
  * @param output What `pnputil` printed.
  * @returns `unavailable` with no Bluetooth devices at all (no adapter), `off` with the radio turned off, otherwise
- *   `on` and how many devices are connected.
+ *   `on`, how many devices are connected, and their names.
  */
 export function parsePnputilBluetooth(output: string): BluetoothStatus {
   const blocks = output.split(/\r?\n[ \t]*\r?\n/);
   // The first line's value, after its (translated) label: `Instance ID:    BTH\MS_BTHBRB\...`.
   const instanceIds = blocks.map((block) => /^[^\r\n:]+:\s*(\S+)/m.exec(block.trimStart())?.[1] ?? null);
   if (!instanceIds.some((id) => id !== null && id.includes('\\'))) {
-    return { state: 'unavailable', devices: 0 };
+    return { state: 'unavailable', devices: 0, names: [] };
   }
   if (!instanceIds.some((id) => id !== null && RADIO_INSTANCE.test(id))) {
-    return { state: 'off', devices: 0 };
+    return { state: 'off', devices: 0, names: [] };
   }
   const property = (block: string, key: string): string | null => {
     const at = block.indexOf(key);
@@ -78,14 +78,19 @@ export function parsePnputilBluetooth(output: string): BluetoothStatus {
     return /\r?\n\s*(.*?)\s*(?:\r?\n|$)/.exec(block.slice(at))?.[1] ?? null;
   };
   const connected = new Set<string>();
+  const names = new Set<string>();
   blocks.forEach((block, index) => {
     const id = instanceIds[index];
     if (!id || !DEVICE_INSTANCE.test(id) || property(block, CONNECTED_KEY)?.toUpperCase() !== 'TRUE') {
       return;
     }
-    connected.add(property(block, 'DEVPKEY_Device_FriendlyName') ?? property(block, 'DEVPKEY_Device_ContainerId') ?? id);
+    const name = property(block, 'DEVPKEY_Device_FriendlyName');
+    connected.add(name ?? property(block, 'DEVPKEY_Device_ContainerId') ?? id);
+    if (name) {
+      names.add(name);
+    }
   });
-  return { state: 'on', devices: connected.size };
+  return { state: 'on', devices: connected.size, names: [...names].sort((a, b) => a.localeCompare(b)) };
 }
 
 /**
@@ -95,7 +100,7 @@ export function parsePnputilBluetooth(output: string): BluetoothStatus {
  * from last time.
  */
 export class BluetoothMonitor {
-  private status: BluetoothStatus = { state: 'unavailable', devices: 0 };
+  private status: BluetoothStatus = { state: 'unavailable', devices: 0, names: [] };
   private timer: NodeJS.Timeout | null = null;
   private reading = false;
 
@@ -141,11 +146,15 @@ export class BluetoothMonitor {
       next = parsePnputilBluetooth(await this.read());
     } catch {
       // `pnputil` exits non-zero when the class has no devices, and isn't there at all off Windows.
-      next = { state: 'unavailable', devices: 0 };
+      next = { state: 'unavailable', devices: 0, names: [] };
     } finally {
       this.reading = false;
     }
-    if (next.state !== this.status.state || next.devices !== this.status.devices) {
+    if (
+      next.state !== this.status.state ||
+      next.devices !== this.status.devices ||
+      next.names.join('\n') !== this.status.names.join('\n')
+    ) {
       this.status = next;
       this.onChange(next);
     }

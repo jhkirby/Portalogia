@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-01
+// Last Modified: 2026-10-29
 
 import type { Page } from 'playwright';
 import { clickMenuItem, test, expect } from './fixtures';
@@ -24,7 +24,7 @@ async function stateOf(page: Page): Promise<SnapshotState> {
 async function openTabs(page: Page, count: number): Promise<void> {
   const tabs = page.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
   while ((await tabs.count()) < count) {
-    await page.getByRole('button', { name: 'New tab', exact: true }).click();
+    await page.evaluate(() => window.northstar.createTab());
   }
   await expect(tabs).toHaveCount(count);
 }

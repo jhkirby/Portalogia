@@ -1,89 +1,29 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useEffect, useRef } from 'react';
-import type { PointerMode } from '@shared/tab-state';
 import type { Theme } from '../../hooks/useTheme';
-import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
+import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
 import { ExportMenu } from '../ExportMenu';
-import {
-  CommentIcon,
-  CropIcon,
-  FindIcon,
-  HandIcon,
-  HighlighterIcon,
-  HistoryIcon,
-  BookmarksIcon,
-  KeyboardIcon,
-  LaserPointerIcon,
-  LockIcon,
-  OpenInNewWindowIcon,
-  PenIcon,
-  RevertIcon,
-  SearchIcon,
-  ShieldIcon,
-  TextBoxIcon,
-  TextSelectIcon,
-} from '../icons';
-
-/** The PDF pointer modes' buttons, in toolbar order. */
-const POINTER_MODES: readonly { mode: PointerMode; label: string; shortcut: string }[] = [
-  { mode: 'pan', label: 'Pan: drag to move the document', shortcut: '1' },
-  { mode: 'select', label: 'Select: drag to select text; links can be clicked', shortcut: '2' },
-];
+import { FindIcon, OpenInNewWindowIcon, SearchIcon, ShieldIcon } from '../icons';
 import { ZoomControl } from '../ZoomControl';
 
 interface PageActionsProps {
-  /** Whether there's an active tab to bookmark — browser-only, unlike `canExportPdf`, since a terminal tab has no URL to bookmark. */
-  readonly canActOnPage: boolean;
-  /** True on the blank home page, or a PDF tab with no file open: the pen, highlighter, comment, text box and crop tools — and Revert — have nothing to act on, so they're disabled. */
-  readonly annotationToolsLocked: boolean;
-  /** Whether the pen and comment tools are usable — browser tabs and PDF tabs, unlike `canActOnPage` (a PDF has no URL to bookmark or revert). */
-  readonly canAnnotate: boolean;
-  /** Whether there's an active tab to export to PDF — unlike `canActOnPage`, true for a terminal tab too (its `WebContentsView` prints its on-screen output same as a browser tab prints its page). */
-  readonly canExportPdf: boolean;
-  /** Whether there's an active tab to zoom — unlike `canActOnPage`, true for a terminal tab too (zoom isn't browser-only). */
-  /** Whether the export dropdown is usable — unlike `canExportPdf`, false on the built-in home page, which has no real content to export. */
+  /** Whether the export dropdown is usable: there's an active tab, and it isn't the built-in home page, which has no real content to export. */
   readonly canExportMenu: boolean;
-  /** Whether the active tab has HTML/CSS/JS to save — browser tabs only, unlike `canExportPdf`. */
+  /** Whether the active tab has HTML/CSS/JS to save — browser tabs only. */
   readonly canExportDocuments: boolean;
   /** Whether the export dropdown is shown at all — hidden on a PDF tab, which has nothing to export. */
   readonly showExportMenu: boolean;
-  /** Whether the comment tool is shown — hidden on a terminal tab, which has no document to anchor a comment to. */
-  readonly showCommentTool: boolean;
-  /** Whether the text box tool is shown — hidden on a terminal tab, like the comment tool. */
-  readonly showTextTool: boolean;
-  /** Whether the laser pointer is shown — hidden on a History tab. */
-  readonly showLaserPointer: boolean;
   /** Whether the zoom control is shown — hidden on a History tab, which doesn't zoom. */
   readonly showZoom: boolean;
-  /** Whether the pen is shown — hidden on a terminal tab, which has no document to draw on. */
-  readonly showPen: boolean;
-  /** Whether the highlighter is shown — hidden on a terminal tab. */
-  readonly showHighlighter: boolean;
-  /** Whether Revert Annotations is shown — hidden on a terminal tab, which can't be annotated. */
-  readonly showRevert: boolean;
   readonly canZoom: boolean;
   /** The active tab's current zoom, within its range. */
   readonly zoomPercent: number;
   readonly focusMode: boolean;
-  /** Whether the laser pointer overlay is currently on. */
-  readonly laserPointerActive: boolean;
-  /** Whether the highlighter tool is currently on. */
-  readonly highlighterActive: boolean;
-  /** Whether the comment tool is currently on. */
-  readonly commentToolActive: boolean;
-  /** Whether the text box tool is currently on. */
-  readonly textToolActive: boolean;
-  /** Whether the pen tool is currently on. */
-  readonly penActive: boolean;
-  /** Whether the PDF crop tool is currently on. */
-  readonly cropActive: boolean;
-  /** Whether the crop tool is shown — PDF tabs only, the one document type it applies to. */
-  readonly showCrop: boolean;
   readonly theme: Theme;
   /** Whether the ad blocker button is shown — web pages only (not the home page, a PDF, a terminal or History). */
   readonly showAdBlock: boolean;
@@ -97,19 +37,8 @@ interface PageActionsProps {
   readonly adBlockSite: string;
   /** Turns blocking off or back on for the active page's site. */
   readonly onToggleAdBlock: () => void;
-  /** Opens a new PDF viewer tab. */
-  readonly onOpenPdfViewer: () => void;
-  /** Opens a new Markdown tab. */
-  readonly onOpenMarkdown: () => void;
   /** Whether the active tab is a Markdown note, whose export menu lists PDF, `.md` and `.txt`. */
   readonly markdownExport: boolean;
-  readonly onNewTerminal: () => void;
-  /** Opens a new History tab. */
-  readonly onOpenHistory: () => void;
-  /** Opens a new Bookmarks tab. */
-  readonly onOpenBookmarks: () => void;
-  /** Opens a new Secrets tab. */
-  readonly onOpenSecrets: () => void;
   readonly onOpenTabSearch: () => void;
   /** Whether the find bar is open. */
   readonly findOpen: boolean;
@@ -121,52 +50,23 @@ interface PageActionsProps {
   readonly onSetZoom: (percent: number) => void;
   readonly onOpenWorkspaceInNewWindow: () => void;
   readonly onToggleFocusMode: () => void;
-  readonly onToggleLaserPointer: () => void;
-  readonly onToggleHighlighter: () => void;
-  readonly onToggleCommentTool: () => void;
-  readonly onToggleTextTool: () => void;
-  readonly onTogglePen: () => void;
-  readonly onToggleCrop: () => void;
-  /** Whether the active tab is a PDF, a note or a web page, whose pointer modes (Pan, Select) show beside the tools. */
-  readonly showPointerModes: boolean;
-  /** The tab's pointer mode — shown pressed only while no tool is on, since a tool takes the pointer over. */
-  readonly pointerMode: PointerMode;
-  /** The tab has nothing to pan or select: a PDF or note with no file open, or the home page. */
-  readonly pointerModesLocked: boolean;
-  /** Whether the edit mode button is shown — browser tabs only, whose pages may bind the tools' keys. */
-  readonly showEditMode: boolean;
-  /** Whether the active browser tab is in edit mode: the tools' keyboard shortcuts go to its page. */
-  readonly editMode: boolean;
-  /** Turns the active browser tab's edit mode on or off. */
-  readonly onToggleEditMode: () => void;
-  /** Picks a pointer mode, turning off whichever tool is on (as turning one tool on turns off the others). */
-  readonly onSetPointerMode: (mode: PointerMode) => void;
-  /** Reverts the active page back to no highlights/comments — a one-shot action, not a toggle. */
-  readonly onRevertPage: () => void;
   readonly onToggleTheme: () => void;
 }
 
 /**
- * The toolbar's right-hand button strip, in five groups split by dividers —
- * nearest the address bar first: page-editing tools (laser pointer, pen,
- * highlighter, comments, revert); page/app tools (PDF, terminal, tab search);
- * zoom; window actions (new window, Focus Mode); appearance (accent color, theme).
+ * The toolbar's right-hand button strip, in four groups split by dividers —
+ * nearest the address bar first: page tools (export, tab search, find, the ad
+ * blocker);
+ * zoom; window actions (new window, Focus Mode); appearance (accent color,
+ * theme). The page-editing tools (Pan, Select, the laser pointer, pen and the
+ * rest) are in the Tools sidebar on the right (`ToolsBar`), and the other kinds
+ * of tab (PDF, note, terminal, bookmarks, secrets, history) open from the tab
+ * row's "+" menu (`NewTabMenu`).
  */
 export function PageActions({
-  canActOnPage,
-  canAnnotate,
-  annotationToolsLocked,
-  canExportPdf,
   canZoom,
   zoomPercent,
   focusMode,
-  laserPointerActive,
-  highlighterActive,
-  commentToolActive,
-  textToolActive,
-  penActive,
-  cropActive,
-  showCrop,
   theme,
   showAdBlock,
   adBlockActive,
@@ -174,23 +74,11 @@ export function PageActions({
   adBlockBlockedCount,
   adBlockSite,
   onToggleAdBlock,
-  onOpenPdfViewer,
-  onOpenMarkdown,
   markdownExport,
   canExportMenu,
   canExportDocuments,
   showExportMenu,
-  showCommentTool,
-  showTextTool,
-  showLaserPointer,
   showZoom,
-  showPen,
-  showHighlighter,
-  showRevert,
-  onNewTerminal,
-  onOpenHistory,
-  onOpenBookmarks,
-  onOpenSecrets,
   onOpenTabSearch,
   findOpen,
   canFind,
@@ -200,37 +88,8 @@ export function PageActions({
   onSetZoom,
   onOpenWorkspaceInNewWindow,
   onToggleFocusMode,
-  onToggleLaserPointer,
-  onToggleHighlighter,
-  onToggleCommentTool,
-  onToggleTextTool,
-  onTogglePen,
-  onToggleCrop,
-  showPointerModes,
-  pointerMode,
-  pointerModesLocked,
-  onSetPointerMode,
-  showEditMode,
-  editMode,
-  onToggleEditMode,
-  onRevertPage,
   onToggleTheme,
 }: PageActionsProps) {
-  // With none of the tool buttons showing (a History tab), the divider that closes their group would sit alone at the left edge.
-  const showAnyTool =
-    showPointerModes ||
-    showEditMode ||
-    showLaserPointer ||
-    showPen ||
-    showHighlighter ||
-    showCommentTool ||
-    showTextTool ||
-    showCrop ||
-    showRevert;
-  // The pointer modes are the tools' resting state: one of them is pressed exactly when no tool is.
-  const anyToolActive =
-    laserPointerActive || penActive || highlighterActive || commentToolActive || textToolActive || cropActive;
-
   const stripRef = useRef<HTMLDivElement>(null);
 
   // In a window too narrow for every tool the strip scrolls sideways, with no scroll bar, so an ordinary (vertical)
@@ -256,184 +115,7 @@ export function PageActions({
 
   return (
     <div ref={stripRef} className="page-actions">
-      {showPointerModes &&
-        POINTER_MODES.map(({ mode, label, shortcut }) => (
-          <button
-            key={mode}
-            type="button"
-            className="page-actions__button hover-grow chrome-tooltip"
-            onClick={() => onSetPointerMode(mode)}
-            disabled={pointerModesLocked}
-            aria-pressed={!anyToolActive && pointerMode === mode}
-            aria-label={label}
-            // Alt+1 / Alt+2: Ctrl+1–8 jump to tabs.
-            data-tooltip={`${label} (${formatAltShortcut(shortcut)})`}
-          >
-            {mode === 'pan' ? <HandIcon /> : <TextSelectIcon />}
-          </button>
-        ))}
-      {showEditMode && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onToggleEditMode}
-          aria-pressed={editMode}
-          aria-label={editMode ? 'Turn off edit mode' : 'Turn on edit mode'}
-          data-tooltip={`${
-            editMode
-              ? "Turn off edit mode: the tools' shortcuts work again"
-              : "Turn on edit mode: the page gets the tools' shortcut keys"
-          } (${formatShortcut('Alt+Shift+E')})`}
-        >
-          <KeyboardIcon />
-        </button>
-      )}
-      {showLaserPointer && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onToggleLaserPointer}
-          disabled={!canExportPdf}
-          aria-pressed={laserPointerActive}
-          aria-label={laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'}
-          data-tooltip={`${laserPointerActive ? 'Turn off laser pointer' : 'Turn on laser pointer'} (${formatShortcut('I')})`}
-        >
-          <LaserPointerIcon />
-        </button>
-      )}
-      {showPen && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onTogglePen}
-          disabled={!canAnnotate || annotationToolsLocked}
-          aria-pressed={penActive}
-          aria-label={penActive ? 'Turn off pen' : 'Turn on pen'}
-          data-tooltip={`${penActive ? 'Turn off pen' : 'Turn on pen'} (${formatShortcut('P')})`}
-        >
-          <PenIcon />
-        </button>
-      )}
-      {showHighlighter && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onToggleHighlighter}
-          disabled={!canExportPdf || annotationToolsLocked}
-          aria-pressed={highlighterActive}
-          aria-label={highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'}
-          data-tooltip={`${highlighterActive ? 'Turn off highlighter' : 'Turn on highlighter'} (${formatShortcut('J')})`}
-        >
-          <HighlighterIcon />
-        </button>
-      )}
-      {showCommentTool && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onToggleCommentTool}
-          disabled={!canAnnotate || annotationToolsLocked}
-          aria-pressed={commentToolActive}
-          aria-label={commentToolActive ? 'Turn off comments' : 'Turn on comments'}
-          data-tooltip={`${commentToolActive ? 'Turn off comments' : 'Turn on comments'} (${formatShortcut('M')})`}
-        >
-          <CommentIcon />
-        </button>
-      )}
-      {showTextTool && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onToggleTextTool}
-          disabled={!canAnnotate || annotationToolsLocked}
-          aria-pressed={textToolActive}
-          aria-label={textToolActive ? 'Turn off text box' : 'Turn on text box'}
-          data-tooltip={`${textToolActive ? 'Turn off text box' : 'Turn on text box'} (${formatShortcut('E')})`}
-        >
-          <TextBoxIcon />
-        </button>
-      )}
-      {showCrop && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onToggleCrop}
-          disabled={annotationToolsLocked}
-          aria-pressed={cropActive}
-          aria-label={cropActive ? 'Turn off crop' : 'Turn on crop'}
-          data-tooltip={`${cropActive ? 'Turn off crop' : 'Turn on crop'} (${formatShortcut('Shift+X')})`}
-        >
-          <CropIcon />
-        </button>
-      )}
-      {showRevert && (
-        <button
-          type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
-          onClick={onRevertPage}
-          disabled={!canAnnotate || annotationToolsLocked}
-          aria-label="Revert annotations"
-          data-tooltip={`Revert annotations (${formatShortcut('Shift+R')})`}
-        >
-          <RevertIcon />
-        </button>
-      )}
-      {showAnyTool && <span className="page-actions__divider" role="separator" aria-hidden="true" />}
-      <button
-        type="button"
-        className="page-actions__button hover-grow page-actions__button--pdf chrome-tooltip"
-        onClick={onOpenPdfViewer}
-        aria-label="Open PDF viewer"
-        data-tooltip={`Open PDF viewer (${formatShortcut('Shift+P')})`}
-      >
-        PDF
-      </button>
-      <button
-        type="button"
-        className="page-actions__button hover-grow page-actions__button--pdf chrome-tooltip"
-        onClick={onOpenMarkdown}
-        aria-label="Open Markdown notes"
-        data-tooltip={`Open Markdown notes (${formatShortcut('Shift+M')})`}
-      >
-        MD
-      </button>
-      <button
-        type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
-        onClick={onNewTerminal}
-        aria-label="New terminal"
-        data-tooltip={`New terminal (${formatShortcut('>')})`}
-      >
-        {'>_'}
-      </button>
       {showExportMenu && <ExportMenu canExport={canExportMenu} canExportDocuments={canExportDocuments} markdown={markdownExport} />}
-      <button
-        type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
-        onClick={onOpenHistory}
-        aria-label="Open history"
-        data-tooltip={`Open history (${formatShortcut('Shift+H')})`}
-      >
-        <HistoryIcon />
-      </button>
-      <button
-        type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
-        onClick={onOpenBookmarks}
-        aria-label="Open bookmarks"
-        data-tooltip="Open bookmarks"
-      >
-        <BookmarksIcon />
-      </button>
-      <button
-        type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
-        onClick={onOpenSecrets}
-        aria-label="Open secrets"
-        data-tooltip="Open secrets"
-      >
-        <LockIcon />
-      </button>
       <button
         type="button"
         className="page-actions__button hover-grow chrome-tooltip"

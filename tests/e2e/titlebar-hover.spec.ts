@@ -45,10 +45,11 @@ test.describe('titlebar corner', () => {
   });
 
   test('the hidden buttons still work once the pointer reaches them', async ({ window }) => {
-    const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
-    await expect(tabs).toHaveCount(1);
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
-    await expect(tabs).toHaveCount(2);
+    // The "+" opens its menu of new tabs (`NewTabMenu`), drawn by its own overlay over the page.
+    const newTab = window.getByRole('button', { name: 'New tab', exact: true });
+    await expect(newTab).toHaveAttribute('aria-expanded', 'false');
+    await newTab.click();
+    await expect(newTab).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('the clock never takes the pointer, so the window-drag strip above it keeps working', async ({ window }) => {

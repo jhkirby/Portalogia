@@ -5,17 +5,28 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { BatteryIcon, BluetoothIcon, SpeakerIcon, WifiIcon } from '../icons';
+import { FadeSwap } from '../FadeSwap';
 import { batteryLevel, formatBatteryTimeLeft, useBattery } from '../../hooks/useBattery';
-import { displayDeviceName, speakerWaves, useSystemStatus, wifiBars } from '../../hooks/useSystemStatus';
+import {
+  displayDeviceName,
+  formatTemperature,
+  speakerWaves,
+  TEMPERATURE_UNITS,
+  useSystemStatus,
+  wifiBars,
+} from '../../hooks/useSystemStatus';
+
+/** How long each Bluetooth device's name, and each unit of the temperature, shows before the next takes its turn. */
+const TURN_MS = 10_000;
 import { formatClockDate, formatClockTime, formatClockTimeZone, msUntilNextSecond } from '../../lib/clockFormat';
 
 /**
  * The date and time in the window's top-right corner, where the window
  * controls are: the date ("Monday, October 19th") over the 24-hour time with seconds, in
- * the computer's own time zone. To its left, in sections split by thin rules: the sound (the playback device and its
- * volume), then Bluetooth and the Wi-Fi network, then
- * the battery, then the outside temperature beside the clock, since Northstar may cover the whole screen, taskbar
- * included. Shown while the pointer is away from the tab
+ * the computer's own time zone, with the outside temperature before the time. To its left, in sections split by thin
+ * rules: the sound (the playback device and its volume), then Bluetooth (with a connected device's name) and the
+ * Wi-Fi network, then the battery, since Northstar may cover the whole screen, taskbar included. The device names
+ * take turns, as do the temperature's units (°F, °C, then kelvin), each every 10 seconds. Shown while the pointer is away from the tab
  * row; hovering the row swaps it for the window controls and the new-tab
  * button (see titlebar-clock.css and app.css's `.titlebar`).
  */
@@ -24,6 +35,14 @@ export function TitlebarClock() {
   const { audio, wifi, bluetooth, weather } = useSystemStatus();
   const battery = useBattery();
   const batteryTimeLeft = battery ? formatBatteryTimeLeft(battery.secondsLeft) : null;
+  // Counts the turns: the next connected device's name, and the next unit of the temperature, every TURN_MS.
+  const [turn, setTurn] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setTurn((current) => current + 1), TURN_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  const deviceName = bluetooth.names[turn % Math.max(1, bluetooth.names.length)] ?? null;
+  const unit = TEMPERATURE_UNITS[turn % TEMPERATURE_UNITS.length] ?? 'F';
 
   // Wakes at the start of each second, when the shown time changes, rather than polling. A computer back from sleep
   // fires the waiting timer late, and the window regaining focus catches up at once.
@@ -70,12 +89,22 @@ export function TitlebarClock() {
             bluetooth.state === 'off'
               ? 'Bluetooth off'
               : bluetooth.devices > 0
-                ? `Bluetooth on, ${bluetooth.devices} ${bluetooth.devices === 1 ? 'device' : 'devices'} connected`
+                ? `Bluetooth on, ${bluetooth.devices} ${bluetooth.devices === 1 ? 'device' : 'devices'} connected${
+                    bluetooth.names.length > 0 ? `: ${bluetooth.names.join(', ')}` : ''
+                  }`
                 : 'Bluetooth on, no devices connected'
           }
         >
           <BluetoothIcon off={bluetooth.state === 'off'} size={18} />
-          {bluetooth.devices > 0 && <span aria-hidden="true">({bluetooth.devices})</span>}
+          {/* A connected device's name beside the icon; with several, each takes its turn. A device with no name is
+              only counted. */}
+          {deviceName !== null ? (
+            <span aria-hidden="true">
+              <FadeSwap className="titlebar-clock__device" text={deviceName} />
+            </span>
+          ) : (
+            bluetooth.devices > 0 && <span aria-hidden="true">({bluetooth.devices})</span>
+          )}
         </span>
       )}
       {wifi.state !== 'unavailable' && (
@@ -118,21 +147,22 @@ export function TitlebarClock() {
     </span>
   );
 
+  // The date over the time, with the outside temperature before the time, the same size, in its unit of the turn.
   const timeAndWeather = (
-    <>
-      {weather.temperatureF !== null && (
-        <span className="titlebar-clock__temperature" aria-label={`${weather.temperatureF} degrees Fahrenheit outside`}>
-          {weather.temperatureF}°F
-        </span>
-      )}
-      <time className="titlebar-clock__clock" dateTime={now.toISOString()}>
-        <span className="titlebar-clock__date">{formatClockDate(now)}</span>
-        <span className="titlebar-clock__time">
+    <div className="titlebar-clock__clock">
+      <span className="titlebar-clock__date">{formatClockDate(now)}</span>
+      <span className="titlebar-clock__time-row">
+        {weather.temperatureF !== null && (
+          <span className="titlebar-clock__temperature" aria-label={`${weather.temperatureF} degrees Fahrenheit outside`}>
+            <FadeSwap text={formatTemperature(weather.temperatureF, unit)} />
+          </span>
+        )}
+        <time className="titlebar-clock__time" dateTime={now.toISOString()}>
           {formatClockTime(now)}
           <span className="titlebar-clock__zone">{formatClockTimeZone(now)}</span>
-        </span>
-      </time>
-    </>
+        </time>
+      </span>
+    </div>
   );
 
   // A rule only between sections that are showing, so a desktop without a battery doesn't get two in a row.

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -177,7 +177,7 @@ test.describe('pointer modes on a note', () => {
   });
 
   test('the modes are locked on a note tab with no note open', async ({ window }) => {
-    await window.getByRole('button', { name: 'Open Markdown notes' }).click();
+    await window.evaluate(() => window.northstar.createMarkdownTab());
     await expect(panButton(window)).toBeDisabled();
   });
 });

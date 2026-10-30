@@ -1,10 +1,22 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-29
 
-import { useEffect, useRef, useState } from 'react';
-import type { ExportMenuSyncPayload } from '@shared/ipc-contract';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { ExportMenuSyncPayload, NewTabMenuAction } from '@shared/ipc-contract';
+import { BookmarksIcon, GlobeIcon, HistoryIcon, LockIcon } from '../icons';
+
+/** The "+" menu's rows, in order: what each opens, its icon (the toolbar buttons' old faces), and its text. */
+const NEW_TAB_ROWS: readonly { readonly action: NewTabMenuAction; readonly icon: ReactNode; readonly text: string }[] = [
+  { action: 'new-tab', icon: <GlobeIcon size={14} />, text: 'Open New Tab' },
+  { action: 'new-pdf', icon: <span className="new-tab-menu__badge">PDF</span>, text: 'Open PDF Viewer' },
+  { action: 'new-markdown', icon: <span className="new-tab-menu__badge">MD</span>, text: 'Open Markdown Viewer' },
+  { action: 'new-terminal', icon: <span className="new-tab-menu__badge">{'>_'}</span>, text: 'Open Terminal Emulator' },
+  { action: 'new-bookmarks', icon: <BookmarksIcon size={14} />, text: 'Open Bookmark Manager' },
+  { action: 'new-secrets', icon: <LockIcon size={14} />, text: 'Open Secret Manager' },
+  { action: 'new-history', icon: <HistoryIcon size={14} />, text: 'Open History Viewer' },
+];
 
 /**
  * The whole of `export-menu.html`'s page — the export dropdown's rows,
@@ -44,6 +56,31 @@ export function ExportMenuOverlayView() {
 
   if (!payload || !payload.open) {
     return null;
+  }
+
+  // The tab row's "+" menu, drawn by its own copy of this overlay: what a new tab can be, each with its icon.
+  if (payload.kind === 'new-tab') {
+    return (
+      <div ref={menuRef} className="export-menu new-tab-menu" role="menu" aria-label="New tab">
+        {NEW_TAB_ROWS.map((row, index) => (
+          <Fragment key={row.action}>
+            <button
+              type="button"
+              role="menuitem"
+              className="export-menu__item new-tab-menu__item"
+              onClick={() => window.northstarExportMenu.select(row.action)}
+            >
+              <span className="new-tab-menu__icon" aria-hidden="true">
+                {row.icon}
+              </span>
+              {row.text}
+            </button>
+            {/* A plain new tab, then the other kinds of tab. */}
+            {index === 0 && <span className="new-tab-menu__divider" role="separator" aria-hidden="true" />}
+          </Fragment>
+        ))}
+      </div>
+    );
   }
 
   return (

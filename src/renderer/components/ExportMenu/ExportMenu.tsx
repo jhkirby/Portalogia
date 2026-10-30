@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-29
 
 import { useEffect, useRef, useState } from 'react';
 import { ExportIcon } from '../icons';
@@ -30,7 +30,7 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
 
   useEffect(() => {
     if (!isOpen) {
-      window.northstar.syncExportMenu({ open: false, rect: null, canExportDocuments, markdown });
+      window.northstar.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments, markdown });
       return;
     }
     const updateSync = (): void => {
@@ -39,6 +39,7 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
         return;
       }
       window.northstar.syncExportMenu({
+        kind: 'export',
         open: true,
         rect: { top: rect.bottom + DROPDOWN_GAP_PX, left: Math.max(8, rect.left) },
         canExportDocuments,
@@ -52,7 +53,8 @@ export function ExportMenu({ canExport, canExportDocuments, markdown }: ExportMe
 
   // Belt-and-suspenders close on unmount, same as `ColorPicker`.
   useEffect(
-    () => () => window.northstar.syncExportMenu({ open: false, rect: null, canExportDocuments: false, markdown: false }),
+    () => () =>
+      window.northstar.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments: false, markdown: false }),
     [],
   );
 

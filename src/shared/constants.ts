@@ -85,6 +85,15 @@ export const SIDEBAR_WIDTH_PX = 180;
 export const SIDEBAR_COLLAPSED_WIDTH_PX = 40;
 
 /**
+ * Width, in CSS pixels, of the Tools sidebar on the window's right edge (`ToolsBar`): the page tools, each with its
+ * name. The main process narrows each tab's view by this much so it never sits under the sidebar, the way
+ * `SIDEBAR_WIDTH_PX` clears the workspaces on the left. Hidden, it keeps a rail of just the tools' icons,
+ * `SIDEBAR_COLLAPSED_WIDTH_PX` wide like the left one's; in Focus Mode it goes entirely. Must equal
+ * `--size-tools-sidebar-width` in `sizes.css`.
+ */
+export const TOOLS_SIDEBAR_WIDTH_PX = 180;
+
+/**
  * How long the sidebar's show/hide slide takes, in milliseconds, when
  * toggled via `toggleSidebar` (Ctrl+L) — and also how long the chrome's
  * slide-away takes when Focus Mode (Ctrl+Shift+F) toggles, since both
@@ -209,6 +218,12 @@ export const TOOLTIP_OVERLAY_PADDING_Y_PX = 4;
 export const TOOLTIP_OVERLAY_LINE_HEIGHT_PX = 16;
 
 /**
+ * Width, in CSS pixels, of the accent border around `TooltipOverlay`'s box — must equal `tooltip-overlay.css`'s own
+ * `border`. Counted into the box the chrome measures (`computeTooltipOverlayRect`), so the text keeps all its room.
+ */
+export const TOOLTIP_OVERLAY_BORDER_PX = 1;
+
+/**
  * Gap, in CSS pixels, between `TooltipOverlay`'s own box and the element
  * it's anchored above — must equal tooltip.css's plain `::after` tooltip's
  * own `margin-bottom`, the same visual relationship this overlay is
@@ -240,6 +255,14 @@ export const EXPORT_MENU_WIDTH_PX = 112;
 export const EXPORT_MENU_HEIGHT_PX = 74;
 /** A Markdown tab's export menu has a third row (PDF, .md, .txt): 3 x 32px rows plus the same padding and border. */
 export const EXPORT_MENU_MARKDOWN_HEIGHT_PX = 106;
+
+/**
+ * Size of the tab row's "+" menu (`NewTabMenu`, drawn by the same overlay as the export menu): a new tab, a rule,
+ * then the six other kinds of tab. Height = 7 x 32px rows + a 9px rule (1px line, 4px either side) + 2 x 4px padding +
+ * 2 x 1px border; must match export-menu.css.
+ */
+export const NEW_TAB_MENU_WIDTH_PX = 224;
+export const NEW_TAB_MENU_HEIGHT_PX = 243;
 
 /**
  * The name of the function a Markdown tab's own page defines on `window`

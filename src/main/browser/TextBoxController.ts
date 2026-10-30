@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-04
+// Last Modified: 2026-10-29
 
 import { ipcMain, type WebContents } from 'electron';
 import { z } from 'zod';
@@ -145,6 +145,14 @@ export class TextBoxController {
   }
 
   /** Forgets a closed tab's in-memory state; saved boxes are keyed by URL and stay. */
+  /**
+   * @param url A page's address.
+   * @returns Whether that page has any saved text boxes — what Revert would take off it.
+   */
+  public hasMarksFor(url: string): boolean {
+    return this.store.listFor(url).length > 0;
+  }
+
   public disposeTab(tabId: string): void {
     this.tabs.delete(tabId);
   }

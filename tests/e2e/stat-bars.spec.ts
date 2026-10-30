@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -102,7 +102,7 @@ test.describe('the PDF stat bar', () => {
     await electronApp.evaluate(({ dialog }, path) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog;
     }, pdfPath);
-    await window.getByRole('button', { name: 'Open PDF viewer' }).click();
+    await window.evaluate(() => window.northstar.createPdfTab());
     await window.locator('.pdf-toolbar').getByRole('button', { name: /^Open/ }).first().click();
 
     const pdf = await findTabPage(electronApp, 'pdf.html');

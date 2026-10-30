@@ -4,8 +4,11 @@
 // Last Modified: 2026-10-29
 
 interface MistProps {
-  /** Which area it fills: the tab row (`row`, wisps drifting along it) or the workspace sidebar (`rail`, up and down it). */
-  readonly variant: 'row' | 'rail';
+  /**
+   * Which area it fills: the tab row (`row`, wisps drifting along it), the workspace sidebar (`rail`, up and down
+   * it) or the Tools sidebar (`tools`, up and down it too, on timings of its own).
+   */
+  readonly variant: 'row' | 'rail' | 'tools';
 }
 
 /** How many wisps each area has: enough to never look empty, few enough to stay faint. */

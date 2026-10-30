@@ -313,25 +313,21 @@ window.addEventListener('focusin', reportEditableFocus, true);
 // `focusout` fires before the next element has focus, so look once focus has settled.
 window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
 
-// Escape takes the caret out of a text box, so the shortcuts that stand aside while one has it work again, and gives
-// the keyboard back to the chrome (Escape there hands it back, the caret returning to the box). Decided once the
-// page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a popup) called
-// `preventDefault`, and then the page keeps the keyboard for the next press.
+// Escape gives the keyboard back to the chrome, so the app's shortcuts work again; Escape there hands it back. A text
+// box (the note's editor among them) keeps its caret where it was rather than being left, so coming back puts the
+// cursor in the same place. Decided once the page's own handlers have had the key: one that used Escape itself
+// (closing a suggestion list or a popup) called `preventDefault`, and then the page keeps the keyboard for the next
+// press.
 window.addEventListener(
   'keydown',
   (event) => {
     if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
       return;
     }
-    const element = document.activeElement;
     setTimeout(() => {
-      if (event.defaultPrevented) {
-        return;
+      if (!event.defaultPrevented) {
+        ipcRenderer.send(TabReleaseKeyboard);
       }
-      if (isEditableElement(element) && document.activeElement === element) {
-        element.blur();
-      }
-      ipcRenderer.send(TabReleaseKeyboard);
     }, 0);
   },
   true,

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-26
+// Last Modified: 2026-10-29
 
 import { ipcMain, type WebContents } from 'electron';
 import { z } from 'zod';
@@ -163,6 +163,14 @@ export class CommentController {
   }
 
   /** Removes a tab's in-memory comment state — call when a tab closes. Never touches `CommentStore`: persisted comments are keyed by URL, not tab id. */
+  /**
+   * @param url A page's address.
+   * @returns Whether that page has any saved comments — what Revert would take off it.
+   */
+  public hasMarksFor(url: string): boolean {
+    return this.store.listFor(url).length > 0;
+  }
+
   public disposeTab(tabId: string): void {
     this.tabs.delete(tabId);
   }

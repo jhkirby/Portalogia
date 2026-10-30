@@ -70,8 +70,3 @@
   color: var(--color-accent-text);
 }
 
-.page-actions__button--pdf {
-  padding: 0 var(--size-spacing-sm);
-  font-size: var(--size-font-sm);
-  font-weight: 600;
-}

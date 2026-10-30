@@ -308,6 +308,12 @@ export const IpcChannel = {
   ColorPickerCloseRequested: 'color-picker:close-requested',
   ExportMenuSync: 'export-menu:sync',
   ExportMenuSelect: 'export-menu:select',
+  /** Chrome → main: the tab row's "+" menu opened, moved or closed (drawn by a second menu overlay). */
+  NewTabMenuSync: 'new-tab-menu:sync',
+  /** Main → chrome: close the "+" menu (a row was picked, Escape, or a click on the page). */
+  NewTabMenuCloseRequested: 'new-tab-menu:close-requested',
+  /** Main → chrome: Revert annotations was asked for by its shortcut; the chrome confirms it, as it does the button. */
+  TabsRevertRequested: 'tabs:revert-requested',
   ExportMenuCloseRequested: 'export-menu:close-requested',
   AccentColorSet: 'accent-color:set',
   SplitEnter: 'split:enter',
@@ -329,6 +335,8 @@ export const IpcChannel = {
   // `contents.zoomLevel` from main.
   ZoomApply: 'zoom:apply',
   SidebarToggle: 'sidebar:toggle',
+  /** Chrome → main: show the Tools sidebar in full, or hide it to its rail of icons. */
+  ToolsSidebarToggle: 'tools-sidebar:toggle',
   /** Chrome → main: Escape in the chrome, with nothing there using it — the active tab's page takes the keyboard. */
   TabsFocusContent: 'tabs:focus-content',
   /** PDF or Markdown page → main: Escape with nothing in the page using it — the keyboard goes back to the chrome. */
@@ -501,6 +509,8 @@ export interface BluetoothStatus {
   readonly state: 'on' | 'off' | 'unavailable';
   /** How many devices are connected; 0 unless `on`. */
   readonly devices: number;
+  /** The connected devices' names, as Windows shows them, in name order; those with no name are counted but not listed. */
+  readonly names: readonly string[];
 }
 
 /** The outside temperature where the computer is, for the titlebar. */
@@ -573,6 +583,19 @@ export interface ColorPickerSyncPayload {
 /** What a row in the export dropdown does: save the page as a PDF, save its HTML/CSS/JS files, or (Markdown tabs) save the note as `.md` or `.txt`. */
 export type ExportMenuAction = 'pdf' | 'documents' | 'markdown' | 'text';
 
+/** A row of the tab row's "+" menu (`NewTabMenu`): which kind of tab it opens. */
+export type NewTabMenuAction =
+  | 'new-tab'
+  | 'new-pdf'
+  | 'new-markdown'
+  | 'new-terminal'
+  | 'new-bookmarks'
+  | 'new-secrets'
+  | 'new-history';
+
+/** A row picked in either dropdown the menu overlay draws (`ExportMenuOverlay`): the export menu's or the "+" menu's. */
+export type MenuOverlayAction = ExportMenuAction | NewTabMenuAction;
+
 /**
  * What `ExportMenu` pushes to its dedicated overlay `WebContentsView` on
  * every open/close — see `syncExportMenu` and `ExportMenuOverlay`. `rect`
@@ -580,6 +603,8 @@ export type ExportMenuAction = 'pdf' | 'documents' | 'markdown' | 'text';
  * (`EXPORT_MENU_WIDTH_PX`/`EXPORT_MENU_HEIGHT_PX`).
  */
 export interface ExportMenuSyncPayload {
+  /** Which menu: the toolbar's export menu, or the tab row's "+" menu (`NewTabMenu`). The same overlay draws either. */
+  readonly kind: 'export' | 'new-tab';
   readonly open: boolean;
   readonly rect: { readonly top: number; readonly left: number } | null;
   /** False for a terminal tab, whose page is our own UI rather than content worth saving — the documents row is disabled. */
@@ -872,6 +897,12 @@ export interface NorthstarApi {
 
   /** Pushes `ExportMenu`'s open/closed state and position to its overlay `WebContentsView` (see `ExportMenuOverlay`). Fire-and-forget, same as `syncColorPicker`. */
   syncExportMenu(payload: ExportMenuSyncPayload): void;
+  /** Pushes the tab row's "+" menu's state down to its overlay, as `syncExportMenu` does the export menu's. */
+  syncNewTabMenu(payload: ExportMenuSyncPayload): void;
+  /** Subscribes to main asking the "+" menu to close. Returns an unsubscribe function. */
+  onNewTabMenuCloseRequested(listener: () => void): () => void;
+  /** Subscribes to Revert annotations' shortcut, which the chrome confirms before reverting. Returns an unsubscribe function. */
+  onRevertRequested(listener: () => void): () => void;
   /** Subscribes to the overlay asking to close — an Escape typed inside it, a click on the live page, or a row being chosen. */
   onExportMenuCloseRequested(listener: () => void): () => void;
 
@@ -880,6 +911,8 @@ export interface NorthstarApi {
 
   /** Shows or hides the workspace sidebar — `WorkspaceBar`'s own `.sidebar__toggle` button doing the same thing Ctrl+L already does. */
   toggleSidebar(): Promise<IpcResult<BrowserState>>;
+  /** Shows the Tools sidebar in full, or hides it to its rail of icons; the page beside it resizes to match. */
+  toggleToolsSidebar(): Promise<IpcResult<BrowserState>>;
   /** Hands the keyboard to the active tab's page (a web page, PDF, note or terminal): Escape pressed in the chrome. */
   focusContent(): Promise<IpcResult<null>>;
 
@@ -1168,7 +1201,7 @@ export interface NorthstarExportMenuApi {
   /** Subscribes to the chrome's latest `syncExportMenu` push. */
   onSync(listener: (payload: ExportMenuSyncPayload) => void): () => void;
   /** Reports the chosen row. Fire-and-forget. */
-  select(action: ExportMenuAction): void;
+  select(action: MenuOverlayAction): void;
   /** Reports an Escape keypress back to the chrome, which owns closing the menu. Fire-and-forget. */
   requestClose(): void;
 }

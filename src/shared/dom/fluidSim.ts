@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 /**
  * The fluid that fills an empty tab (a note or PDF tab with nothing open, and the new-tab page): a small
@@ -32,7 +32,15 @@ export interface FluidOptions {
   readonly palette: () => readonly FluidColor[];
   /** What takes the pointer (moves and clicks); the canvas's own host when left out. */
   readonly events?: EventTarget;
+  /**
+   * Whether the fluid is on: shown, moving, and stirred by the pointer. Asked every frame. Off, it fades out, stops
+   * (costing nothing), and lets the pointer — the right button included — through untouched. Always on when left out.
+   */
+  readonly active?: () => boolean;
 }
+
+/** How long the fluid takes to fade in or out as it's turned on or off (`FluidOptions.active`). */
+const FADE_MS = 350;
 
 /** Simulation grid (velocity, pressure) along the short side: low, as the fluid's motion is smooth anyway. */
 const SIM_RESOLUTION = 128;
@@ -666,7 +674,12 @@ export function startFluid(host: HTMLElement, options: FluidOptions): () => void
       y: 1 - (event.clientY - rect.top) / Math.max(1, rect.height),
     };
   };
+  const isActive = options.active ?? ((): boolean => true);
   const onMove = (event: Event): void => {
+    if (!isActive()) {
+      pointer.inside = false;
+      return;
+    }
     const { x, y } = toUv(event as PointerEvent);
     if (pointer.inside) {
       pointer.dx += (x - pointer.x) * SPLAT_FORCE * Math.max(1, aspect());
@@ -696,14 +709,19 @@ export function startFluid(host: HTMLElement, options: FluidOptions): () => void
       sucking = false;
     }
   };
-  // The right button pulls the fluid instead of opening a menu.
+  // The right button pulls the fluid instead of opening a menu — while the fluid is on.
   const onContextMenu = (event: Event): void => {
-    event.preventDefault();
+    if (isActive()) {
+      event.preventDefault();
+    }
   };
   const rippleTimers = new Set<number>();
   /** Left clicks' blasts still driving the smoke out: where, and when each began. */
   const blasts: { x: number; y: number; start: number }[] = [];
   const onDown = (event: Event): void => {
+    if (!isActive()) {
+      return;
+    }
     const pointerEvent = event as PointerEvent;
     const { x, y } = toUv(pointerEvent);
     if (x < 0 || x > 1 || y < 0 || y > 1) {
@@ -733,7 +751,7 @@ export function startFluid(host: HTMLElement, options: FluidOptions): () => void
   // The wheel turns the fluid around the pointer: up clockwise, down anticlockwise. Ctrl+wheel is the page's zoom.
   const onWheel = (event: Event): void => {
     const wheel = event as WheelEvent;
-    if (wheel.ctrlKey) {
+    if (wheel.ctrlKey || !isActive()) {
       return;
     }
     const { x, y } = toUv(wheel);
@@ -754,12 +772,32 @@ export function startFluid(host: HTMLElement, options: FluidOptions): () => void
   events.addEventListener('wheel', onWheel, { passive: true });
 
   // ── The loop ──
+  // Off (`active`), the canvas fades out, then the simulation stops until it's on again.
+  canvas.style.transition = `opacity ${FADE_MS}ms ease`;
+  let shown = true;
+  let hiddenSince = 0;
   let frame = 0;
   let last = performance.now();
   const loop = (now: number): void => {
     frame = requestAnimationFrame(loop);
     const dt = Math.min((now - last) / 1000, 1 / 30);
     last = now;
+    const on = isActive();
+    if (on !== shown) {
+      shown = on;
+      canvas.style.opacity = on ? '1' : '0';
+      hiddenSince = now;
+      if (!on) {
+        // What the pointer was doing goes with it.
+        pointer.moved = false;
+        pointer.inside = false;
+        sucking = false;
+        blasts.length = 0;
+      }
+    }
+    if (!on && now - hiddenSince > FADE_MS) {
+      return;
+    }
     if (fitCanvas()) {
       release();
       allocate();

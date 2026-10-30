@@ -1,10 +1,11 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-26
+// Last Modified: 2026-10-29
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
+import { notifyAnnotationsChanged } from './annotationChanges';
 
 const rgbFileSchema = z.object({
   r: z.number().int().min(0).max(255),
@@ -88,6 +89,8 @@ export class CommentStore {
   }
 
   private scheduleSave(): void {
+    // Every change comes through here: whoever shows whether there are marks hears of it.
+    notifyAnnotationsChanged();
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }

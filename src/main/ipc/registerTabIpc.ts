@@ -245,6 +245,14 @@ export function registerTabIpc(
     }
   });
 
+  ipcMain.handle(IpcChannel.ToolsSidebarToggle, (event): IpcResult<BrowserState> => {
+    try {
+      return { ok: true, data: resolveTabManager(event).toggleToolsSidebar() };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   ipcMain.handle(IpcChannel.SidebarToggle, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).toggleSidebar() };
@@ -789,6 +797,13 @@ export function registerTabIpc(
     const parsed = exportMenuSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
       resolveTabManager(event).syncExportMenu(parsed.data);
+    }
+  });
+  // The tab row's "+" menu, drawn by a second menu overlay of its own (`TabManager.syncNewTabMenu`).
+  ipcMain.on(IpcChannel.NewTabMenuSync, (event: IpcMainEvent, rawRequest: unknown) => {
+    const parsed = exportMenuSyncRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      resolveTabManager(event).syncNewTabMenu(parsed.data);
     }
   });
   ipcMain.on(IpcChannel.ColorPickerSync, (event: IpcMainEvent, rawRequest: unknown) => {

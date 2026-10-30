@@ -38,6 +38,9 @@
      see its own comment there for why the sidebar collapses to this
      instead of straight to 0. */
   --size-sidebar-collapsed-width: 40px;
+  /* Must equal TOOLS_SIDEBAR_WIDTH_PX in src/shared/constants.ts — main narrows the tab's view by this much on the
+     right, so it never sits under the Tools sidebar. Hidden, it keeps --size-sidebar-collapsed-width, like the left. */
+  --size-tools-sidebar-width: 180px;
   /* Must equal SIDEBAR_TOGGLE_DURATION_MS in src/shared/constants.ts —
      shared by the sidebar's slide (Ctrl+L) and the chrome's Focus Mode
      slide (Ctrl+Shift+F, see `.app--focus-mode` in app.css). The main

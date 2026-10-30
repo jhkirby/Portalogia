@@ -1,0 +1,222 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── TOOLS SIDEBAR ────────────────────────────────────────────────────── */
+/* The page tools on the window's right edge (`ToolsBar`): the workspace sidebar (workspace-bar.css) mirrored, its
+   heading (`.sidebar__header`, `.sidebar__title`, `.sidebar__toggle`) shared from there. The last of `.main-row`'s
+   three, after the tab area; main narrows the tab's own view by this same width (`TabManager.targetRightInset`), so
+   the page never sits under it. */
+
+.tools-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: var(--size-tools-sidebar-width);
+  min-height: 0;
+  box-sizing: border-box;
+
+  background: var(--color-chrome-bg);
+  border-left: 1px solid var(--color-chrome-border);
+
+  /* The same slide as the workspace sidebar's, which main matches frame by frame on the page's right edge. */
+  transition:
+    width var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    border-color var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* Hidden: a rail of just the tools' icons, as narrow as the workspace sidebar's. */
+.tools-sidebar--hidden {
+  width: var(--size-sidebar-collapsed-width);
+}
+
+/* Focus Mode: gone entirely, its edge line with it. */
+.tools-sidebar--focus-mode {
+  width: 0;
+  border-left-color: transparent;
+}
+
+/* Everything in the sidebar; what no longer fits as it narrows clips here. */
+.tools-sidebar__inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--size-spacing-sm);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.tools-sidebar--hidden .tools-sidebar__inner {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* The heading mirrored: the show/hide button first, on the outer side toward the page, then the title, against the
+   sidebar's right edge in line with the tools' icons. The title slides away as the sidebar narrows, as on the left. */
+.tools-sidebar__header .sidebar__title {
+  padding-left: 0;
+  padding-right: var(--size-spacing-sm);
+
+  text-align: right;
+
+  transition: padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.tools-sidebar--hidden .tools-sidebar__header .sidebar__title {
+  padding-right: 0;
+}
+
+/* ── The tools ── */
+
+.tools-sidebar__list {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  gap: var(--size-spacing-xs);
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+}
+
+.tools-sidebar__list::-webkit-scrollbar {
+  display: none;
+}
+
+/* A tool: its name, then its icon at the row's right end — a workspace pill's look, with nothing behind it at rest. */
+.tools-sidebar__tool {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+  box-sizing: border-box;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.tools-sidebar__tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The name takes what the icon leaves: as the sidebar narrows it's squeezed away first, and the icon keeps its place
+   at the right. */
+.tools-sidebar__name {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A fixed square, so the icons line up down the right edge whatever their shape. */
+.tools-sidebar__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.tools-sidebar__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Hidden, a row is just its icon, centred in the row (and so in its "on" fill), every icon on one line down the rail
+   with the show/hide button's above them. The name and the gap before the icon both go, or they'd push the icon off
+   centre. */
+.tools-sidebar--hidden .tools-sidebar__tool {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.tools-sidebar--hidden .tools-sidebar__name {
+  display: none;
+}
+
+/* Between Pan and Select, which only move the pointer, and the tools after them, which mark the page. */
+.tools-sidebar__divider {
+  flex-shrink: 0;
+  height: 1px;
+  margin: var(--size-spacing-xs) var(--size-spacing-sm);
+
+  background: var(--color-chrome-border);
+}
+
+.tools-sidebar--hidden .tools-sidebar__divider {
+  margin-left: 2px;
+  margin-right: 2px;
+}
+
+/* A tool that's on: the selected workspace's fill (workspace-bar.css), with its icon in the accent. */
+.tools-sidebar__tool--on {
+  color: var(--color-tab-text-active);
+}
+
+.tools-sidebar__tool--on .tools-sidebar__icon {
+  color: var(--color-accent-text);
+}
+
+/* Under the row's content: the "on" fill and the click ripples, clipped to the row's rounded shape. */
+.tools-sidebar__effects {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+
+  border-radius: inherit;
+
+  pointer-events: none;
+}
+
+/* The fill leaves at once, and grows in on the tool turned on, as the selected workspace's does. */
+.tools-sidebar__on-fill {
+  position: absolute;
+  inset: 0;
+
+  background: var(--color-tab-bg-active);
+  border-radius: inherit;
+
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.tools-sidebar__tool--on .tools-sidebar__on-fill {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity 140ms ease-out;
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .tools-sidebar__tool--on .tools-sidebar__on-fill {
+    transition: none;
+  }
+}

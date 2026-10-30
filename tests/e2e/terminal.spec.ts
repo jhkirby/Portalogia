@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-22
+// Last Modified: 2026-10-29
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,7 @@ test.describe('terminal', () => {
     // it appears rather than guessing a fixed delay.
     const [terminalPage] = await Promise.all([
       electronApp.waitForEvent('window', { predicate: (page) => page.url().includes('terminal.html') }),
-      window.getByRole('button', { name: 'New terminal' }).click(),
+      window.evaluate(() => window.northstar.createTerminalTab()),
     ]);
     await terminalPage.waitForLoadState('domcontentloaded');
 

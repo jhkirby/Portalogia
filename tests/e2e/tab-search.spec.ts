@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-05
+// Last Modified: 2026-10-29
 
 import { test, expect } from './fixtures';
 
@@ -24,7 +24,7 @@ test.describe('tab search', () => {
   });
 
   test('lists every tab with its workspace, and filters as you type', async ({ window, server }) => {
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
@@ -47,7 +47,7 @@ test.describe('tab search', () => {
   });
 
   test('Up/Down move the highlight and Enter jumps to that tab', async ({ window, server }) => {
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
@@ -73,7 +73,7 @@ test.describe('tab search', () => {
   });
 
   test('clicking a row jumps to that tab', async ({ window, server }) => {
-    await window.getByRole('button', { name: 'New tab', exact: true }).click();
+    await window.evaluate(() => window.northstar.createTab());
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');

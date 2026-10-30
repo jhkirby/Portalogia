@@ -688,6 +688,8 @@ export const zoomWheelRequestSchema = z.object({
 });
 
 export const exportMenuSyncRequestSchema = z.object({
+  /** Defaulted so a sync from before the "+" menu shared the overlay still parses. */
+  kind: z.enum(['export', 'new-tab']).default('export'),
   open: z.boolean(),
   rect: z.object({ top: z.number(), left: z.number() }).nullable(),
   canExportDocuments: z.boolean(),
@@ -696,7 +698,19 @@ export const exportMenuSyncRequestSchema = z.object({
 });
 
 export const exportMenuSelectRequestSchema = z.object({
-  action: z.enum(['pdf', 'documents', 'markdown', 'text']),
+  action: z.enum([
+    'pdf',
+    'documents',
+    'markdown',
+    'text',
+    'new-tab',
+    'new-pdf',
+    'new-markdown',
+    'new-terminal',
+    'new-bookmarks',
+    'new-secrets',
+    'new-history',
+  ]),
 });
 
 export const themeSetRequestSchema = z.object({

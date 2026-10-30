@@ -116,8 +116,10 @@
   --color-selection-bg: color-mix(in srgb, rgb(var(--color-accent-rgb)) 12%, white);
   --color-accent-text: rgb(var(--color-accent-rgb));
 
-  --color-tooltip-bg: #202124;
-  --color-tooltip-text: #ffffff;
+  /* Tooltips: white on the light theme, dark on the dark, each outlined in the accent (`--color-tooltip-border`). */
+  --color-tooltip-bg: #ffffff;
+  --color-tooltip-text: #202124;
+  --color-tooltip-border: var(--color-accent-text);
 
   /* A hovered sidebar or nav button's glow (`.hover-glow`): a light glow can't show on this theme's light chrome, so
      it's the accent, softened. */
@@ -173,8 +175,9 @@
   --color-selection-bg: #3c4043;
   --color-accent-text: rgb(var(--color-accent-rgb));
 
-  --color-tooltip-bg: #5f6368;
-  --color-tooltip-text: #ffffff;
+  --color-tooltip-bg: #2a2b2e;
+  --color-tooltip-text: #e8eaed;
+  --color-tooltip-border: var(--color-accent-text);
 
   /* A hovered sidebar or nav button's glow (`.hover-glow`): the same soft white as the workspaces' shimmer. */
   --color-hover-glow: rgba(255, 255, 255, 0.55);

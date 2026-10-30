@@ -49,9 +49,10 @@ export class TooltipOverlay {
     this.view.webContents.on('will-navigate', (event) => event.preventDefault());
     this.view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-    // Matches `--size-radius-sm` (sizes.css), same reasoning as
-    // `SuggestionsOverlay.setBorderRadius`.
-    this.view.setBorderRadius(6);
+    // Transparent, with the rounded box and its accent border drawn by tooltip-overlay.css, rather than a native
+    // `setBorderRadius`: the native clip cuts through a square CSS border and left gaps at its corners (the export
+    // menu's overlay does the same, for the same reason).
+    this.view.setBackgroundColor('#00000000');
 
     const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
     if (!app.isPackaged && devServerUrl) {

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { test, expect } from '@playwright/test';
 import { parseWlanInterfaces, WifiMonitor } from '../../src/main/platform/WifiMonitor';
@@ -121,7 +121,7 @@ test.describe('parsePnputilBluetooth', () => {
       pnputilBlock('BTHENUM\\Dev_7415F5121579\\7&38d62c91&1&BluetoothDevice_7415F5121579', 'AirPods Pro', true),
       pnputilBlock('BTHENUM\\Dev_44A10E2CF0BF\\7&38d62c91&1&BluetoothDevice_44A10E2CF0BF', 'Phone', false),
     );
-    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 2 });
+    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 2, names: ['AirPods Pro', 'WH-1000XM5'] });
   });
 
   test('a device connected over both Classic and LE counts once', () => {
@@ -130,7 +130,7 @@ test.describe('parsePnputilBluetooth', () => {
       pnputilBlock('BTHENUM\\Dev_44A10E2CF0BF\\7&38d62c91&1&BluetoothDevice_44A10E2CF0BF', 'Phone', true, '{a}'),
       pnputilBlock('BTHLE\\Dev_4c0f60f12c59\\7&2b0ebec2&1&4c0f60f12c59', 'Phone', true, '{b}'),
     );
-    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 1 });
+    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 1, names: ['Phone'] });
   });
 
   test("a device's services and the adapter itself aren't counted, even when marked connected", () => {
@@ -142,7 +142,7 @@ test.describe('parsePnputilBluetooth', () => {
         true,
       ),
     );
-    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 0 });
+    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 0, names: [] });
   });
 
   test('on, with paired devices but none connected, counts none', () => {
@@ -150,20 +150,21 @@ test.describe('parsePnputilBluetooth', () => {
       ADAPTER,
       pnputilBlock('BTHENUM\\Dev_8099E750CC65\\7&38d62c91&1&BluetoothDevice_8099E750CC65', 'WH-1000XM5', false),
     );
-    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 0 });
+    expect(parsePnputilBluetooth(output)).toEqual({ state: 'on', devices: 0, names: [] });
   });
 
   test("the radio turned off leaves only the adapter's own node, and reads as off", () => {
     const output = pnputilOutput(pnputilBlock('USB\\VID_8087&PID_0033\\5&2cb48be1&0&10', 'Intel(R) Wireless Bluetooth(R)', false));
-    expect(parsePnputilBluetooth(output)).toEqual({ state: 'off', devices: 0 });
+    expect(parsePnputilBluetooth(output)).toEqual({ state: 'off', devices: 0, names: [] });
   });
 
   test('no Bluetooth devices at all (no adapter) is unavailable', () => {
     expect(parsePnputilBluetooth('Microsoft PnP Utility\r\n\r\nNo devices were found on the system.\r\n')).toEqual({
       state: 'unavailable',
       devices: 0,
+      names: [],
     });
-    expect(parsePnputilBluetooth('')).toEqual({ state: 'unavailable', devices: 0 });
+    expect(parsePnputilBluetooth('')).toEqual({ state: 'unavailable', devices: 0, names: [] });
   });
 });
 

@@ -1,12 +1,18 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-29
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
-import { EXPORT_MENU_HEIGHT_PX, EXPORT_MENU_MARKDOWN_HEIGHT_PX, EXPORT_MENU_WIDTH_PX } from '@shared/constants';
-import { IpcChannel, type ExportMenuAction, type ExportMenuSyncPayload } from '@shared/ipc-contract';
+import {
+  EXPORT_MENU_HEIGHT_PX,
+  EXPORT_MENU_MARKDOWN_HEIGHT_PX,
+  EXPORT_MENU_WIDTH_PX,
+  NEW_TAB_MENU_HEIGHT_PX,
+  NEW_TAB_MENU_WIDTH_PX,
+} from '@shared/constants';
+import { IpcChannel, type ExportMenuSyncPayload, type MenuOverlayAction } from '@shared/ipc-contract';
 import { exportMenuSelectRequestSchema } from '@shared/ipc-schemas';
 
 /**
@@ -32,7 +38,7 @@ export class ExportMenuOverlay {
    */
   public constructor(
     private readonly window: BrowserWindow,
-    onSelect: (action: ExportMenuAction) => void,
+    onSelect: (action: MenuOverlayAction) => void,
     private readonly onCloseRequested: () => void,
   ) {
     this.handleActiveViewFocused = () => this.onCloseRequested();
@@ -95,11 +101,17 @@ export class ExportMenuOverlay {
     }
     this.watchActiveView(activeTabView);
 
+    // Each menu's fixed size: the "+" menu's (`NewTabMenu`), or the export menu's, a row longer on a note.
     this.view.setBounds({
       x: Math.round(payload.rect.left),
       y: Math.round(payload.rect.top),
-      width: EXPORT_MENU_WIDTH_PX,
-      height: payload.markdown ? EXPORT_MENU_MARKDOWN_HEIGHT_PX : EXPORT_MENU_HEIGHT_PX,
+      width: payload.kind === 'new-tab' ? NEW_TAB_MENU_WIDTH_PX : EXPORT_MENU_WIDTH_PX,
+      height:
+        payload.kind === 'new-tab'
+          ? NEW_TAB_MENU_HEIGHT_PX
+          : payload.markdown
+            ? EXPORT_MENU_MARKDOWN_HEIGHT_PX
+            : EXPORT_MENU_HEIGHT_PX,
     });
 
     this.view.webContents.send(IpcChannel.ExportMenuSync, payload);

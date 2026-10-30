@@ -103,9 +103,37 @@
   --battery-fill: var(--color-battery-critical);
 }
 
+/* Before the time, in the same row under the date and at the same size. */
+.titlebar-clock__time-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-spacing-sm);
+}
+
 .titlebar-clock__temperature {
   font-size: var(--size-font-md);
   font-weight: 600;
+}
+
+/* A text that takes turns (`FadeSwap`): the temperature's unit, a Bluetooth device's name. The old one fades out, then
+   the new one in, each over 220ms (`FADE_MS` in FadeSwap.tsx). */
+.fade-swap {
+  transition: opacity 220ms ease-in-out;
+}
+
+.fade-swap--out {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-swap {
+    transition: none;
+  }
+}
+
+/* A connected Bluetooth device's name, beside the icon; it shows in full, as the playback device's does. */
+.titlebar-clock__device {
+  white-space: nowrap;
 }
 
 .titlebar-clock__date {

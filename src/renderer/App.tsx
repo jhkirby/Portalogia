@@ -9,8 +9,9 @@ import { HOME_URL } from '@shared/constants';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { ClearHistoryPopup } from './components/ClearHistoryPopup';
-import { DeleteNotePopup } from './components/DeleteNotePopup';
+import { ConfirmWordPopup } from './components/ConfirmWordPopup';
 import { Mist } from './components/Mist';
+import { ToolsBar } from './components/ToolsBar';
 import { ContentSnapshot } from './components/ContentSnapshot';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
@@ -36,7 +37,7 @@ import { useTheme } from './hooks/useTheme';
 import { usePointerGlow } from './hooks/usePointerGlow';
 
 /** The popups that cover the page, each closed with an animation (see `PopupTransition`). */
-type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote';
+type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote' | 'revert';
 
 /** The longest a popup's closing motion may take before it closes anyway (it can't end while the window is hidden). */
 const POPUP_EXIT_FALLBACK_MS = 500;
@@ -88,8 +89,10 @@ export function App() {
     focusMode,
     contentFocused,
     sidebarVisible,
+    toolsSidebarVisible,
+    toggleToolsSidebar,
+    canRevert,
     grabbedTabId,
-    createTab,
     closeTab,
     activateTab,
     selectedTabIds,
@@ -109,15 +112,10 @@ export function App() {
     goForward,
     reload,
     stop,
-    createPdfTab,
-    createHistoryTab,
-    createBookmarksTab,
-    createSecretsTab,
     openPdfFile,
     setPointerMode,
     toggleEditMode,
     renamePdfFile,
-    createMarkdownTab,
     openMarkdownFile,
     newMarkdownFile,
     closeMarkdownFile,
@@ -128,7 +126,6 @@ export function App() {
     addMarkdownBookmark,
     openMarkdownPath,
     openMarkdownBookmark,
-    createTerminalTab,
     revertPage,
     createWorkspace,
     switchWorkspace,
@@ -511,6 +508,41 @@ export function App() {
     });
   };
 
+  // Revert annotations takes every mark off the page, so it's confirmed the same way: by typing "revert". The Tools
+  // sidebar's Revert opens it, and so does its shortcut (main asks, `onRevertRequested`).
+  const [revertPopup, setRevertPopup] = useState<{ readonly tabId: string; readonly previewImage: string | null } | null>(null);
+
+  const openRevert = (): void => {
+    const tabId = activeTabId;
+    if (revertPopup || !tabId) {
+      return;
+    }
+    setRevertPopup({ tabId, previewImage: null });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setRevertPopup((current) => (current ? { ...current, previewImage } : current));
+    });
+  };
+
+  const closeRevert = (confirmed: boolean): void => {
+    if (!revertPopup) {
+      return;
+    }
+    const { tabId } = revertPopup;
+    closePopupAnimated('revert', () => {
+      endTabPreview(tabId);
+      setRevertPopup(null);
+      // Reverted once the page is back in view, so its marks can be seen going.
+      if (confirmed) {
+        revertPage(tabId);
+      }
+    });
+  };
+
+  // The latest `openRevert` for the shortcut's listener, which subscribes once.
+  const openRevertRef = useRef(openRevert);
+  openRevertRef.current = openRevert;
+  useEffect(() => window.northstar.onRevertRequested(() => openRevertRef.current()), []);
+
   const closeDeleteNote = (confirmed: boolean): void => {
     if (!deleteNotePopup) {
       return;
@@ -678,7 +710,6 @@ export function App() {
               onClose={closeTab}
               onReorder={moveTab}
               grabbedTabId={grabbedTabId}
-              onNewTab={() => createTab()}
               onDragEndOutside={tearOffTab}
               onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
               onTearOffEnd={tearOffTabEnd}
@@ -762,38 +793,9 @@ export function App() {
             )}
             {secondaryTab && <SplitIndicator secondaryTab={secondaryTab} onExit={exitSplitView} />}
             <PageActions
-              canActOnPage={browserTab !== null}
-              canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
-              // Marks go on the formatted, read-only note, so editing or raw text locks them too.
-              annotationToolsLocked={
-                isHome ||
-                ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName === null) ||
-                (activeTab?.kind === 'markdown' && (activeTab.mode === 'edit' || activeTab.display === 'raw'))
-              }
-              canExportPdf={activeTabId !== null}
               canZoom={activeTabId !== null}
               zoomPercent={zoomPercent}
               focusMode={focusMode}
-              laserPointerActive={laserPointerActive}
-              highlighterActive={highlighterActive}
-              commentToolActive={commentToolActive}
-              textToolActive={textToolActive}
-              penActive={penActive}
-              cropActive={cropActive}
-              showCrop={activeTab?.kind === 'pdf'}
-              showPointerModes={pointerModeTab !== null}
-              pointerMode={pointerModeTab?.pointerMode ?? 'select'}
-              pointerModesLocked={
-                isHome || ((pointerModeTab?.kind === 'pdf' || pointerModeTab?.kind === 'markdown') && pointerModeTab.fileName === null)
-              }
-              onSetPointerMode={(mode) => {
-                if (pointerModeTab) {
-                  setPointerMode(pointerModeTab.id, mode);
-                }
-              }}
-              showEditMode={browserTab !== null}
-              editMode={browserTab?.editMode ?? false}
-              onToggleEditMode={() => browserTab && toggleEditMode(browserTab.id)}
               theme={theme}
               showAdBlock={adBlockSite !== null && !isHome}
               adBlockActive={adBlock.enabled && !adBlockSiteAllowed}
@@ -801,8 +803,6 @@ export function App() {
               adBlockBlockedCount={activeTabId ? (adBlock.blockedByTab[activeTabId] ?? 0) : 0}
               adBlockSite={adBlockSite ?? ''}
               onToggleAdBlock={() => adBlockSite && window.northstar.setAdBlockSiteAllowed(adBlockSite, !adBlockSiteAllowed)}
-              onOpenPdfViewer={createPdfTab}
-              onOpenMarkdown={createMarkdownTab}
               markdownExport={activeTab?.kind === 'markdown'}
               canExportMenu={
                 activeTabId !== null &&
@@ -813,17 +813,7 @@ export function App() {
               }
               canExportDocuments={browserTab !== null && !isHome}
               showExportMenu={activeTab?.kind !== 'pdf' && !isTablePage}
-              showCommentTool={!isAppPage}
-              showLaserPointer={!isTablePage}
               showZoom={!isTablePage}
-              showTextTool={!isAppPage && activeTab?.kind !== 'markdown'}
-              showPen={!isAppPage}
-              showHighlighter={!isAppPage}
-              showRevert={!isAppPage}
-              onNewTerminal={createTerminalTab}
-              onOpenHistory={createHistoryTab}
-              onOpenBookmarks={createBookmarksTab}
-              onOpenSecrets={createSecretsTab}
               onOpenTabSearch={openTabSearch}
               findOpen={findOpen}
               canFind={canFind}
@@ -833,13 +823,6 @@ export function App() {
               onSetZoom={setZoom}
               onOpenWorkspaceInNewWindow={openWorkspaceInNewWindow}
               onToggleFocusMode={() => setFocusMode(!focusMode)}
-              onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}
-              onToggleHighlighter={() => setHighlighter(!highlighterActive)}
-              onToggleCommentTool={() => setCommentTool(!commentToolActive)}
-              onToggleTextTool={() => setTextTool(!textToolActive)}
-              onTogglePen={() => setPen(!penActive)}
-              onToggleCrop={() => setCrop(!cropActive)}
-              onRevertPage={() => activeTabId && revertPage(activeTabId)}
               onToggleTheme={toggleTheme}
             />
           </div>
@@ -944,11 +927,27 @@ export function App() {
           )}
           {deleteNotePopup && (
             <PopupTransition closing={closingPopups.has('deleteNote')} onExited={() => finishPopupClose('deleteNote')}>
-              <DeleteNotePopup
-                fileName={deleteNotePopup.fileName}
+              <ConfirmWordPopup
+                title={`Delete ${deleteNotePopup.fileName}?`}
+                detail="The file goes to the Recycle Bin, and its marks are removed."
+                word="DELETE"
+                dialogLabel="Delete note"
                 previewImage={deleteNotePopup.previewImage}
                 onConfirm={() => closeDeleteNote(true)}
                 onClose={() => closeDeleteNote(false)}
+              />
+            </PopupTransition>
+          )}
+          {revertPopup && (
+            <PopupTransition closing={closingPopups.has('revert')} onExited={() => finishPopupClose('revert')}>
+              <ConfirmWordPopup
+                title="Revert annotations?"
+                detail="Every highlight, drawing, comment, text box and crop on this page is removed."
+                word="REVERT"
+                dialogLabel="Revert annotations"
+                previewImage={revertPopup.previewImage}
+                onConfirm={() => closeRevert(true)}
+                onClose={() => closeRevert(false)}
               />
             </PopupTransition>
           )}
@@ -964,6 +963,54 @@ export function App() {
             </PopupTransition>
           )}
         </div>
+        {/* The page tools, on the right — mirrored from the workspaces on the left, and only those the tab can use. */}
+        <ToolsBar
+          visible={toolsSidebarVisible}
+          focusMode={focusMode}
+          onToggleVisible={toggleToolsSidebar}
+          canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
+          canPoint={activeTabId !== null}
+          // Marks go on the formatted, read-only note, so editing or raw text locks them too.
+          annotationToolsLocked={
+            isHome ||
+            ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName === null) ||
+            (activeTab?.kind === 'markdown' && (activeTab.mode === 'edit' || activeTab.display === 'raw'))
+          }
+          showPointerModes={pointerModeTab !== null}
+          pointerMode={pointerModeTab?.pointerMode ?? 'select'}
+          pointerModesLocked={
+            isHome || ((pointerModeTab?.kind === 'pdf' || pointerModeTab?.kind === 'markdown') && pointerModeTab.fileName === null)
+          }
+          onSetPointerMode={(mode) => {
+            if (pointerModeTab) {
+              setPointerMode(pointerModeTab.id, mode);
+            }
+          }}
+          showEditMode={browserTab !== null}
+          editMode={browserTab?.editMode ?? false}
+          onToggleEditMode={() => browserTab && toggleEditMode(browserTab.id)}
+          showLaserPointer={!isTablePage}
+          laserPointerActive={laserPointerActive}
+          onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}
+          showPen={!isAppPage}
+          penActive={penActive}
+          onTogglePen={() => setPen(!penActive)}
+          showHighlighter={!isAppPage}
+          highlighterActive={highlighterActive}
+          onToggleHighlighter={() => setHighlighter(!highlighterActive)}
+          showCommentTool={!isAppPage}
+          commentToolActive={commentToolActive}
+          onToggleCommentTool={() => setCommentTool(!commentToolActive)}
+          showTextTool={!isAppPage && activeTab?.kind !== 'markdown'}
+          textToolActive={textToolActive}
+          onToggleTextTool={() => setTextTool(!textToolActive)}
+          showCrop={activeTab?.kind === 'pdf'}
+          cropActive={cropActive}
+          onToggleCrop={() => setCrop(!cropActive)}
+          showRevert={!isAppPage}
+          canRevert={canRevert}
+          onRevertPage={openRevert}
+        />
       </div>
     </div>
   );

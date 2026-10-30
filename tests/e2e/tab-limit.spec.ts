@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-30
+// Last Modified: 2026-10-29
 
 import { MAX_TABS_PER_WORKSPACE, MAX_WORKSPACES } from '../../src/shared/constants';
 import { test, expect } from './fixtures';
@@ -12,7 +12,7 @@ test.describe('tabs per workspace limit', () => {
     const newTab = window.getByRole('button', { name: 'New tab', exact: true });
 
     while ((await tabs.count()) < MAX_TABS_PER_WORKSPACE) {
-      await newTab.click();
+      await window.evaluate(() => window.northstar.createTab());
     }
     await expect(tabs).toHaveCount(MAX_TABS_PER_WORKSPACE);
     await expect(newTab).toHaveCount(0);
@@ -24,9 +24,8 @@ test.describe('tabs per workspace limit', () => {
 
   test('the main process refuses a ninth tab even when the button is bypassed', async ({ window }) => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
-    const newTab = window.getByRole('button', { name: 'New tab', exact: true });
     while ((await tabs.count()) < MAX_TABS_PER_WORKSPACE) {
-      await newTab.click();
+      await window.evaluate(() => window.northstar.createTab());
     }
 
     // A terminal tab, a duplicate, and a direct create all go through other paths than the button.
@@ -41,7 +40,7 @@ test.describe('tabs per workspace limit', () => {
     const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
     const newTab = window.getByRole('button', { name: 'New tab', exact: true });
     while ((await tabs.count()) < MAX_TABS_PER_WORKSPACE) {
-      await newTab.click();
+      await window.evaluate(() => window.northstar.createTab());
     }
 
     await window.getByRole('button', { name: 'New workspace' }).click();

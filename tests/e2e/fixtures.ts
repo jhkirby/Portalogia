@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -181,7 +181,7 @@ export async function openNote(app: ElectronApplication, window: Page, path: str
   await app.evaluate(({ dialog }, notePath) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [notePath] })) as typeof dialog.showOpenDialog;
   }, path);
-  await window.getByRole('button', { name: 'Open Markdown notes' }).click();
+  await window.evaluate(() => window.northstar.createMarkdownTab());
   await window.getByRole('button', { name: /Open a note/ }).click();
   return findTabPage(app, 'markdown.html');
 }

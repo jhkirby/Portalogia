@@ -23,7 +23,7 @@ export interface SystemStatus {
 export function useSystemStatus(): SystemStatus {
   const [audio, setAudio] = useState<AudioStatus>({ state: 'unavailable', device: null, volume: 0, muted: false });
   const [wifi, setWifi] = useState<WifiStatus>({ state: 'unavailable', signal: 0, ssid: null });
-  const [bluetooth, setBluetooth] = useState<BluetoothStatus>({ state: 'unavailable', devices: 0 });
+  const [bluetooth, setBluetooth] = useState<BluetoothStatus>({ state: 'unavailable', devices: 0, names: [] });
   const [weather, setWeather] = useState<WeatherState>({ temperatureF: null });
 
   useEffect(() => {
@@ -80,6 +80,28 @@ export function displayDeviceName(name: string): string {
   }
   shown = shown.replace(/\s{2,}/g, ' ').trim();
   return shown || name;
+}
+
+/** The units the titlebar's temperature takes turns in, in order. */
+export const TEMPERATURE_UNITS = ['F', 'C', 'K'] as const;
+
+export type TemperatureUnit = (typeof TEMPERATURE_UNITS)[number];
+
+/**
+ * A temperature as the titlebar shows it, in whole degrees: "72°F", "22°C", or "295 K" (kelvin take no degree sign).
+ * @param fahrenheit The temperature, in degrees Fahrenheit.
+ * @param unit The unit to show it in.
+ * @returns The text.
+ */
+export function formatTemperature(fahrenheit: number, unit: TemperatureUnit): string {
+  const celsius = ((fahrenheit - 32) * 5) / 9;
+  if (unit === 'C') {
+    return `${Math.round(celsius)}°C`;
+  }
+  if (unit === 'K') {
+    return `${Math.round(celsius + 273.15)} K`;
+  }
+  return `${Math.round(fahrenheit)}°F`;
 }
 
 /**

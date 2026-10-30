@@ -969,6 +969,8 @@ pre.md-code:hover .md-code-controls,
   padding: 4px 8px;
 
   background: var(--color-tooltip-bg);
+  /* Outlined in the accent, as every tooltip is. */
+  border: 1px solid var(--color-tooltip-border);
   border-radius: var(--size-radius-sm);
   transform: translateY(-50%);
 

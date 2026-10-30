@@ -132,6 +132,17 @@ const api: NorthstarApi = {
   syncTooltip: (payload) => ipcRenderer.send(IpcChannel.TooltipSync, payload),
 
   syncExportMenu: (payload) => ipcRenderer.send(IpcChannel.ExportMenuSync, payload),
+  syncNewTabMenu: (payload) => ipcRenderer.send(IpcChannel.NewTabMenuSync, payload),
+  onNewTabMenuCloseRequested: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.NewTabMenuCloseRequested, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.NewTabMenuCloseRequested, handler);
+  },
+  onRevertRequested: (listener) => {
+    const handler = (): void => listener();
+    ipcRenderer.on(IpcChannel.TabsRevertRequested, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.TabsRevertRequested, handler);
+  },
   onExportMenuCloseRequested: (listener) => {
     const handler = (): void => listener();
     ipcRenderer.on(IpcChannel.ExportMenuCloseRequested, handler);
@@ -154,6 +165,7 @@ const api: NorthstarApi = {
   exitSplitView: () => invoke(IpcChannel.SplitExit),
 
   toggleSidebar: () => invoke(IpcChannel.SidebarToggle),
+  toggleToolsSidebar: () => invoke(IpcChannel.ToolsSidebarToggle),
   focusContent: () => invoke(IpcChannel.TabsFocusContent),
 
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),

@@ -21,29 +21,30 @@ interface ClearHistoryPopupProps {
 
 /**
  * Takes what was typed into the confirm box and keeps only what spells the
- * start of `CONFIRM_WORD`: each new character counts only if it's the next one
- * the word needs (in either case), so a stray key adds nothing. Deleting (or
- * any other edit) keeps whatever start of the word is left.
+ * start of the word: each new character counts only if it's the next one the
+ * word needs (in either case), so a stray key adds nothing. Deleting (or any
+ * other edit) keeps whatever start of the word is left.
  * @param current What the box held.
  * @param typed What it holds after the edit.
+ * @param word The word to spell, in capitals: `CONFIRM_WORD` unless a popup asks for another ("REVERT").
  * @returns The box's new text, always a start of the word, in capitals.
  */
-export function acceptConfirmInput(current: string, typed: string): string {
+export function acceptConfirmInput(current: string, typed: string, word: string = CONFIRM_WORD): string {
   const upper = typed.toUpperCase();
   if (upper.startsWith(current) && upper.length > current.length) {
     let next = current;
     for (const character of upper.slice(current.length)) {
-      if (character === CONFIRM_WORD[next.length]) {
+      if (character === word[next.length]) {
         next += character;
       }
     }
     return next;
   }
   let prefix = 0;
-  while (prefix < upper.length && upper[prefix] === CONFIRM_WORD[prefix]) {
+  while (prefix < upper.length && upper[prefix] === word[prefix]) {
     prefix += 1;
   }
-  return CONFIRM_WORD.slice(0, prefix);
+  return word.slice(0, prefix);
 }
 
 /**

@@ -4,6 +4,7 @@
 // Last Modified: 2026-10-29
 
 import {
+  TOOLTIP_OVERLAY_BORDER_PX,
   TOOLTIP_OVERLAY_FONT_PX,
   TOOLTIP_OVERLAY_GAP_PX,
   TOOLTIP_OVERLAY_LINE_HEIGHT_PX,
@@ -90,8 +91,9 @@ export function placeTooltip(
  * hovered on `anchor` — `placeTooltip` with the overlay's own measured size.
  */
 export function computeTooltipOverlayRect(text: string, anchor: TooltipAnchorRect, viewport: TooltipViewport): TooltipRect {
-  const width = Math.ceil(measureTooltipTextWidth(text)) + 2 * TOOLTIP_OVERLAY_PADDING_X_PX;
-  const height = TOOLTIP_OVERLAY_LINE_HEIGHT_PX + 2 * TOOLTIP_OVERLAY_PADDING_Y_PX;
+  // The text, its padding, and the accent border around them.
+  const width = Math.ceil(measureTooltipTextWidth(text)) + 2 * (TOOLTIP_OVERLAY_PADDING_X_PX + TOOLTIP_OVERLAY_BORDER_PX);
+  const height = TOOLTIP_OVERLAY_LINE_HEIGHT_PX + 2 * (TOOLTIP_OVERLAY_PADDING_Y_PX + TOOLTIP_OVERLAY_BORDER_PX);
   return placeTooltip({ width, height }, anchor, viewport);
 }
 

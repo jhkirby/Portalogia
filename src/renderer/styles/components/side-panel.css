@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-24 */
+   Last Modified: 2026-10-29 */
 
 /* ── SIDE PANEL ───────────────────────────────────────────────────────── */
 /* The right-hand panel of a note or a PDF (`SidePanel`): tabs across the top, a list under them that scrolls on its
@@ -52,6 +52,8 @@
   padding: 4px 8px;
 
   background: var(--color-tooltip-bg);
+  /* Outlined in the accent, as every tooltip is. */
+  border: 1px solid var(--color-tooltip-border);
   border-radius: var(--size-radius-sm);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 

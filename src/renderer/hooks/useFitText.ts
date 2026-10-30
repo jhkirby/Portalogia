@@ -5,49 +5,92 @@
 
 import { useLayoutEffect, type RefObject } from 'react';
 
-/** The least step, in px, the size is nudged down by when rounding leaves the text a sliver too wide. */
+/** The least step, in px, the size is nudged down by when rounding leaves a text a sliver too wide. */
 const NUDGE_PX = 0.5;
 
 /**
- * Sizes a one-line element's text to fit its width: at `maxPx` when it fits,
- * otherwise as small as it needs to be, but never below `minPx` (then the
- * element's own ellipsis cuts it short, still readable). Refitted whenever the
- * text changes or the element's container resizes — a tab narrowing as more
- * open beside it, or widening as they close.
+ * Sizes a set of one-line texts together, so they always match: at `maxPx`
+ * when every one fits, otherwise at the size the most crowded one needs, but
+ * never below `minPx` (then their own ellipsis cuts the longest short, still
+ * readable). The tab row's titles, so a long one never leaves its title
+ * smaller than its neighbours'. Refitted when the container resizes, any of
+ * the texts' boxes do, an animation inside ends, or `key` changes (a title
+ * did).
  *
- * The size is set straight on the element's style, not through React state:
+ * The size is set straight on the elements' style, not through React state:
  * fitting happens on every frame of a resize, and a render each time would buy
  * nothing.
- * @param ref The element: one line (`white-space: nowrap`), its width set by its layout rather than its text.
- * @param text What it shows; a change refits it.
- * @param maxPx Its full font size.
- * @param minPx The smallest it may go.
+ * @param containerRef What holds the texts.
+ * @param selector Every text to size: one line (`white-space: nowrap`), its width set by its layout, not its text.
+ * @param measureSelector The texts whose fit decides the size — those whose boxes are at rest (a tab still opening or
+ *   closing is squeezed by its animation, and would shrink every title with it).
+ * @param key Anything that changes when a text does, so they're refitted.
+ * @param maxPx Their full font size.
+ * @param minPx The smallest they may go.
  */
-export function useFitText(ref: RefObject<HTMLElement | null>, text: string, maxPx: number, minPx: number): void {
+export function useSharedFitText(
+  containerRef: RefObject<HTMLElement | null>,
+  selector: string,
+  measureSelector: string,
+  key: string,
+  maxPx: number,
+  minPx: number,
+): void {
   useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) {
+    const container = containerRef.current;
+    if (!container) {
       return undefined;
     }
+    let frame = 0;
     const fit = (): void => {
-      element.style.fontSize = `${maxPx}px`;
-      const available = element.clientWidth;
-      const needed = element.scrollWidth;
-      if (needed <= available || available <= 0) {
+      frame = 0;
+      const all = Array.from(container.querySelectorAll<HTMLElement>(selector));
+      const measured = Array.from(container.querySelectorAll<HTMLElement>(measureSelector));
+      const setAll = (size: number): void => {
+        for (const element of all) {
+          element.style.fontSize = `${size}px`;
+        }
+      };
+      setAll(maxPx);
+      // Text widens in step with its font size, so one measurement each gives the size every one of them fits at.
+      let size = maxPx;
+      for (const element of measured) {
+        const available = element.clientWidth;
+        const needed = element.scrollWidth;
+        if (available > 0 && needed > available) {
+          size = Math.min(size, (maxPx * available) / needed);
+        }
+      }
+      size = Math.max(minPx, Math.floor(size * 10) / 10);
+      if (size >= maxPx) {
         return;
       }
-      // Text widens in step with its font size, so one measurement gives the size that fits.
-      let size = Math.max(minPx, Math.floor(((maxPx * available) / needed) * 10) / 10);
-      element.style.fontSize = `${size}px`;
-      while (size > minPx && element.scrollWidth > element.clientWidth) {
+      setAll(size);
+      const overflows = (): boolean => measured.some((element) => element.scrollWidth > element.clientWidth);
+      while (size > minPx && overflows()) {
         size = Math.max(minPx, size - NUDGE_PX);
-        element.style.fontSize = `${size}px`;
+        setAll(size);
+      }
+    };
+    const schedule = (): void => {
+      if (!frame) {
+        frame = requestAnimationFrame(fit);
       }
     };
     fit();
-    // The container, not the element: the element's own height changes with its font size, which would refit it again.
-    const observer = new ResizeObserver(fit);
-    observer.observe(element.parentElement ?? element);
-    return () => observer.disconnect();
-  }, [ref, text, maxPx, minPx]);
+    // The texts' boxes (each one's parent, so its own height changing with its font size doesn't refit it again), and
+    // the container as a whole.
+    const observer = new ResizeObserver(schedule);
+    observer.observe(container);
+    for (const element of container.querySelectorAll<HTMLElement>(selector)) {
+      observer.observe(element.parentElement ?? element);
+    }
+    // A tab done opening or closing now counts (or no longer does).
+    container.addEventListener('animationend', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      container.removeEventListener('animationend', schedule);
+    };
+  }, [containerRef, selector, measureSelector, key, maxPx, minPx]);
 }

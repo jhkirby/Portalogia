@@ -248,6 +248,10 @@ export interface BrowserState {
   readonly contentFocused: boolean;
   /** Whether the workspace sidebar is currently shown (toggled via Ctrl+L). */
   readonly sidebarVisible: boolean;
+  /** Whether the Tools sidebar on the right is shown in full, rather than as a rail of its tools' icons. */
+  readonly toolsSidebarVisible: boolean;
+  /** Whether the active tab has any marks — highlights, comments, text boxes, drawings, crops — for Revert to take off. */
+  readonly canRevert: boolean;
   /** The tab currently grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it) — `null` when nothing is grabbed. */
   readonly grabbedTabId: string | null;
   /**

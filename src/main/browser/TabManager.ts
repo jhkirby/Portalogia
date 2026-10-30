@@ -34,6 +34,7 @@ import {
   SIDEBAR_COLLAPSED_WIDTH_PX,
   SIDEBAR_TOGGLE_DURATION_MS,
   SIDEBAR_WIDTH_PX,
+  TOOLS_SIDEBAR_WIDTH_PX,
   TERMINAL_PREPARE_PRINT_GLOBAL,
   WORKSPACE_COLORS,
   ZOOM_PERCENT_DEFAULT,
@@ -55,6 +56,8 @@ import {
   type BookmarkUpdateResult,
   type ColorPickerSyncPayload,
   type ExportMenuAction,
+  type MenuOverlayAction,
+  type NewTabMenuAction,
   type ExportMenuSyncPayload,
   type FindCommand,
   type FindResult,
@@ -92,6 +95,7 @@ import { beginLoad, endLoad } from './loadProgress';
 import { trackDomainLoadBlur } from './domainLoadBlur';
 import { EMPTY_MARKDOWN_ANNOTATIONS, markdownAnnotationStore } from './MarkdownAnnotationStore';
 import { FileLoadProgress } from './FileLoadProgress';
+import { onAnnotationsChanged } from './annotationChanges';
 import { MarkdownDocuments } from './MarkdownDocuments';
 import {
   MARKDOWN_EXTENSION_PATTERN,
@@ -229,6 +233,21 @@ const LOAD_PROGRESS_HOLD_MS = 1000;
 const retiredViews = new WeakSet<WebContentsView>();
 
 /**
+ * Whether each tab's page had the keyboard when it was last the active tab, so coming back to it gives the page the
+ * keyboard again only if it had it then — clicking a tab never puts the cursor in its page by itself. Set when a page
+ * gets the keyboard; cleared when the keyboard goes to the chrome on purpose (`focusChrome`), or when the page loses it
+ * while its tab is still the one showing (`PAGE_FOCUS_SETTLE_MS` later — a click on another tab takes the keyboard
+ * first, and must not count). A tab not in here — a new one — starts without it. Module-level, like `pdfFilePaths`.
+ */
+const pageHadKeyboard = new Map<string, boolean>();
+
+/**
+ * How long after a page loses the keyboard its tab must still be the active one for that to count as leaving the page
+ * (`pageHadKeyboard`): long enough for a click on another tab to switch to it, and so to leave this one as it was.
+ */
+const PAGE_FOCUS_SETTLE_MS = 1000;
+
+/**
  * Each PDF or Markdown tab's file load, for its file bar's progress (see `FileLoadProgress`). Module-level for the same
  * reason as `pdfFilePaths`: a tab can move between windows' managers while a file loads.
  */
@@ -312,6 +331,14 @@ export class TabManager {
   private splitView: SplitViewState | null = null;
   private focusMode = false;
   private sidebarVisible = true;
+  /** Whether the Tools sidebar on the right is shown in full (`toggleToolsSidebar`), rather than as its rail of icons. */
+  private toolsSidebarVisible = true;
+  /**
+   * The right inset the tab views are laid out with now: `targetRightInset` at rest, somewhere between two values
+   * while the Tools sidebar slides (`animateBoundsInset` moves it). Kept rather than passed along, since only the
+   * slides ever change it and every other layout just reads it.
+   */
+  private rightInsetNow = TOOLS_SIDEBAR_WIDTH_PX;
   private laserPointerActive = false;
   /** While true, `handleWorkspaceRemoved` doesn't mount a fallback tab — set on a window that's being dragged around as a whole and may be closed on release. */
   private suppressWorkspaceFallback = false;
@@ -354,6 +381,10 @@ export class TabManager {
   private readonly tooltipOverlay: TooltipOverlay;
   private readonly colorPickerOverlay: ColorPickerOverlay;
   private readonly exportMenuOverlay: ExportMenuOverlay;
+  /** The tab row's "+" menu (`NewTabMenu`): a second menu overlay of its own, so the two menus never close each other. */
+  private readonly newTabMenuOverlay: ExportMenuOverlay;
+  /** Stops listening for marks changing (`canRevertActiveTab`), when the window closes. */
+  private readonly stopWatchingMarks: () => void;
   /** The "save this login?" prompt in the page area's top-right corner — see `offerSecret`. */
   private readonly secretPrompt: SecretPromptOverlay;
   private readonly laserPointerOverlay: LaserPointerOverlay;
@@ -484,6 +515,13 @@ export class TabManager {
       (action) => this.runExportAction(action),
       () => this.window.webContents.send(IpcChannel.ExportMenuCloseRequested),
     );
+    this.newTabMenuOverlay = new ExportMenuOverlay(
+      this.window,
+      (action) => this.runNewTabMenuAction(action),
+      () => this.window.webContents.send(IpcChannel.NewTabMenuCloseRequested),
+    );
+    // A mark added or removed anywhere may change whether Revert has anything to do (`BrowserState.canRevert`).
+    this.stopWatchingMarks = onAnnotationsChanged(() => this.emitState());
     this.secretPrompt = new SecretPromptOverlay(this.window, (answer) => this.secretsController.answer(answer));
     this.contentSnapshot = new ContentSnapshot(this.window);
     this.findOverlay = new FindOverlay(this.window, {
@@ -2757,8 +2795,54 @@ export class TabManager {
     this.exportMenuOverlay.sync(payload, activeTabView);
   }
 
+  /** Applies the tab row's "+" menu's latest sync (`NewTabMenu`) — the same overlay as the export menu's, its own copy. */
+  public syncNewTabMenu(payload: ExportMenuSyncPayload): void {
+    const activeTabView = this.activeTabId ? (this.views.get(this.activeTabId) ?? null) : null;
+    this.newTabMenuOverlay.sync(payload, activeTabView);
+  }
+
+  /**
+   * Opens the kind of tab a row of the "+" menu names, in the active workspace (`createTab` and its kin, each held to
+   * the workspace's tab limit), then has the chrome close the menu.
+   * @param action The row picked; any other menu's row is ignored.
+   */
+  private runNewTabMenuAction(action: MenuOverlayAction): void {
+    if (!isNewTabMenuAction(action)) {
+      return;
+    }
+    this.window.webContents.send(IpcChannel.NewTabMenuCloseRequested);
+    switch (action) {
+      case 'new-tab':
+        this.createTab();
+        break;
+      case 'new-pdf':
+        this.createPdfTab();
+        break;
+      case 'new-markdown':
+        this.createMarkdownTab();
+        break;
+      case 'new-terminal':
+        this.createTerminalTab();
+        break;
+      case 'new-bookmarks':
+        this.createBookmarksTab();
+        break;
+      case 'new-secrets':
+        this.createSecretsTab();
+        break;
+      case 'new-history':
+        this.createHistoryTab();
+        break;
+    }
+  }
+
   /** Runs a row chosen in the export dropdown against the active tab, then has the chrome close the menu. Failures are logged — the menu is already gone, so there's no UI left to report to. */
-  private runExportAction(action: ExportMenuAction): void {
+  private runExportAction(choice: MenuOverlayAction): void {
+    // The "+" menu's rows are its own overlay's to run (`runNewTabMenuAction`).
+    if (isNewTabMenuAction(choice)) {
+      return;
+    }
+    const action: ExportMenuAction = choice;
     this.window.webContents.send(IpcChannel.ExportMenuCloseRequested);
     const id = this.activeTabId;
     if (!id) {
@@ -2791,6 +2875,8 @@ export class TabManager {
     this.tooltipOverlay.dispose();
     this.colorPickerOverlay.dispose();
     this.exportMenuOverlay.dispose();
+    this.newTabMenuOverlay.dispose();
+    this.stopWatchingMarks();
     this.dismissSecretPrompt();
     this.secretPrompt.dispose();
     this.laserPointerOverlay.dispose();
@@ -3166,6 +3252,7 @@ export class TabManager {
     markdownPagesReady.delete(id);
     markdownRunning.delete(id);
     markdownSaveErrorShown.delete(id);
+    pageHadKeyboard.delete(id);
     fileLoads.get(id)?.cancel();
     fileLoads.delete(id);
     markdownCspRemovers.get(id)?.();
@@ -3402,7 +3489,7 @@ export class TabManager {
       this.window.contentView.addChildView(view, 0);
       this.pushFocusModeTo(id);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
-      view.webContents.focus();
+      this.giveKeyboardAsLeft(id, view);
       this.registry.mountOwners.set(id, this);
     }
     const previousTabId = this.activeTabId;
@@ -4869,7 +4956,7 @@ export class TabManager {
       // Index 0 — see `activateTab`'s own `addChildView` call for why.
       this.window.contentView.addChildView(view, 0);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
-      view.webContents.focus();
+      this.giveKeyboardAsLeft(id, view);
     }
     return this.getState();
   }
@@ -5893,6 +5980,21 @@ export class TabManager {
   }
 
   /**
+   * Shows the Tools sidebar in full or hides it to its rail of icons, sliding the tab views' right edge in step with
+   * the sidebar's own CSS transition (`animateBoundsInset` carries the right inset along). In Focus Mode the sidebar
+   * is gone whichever way it's set, so only the setting changes.
+   * @returns The full browser state after the change; the slide itself goes on after.
+   */
+  public toggleToolsSidebar(): BrowserState {
+    this.toolsSidebarVisible = !this.toolsSidebarVisible;
+    this.emitState();
+    const left = this.targetLeftInset();
+    const top = this.targetTopInset();
+    this.animateBoundsInset(left, left, top, top);
+    return this.getState();
+  }
+
+  /**
    * The chrome has a sidebar slide's snapshot on screen (`ContentSnapshotShown`).
    * @param id The snapshot's id.
    */
@@ -6003,6 +6105,9 @@ export class TabManager {
     const token = ++this.boundsAnimationToken;
     this.isAnimatingBounds = true;
     const start = Date.now();
+    // The right edge moves with every slide too: to the Tools sidebar's new width, or to 0 entering Focus Mode.
+    const fromRight = this.rightInsetNow;
+    const toRight = this.targetRightInset();
     const step = (): void => {
       if (token !== this.boundsAnimationToken) {
         return;
@@ -6012,6 +6117,7 @@ export class TabManager {
       // function on the sidebar's and chrome's own CSS transitions (see
       // workspace-bar.css and app.css).
       const eased = 1 - (1 - t) ** 3;
+      this.rightInsetNow = fromRight + (toRight - fromRight) * eased;
       this.applyBounds(fromLeft + (toLeft - fromLeft) * eased, fromTop + (toTop - fromTop) * eased);
       if (t < 1) {
         setTimeout(step, 16);
@@ -6335,8 +6441,9 @@ export class TabManager {
         this.toggleCrop();
         break;
       case 'r':
+        // Confirmed first, as the Tools sidebar's Revert is: the chrome asks for "REVERT" to be typed, then reverts.
         if (tabId) {
-          this.revertPage(tabId);
+          this.window.webContents.send(IpcChannel.TabsRevertRequested);
         }
         break;
       default:
@@ -6497,7 +6604,25 @@ export class TabManager {
    * address bar — so this is just the bare `webContents.focus()` half.
    */
   public focusChrome(): void {
+    // Given to the chrome on purpose (Shift+Escape, a page's own Escape, Ctrl+`): the tab is left without the keyboard.
+    if (this.activeTabId) {
+      pageHadKeyboard.set(this.activeTabId, false);
+    }
     this.window.webContents.focus();
+  }
+
+  /**
+   * Gives the keyboard to a tab just shown, as it was when the tab was last left (`pageHadKeyboard`): its page if it
+   * had it, otherwise the chrome — so the page shows unfocused, and a click or Escape in the chrome hands it over.
+   * @param id The tab.
+   * @param view Its view, just mounted.
+   */
+  private giveKeyboardAsLeft(id: string, view: WebContentsView): void {
+    if (pageHadKeyboard.get(id) === true) {
+      view.webContents.focus();
+    } else {
+      this.window.webContents.focus();
+    }
   }
 
   /**
@@ -6512,6 +6637,49 @@ export class TabManager {
       return;
     }
     view.webContents.focus();
+  }
+
+  /**
+   * Whether the active tab has any marks for Revert to take off (`BrowserState.canRevert`): a web page's saved
+   * highlights, comments, text boxes or pen strokes; a PDF's or note's saved marks. The home page, an empty PDF or note,
+   * and every other kind of tab have none.
+   */
+  private canRevertActiveTab(): boolean {
+    const id = this.activeTabId;
+    const state = id ? this.states.get(id) : undefined;
+    if (!id || !state) {
+      return false;
+    }
+    if (state.kind === 'browser') {
+      const { url } = state;
+      return (
+        url !== HOME_URL &&
+        (this.highlighter.hasMarksFor(url) ||
+          this.commentController.hasMarksFor(url) ||
+          this.textBoxController.hasMarksFor(url) ||
+          this.penController.hasMarksFor(url))
+      );
+    }
+    if (state.kind === 'pdf') {
+      const key = pdfFileKeys.get(id);
+      if (key === undefined) {
+        return false;
+      }
+      const marks = pdfAnnotationStore.get(key);
+      return (
+        marks.strokes.length + marks.comments.length + marks.highlights.length + marks.textBoxes.length + marks.crops.length >
+        0
+      );
+    }
+    if (state.kind === 'markdown') {
+      const path = markdownDocuments.pathOf(id);
+      if (path === undefined) {
+        return false;
+      }
+      const marks = markdownAnnotationStore.get(path);
+      return marks.strokes.length + marks.comments.length + marks.highlights.length > 0;
+    }
+    return false;
   }
 
   /** Whether the active tab's own page has the keyboard — see `BrowserState.contentFocused`. */
@@ -6583,6 +6751,8 @@ export class TabManager {
       focusMode: this.focusMode,
       contentFocused: this.isContentFocused(),
       sidebarVisible: this.sidebarVisible,
+      toolsSidebarVisible: this.toolsSidebarVisible,
+      canRevert: this.canRevertActiveTab(),
       grabbedTabId: this.grabbedTabId,
       selectedTabIds: this.currentTabSelection(),
       selectedWorkspaceIds: this.currentWorkspaceSelection(),
@@ -6610,6 +6780,7 @@ export class TabManager {
     if (this.isAnimatingBounds) {
       return;
     }
+    this.rightInsetNow = this.targetRightInset();
     this.applyBounds(this.targetLeftInset(), this.targetTopInset());
   }
 
@@ -6671,6 +6842,17 @@ export class TabManager {
   }
 
   /**
+   * The Tools sidebar's resting width on the right: `TOOLS_SIDEBAR_WIDTH_PX` shown, its rail
+   * (`SIDEBAR_COLLAPSED_WIDTH_PX`) hidden, and 0 in Focus Mode — the left sidebar's `targetLeftInset`, mirrored.
+   */
+  private targetRightInset(): number {
+    if (this.focusMode) {
+      return 0;
+    }
+    return this.toolsSidebarVisible ? TOOLS_SIDEBAR_WIDTH_PX : SIDEBAR_COLLAPSED_WIDTH_PX;
+  }
+
+  /**
    * The chrome's resting vertical inset: `CHROME_HEIGHT_FOCUSED_PX` (the
    * whole titlebar/tab-strip/toolbar slid away) in Focus Mode, else
    * `CHROME_HEIGHT_PX`. Mid-toggle, `applyBounds` is driven by
@@ -6711,7 +6893,8 @@ export class TabManager {
     return {
       x: left + insetX,
       y: top + insetY,
-      width: Math.max(0, width - left - 2 * insetX),
+      // The Tools sidebar takes the right edge (`rightInsetNow`), as the workspaces take the left.
+      width: Math.max(0, width - left - this.rightInsetNow - 2 * insetX),
       height: Math.max(0, height - top - this.bottomInset() - 2 * insetY),
     };
   }
@@ -7031,6 +7214,19 @@ export class TabManager {
     const owningManager = (): TabManager => this.registry.mountOwners.get(id) ?? this;
 
     wc.on('blur', () => owningManager().releaseGrabbedTab());
+
+    // The page's keyboard focus, remembered for when its tab is next shown (`pageHadKeyboard`).
+    wc.on('focus', () => pageHadKeyboard.set(id, true));
+    wc.on('blur', () => {
+      setTimeout(() => {
+        const owner = owningManager();
+        // Still the tab showing, in a window that still has the focus, and the page hasn't got the keyboard back: it
+        // was left. Switching tabs, or the window losing focus, leaves the page as it was.
+        if (!wc.isDestroyed() && owner.activeTabId === id && owner.window.isFocused() && !wc.isFocused()) {
+          pageHadKeyboard.set(id, false);
+        }
+      }, PAGE_FOCUS_SETTLE_MS);
+    });
 
     wc.on('before-input-event', (event, input) => {
       const owner = owningManager();
@@ -7535,4 +7731,20 @@ function releaseView(view: WebContentsView, window: BrowserWindow): void {
   if (retiredViews.has(view) && !view.webContents.isDestroyed()) {
     view.webContents.close();
   }
+}
+
+/** The "+" menu's rows (`NewTabMenuAction`), as against the export menu's. */
+const NEW_TAB_MENU_ACTIONS: ReadonlySet<string> = new Set<NewTabMenuAction>([
+  'new-tab',
+  'new-pdf',
+  'new-markdown',
+  'new-terminal',
+  'new-bookmarks',
+  'new-secrets',
+  'new-history',
+]);
+
+/** @returns Whether a row picked in a menu overlay is one of the "+" menu's. */
+function isNewTabMenuAction(action: MenuOverlayAction): action is NewTabMenuAction {
+  return NEW_TAB_MENU_ACTIONS.has(action);
 }

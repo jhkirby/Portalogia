@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-01 */
+   Last Modified: 2026-10-29 */
 
 /* ── EXPORT MENU ──────────────────────────────────────────────────────── */
 /* `ExportMenu`'s dropdown page (`export-menu.html`) — a dedicated
@@ -69,4 +69,39 @@ body {
 .export-menu__item:disabled {
   color: var(--color-button-disabled-text);
   cursor: default;
+}
+
+/* ── NEW TAB MENU ─────────────────────────────────────────────────────── */
+/* The tab row's "+" menu (`NewTabMenu`), drawn by its own copy of this page: the export menu's look, each row's icon
+   on its left. Its size is fixed in `NEW_TAB_MENU_WIDTH_PX`/`NEW_TAB_MENU_HEIGHT_PX`: 7 rows of 32px, the 9px rule
+   below, and the export menu's padding and border. */
+
+.new-tab-menu__item {
+  gap: var(--size-spacing-sm);
+}
+
+/* A fixed box, so the rows' text lines up whatever the icon. */
+.new-tab-menu__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+
+  color: var(--color-tab-text);
+}
+
+/* PDF, MD and >_ as the toolbar showed them: short bold text standing in for an icon. */
+.new-tab-menu__badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Between "Open New Tab" and the other kinds of tab: 1px, with 4px either side (9px in all). */
+.new-tab-menu__divider {
+  flex: 0 0 1px;
+  margin: 4px var(--size-spacing-sm);
+
+  background: var(--color-panel-border);
 }
