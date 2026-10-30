@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-25 */
+   Last Modified: 2026-10-29 */
 
 /* ── ZOOM CONTROL ─────────────────────────────────────────────────────── */
 
@@ -37,14 +37,6 @@
 .zoom-control__bubble:focus-within {
   outline: 2px solid var(--color-address-border-focus);
   outline-offset: -1px;
-}
-
-/* Tooltip anchor for `.chrome-tooltip::after` — see page-actions.css's
-   identical comment on `.page-actions__button::after` for why this group,
-   near the toolbar's right edge, grows its tooltip leftward from the
-   bubble's own right edge rather than centering it. */
-.zoom-control__bubble::after {
-  right: 0;
 }
 
 .zoom-control__input {

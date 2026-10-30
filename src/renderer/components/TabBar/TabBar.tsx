@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
@@ -15,6 +15,13 @@ import { SHIMMER_PERIOD_MS, useShimmerTick } from '../../hooks/useShimmerTick';
 import { useTabTransitions } from './useTabTransitions';
 import { useActiveTabSlide } from './useActiveTabSlide';
 import { useClickRipples } from '../../hooks/useClickRipples';
+import { useFitText } from '../../hooks/useFitText';
+
+/** A tab title's full size, in px: the tab row's own (`--size-font-md`). */
+const TITLE_FONT_PX = 13;
+
+/** The smallest a tab's title shrinks to as tabs narrow; below this it would be hard to read, so the ellipsis takes over. */
+const TITLE_MIN_FONT_PX = 10;
 
 // A native HTML5 drag shows the browser's own snapshot of the dragged
 // element following the cursor by default; over this chrome's mix of HTML
@@ -385,7 +392,7 @@ export function TabBar({
       {tabs.length < MAX_TABS_PER_WORKSPACE && (
         <button
           type="button"
-          className="tab-bar__new hover-grow chrome-tooltip"
+          className="tab-bar__new hover-glow chrome-tooltip"
           style={{ order: slotOrder(displayIds.length + 2) }}
           aria-label="New tab"
           onClick={onNewTab}
@@ -456,6 +463,10 @@ function Tab({
 }: TabProps) {
   const activate = (): void => onActivate(tab.id);
   const ripples = useClickRipples();
+  // The title shrinks with the tab, rather than ending in "…", down to a size still easy to read.
+  const titleText = label ?? (tab.title || 'New Tab');
+  const titleRef = useRef<HTMLSpanElement>(null);
+  useFitText(titleRef, titleText, TITLE_FONT_PX, TITLE_MIN_FONT_PX);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -548,10 +559,9 @@ function Tab({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* Below the tab's content: the hover fill rising from the bottom, the active background sliding past on a
-          keyboard switch (`useActiveTabSlide` draws into it), and the click ripples. */}
+      {/* Below the tab's content: the active background sliding past on a keyboard switch (`useActiveTabSlide`
+          draws into it), and the click ripples. */}
       <span className="tab-bar__effects" aria-hidden="true">
-        <span className="tab-bar__hover-fill" />
         <span className="tab-bar__slide-layer" />
         {ripples.ripples.map((ripple) => (
           <span
@@ -593,12 +603,12 @@ function Tab({
           <GlobeIcon size={13} />
         </span>
       )}
-      <span className="tab-bar__title" title={tab.title || undefined}>
-        {label ?? (tab.title || 'New Tab')}
+      <span ref={titleRef} className="tab-bar__title" title={tab.title || undefined}>
+        {titleText}
       </span>
       <button
         type="button"
-        className="tab-bar__close hover-grow chrome-tooltip"
+        className="tab-bar__close hover-glow chrome-tooltip"
         aria-label={`Close ${tab.title || 'tab'}`}
         onClick={handleClose}
         data-tooltip={isActive ? `Close tab (${formatShortcut('W')})` : 'Close tab'}

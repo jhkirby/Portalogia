@@ -1,66 +1,15 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-18 */
+   Last Modified: 2026-10-29 */
 
 /* ── TOOLTIP ──────────────────────────────────────────────────────────── */
 
-/* Shared by every toolbar icon button (`.nav-controls__button`,
-   `.page-actions__button`) that wants a hover tooltip: a self-drawn one
-   rather than the native `title` attribute, since Electron's OS-level
-   tooltip is unreliable over this custom chrome (delayed, easy to miss,
-   and suppressed entirely on a `:disabled` button, whereas `:hover` itself
-   still fires regardless of disabled state). Opens *upward*, since this
-   toolbar is the bottom edge of the chrome and just past it is the active
-   tab's native `WebContentsView` — a separate surface the main process
-   layers on top of this whole page, which would silently paint over (and
-   hide) a tooltip that instead opened downward.
-   Each consumer still owns its own horizontal anchor (`left: 0` to grow
-   rightward, `right: 0` to grow leftward) — whichever keeps it inside the
-   window depends on which edge of the toolbar that button sits near. */
+/* Marks an element whose `data-tooltip` text shows as a tooltip while the pointer rests on it. Nothing is drawn here:
+   every tooltip is drawn by `TooltipOverlay`, a native view above everything in the window (the tab's own page
+   included), placed by `installChromeTooltips` so it always stays inside the window — see there. A self-drawn tooltip
+   rather than the native `title`, which Electron shows late and unreliably over this custom chrome, and never on a
+   `:disabled` button. */
 .chrome-tooltip {
   position: relative;
-}
-
-.chrome-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  z-index: 10;
-  margin-bottom: 6px;
-  padding: 4px 8px;
-  /* A `max-width` consumer (again, the sidebar's collapsed-state
-     tooltips) means that width to actually be the on-screen box, padding
-     included — without this, `max-width` only caps the content area and
-     this rule's own 8px+8px of horizontal padding gets added back on top
-     of it, which was quietly pushing the box a few pixels past the
-     chrome-owned area those `max-width`s were computed to fit exactly
-     inside, right back off the window edge. */
-  box-sizing: border-box;
-
-  background: var(--color-tooltip-bg);
-  border-radius: var(--size-radius-sm);
-
-  font-size: var(--size-font-sm);
-  font-weight: 400;
-  color: var(--color-tooltip-text);
-  white-space: nowrap;
-  /* A consumer that overrides `white-space: normal` with a tight
-     `max-width` (the sidebar's own collapsed-state tooltips, currently
-     the only ones narrow enough for this to matter) needs this too —
-     without it, a single word wider than that `max-width` (e.g.
-     "workspace") doesn't wrap at all, it just overflows past the box
-     un-broken, which defeats the whole point of capping the width to stay
-     inside the chrome-owned area in the first place. Harmless everywhere
-     else: it only changes anything when a word genuinely wouldn't
-     otherwise fit. */
-  overflow-wrap: break-word;
-
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease 400ms;
-}
-
-.chrome-tooltip:hover::after {
-  opacity: 1;
 }

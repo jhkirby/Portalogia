@@ -1,17 +1,15 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-09-25 */
+   Last Modified: 2026-10-29 */
 
 /* ── TOOLTIP OVERLAY ──────────────────────────────────────────────────── */
-/* A collapsed-sidebar tooltip's whole page (`tooltip.html`) — a dedicated
+/* Every chrome tooltip's whole page (`tooltip.html`) — a dedicated
    `WebContentsView` the main process sizes to exactly this text's own
-   measured box and stacks above the active tab's view (see
-   `TooltipOverlay`), rather than the plain CSS `::after` tooltip
-   (tooltip.css) every other `.chrome-tooltip` consumer uses. Its bounds are
-   always exactly `computeTooltipOverlayRect`'s own output, so there's
-   nothing to lay out here beyond the text itself — no positioning, no
-   wrapping, no max-width. */
+   measured box and stacks above everything else in the window (see
+   `TooltipOverlay` and `installChromeTooltips`). Its bounds are always
+   exactly `computeTooltipOverlayRect`'s own output, so there's nothing to
+   lay out here beyond the text itself — no positioning, no wrapping. */
 
 html,
 body {
@@ -35,8 +33,6 @@ body {
 }
 
 .tooltip-overlay {
-  display: flex;
-  align-items: center;
   box-sizing: border-box;
   height: 100%;
   /* Must equal TOOLTIP_OVERLAY_PADDING_Y_PX/TOOLTIP_OVERLAY_PADDING_X_PX in
@@ -54,4 +50,7 @@ body {
   line-height: 16px;
   color: var(--color-tooltip-text);
   white-space: nowrap;
+  /* Only ever narrower than its text in a window too narrow for it (`placeTooltip`): then it ends in an ellipsis. */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

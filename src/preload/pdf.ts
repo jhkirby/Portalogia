@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-29
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PdfAnnotations } from '@shared/ipc-schemas';
@@ -19,6 +19,7 @@ import type { RGB } from '@shared/color';
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object.
 const PdfFile = 'pdf:file';
+const TabReleaseKeyboard = 'tab:release-keyboard';
 const PdfSaveAnnotations = 'pdf:save-annotations';
 const PdfClear = 'pdf:clear';
 const PdfClosed = 'pdf:closed';
@@ -26,6 +27,7 @@ const PdfUndo = 'pdf:undo';
 const PdfRedo = 'pdf:redo';
 const PdfPageInfo = 'pdf:page-info';
 const PdfHistoryInfo = 'pdf:history-info';
+const PdfLoadProgress = 'pdf:load-progress';
 const PdfHistoryGo = 'pdf:history-go';
 const PdfCropState = 'pdf:crop-state';
 const PdfScrollToPage = 'pdf:scroll-to-page';
@@ -218,6 +220,9 @@ const api: NorthstarPdfApi = {
   reportPage: (page, pageCount) => {
     ipcRenderer.send(PdfPageInfo, { id: tabId, page, pageCount });
   },
+  reportLoadProgress: (percent) => {
+    ipcRenderer.send(PdfLoadProgress, { id: tabId, percent });
+  },
   reportHistory: (canGoBack, canGoForward) => {
     ipcRenderer.send(PdfHistoryInfo, { id: tabId, canGoBack, canGoForward });
   },
@@ -342,9 +347,10 @@ window.addEventListener('focusin', reportEditableFocus, true);
 // `focusout` fires before the next element has focus, so look once focus has settled.
 window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
 
-// Escape takes the caret out of a text box, so the shortcuts that stand aside while one has it work again. Decided
-// once the page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a popup)
-// called `preventDefault`, and then the caret stays for the next press.
+// Escape takes the caret out of a text box, so the shortcuts that stand aside while one has it work again, and gives
+// the keyboard back to the chrome (Escape there hands it back, the caret returning to the box). Decided once the
+// page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a popup) called
+// `preventDefault`, and then the page keeps the keyboard for the next press.
 window.addEventListener(
   'keydown',
   (event) => {
@@ -352,13 +358,14 @@ window.addEventListener(
       return;
     }
     const element = document.activeElement;
-    if (!isEditableElement(element)) {
-      return;
-    }
     setTimeout(() => {
-      if (!event.defaultPrevented && document.activeElement === element) {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (isEditableElement(element) && document.activeElement === element) {
         element.blur();
       }
+      ipcRenderer.send(TabReleaseKeyboard);
     }, 0);
   },
   true,

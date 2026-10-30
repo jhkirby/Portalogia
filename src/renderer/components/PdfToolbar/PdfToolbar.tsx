@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useState } from 'react';
 import type { BookmarkState, PdfTabState } from '@shared/tab-state';
 import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
-import { BookmarkStarIcon } from '../icons';
+import { FileBar } from '../FileBar';
 import { PdfSearchBox } from './PdfSearchBox';
 
 /** Must match `pdfRenameRequestSchema` in main: something, then ".pdf". */
@@ -38,9 +38,10 @@ interface PdfToolbarProps {
 /**
  * The PDF tab's controls, shown in the main toolbar where a browser tab has
  * its address bar: Back/Forward through the jumps made in the document
- * (followed links, the page box), the bookmark star, Open, Close and Export,
- * and the file name (an editable text
- * box — or, while no file is open, a search over the bookmarked PDFs). The
+ * (followed links, the page box), Open, Close and Export, and the file bar
+ * (`FileBar`): the bookmark star and the file name (an editable text box — or,
+ * while no file is open, a search over the bookmarked PDFs), with the file's
+ * progress while it opens. The
  * page counter is in the PDF page's own stat bar (`PdfStatusBar`).
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
@@ -82,7 +83,7 @@ export function PdfToolbar({
       <div className="nav-controls">
         <button
           type="button"
-          className="nav-controls__button hover-grow chrome-tooltip"
+          className="nav-controls__button hover-glow chrome-tooltip"
           onClick={() => onNavigate(tab.id, -1)}
           disabled={!tab.canGoBack}
           aria-label="Back"
@@ -92,7 +93,7 @@ export function PdfToolbar({
         </button>
         <button
           type="button"
-          className="nav-controls__button hover-grow chrome-tooltip"
+          className="nav-controls__button hover-glow chrome-tooltip"
           onClick={() => onNavigate(tab.id, 1)}
           disabled={!tab.canGoForward}
           aria-label="Forward"
@@ -101,17 +102,6 @@ export function PdfToolbar({
           ›
         </button>
       </div>
-      <button
-        type="button"
-        className="pdf-toolbar__bookmark hover-grow chrome-tooltip"
-        onClick={() => onToggleBookmark(tab.id)}
-        disabled={fileName === null}
-        aria-pressed={isBookmarked}
-        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this PDF'}
-        data-tooltip={`${isBookmarked ? 'Remove bookmark' : 'Bookmark this PDF'} (${formatShortcut('B')})`}
-      >
-        <BookmarkStarIcon filled={isBookmarked} size={14} />
-      </button>
       <button
         type="button"
         className="pdf-toolbar__button hover-grow chrome-tooltip"
@@ -138,31 +128,39 @@ export function PdfToolbar({
       >
         Export
       </button>
-      {/* Before a file is open there's nothing to rename, so the slot is a search over the bookmarked PDFs instead. */}
-      {fileName === null ? (
-        <PdfSearchBox
-          bookmarks={pdfBookmarks}
-          onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)}
-          onOpenPath={(path) => onOpenPdfPath(tab.id, path)}
-        />
-      ) : (
-        <input
-          type="text"
-          className="pdf-toolbar__file-name"
-          aria-label="File name"
-          value={nameDraft ?? fileName}
-          onChange={(event) => setNameDraft(event.target.value)}
-          onBlur={commitName}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            } else if (event.key === 'Escape') {
-              setNameDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      )}
+      <FileBar
+        isBookmarked={isBookmarked}
+        canBookmark={fileName !== null}
+        bookmarkLabel="Bookmark this PDF"
+        onToggleBookmark={() => onToggleBookmark(tab.id)}
+        loadProgress={tab.loadProgress}
+      >
+        {/* Before a file is open there's nothing to rename, so the bar is a search over the bookmarked PDFs instead. */}
+        {fileName === null ? (
+          <PdfSearchBox
+            bookmarks={pdfBookmarks}
+            onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)}
+            onOpenPath={(path) => onOpenPdfPath(tab.id, path)}
+          />
+        ) : (
+          <input
+            type="text"
+            className="file-bar__name"
+            aria-label="File name"
+            value={nameDraft ?? fileName}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={commitName}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                setNameDraft(null);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+        )}
+      </FileBar>
       {error && <span className="pdf-toolbar__error">{error}</span>}
     </div>
   );

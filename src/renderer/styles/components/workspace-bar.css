@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-24 */
+   Last Modified: 2026-10-29 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -17,21 +17,12 @@
    plain CSS flow instead). */
 
 .sidebar {
-  /* Anchors `.sidebar__toggle`, an absolutely-positioned child pinned to
-     this element's own right edge (`right: 0` on it) — which, since
-     that's exactly what animates via `width` below, is what makes the
-     button track the sidebar's collapsing/expanding border for free,
-     no separate transition of its own needed. */
   position: relative;
   display: flex;
   flex-direction: column;
   width: var(--size-sidebar-width);
   min-height: 0;
   box-sizing: border-box;
-  /* Was `hidden` on this element directly — moved down to `.sidebar__inner`
-     (see its own comment) so `.sidebar__toggle` isn't clipped away along
-     with everything else as this collapses toward 0. */
-  overflow: visible;
 
   background: var(--color-chrome-bg);
   border-right: 1px solid var(--color-chrome-border);
@@ -45,8 +36,8 @@
     border-color var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* An ordinary Ctrl+L toggle, not Focus Mode — collapses to just enough
-   room for `.sidebar__toggle` to stay visible and clickable (see
+/* An ordinary Ctrl+L toggle, not Focus Mode — collapses to a narrow rail of
+   icons: the show/hide button on top, then the workspaces (see
    TabManager.targetLeftInset, which shifts the tab's own native content
    to clear exactly this much). `.sidebar--focus-mode` below overrides
    this to a true 0 when Focus Mode is what's actually collapsing it. */
@@ -61,19 +52,14 @@
   border-right-color: transparent;
 }
 
-/* Everything that actually needs to disappear as the sidebar collapses —
-   the workspace list and "New workspace" button, but not `.sidebar__toggle`
-   (a sibling, outside this element entirely; see `WorkspaceBar`'s own
-   comment) — clips here instead of on `.sidebar` itself. */
+/* Everything in the sidebar: the heading, the workspace list and the
+   buttons below it. What no longer fits as the sidebar collapses clips here. */
 .sidebar__inner {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: var(--size-spacing-sm);
-  /* Right side clears the toggle strip (plus a hair of air), so the pills'
-     highlight stops short of it instead of running underneath. */
-  padding-right: calc(var(--size-sidebar-toggle-width) + 2px);
   box-sizing: border-box;
   overflow: hidden;
 
@@ -83,99 +69,73 @@
 }
 
 .sidebar--hidden .sidebar__inner {
-  /* A little room, so the selected pill's grey doesn't run into the window's left edge. */
+  /* A little room either side, so the selected pill's grey doesn't run into the window's edge or the border. */
   padding-left: 6px;
-  /* Still clears the toggle strip when collapsed. */
-  padding-right: calc(var(--size-sidebar-toggle-width) + 2px);
+  padding-right: 6px;
   /* Collapsed, this still occupies `--size-sidebar-collapsed-width` — not
      0 (see `.sidebar--hidden` above) — specifically so its squeezed
      contents stay usable: a workspace pill's colored dot is still
-     clickable to switch to it, and "New workspace"'s icon is still
-     clickable too, even though there's no longer room to show either
-     one's label text (clipped by this element's own `overflow: hidden`,
-     same as it always was). Each one's own tooltip is capped to fit
-     within this same collapsed width now too — see each's own `::after`
-     rule below — rather than this disabling pointer events outright the
-     way it used to, which took those tooltips out of reach by taking the
-     whole squeezed area out of hit-testing, but also blocked the actual
-     clicks this sidebar still needs to support collapsed. */
+     clickable to switch to it, and the show/hide button and "New
+     workspace"'s icon are still clickable too, even though there's no
+     longer room to show any label text (clipped by this element's own
+     `overflow: hidden`). Their tooltips are drawn above the page beside the
+     rail (`installChromeTooltips`), so they show in full collapsed too. */
 }
 
-/* The Ctrl+L handle — a narrow strip spanning the sidebar's whole height,
-   flush against its right border. Since `right: 0` tracks that border
-   directly, it follows it for free as `.sidebar`'s `width` animates, no
-   separate transition of its own needed. Narrow enough (well inside
-   `--size-sidebar-collapsed-width`) to fit inside the sidebar at its most
-   collapsed without the tab's native content — which starts exactly at that
-   same border — ever painting over it. */
+/* ── HEADING ──────────────────────────────────────────────────────────── */
+
+/* "Workspaces", and the show/hide button at the right, above the first workspace. */
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin-bottom: var(--size-spacing-xs);
+  flex-shrink: 0;
+}
+
+/* A flex basis of 0: the name takes only the room the button leaves, so as the sidebar collapses the name is
+   squeezed away first and the button stays its full size until the rail is narrower than it. */
+.sidebar__title {
+  overflow: hidden;
+  flex: 1 1 0;
+  min-width: 0;
+  /* In line with the workspaces' icons below. Slides away with the collapse, so the button isn't squeezed by it. */
+  padding-left: var(--size-spacing-sm);
+
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-tab-text-active);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  transition: padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.sidebar--hidden .sidebar__title {
+  padding-left: 0;
+}
+
+/* Collapsed, the rail is narrower than this button's 28px, so it shrinks to fill it, its icon centred over the
+   workspaces' icons below. */
 .sidebar__toggle {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--size-sidebar-toggle-width);
+  flex: 0 1 28px;
+  min-width: 0;
+  height: 28px;
   padding: 0;
 
-  /* A full-height strip along the sidebar's edge that's invisible — the strip
-     and its arrow both — until the pointer is over it, then a grey that goes lighter while the button is held down
-     (darker in the light theme). */
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: var(--size-radius-sm);
 
-  font-size: 11px;
-  line-height: 1;
-  color: transparent;
-
+  color: var(--color-tab-text);
   cursor: pointer;
 }
 
 .sidebar__toggle:hover {
-  color: var(--color-tab-text);
-}
-
-/* The hover fill slides in from the sidebar's border toward the sidebar, and back out to it on leaving, rather
-   than growing from the centre like other `.hover-grow` buttons: on a full-height strip the centre-out growth read
-   as a bar appearing from nowhere, where a slide from the edge reads as the edge itself. */
-.sidebar__toggle::before {
-  /* Fully opaque from the start, so the fill slides rather than fading as it goes. */
-  opacity: 1;
-  transform: scaleX(0);
-  transform-origin: right center;
-}
-
-.sidebar__toggle:hover:not(:disabled)::before {
-  transform: scaleX(1);
-}
-
-.sidebar__toggle:active {
-  background: var(--color-grip-active-bg);
-}
-
-/* Anchored right and capped narrow, same reasoning (and the same
-   `max-width`/`white-space: normal` wrap) as `.workspace-bar__remove::after`
-   below — this button sits right at the sidebar's own edge, so a tooltip
-   growing wide from it would spill past the sidebar's own bounds into the
-   tab's native content and get painted over by it. */
-.sidebar__toggle::after {
-  right: 0;
-  max-width: 110px;
-  white-space: normal;
-}
-
-/* Collapsed, `WorkspaceBar` swaps this button's tooltip to `TooltipOverlay`
-   (a native view stacked above the tab's own — see `useOverlayTooltip`)
-   instead of rendering it here, since the plain version above can't grow
-   past `--size-sidebar-collapsed-width` without the tab's native content
-   painting over it — see `SIDEBAR_COLLAPSED_WIDTH_PX`'s own comment.
-   Suppressed outright rather than left narrow, so hovering shows only the
-   overlay's version, never both at once. */
-.sidebar--hidden .sidebar__toggle::after {
-  display: none;
+  color: var(--color-tab-text-active);
 }
 
 /* ── WORKSPACE LIST ───────────────────────────────────────────────────── */
@@ -234,10 +194,14 @@
   cursor: pointer;
 }
 
-/* Hovering grows the hover colour out from the centre and shrinks it back on leaving, like every other such button
-   (`.hover-grow`, whose layer is the tab hover colour here). */
-.workspace-bar__pill {
-  --hover-grow-bg: var(--color-tab-hover-bg);
+/* Hovering makes the workspace's icon and name glow (`.hover-glow`), with no colour behind them. Its pencil and ×
+   take no part in that: each glows only while the pointer is on it. */
+.workspace-bar__pill:hover :is(.workspace-bar__edit, .workspace-bar__remove):not(:hover) {
+  text-shadow: none;
+}
+
+.workspace-bar__pill:hover :is(.workspace-bar__edit, .workspace-bar__remove):not(:hover) svg {
+  filter: none;
 }
 
 .workspace-bar__pill--active {
@@ -446,27 +410,17 @@
   pointer-events: auto;
 }
 
-.workspace-bar__edit,
+/* The two buttons sit closer to each other, and to the pill's right end, than the pill's own gap and padding would put
+   them: half the gap between them, and half the padding after them. */
+.workspace-bar__pill {
+  padding-right: calc(var(--size-spacing-sm) / 2);
+}
+
 .workspace-bar__remove {
-  --hover-grow-bg: var(--color-close-hover-bg);
+  margin-left: calc(-1 * var(--size-spacing-sm) / 2);
 }
 
-/* Unlike the toolbar's tooltips (see tooltip.css), this one can't just grow
-   past its container: the active tab's native `WebContentsView` is layered
-   directly to the right of the sidebar (see TabManager's bounds math), and
-   would silently paint over any tooltip pixel that strayed past the
-   sidebar's own edge — clipping wouldn't even be the failure mode, it'd
-   just render behind that view. Anchoring right and capping the width
-   keeps the whole tooltip inside `--size-sidebar-width`, wrapping instead
-   of overflowing if the text is too long for one line at that width. */
-.workspace-bar__edit::after,
-.workspace-bar__remove::after {
-  right: 0;
-  max-width: 150px;
-  white-space: normal;
-}
-
-/* Collapsed, the pill's room is the rail minus the toggle strip: its usual
+/* Collapsed, the pill's room is the rail less its padding: its usual
    side padding would push a 16px icon past that and clip it. Trimmed so the
    whole icon, whatever its shape, sits inside and roughly centered. */
 .sidebar--hidden .workspace-bar__pill {
@@ -477,16 +431,6 @@
 .sidebar--hidden .workspace-bar__new {
   padding-left: 10px;
   padding-right: 0;
-}
-
-/* Same reasoning as `.sidebar--hidden .sidebar__toggle::after` above —
-   collapsed, this pill is squeezed down to `--size-sidebar-collapsed-width`
-   itself, so its own tooltip needs the same tighter cap to actually stay
-   inside that, not the much roomier `--size-sidebar-width` this pill has
-   when the sidebar is fully expanded. */
-.sidebar--hidden .workspace-bar__edit::after,
-.sidebar--hidden .workspace-bar__remove::after {
-  max-width: calc(var(--size-sidebar-collapsed-width) - 2px);
 }
 
 /* ── NEW WORKSPACE ────────────────────────────────────────────────────── */
@@ -517,21 +461,6 @@
    drop-target treatment as `.workspace-bar__pill--drop-target`. */
 .workspace-bar__new--drop-target {
   box-shadow: inset 0 0 0 2px var(--color-accent-text);
-}
-
-/* Same reasoning as `.workspace-bar__remove::after` above — kept inside
-   `--size-sidebar-width` so the active tab's native view can't paint over
-   it. Anchored left since this button spans the sidebar's full width. */
-.workspace-bar__new::after {
-  left: 0;
-  max-width: 150px;
-  white-space: normal;
-}
-
-/* Same reasoning (and the same `TooltipOverlay` swap) as
-   `.sidebar--hidden .sidebar__toggle::after` above. */
-.sidebar--hidden .workspace-bar__new::after {
-  display: none;
 }
 
 .workspace-bar__new-icon {
@@ -598,20 +527,6 @@
 .workspace-bar__star:hover,
 .workspace-bar__star[aria-pressed='true'] {
   color: var(--color-accent-text);
-}
-
-/* Anchored to the star's own left edge and growing rightward, so the tooltip stays inside the sidebar. It wraps
-   inside its box, rather than running out of it as the default one-line tooltip would at this width. */
-.workspace-bar__star::after {
-  left: 0;
-  max-width: 140px;
-  white-space: normal;
-  /* Opens downward (the default is up): the first workspace sits at the sidebar's very top, which would clip it.
-     It stays inside the 140px-wide sidebar column, so the tab's own view can't paint over it. */
-  top: 100%;
-  bottom: auto;
-  margin-top: 6px;
-  margin-bottom: 0;
 }
 
 /* A saved workspace's filled star, hovered, is about to be unsaved: it spins a quarter turn (the star looks the
@@ -723,32 +638,9 @@
   padding-left: 6px;
 }
 
-/* The sidebar's right edge is this button's: its tooltip grows leftward, inside the sidebar. */
-.workspace-bar__images::after {
-  right: 0;
-  left: auto;
-  /* Two lines ("Workspace images" / the shortcut) — it opens upward, and with one workspace there is little room above. */
-  max-width: 168px;
-  white-space: normal;
-}
-
-.sidebar--hidden .workspace-bar__images::after {
-  display: none;
-}
-
-/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
-
-/* No slide: the toggle's fill only fades in and out, as every `.hover-grow` fill does with reduced motion. */
-@media (prefers-reduced-motion: reduce) {
-  .sidebar__toggle::before {
-    opacity: 0;
-    transform: none;
-  }
-}
-
 /* ── Shimmer ──
    Every 20 seconds (`useShimmerTick`) a wave runs down the workspaces, top to bottom: each one's icon
-   and name brighten and lift a little, one after another, `--shimmer-index`
+   and name brighten where they are, one after another, `--shimmer-index`
    setting how far along the wave each is. Two identical keyframes taken by
    turns (`data-shimmer` a/b), since an animation only restarts when its name
    changes. */
@@ -763,14 +655,12 @@
 @keyframes workspace-shimmer-a {
   45% {
     filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
-    transform: translateY(-1px);
   }
 }
 
 @keyframes workspace-shimmer-b {
   45% {
     filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
-    transform: translateY(-1px);
   }
 }
 

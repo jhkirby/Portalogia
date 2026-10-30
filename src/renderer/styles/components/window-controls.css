@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-29 */
 
 /* ── WINDOW CONTROLS ──────────────────────────────────────────────────── */
 /* Lives inside `.titlebar` (see app.css), which is the frameless window's
@@ -36,24 +36,13 @@
   cursor: pointer;
 }
 
-/* Matches the OS convention (and the native titlebar this replaces) of a
-   red close button on hover, distinct from the other two. */
+/* Hovered, the buttons glow (`.hover-glow`) rather than filling in. Close glows red in either theme, the OS
+   convention of a red close button, so it stays distinct from the other two. */
 .window-controls__button--close {
-  --hover-grow-bg: #e81123;
+  --color-hover-glow: rgba(232, 17, 35, 0.85);
 }
 
-.window-controls__button--close:hover {
-  color: #ffffff;
+.window-controls__button--close.hover-glow:hover {
+  color: #ff4d5a;
 }
 
-/* These sit in the very top row, so (like `.tab-bar__close`) the tooltip opens
-   downward: there is no room above, and below is still chrome (the toolbar), not
-   the tab's native view. Anchored to the button's right edge, growing leftward,
-   because the buttons are flush against the window's right edge. */
-.window-controls__button::after {
-  top: 100%;
-  bottom: auto;
-  right: 0;
-  margin-top: 6px;
-  margin-bottom: 0;
-}

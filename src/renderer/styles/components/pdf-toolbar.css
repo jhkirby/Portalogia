@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-29 */
 
 /* ── PDF TOOLBAR ──────────────────────────────────────────────────────── */
 /* The PDF tab's controls inside the chrome's main toolbar, in the slot a
@@ -14,34 +14,6 @@
   gap: var(--size-spacing-sm);
   /* No smaller than its own controls: in a narrow window the page tools beside it scroll instead (`.page-actions`). */
   min-width: min-content;
-}
-
-/* The file name: always a text box (selectable, unlike the page body). */
-.pdf-toolbar__file-name {
-  flex: 0 1 280px;
-  height: 26px;
-  padding: 0 var(--size-spacing-sm);
-  min-width: 0;
-
-  background: transparent;
-  /* No box until the pointer is over it or the cursor is in it. */
-  border: 1px solid transparent;
-  border-radius: var(--size-radius-sm);
-
-  font: inherit;
-  font-size: var(--size-font-sm);
-  color: var(--color-tab-text-active);
-  user-select: text;
-}
-
-/* Hovering shows the toolbar's grey border; the accent color is for when the cursor is inside. */
-.pdf-toolbar__file-name:hover {
-  border-color: var(--color-chrome-border);
-}
-
-.pdf-toolbar__file-name:focus {
-  outline: none;
-  border-color: var(--color-accent-text);
 }
 
 .pdf-toolbar__button {
@@ -71,42 +43,8 @@
   color: #d93025;
 }
 
-/* The bookmark star, left of Open — same look as the address bar's. */
-.pdf-toolbar__bookmark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  padding: 0;
-
-  background: transparent;
-  border: none;
-  border-radius: var(--size-radius-sm);
-
-  color: var(--color-address-placeholder);
-  cursor: pointer;
-}
-
-/* Sits at the toolbar's left edge, so the shared tooltip must grow rightward
-   from the button: left alone, the button's centered flex layout would
-   center it on the 20px star, pushing half of it off the window. */
-.pdf-toolbar__bookmark::after {
-  left: 0;
-}
-
-.pdf-toolbar__bookmark[aria-pressed='true'] {
-  color: var(--color-accent-text);
-}
-
-.pdf-toolbar__bookmark:disabled {
-  color: var(--color-button-disabled-text);
-  cursor: default;
-}
-
-/* The search box shown in the file name's place while no file is open — the
-   address bar's look, since it plays the same part for bookmarked PDFs. */
+/* The search box shown in the file name's place while no file is open. Inside the file bar (`FileBar`), which is
+   where it always sits now, `file-bar.css` takes its box away so the bar's pill is its only one. */
 .pdf-search {
   display: flex;
   flex: 0 1 280px;

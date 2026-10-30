@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -92,7 +92,9 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
       return;
     }
     const updateRect = (): void => {
-      const rect = containerRef.current?.getBoundingClientRect();
+      // The whole file bar it sits in, not just the box: the dropdown hangs from the bar, as the address bar's does.
+      const anchor = containerRef.current?.closest('.file-bar') ?? containerRef.current;
+      const rect = anchor?.getBoundingClientRect();
       if (rect) {
         setDropdownRect({ top: rect.bottom, left: rect.left, width: rect.width });
       }

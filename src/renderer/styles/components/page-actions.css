@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-18 */
+   Last Modified: 2026-10-29 */
 
 /* ── PAGE ACTIONS ─────────────────────────────────────────────────────── */
 
@@ -27,22 +27,6 @@
 /* Every tool keeps its size; the strip scrolls instead of squeezing them. */
 .page-actions > * {
   flex-shrink: 0;
-}
-
-/* A tooltip drawn inside the scrolling strip would be clipped by it, so it is pinned to the window instead and placed
-   against its own button with anchor positioning: still just above the button, growing leftward from its right edge
-   (see `.page-actions__button::after`), and hidden while its button is scrolled out of sight. */
-.page-actions .chrome-tooltip {
-  anchor-name: --page-action;
-  anchor-scope: --page-action;
-}
-
-.page-actions .chrome-tooltip::after {
-  position: fixed;
-  position-anchor: --page-action;
-  bottom: anchor(top);
-  right: anchor(right);
-  left: auto;
 }
 
 .page-actions__divider {
@@ -71,17 +55,6 @@
   color: var(--color-tab-text);
 
   cursor: pointer;
-}
-
-/* This whole group sits at the toolbar's right edge — see tooltip.css for
-   the shared `.chrome-tooltip` look this button also carries — close
-   enough to the window's own right edge that a wide, centered tooltip
-   (e.g. "Search tabs (Ctrl+K)") can overflow past it. Anchoring to the
-   button's own right edge and growing leftward instead keeps every
-   tooltip here inside the window no matter how close its button is to
-   that edge. */
-.page-actions__button::after {
-  right: 0;
 }
 
 .page-actions__button:disabled {

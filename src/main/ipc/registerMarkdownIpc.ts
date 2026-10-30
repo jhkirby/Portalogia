@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-29
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -30,7 +30,7 @@ import type { TabManager } from '../browser/TabManager';
 /**
  * Registers the Markdown tab's channels, in two groups:
  *
- * - **Chrome → main** (the toolbar's New, Open, Close, rename, mode switch,
+ * - **Chrome → main** (the toolbar's New, Open, Close, Delete, rename, mode switch,
  *   history arrows, export, bookmark search), routed to whichever
  *   `TabManager` owns the tab, since a tab can have moved to another window.
  * - **Page → main** (saving an edit, saving marks, following a link,
@@ -59,6 +59,7 @@ export function registerMarkdownIpc(
   invokeForTab(IpcChannel.MarkdownOpenFile, tabIdRequestSchema, (manager, request) => manager.openMarkdownFile(request.id));
   invokeForTab(IpcChannel.MarkdownNewFile, tabIdRequestSchema, (manager, request) => manager.newMarkdownFile(request.id));
   invokeForTab(IpcChannel.MarkdownCloseFile, tabIdRequestSchema, (manager, request) => manager.closeMarkdownFile(request.id));
+  invokeForTab(IpcChannel.MarkdownDeleteFile, tabIdRequestSchema, (manager, request) => manager.deleteMarkdownFile(request.id));
   invokeForTab(IpcChannel.MarkdownRename, markdownRenameRequestSchema, (manager, request) =>
     manager.renameMarkdownTab(request.id, request.name),
   );

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { SecretField, SecretState } from '@shared/ipc-contract';
@@ -316,6 +316,8 @@ export function SecretsViewer() {
                     className={className}
                     direction={sort.directionOf(column)}
                     onToggle={() => sort.toggle(column)}
+                    // Re-sorting under Add's row would shuffle the table while it's being filled in.
+                    disabled={newSecret !== null}
                   />
                 ))}
                 <th className="history__th secrets__th--secret">Secret</th>

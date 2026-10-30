@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-24 */
+   Last Modified: 2026-10-29 */
 
 /* ── TERMINAL ─────────────────────────────────────────────────────────── */
 /* One terminal tab's whole page (`terminal.html`), a dedicated
@@ -54,7 +54,10 @@ body {
   flex: 1;
   min-height: 0;
   margin: var(--size-content-frame-y) var(--size-content-frame-x);
-  border: 1px solid light-dark(#d7d9db, #5f6368);
+  /* The same frame as every other tab's (the History table's look, `--color-panel-border`). The fallback is that
+     token's own two values, for the moment before `followSystemTheme` sets `data-theme`: without it the whole
+     border would drop out. */
+  border: 1px solid var(--color-panel-border, light-dark(#d7d9db, #5f6368));
   border-radius: var(--size-content-frame-radius);
   /* Room between the prompt and the window's left edge (and a little above the first line). xterm's fit measures the
      space inside this padding, so its rows and columns stay whole. */
@@ -67,6 +70,20 @@ body {
      takes for that to happen, so it should match rather than always
      flashing dark first in light mode. */
   background: light-dark(#ffffff, #1e1e1e);
+
+  transition:
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+/* The cursor is in the terminal (`trackPageFocus`): the frame lights up in the accent, as a web page's does.
+   Shift+Escape gives the keyboard back to the chrome; Escape there hands it back. */
+.page-focused .terminal__surface {
+  border-color: var(--color-accent-text);
+  /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */
+  box-shadow:
+    0 0 0 1px var(--color-accent-text),
+    0 0 14px 2px rgba(var(--color-accent-rgb), 0.55);
 }
 
 /* Toggled by `Terminal.tsx`'s own `onHighlighterState` subscription — the

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 /**
  * Height, in CSS pixels, of the browser chrome (titlebar row + toolbar) at
@@ -68,16 +68,15 @@ export const SIDEBAR_WIDTH_PX = 180;
  * Width, in CSS pixels, the sidebar collapses to when toggled off (Ctrl+L)
  * — not all the way to 0: kept as a narrow icon rail (workspace dots stay
  * visible *and* clickable, and so does `WorkspaceBar`'s own
- * `.sidebar__toggle` nub) instead of disappearing outright, which the main
+ * `.sidebar__toggle` button at the top) instead of disappearing outright, which the main
  * process makes room for by shifting the tab's own native content right by
  * exactly this much (`TabManager.targetLeftInset`) whenever the sidebar is
  * off but Focus Mode isn't on. That native content is a separate compositor
  * surface layered above this chrome, immune to CSS z-index — which is why
- * `.sidebar__toggle` and `.workspace-bar__new`'s own tooltips switch to
- * `TooltipOverlay` (a second native view stacked *above* the tab's own,
- * same idea as `SuggestionsOverlay`) instead of the plain CSS one the rest
- * of the chrome uses, the moment the sidebar collapses to this width — see
- * `useOverlayTooltip`. Must equal `--size-sidebar-collapsed-width` in
+ * every chrome tooltip is drawn by `TooltipOverlay` (a second native view
+ * stacked *above* the tab's own, same idea as `SuggestionsOverlay`), so
+ * the rail's tooltips show beside it in full — see `installChromeTooltips`.
+ * Must equal `--size-sidebar-collapsed-width` in
  * `sizes.css`, the same relationship `SIDEBAR_WIDTH_PX` has with
  * `--size-sidebar-width`. Focus Mode collapses all the way to 0 instead —
  * full immersion, no lingering rail — which is why this is a separate
@@ -289,7 +288,7 @@ export const TAB_STRIP_HEIGHT_PX = 48;
  * workspace — and mirrored in the tab bar, which hides its "+" button at the
  * limit. A tab shown from several windows counts once.
  */
-export const MAX_TABS_PER_WORKSPACE = 8;
+export const MAX_TABS_PER_WORKSPACE = 7;
 
 /**
  * The most workspaces that can exist at once. Enforced in the main process

@@ -1,15 +1,15 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-29
 
 import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
 import { useClickRipples } from '../../hooks/useClickRipples';
-import { useOverlayTooltip } from '../../hooks/useOverlayTooltip';
 import { formatShortcut } from '../../lib/shortcuts';
-import { BookmarkStarIcon, PencilIcon, WorkspaceImagesIcon } from '../icons';
+import { BookmarkStarIcon, PencilIcon, SidebarIcon, WorkspaceImagesIcon } from '../icons';
+import { Mist } from '../Mist';
 import { WorkspaceIcon } from '../WorkspaceIcon';
 import { usePointerGlow } from '../../hooks/usePointerGlow';
 import { useShimmerTick } from '../../hooks/useShimmerTick';
@@ -26,10 +26,10 @@ interface WorkspaceBarProps {
   /**
    * Whether Focus Mode is on — distinct from `sidebarVisible` being
    * `false`: Focus Mode collapses the sidebar all the way to 0 (full
-   * immersion) and hides `.sidebar__toggle` outright, while an ordinary
+   * immersion) and drops `.sidebar__toggle` outright, while an ordinary
    * Ctrl+L toggle collapses it only to `SIDEBAR_COLLAPSED_WIDTH_PX`,
-   * leaving that button visible and clickable — see workspace-bar.css's
-   * `.sidebar--hidden`/`.sidebar--focus-mode`.
+   * leaving that button at the top of the rail, visible and clickable — see
+   * workspace-bar.css's `.sidebar--hidden`/`.sidebar--focus-mode`.
    */
   readonly focusMode: boolean;
   /** The workspaces multi-selected with Ctrl/Shift+click (active one included), or empty — they're drawn selected. */
@@ -56,7 +56,7 @@ interface WorkspaceBarProps {
   readonly onRemoveImage: (imageId: string) => void;
   /** Opens the workspace images popup. */
   readonly onOpenImages: () => void;
-  /** Shows or hides the sidebar — `.sidebar__toggle`'s own click, the same Ctrl+L action. */
+  /** Shows or hides the sidebar — the heading's `.sidebar__toggle` click, the same Ctrl+L action. */
   readonly onToggleSidebar: () => void;
 }
 
@@ -107,17 +107,6 @@ export function WorkspaceBar({
   // Every 20 s a shimmer runs down the workspaces' icons and names (the tabs' runs 10 s apart from it).
   const shimmer = useShimmerTick(0);
 
-  // Collapsed (`!sidebarVisible`), these two buttons swap their tooltip
-  // from the plain CSS one (tooltip.css) to `TooltipOverlay` — see
-  // `useOverlayTooltip`'s own doc comment for why. Still called
-  // unconditionally (hooks can't be conditional); only actually wired onto
-  // the buttons below while collapsed.
-  const sidebarToggleTooltip = useOverlayTooltip(
-    `${sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} (${formatShortcut('L')})`,
-  );
-  const newWorkspaceTooltip = useOverlayTooltip(`New workspace (${formatShortcut('Shift+N')})`);
-  const imagesTooltip = useOverlayTooltip(`Workspace images (${formatShortcut('Shift+S')})`);
-
   // Collapsing the sidebar mid-rename drops the rename, for the same reason a double-click can't start one then.
   if (!sidebarVisible && editingId !== null) {
     setEditingId(null);
@@ -148,14 +137,34 @@ export function WorkspaceBar({
       ref={sidebarRef}
       className={`sidebar pointer-glow-host${sidebarVisible ? '' : ' sidebar--hidden'}${focusMode ? ' sidebar--focus-mode' : ''}`}
     >
-      {/* The accent glowing around the pointer while it's over the sidebar, under everything in it. */}
+      {/* Mist drifting up and down the sidebar, then the accent glowing around the pointer, under everything in it. */}
+      <Mist variant="rail" />
       <div className="pointer-glow" aria-hidden="true" />
-      {/* Everything that actually needs to disappear as the sidebar
-          collapses lives in this inner wrapper, which clips to nothing —
-          `.sidebar__toggle` below deliberately isn't in here, since it's
-          the one thing meant to stay visible in the collapsed (but not
-          Focus Mode) state; see workspace-bar.css's own comments. */}
+      {/* Everything in the sidebar lives in this inner wrapper, which clips what no longer fits as it collapses. */}
       <div className="sidebar__inner">
+        {/* The sidebar's heading: its name, and the show/hide button at the right. Collapsing squeezes the name away
+            first, leaving the button alone in the rail above the workspaces' icons. */}
+        <div className="sidebar__header">
+          <span className="sidebar__title">Workspaces</span>
+          {/* Omitted in Focus Mode rather than just clipped away: nothing chrome-drawn should be reachable (by click
+              or by Tab-key focus) while it's on, matching the top bar's own `.app--focus-mode .app__bar`. */}
+          {!focusMode && (
+            <button
+              type="button"
+              className="sidebar__toggle hover-glow chrome-tooltip"
+              onClick={(event) => {
+                onToggleSidebar();
+                // Let go of focus: a focused button can keep itself looking "active" after the click.
+                event.currentTarget.blur();
+              }}
+              aria-label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+              aria-expanded={sidebarVisible}
+              data-tooltip={`${sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} (${formatShortcut('L')})`}
+            >
+              <SidebarIcon open={sidebarVisible} />
+            </button>
+          )}
+        </div>
         <div
           ref={listRef}
           className="workspace-bar"
@@ -220,7 +229,7 @@ export function WorkspaceBar({
                 tabIndex={0}
                 aria-selected={isActive || selectedWorkspaceIds.includes(workspace.id)}
                 data-workspace-id={workspace.id}
-                className={`workspace-bar__pill hover-grow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}${enteringIds.has(workspace.id) ? ' workspace-bar__pill--entering' : ''}`}
+                className={`workspace-bar__pill hover-glow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}${enteringIds.has(workspace.id) ? ' workspace-bar__pill--entering' : ''}`}
                 onAnimationEnd={(event) => {
                   // Bubbled up from the ripples and the selected colour too; only the slide-in ends the opening.
                   if (event.animationName === 'workspace-pill-slide-in') {
@@ -316,7 +325,7 @@ export function WorkspaceBar({
                 {!isEditing && (
                   <button
                     type="button"
-                    className="workspace-bar__edit hover-grow chrome-tooltip"
+                    className="workspace-bar__edit hover-glow chrome-tooltip"
                     aria-label={`Edit ${workspace.name} workspace`}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -330,7 +339,7 @@ export function WorkspaceBar({
                 {workspaces.length > 1 && !isEditing && (
                   <button
                     type="button"
-                    className="workspace-bar__remove hover-grow chrome-tooltip"
+                    className="workspace-bar__remove hover-glow chrome-tooltip"
                     aria-label={`Remove ${workspace.name} workspace`}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -372,15 +381,12 @@ export function WorkspaceBar({
         {workspaces.length < MAX_WORKSPACES && (
           <button
             type="button"
-            className={`workspace-bar__new hover-grow chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
+            className={`workspace-bar__new hover-glow chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
             aria-label="New workspace"
             onClick={() => {
-              newWorkspaceTooltip.hide();
               onCreate();
             }}
             data-tooltip={`New workspace (${formatShortcut('Shift+N')})`}
-            onMouseEnter={sidebarVisible ? undefined : newWorkspaceTooltip.onMouseEnter}
-            onMouseLeave={sidebarVisible ? undefined : newWorkspaceTooltip.onMouseLeave}
             onDragOver={(event) => {
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
@@ -404,44 +410,17 @@ export function WorkspaceBar({
         )}
         <button
           type="button"
-          className="workspace-bar__images hover-grow chrome-tooltip"
+          className="workspace-bar__images hover-glow chrome-tooltip"
           aria-label="Workspace images"
           onClick={() => {
-            imagesTooltip.hide();
             onOpenImages();
           }}
           data-tooltip={`Workspace images (${formatShortcut('Shift+S')})`}
-          onMouseEnter={sidebarVisible ? undefined : imagesTooltip.onMouseEnter}
-          onMouseLeave={sidebarVisible ? undefined : imagesTooltip.onMouseLeave}
         >
           <WorkspaceImagesIcon size={16} />
         </button>
         </div>
       </div>
-      {/* Outside `.sidebar__inner` on purpose — see the wrapper's own
-          comment above. Omitted entirely in Focus Mode rather than just
-          hidden: nothing chrome-drawn should be reachable (by click or by
-          Tab-key focus) while it's on, matching the top bar's own
-          `.app--focus-mode .app__bar` treatment. */}
-      {!focusMode && (
-        <button
-          type="button"
-          className="sidebar__toggle hover-grow chrome-tooltip"
-          onClick={(event) => {
-            sidebarToggleTooltip.hide();
-            onToggleSidebar();
-            // Let go of focus: a focused button can keep itself looking "active"
-            // after the click, and this one should only ever show while hovered.
-            event.currentTarget.blur();
-          }}
-          aria-label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-          data-tooltip={`${sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} (${formatShortcut('L')})`}
-          onMouseEnter={sidebarVisible ? undefined : sidebarToggleTooltip.onMouseEnter}
-          onMouseLeave={sidebarVisible ? undefined : sidebarToggleTooltip.onMouseLeave}
-        >
-          {sidebarVisible ? '‹' : '›'}
-        </button>
-      )}
     </aside>
   );
 }

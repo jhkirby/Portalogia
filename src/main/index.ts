@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, safeStorage, screen, session } from 'electron';
@@ -48,6 +48,17 @@ import { watchTitlebarHover } from './windows/titlebarHover';
 
 // Electron requires this to be set before `app.whenReady()`.
 app.setName('Northstar');
+
+// Dev runs get their own profile so they never open the installed app's
+// data — bookmarks, history, cookies, and above all saved secrets. It also
+// gives dev its own `Local State` key, so the installed app's encrypted
+// secrets can't be decrypted even if they were copied over. An explicit
+// `--user-data-dir` (the e2e fixtures pass a temp dir) still wins. This has
+// to run before anything reads `userData`, which the stores below do as
+// soon as this module loads.
+if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
+  app.setPath('userData', join(app.getPath('appData'), 'Northstar-Dev'));
+}
 
 // Custom schemes must be registered as privileged before the app is ready.
 // `standard: true` gives it normal URL parsing (host, path); `secure: true`

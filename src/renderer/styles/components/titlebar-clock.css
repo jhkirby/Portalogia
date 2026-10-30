@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-27 */
+   Last Modified: 2026-10-29 */
 
 /* ── TITLEBAR CLOCK ───────────────────────────────────────────────────── */
 /* Shares the titlebar's top-right corner with WindowControls (see app.css's
@@ -42,6 +42,7 @@
 
 /* Flex boxes, so the icons centre on the row instead of sitting on a text baseline; the device count and the network's
    name sit close beside their icons, as the battery's percent does. */
+.titlebar-clock__audio,
 .titlebar-clock__bluetooth,
 .titlebar-clock__wifi {
   display: flex;
@@ -50,6 +51,11 @@
 
   font-size: var(--size-font-md);
   font-weight: 600;
+}
+
+/* The playback device's name shows in full. */
+.titlebar-clock__audio-device {
+  white-space: nowrap;
 }
 
 /* A long network name would push the clock around; it stops at a set width with an ellipsis. */

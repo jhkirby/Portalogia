@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-29
 
 import type { Page } from 'playwright';
 import { formatClockDate } from '../../src/renderer/lib/clockFormat';
@@ -19,19 +19,6 @@ async function pointAtToolbar(window: Page): Promise<void> {
 /** Moves the pointer onto the first tab. */
 async function pointAtTabRow(window: Page): Promise<void> {
   await window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab').first().hover();
-}
-
-/**
- * A computed style of an element's `::before` layer.
- * @param window The chrome window.
- * @param selector The element.
- * @param property The CSS property, as `getComputedStyle` names it.
- */
-function beforeStyle(window: Page, selector: string, property: 'transform' | 'transformOrigin' | 'opacity'): Promise<string> {
-  return window.evaluate(
-    ([sel, prop]) => getComputedStyle(document.querySelector(sel)!, '::before')[prop as 'transform'],
-    [selector, property] as const,
-  );
 }
 
 test.describe('titlebar corner', () => {
@@ -77,21 +64,5 @@ test.describe('titlebar corner', () => {
     expect(corner && clock && controls).toBeTruthy();
     expect(corner!.width).toBeGreaterThanOrEqual(Math.max(clock!.width, controls!.width) - 0.5);
     expect(clock!.x).toBeGreaterThanOrEqual(corner!.x - 0.5);
-  });
-});
-
-test.describe('sidebar toggle hover', () => {
-  test('the fill is anchored on the sidebar border and slides out from it, not from the centre', async ({ window }) => {
-    const toggle = '.sidebar__toggle';
-    await pointAtToolbar(window);
-    // At rest the fill has no width, pinned to the strip's right edge — the border with the page.
-    await expect.poll(() => beforeStyle(window, toggle, 'transform')).toBe('matrix(0, 0, 0, 1, 0, 0)');
-    const width = await window.locator(toggle).evaluate((el) => el.getBoundingClientRect().width);
-    expect((await beforeStyle(window, toggle, 'transformOrigin')).split(' ')[0]).toBe(`${width}px`);
-
-    await window.locator(toggle).hover();
-    await expect.poll(() => beforeStyle(window, toggle, 'transform')).toBe('matrix(1, 0, 0, 1, 0, 0)');
-    // Opaque throughout, so it slides in rather than fading in.
-    expect(await beforeStyle(window, toggle, 'opacity')).toBe('1');
   });
 });

@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-24 */
+   Last Modified: 2026-10-29 */
 
 :root {
   /* Also the titlebar's own height now that the tab strip and
@@ -38,9 +38,6 @@
      see its own comment there for why the sidebar collapses to this
      instead of straight to 0. */
   --size-sidebar-collapsed-width: 40px;
-  /* The sidebar's toggle strip along its right edge. Content (workspace pills,
-     "New workspace") keeps clear of this much, so it never sits under the strip. */
-  --size-sidebar-toggle-width: 10px;
   /* Must equal SIDEBAR_TOGGLE_DURATION_MS in src/shared/constants.ts —
      shared by the sidebar's slide (Ctrl+L) and the chrome's Focus Mode
      slide (Ctrl+Shift+F, see `.app--focus-mode` in app.css). The main

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
@@ -98,10 +98,16 @@ export class MarkdownDocuments {
    * @param path The note's path.
    * @param history `'reset'` for a note picked from the toolbar (the tab's Back/Forward start over) or
    *   `'push'` for one reached by a link (the note it came from becomes Back).
+   * @param onProgress Called as the file is read, with the share of it read so far (0-1).
    * @throws If the file is missing, isn't a note, or is too large.
    */
-  public async open(id: string, path: string, history: 'reset' | 'push'): Promise<OpenedNote> {
-    const loaded = await this.read(path);
+  public async open(
+    id: string,
+    path: string,
+    history: 'reset' | 'push',
+    onProgress?: (fraction: number) => void,
+  ): Promise<OpenedNote> {
+    const loaded = await this.read(path, onProgress);
     const previous = this.notes.get(id);
     const back = history === 'push' && previous && !samePath(previous.path, path) ? [...previous.back, previous.path] : [];
     return this.install(id, path, loaded, { back, forward: [] });
@@ -276,12 +282,17 @@ export class MarkdownDocuments {
     this.notes.delete(id);
   }
 
-  /** Reads and normalizes one note from disk. */
-  private async read(path: string): Promise<{ content: string; ending: LineEnding; mtimeMs: number }> {
+  /** Reads and normalizes one note from disk, telling `onProgress` the share of it read so far (0-1). */
+  private async read(
+    path: string,
+    onProgress?: (fraction: number) => void,
+  ): Promise<{ content: string; ending: LineEnding; mtimeMs: number }> {
     if (!isMarkdownPath(path)) {
       throw new Error('That file is not a Markdown note (.md or .markdown).');
     }
-    const read = await readFileCapped(path, MAX_NOTE_BYTES);
+    const read = await readFileCapped(path, MAX_NOTE_BYTES, (bytesRead, totalBytes) =>
+      onProgress?.(Math.min(bytesRead, totalBytes) / Math.max(totalBytes, 1)),
+    );
     if (read.kind === 'not-file') {
       throw new Error('That is not a file.');
     }

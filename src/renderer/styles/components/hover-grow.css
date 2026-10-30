@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-17 */
+   Last Modified: 2026-10-29 */
 
 /* ── HOVER GROW ───────────────────────────────────────────────────────── */
 
@@ -35,9 +35,7 @@
     opacity 140ms ease-out;
 }
 
-/* `isolation` confines a `.chrome-tooltip`'s own `::after` (z-index 10) to this button, where a later sibling would
-   paint over it. The tooltip only shows while the button is hovered, so lifting the hovered button to the tooltip's
-   old level keeps it on top as before. */
+/* A hovered button rises above its siblings, so nothing beside it paints over its own effects. */
 .hover-grow:hover {
   z-index: 10;
 }

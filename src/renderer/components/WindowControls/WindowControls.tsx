@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-10-29
 
 import { useEffect, useState } from 'react';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -24,7 +24,7 @@ export function WindowControls() {
     <div className="window-controls">
       <button
         type="button"
-        className="window-controls__button hover-grow chrome-tooltip"
+        className="window-controls__button hover-glow chrome-tooltip"
         onClick={() => window.northstar.minimizeWindow()}
         aria-label="Minimize"
         data-tooltip={`Minimize (${formatShortcut('Alt+M')})`}
@@ -35,7 +35,7 @@ export function WindowControls() {
       </button>
       <button
         type="button"
-        className="window-controls__button hover-grow chrome-tooltip"
+        className="window-controls__button hover-glow chrome-tooltip"
         onClick={() => window.northstar.toggleMaximizeWindow()}
         aria-label={isMaximized ? 'Restore' : 'Maximize'}
         data-tooltip={`${isMaximized ? 'Restore' : 'Maximize'} (${formatShortcut('Alt+Enter')})`}
@@ -53,7 +53,7 @@ export function WindowControls() {
       </button>
       <button
         type="button"
-        className="window-controls__button hover-grow window-controls__button--close chrome-tooltip"
+        className="window-controls__button hover-glow window-controls__button--close chrome-tooltip"
         onClick={() => window.northstar.closeWindow()}
         aria-label="Close"
         // Alt+F4 is the OS's own, on every platform this runs on the same way, so it is not `formatShortcut`'d.

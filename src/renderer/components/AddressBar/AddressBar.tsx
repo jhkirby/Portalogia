@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -9,6 +9,7 @@ import type { AddressSuggestionItem } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
+import { useFadingProgress } from '../../hooks/useFadingProgress';
 import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 import { pageLabel } from '../../lib/pageLabel';
 import { formatShortcut } from '../../lib/shortcuts';
@@ -36,9 +37,6 @@ interface AddressBarProps {
 
 /** Every match, up to a generous limit: the dropdown scrolls through them. */
 const MAX_SUGGESTIONS = SEARCH_SUGGESTIONS_LIMIT;
-
-/** How long the load's progress takes to fade out once it's done. Must match `.address-bar__progress--leaving`. */
-const PROGRESS_FADE_MS = 300;
 
 /** Vertical gap, in CSS pixels, between the address bar's own bottom edge and the suggestions overlay below it. */
 const DROPDOWN_GAP_PX = 6;
@@ -81,20 +79,8 @@ export function AddressBar({
 }: AddressBarProps) {
   const [draft, setDraft] = useState(url);
 
-  // When the load's progress goes (a second after 100%), it fades out rather than vanishing: the last value stays
-  // drawn, marked as leaving, until the fade is done.
-  const [shownProgress, setShownProgress] = useState<{ value: number; leaving: boolean } | null>(
-    loadProgress === null ? null : { value: loadProgress, leaving: false },
-  );
-  useEffect(() => {
-    if (loadProgress !== null) {
-      setShownProgress({ value: loadProgress, leaving: false });
-      return undefined;
-    }
-    setShownProgress((current) => (current ? { ...current, leaving: true } : null));
-    const timer = window.setTimeout(() => setShownProgress(null), PROGRESS_FADE_MS);
-    return () => window.clearTimeout(timer);
-  }, [loadProgress]);
+  // When the load's progress goes (a second after 100%), it fades out rather than vanishing.
+  const shownProgress = useFadingProgress(loadProgress);
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
 
@@ -30,7 +30,8 @@ interface TerminalStatusBarProps {
  * words and characters.
  */
 export function TerminalStatusBar({ stats }: TerminalStatusBarProps) {
-  const pointer = usePointerPosition();
+  // Measured in the framed terminal, as a web page's is in its own view: blank over the background around it.
+  const pointer = usePointerPosition('.terminal__surface');
   const count = (value: number, one: string, many: string): string =>
     `${value.toLocaleString()} ${value === 1 ? one : many}`;
 

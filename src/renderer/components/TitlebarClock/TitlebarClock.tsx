@@ -1,18 +1,19 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { Fragment, useEffect, useState } from 'react';
-import { BatteryIcon, BluetoothIcon, WifiIcon } from '../icons';
+import { BatteryIcon, BluetoothIcon, SpeakerIcon, WifiIcon } from '../icons';
 import { batteryLevel, formatBatteryTimeLeft, useBattery } from '../../hooks/useBattery';
-import { useSystemStatus, wifiBars } from '../../hooks/useSystemStatus';
+import { displayDeviceName, speakerWaves, useSystemStatus, wifiBars } from '../../hooks/useSystemStatus';
 import { formatClockDate, formatClockTime, formatClockTimeZone, msUntilNextSecond } from '../../lib/clockFormat';
 
 /**
  * The date and time in the window's top-right corner, where the window
  * controls are: the date ("Monday, October 19th") over the 24-hour time with seconds, in
- * the computer's own time zone. To its left, in sections split by thin rules: Bluetooth and the Wi-Fi network, then
+ * the computer's own time zone. To its left, in sections split by thin rules: the sound (the playback device and its
+ * volume), then Bluetooth and the Wi-Fi network, then
  * the battery, then the outside temperature beside the clock, since Northstar may cover the whole screen, taskbar
  * included. Shown while the pointer is away from the tab
  * row; hovering the row swaps it for the window controls and the new-tab
@@ -20,7 +21,7 @@ import { formatClockDate, formatClockTime, formatClockTimeZone, msUntilNextSecon
  */
 export function TitlebarClock() {
   const [now, setNow] = useState(() => new Date());
-  const { wifi, bluetooth, weather } = useSystemStatus();
+  const { audio, wifi, bluetooth, weather } = useSystemStatus();
   const battery = useBattery();
   const batteryTimeLeft = battery ? formatBatteryTimeLeft(battery.secondsLeft) : null;
 
@@ -41,6 +42,23 @@ export function TitlebarClock() {
       window.removeEventListener('focus', tick);
     };
   }, []);
+
+  // The speaker (its waves the volume, struck through when muted), the device's name, and the volume unless muted.
+  const sound = audio.state === 'on' && (
+    <span
+      className="titlebar-clock__audio"
+      role="img"
+      aria-label={`${audio.device ?? 'Sound'}: ${audio.muted ? 'muted' : `volume ${audio.volume}%`}`}
+    >
+      <SpeakerIcon waves={speakerWaves(audio.volume)} muted={audio.muted} size={18} />
+      {audio.device && (
+        <span className="titlebar-clock__audio-device" aria-hidden="true">
+          {displayDeviceName(audio.device)}
+        </span>
+      )}
+      {!audio.muted && <span aria-hidden="true">{audio.volume}%</span>}
+    </span>
+  );
 
   const connectivity = (bluetooth.state !== 'unavailable' || wifi.state !== 'unavailable') && (
     <>
@@ -118,7 +136,7 @@ export function TitlebarClock() {
   );
 
   // A rule only between sections that are showing, so a desktop without a battery doesn't get two in a row.
-  const sections = [connectivity, charge, timeAndWeather].filter(Boolean);
+  const sections = [sound, connectivity, charge, timeAndWeather].filter(Boolean);
 
   return (
     <div className="titlebar-clock">

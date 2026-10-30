@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
 export interface BrowserTabState {
@@ -64,6 +64,11 @@ export interface PdfTabState {
   readonly page: number;
   /** Pages in the open document, 0 before one is opened. */
   readonly pageCount: number;
+  /**
+   * How far the file being opened has got, 0-100 — read from disk, then its pages measured — for the file bar's
+   * progress, or `null` when there's none to show (see `FileLoadProgress`).
+   */
+  readonly loadProgress: number | null;
   /** Whether a jump in the document (a followed link, the page box) has left an earlier place to step back to. */
   readonly canGoBack: boolean;
   /** Whether stepping back has left a later place to step forward to. */
@@ -144,6 +149,8 @@ export interface MarkdownTabState {
    * formatted edits the drawn note in place.
    */
   readonly display: MarkdownDisplay;
+  /** How far the note being opened has got, 0-100, or `null` when there's none to show — see `PdfTabState.loadProgress`. */
+  readonly loadProgress: number | null;
   /** Whether following a link has left an earlier note this tab can step back to. */
   readonly canGoBack: boolean;
   /** Whether stepping back has left a later note this tab can step forward to. */
@@ -233,6 +240,12 @@ export interface BrowserState {
   readonly savedWorkspaceImages: Readonly<Record<string, string>>;
   readonly splitView: SplitViewState | null;
   readonly focusMode: boolean;
+  /**
+   * Whether the active tab's own page has the keyboard (rather than the chrome): the frame around a web page lights up
+   * in the accent while it does. Clicking into the page gives it the keyboard; Shift+Escape takes it back to the
+   * chrome, and Escape in the chrome hands it to the page again.
+   */
+  readonly contentFocused: boolean;
   /** Whether the workspace sidebar is currently shown (toggled via Ctrl+L). */
   readonly sidebarVisible: boolean;
   /** The tab currently grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it) — `null` when nothing is grabbed. */

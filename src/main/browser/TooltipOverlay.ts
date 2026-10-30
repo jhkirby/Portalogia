@@ -1,15 +1,15 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-25
+// Last Modified: 2026-10-29
 
 import { join } from 'node:path';
 import { app, BrowserWindow, WebContentsView } from 'electron';
 import { IpcChannel, type TooltipSyncPayload } from '@shared/ipc-contract';
 
 /**
- * Owns the collapsed sidebar's own tooltip (`.sidebar__toggle`,
- * `.workspace-bar__new` — see `useOverlayTooltip`) as its own small,
+ * Owns every chrome tooltip (each `.chrome-tooltip` — see
+ * `installChromeTooltips`) as its own small,
  * persistent `WebContentsView`, exactly the same reasoning as
  * `SuggestionsOverlay`: whichever tab is active has its own
  * `WebContentsView`, a native surface that always paints above the

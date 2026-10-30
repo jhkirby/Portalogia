@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useState } from 'react';
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
@@ -36,7 +36,8 @@ interface PdfStatusBarProps {
  */
 export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToPage }: PdfStatusBarProps) {
   const [draft, setDraft] = useState<string | null>(null);
-  const pointer = usePointerPosition();
+  // Measured in the framed document, as a web page's is in its own view: blank over the background around it.
+  const pointer = usePointerPosition('.pdf-viewer__body');
   const count = (value: number): string => value.toLocaleString();
   const counted = (value: number | undefined, one: string, many: string): string =>
     value === undefined ? `… ${many}` : `${count(value)} ${value === 1 ? one : many}`;

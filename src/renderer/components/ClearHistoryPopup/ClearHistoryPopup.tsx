@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useState, type ChangeEvent, type KeyboardEvent } from 'react';
 
-/** The word typed to confirm, as it shows (any case may be typed). */
-const CONFIRM_WORD = 'DELETE';
+/** The word typed to confirm, as it shows (any case may be typed). Shared by every deletion popup. */
+export const CONFIRM_WORD = 'DELETE';
 
 interface ClearHistoryPopupProps {
   /** How many visits the range covers: what would be deleted. `null` while it's still being counted. */

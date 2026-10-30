@@ -33,7 +33,7 @@ export function NavControls({
     <div className="nav-controls">
       <button
         type="button"
-        className="nav-controls__button hover-grow chrome-tooltip"
+        className="nav-controls__button hover-glow chrome-tooltip"
         onClick={onBack}
         disabled={!canGoBack}
         aria-label="Back"
@@ -43,7 +43,7 @@ export function NavControls({
       </button>
       <button
         type="button"
-        className="nav-controls__button hover-grow chrome-tooltip"
+        className="nav-controls__button hover-glow chrome-tooltip"
         onClick={onForward}
         disabled={!canGoForward}
         aria-label="Forward"
@@ -53,7 +53,7 @@ export function NavControls({
       </button>
       <button
         type="button"
-        className="nav-controls__button hover-grow chrome-tooltip"
+        className="nav-controls__button hover-glow chrome-tooltip"
         onClick={onReloadOrStop}
         aria-label={isLoading ? 'Stop' : 'Reload'}
         data-tooltip={isLoading ? 'Stop' : `Reload (${formatShortcut('R')})`}
@@ -62,7 +62,7 @@ export function NavControls({
       </button>
       <button
         type="button"
-        className="nav-controls__button hover-grow chrome-tooltip"
+        className="nav-controls__button hover-glow chrome-tooltip"
         onClick={onHome}
         aria-label="Home"
         data-tooltip={`Home (${formatShortcut('H')})`}

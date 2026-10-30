@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-10-29
 
 import {
   useCallback,
@@ -37,6 +37,9 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 /** PDF page sizes are in points (1/72 in); CSS pixels are 1/96 in. Scale 1 here means "actual size". */
 const CSS_PIXELS_PER_POINT = 96 / 72;
+
+/** How much of this page's part of a load is pdf.js parsing the document; the rest is measuring its pages. */
+const PDF_PARSE_SHARE_PERCENT = 10;
 
 /** How long zoom must sit still before pages re-rasterize at the new scale. */
 const RENDER_SCALE_DEBOUNCE_MS = 150;
@@ -283,15 +286,27 @@ export function PdfViewer() {
     setClosing(false);
     setError(null);
     startLoadBlur();
+    // How far this page has got with the file, for the file bar: the document parsed, then each page measured.
+    // Only a new whole percent is sent, so a long document's pages don't each make a report.
+    let reported = -1;
+    const reportProgress = (percent: number): void => {
+      const whole = Math.floor(percent);
+      if (whole > reported) {
+        reported = whole;
+        window.northstarPdf.reportLoadProgress(whole);
+      }
+    };
     try {
       // Read before pdf.js takes the bytes: it hands the buffer to its worker, which empties it here.
       const bytes = file.data.byteLength;
       const loaded = await getDocument({ data: file.data }).promise;
+      reportProgress(PDF_PARSE_SHARE_PERCENT);
       setFileBytes(bytes);
       const sizes: PageSize[] = [];
       for (let n = 1; n <= loaded.numPages; n += 1) {
         const viewport = (await loaded.getPage(n)).getViewport({ scale: CSS_PIXELS_PER_POINT });
         sizes.push({ width: viewport.width, height: viewport.height });
+        reportProgress(PDF_PARSE_SHARE_PERCENT + (n / loaded.numPages) * (100 - PDF_PARSE_SHARE_PERCENT));
       }
       setDoc((previous) => {
         void previous?.loadingTask.destroy();
@@ -322,6 +337,8 @@ export function PdfViewer() {
       setError(openError instanceof Error ? openError.message : 'Could not open that PDF.');
     } finally {
       finishLoadBlur();
+      // Done either way: a file that failed to open has nothing left to load.
+      reportProgress(100);
     }
   }, [startLoadBlur, finishLoadBlur]);
 

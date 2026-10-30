@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useState } from 'react';
 import type { BookmarkState, MarkdownDisplay, MarkdownTabState } from '@shared/tab-state';
 import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
-import { BookmarkStarIcon } from '../icons';
+import { FileBar } from '../FileBar';
 import { PdfSearchBox } from '../PdfToolbar/PdfSearchBox';
 
 /** Must match `markdownRenameRequestSchema` in main: something, then ".md" or ".markdown". */
@@ -27,6 +27,8 @@ interface MarkdownToolbarProps {
   readonly onOpen: (id: string) => void;
   /** Closes the open note, leaving the tab empty. */
   readonly onClose: (id: string) => void;
+  /** Asks to delete the open note (its file goes to the Recycle Bin): `App` confirms with the user first. */
+  readonly onDelete: (id: string) => void;
   readonly onSetMode: (id: string, mode: 'view' | 'edit') => void;
   /** Switches between the formatted note and its raw text. */
   readonly onSetDisplay: (id: string, display: MarkdownDisplay) => void;
@@ -38,11 +40,12 @@ interface MarkdownToolbarProps {
 
 /**
  * The Markdown tab's controls, shown in the main toolbar where a browser tab
- * has its address bar: the bookmark star, Back/Forward through followed
- * links, New and Open, Close, the View/Edit switch (read-only or editable),
- * the Raw/Formatted switch (exact characters or the drawn note), and the
- * file name (an editable text box — or, while no note is
- * open, a search over the bookmarked and recent notes). Export lives in the
+ * has its address bar: Back/Forward through followed links, New and Open,
+ * Close and Delete, the View/Edit switch (read-only or editable), the
+ * Raw/Formatted switch (exact characters or the drawn note), and the file bar
+ * (`FileBar`): the bookmark star and the file name (an editable text box — or,
+ * while no note is open, a search over the bookmarked and recent notes), with
+ * the note's progress while it opens. Export lives in the
  * toolbar's export menu; the page itself only draws the note.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
@@ -56,6 +59,7 @@ export function MarkdownToolbar({
   onNew,
   onOpen,
   onClose,
+  onDelete,
   onSetMode,
   onSetDisplay,
   onNavigate,
@@ -84,7 +88,7 @@ export function MarkdownToolbar({
       <div className="nav-controls">
         <button
           type="button"
-          className="nav-controls__button hover-grow chrome-tooltip"
+          className="nav-controls__button hover-glow chrome-tooltip"
           onClick={() => onNavigate(tab.id, -1)}
           disabled={!tab.canGoBack}
           aria-label="Back"
@@ -94,7 +98,7 @@ export function MarkdownToolbar({
         </button>
         <button
           type="button"
-          className="nav-controls__button hover-grow chrome-tooltip"
+          className="nav-controls__button hover-glow chrome-tooltip"
           onClick={() => onNavigate(tab.id, 1)}
           disabled={!tab.canGoForward}
           aria-label="Forward"
@@ -103,17 +107,6 @@ export function MarkdownToolbar({
           ›
         </button>
       </div>
-      <button
-        type="button"
-        className="markdown-toolbar__bookmark hover-grow chrome-tooltip"
-        onClick={() => onToggleBookmark(tab.id)}
-        disabled={fileName === null}
-        aria-pressed={isBookmarked}
-        aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this note'}
-        data-tooltip={`${isBookmarked ? 'Remove bookmark' : 'Bookmark this note'} (${formatShortcut('B')})`}
-      >
-        <BookmarkStarIcon filled={isBookmarked} size={14} />
-      </button>
       <button
         type="button"
         className="markdown-toolbar__button hover-grow chrome-tooltip"
@@ -138,6 +131,15 @@ export function MarkdownToolbar({
         data-tooltip={`Close the open note (${formatShortcut('Shift+C')})`}
       >
         Close
+      </button>
+      <button
+        type="button"
+        className="markdown-toolbar__button hover-grow chrome-tooltip"
+        onClick={() => onDelete(tab.id)}
+        disabled={fileName === null}
+        data-tooltip="Delete the open note"
+      >
+        Delete
       </button>
       {/* One switch with both sides showing; the side in use is filled. */}
       <div
@@ -178,32 +180,40 @@ export function MarkdownToolbar({
           </button>
         ))}
       </div>
-      {/* Before a note is open there's nothing to rename, so the slot is a search over the bookmarked and recent notes instead. */}
-      {fileName === null ? (
-        <PdfSearchBox
-          kind="markdown"
-          bookmarks={markdownBookmarks}
-          onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)}
-          onOpenPath={(path) => onOpenPath(tab.id, path)}
-        />
-      ) : (
-        <input
-          type="text"
-          className="markdown-toolbar__file-name"
-          aria-label="File name"
-          value={nameDraft ?? fileName}
-          onChange={(event) => setNameDraft(event.target.value)}
-          onBlur={commitName}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            } else if (event.key === 'Escape') {
-              setNameDraft(null);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      )}
+      <FileBar
+        isBookmarked={isBookmarked}
+        canBookmark={fileName !== null}
+        bookmarkLabel="Bookmark this note"
+        onToggleBookmark={() => onToggleBookmark(tab.id)}
+        loadProgress={tab.loadProgress}
+      >
+        {/* Before a note is open there's nothing to rename, so the bar is a search over the bookmarked and recent notes instead. */}
+        {fileName === null ? (
+          <PdfSearchBox
+            kind="markdown"
+            bookmarks={markdownBookmarks}
+            onOpen={(bookmarkId) => onOpenBookmark(tab.id, bookmarkId)}
+            onOpenPath={(path) => onOpenPath(tab.id, path)}
+          />
+        ) : (
+          <input
+            type="text"
+            className="file-bar__name"
+            aria-label="File name"
+            value={nameDraft ?? fileName}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={commitName}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                setNameDraft(null);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+        )}
+      </FileBar>
       {error && <span className="markdown-toolbar__error">{error}</span>}
     </div>
   );

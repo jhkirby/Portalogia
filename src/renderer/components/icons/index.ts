@@ -25,6 +25,8 @@ export { StopIcon } from './StopIcon';
 export { TextSelectIcon } from './TextSelectIcon';
 export { TextBoxIcon } from './TextBoxIcon';
 export { ShieldIcon } from './ShieldIcon';
+export { SidebarIcon } from './SidebarIcon';
+export { SpeakerIcon } from './SpeakerIcon';
 export { WorkspaceImagesIcon } from './WorkspaceImagesIcon';
 export { WifiIcon } from './WifiIcon';
 export { BluetoothIcon } from './BluetoothIcon';

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-26
+// Last Modified: 2026-10-29
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -48,6 +48,7 @@ import {
   pdfOpenBookmarkRequestSchema,
   pageStatsSchema,
   pdfHistoryInfoRequestSchema,
+  pdfLoadProgressRequestSchema,
   pdfPageInfoRequestSchema,
   pdfSaveAnnotationsRequestSchema,
   pdfRenameRequestSchema,
@@ -223,6 +224,24 @@ export function registerTabIpc(
       return { ok: true, data: resolveTabManager(event).exitSplitView() };
     } catch (error) {
       return toErrorResult(error);
+    }
+  });
+
+  ipcMain.handle(IpcChannel.TabsFocusContent, (event): IpcResult<null> => {
+    try {
+      resolveTabManager(event).focusActiveContent();
+      return { ok: true, data: null };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
+  // Fire-and-forget from a PDF or Markdown page on an Escape it had no use for. Only a page that has the keyboard can
+  // give it away, so one in the background can't take it from whatever has it.
+  ipcMain.on(IpcChannel.TabReleaseKeyboard, (event) => {
+    const tab = resolveTabForContents(event.sender);
+    if (tab && event.sender.isFocused()) {
+      tab.manager.focusChrome();
     }
   });
 
@@ -561,6 +580,18 @@ export function registerTabIpc(
     }
   });
 
+  // Fire-and-forget from the PDF page as it reads the file it was sent.
+  ipcMain.on(IpcChannel.PdfLoadProgress, (event, rawRequest: unknown) => {
+    const parsed = pdfLoadProgressRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return;
+    }
+    const manager = resolveTabManagerForTab(parsed.data.id);
+    if (manager?.ownsPdfContents(parsed.data.id, event.sender)) {
+      manager.setPdfLoadProgress(parsed.data.id, parsed.data.percent);
+    }
+  });
+
   // Fire-and-forget from a browser tab's page as its stats change; the tab is whichever one sent it.
   ipcMain.on(IpcChannel.TabPageStats, (event, rawRequest: unknown) => {
     const parsed = pageStatsSchema.safeParse(rawRequest);
@@ -741,9 +772,9 @@ export function registerTabIpc(
     }
   });
 
-  // Same fire-and-forget shape as `AddressSuggestionsSync` above — a
-  // collapsed-sidebar button pushes a fresh sync on every hover start/end
-  // (see `useOverlayTooltip`), with nothing meaningful to reply with.
+  // Same fire-and-forget shape as `AddressSuggestionsSync` above — the
+  // chrome pushes a fresh sync on every tooltip shown or hidden (see
+  // `installChromeTooltips`), with nothing meaningful to reply with.
   ipcMain.on(IpcChannel.TooltipSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = tooltipSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {

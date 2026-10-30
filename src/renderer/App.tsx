@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-26
+// Last Modified: 2026-10-29
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HistoryClearRange, PageStats } from '@shared/ipc-contract';
@@ -9,6 +9,8 @@ import { HOME_URL } from '@shared/constants';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { ClearHistoryPopup } from './components/ClearHistoryPopup';
+import { DeleteNotePopup } from './components/DeleteNotePopup';
+import { Mist } from './components/Mist';
 import { ContentSnapshot } from './components/ContentSnapshot';
 import { NavControls } from './components/NavControls';
 import { PageActions } from './components/PageActions';
@@ -34,7 +36,7 @@ import { useTheme } from './hooks/useTheme';
 import { usePointerGlow } from './hooks/usePointerGlow';
 
 /** The popups that cover the page, each closed with an animation (see `PopupTransition`). */
-type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory';
+type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote';
 
 /** The longest a popup's closing motion may take before it closes anyway (it can't end while the window is hidden). */
 const POPUP_EXIT_FALLBACK_MS = 500;
@@ -84,6 +86,7 @@ export function App() {
     savedWorkspaceImages,
     secondaryTab,
     focusMode,
+    contentFocused,
     sidebarVisible,
     grabbedTabId,
     createTab,
@@ -250,6 +253,31 @@ export function App() {
   // content — see there). Gated on all three so it can never interfere with
   // Escape's other, unrelated uses elsewhere in the chrome (AddressBar,
   // WorkspaceBar's rename, the tab search popup) when none of them are active.
+  // Escape in the chrome with nothing there using it — no tool or Focus Mode to leave (the effect below), no text box
+  // (whose Escape only leaves it), no popup (whose own handler takes the key) — hands the keyboard to the active tab's
+  // page, the other half of the page's Shift+Escape.
+  useEffect(() => {
+    if (focusMode || laserPointerActive || highlighterActive || commentToolActive || textToolActive || penActive || cropActive) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLInputElement && target.type !== 'checkbox' && target.type !== 'radio') ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      void window.northstar.focusContent();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focusMode, laserPointerActive, highlighterActive, commentToolActive, textToolActive, penActive, cropActive]);
+
   useEffect(() => {
     if (!focusMode && !laserPointerActive && !highlighterActive && !commentToolActive && !textToolActive && !penActive && !cropActive) {
       return;
@@ -464,6 +492,39 @@ export function App() {
     });
   };
 
+  // A note's Delete: confirmed the same way as Clear History (typing "delete"), over the note's tab, before its file
+  // goes to the Recycle Bin.
+  const [deleteNotePopup, setDeleteNotePopup] = useState<{
+    readonly tabId: string;
+    readonly fileName: string;
+    readonly previewImage: string | null;
+  } | null>(null);
+
+  const openDeleteNote = (tabId: string): void => {
+    const tab = tabs.find((candidate) => candidate.id === tabId);
+    if (deleteNotePopup || tab?.kind !== 'markdown' || tab.fileName === null) {
+      return;
+    }
+    setDeleteNotePopup({ tabId, fileName: tab.fileName, previewImage: null });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setDeleteNotePopup((current) => (current ? { ...current, previewImage } : current));
+    });
+  };
+
+  const closeDeleteNote = (confirmed: boolean): void => {
+    if (!deleteNotePopup) {
+      return;
+    }
+    const { tabId } = deleteNotePopup;
+    closePopupAnimated('deleteNote', () => {
+      endTabPreview(tabId);
+      setDeleteNotePopup(null);
+      if (confirmed) {
+        void window.northstar.deleteMarkdownFile(tabId);
+      }
+    });
+  };
+
   // Opens over whichever kind of tab is showing, so the tab's native view comes off the window first (it would paint above
   // this popup and swallow its clicks) and a still of its last frame stands in behind it — same as the bookmark popup.
   const openTabSearch = (): void => {
@@ -602,7 +663,8 @@ export function App() {
               out of dragging (see tab-bar.css) so clicking and reordering
               them still works. */}
           <div ref={titlebarRef} className={`titlebar pointer-glow-host${pointerOnTitlebar ? ' pointer-glow-host--pointer-inside titlebar--pointer-inside' : ''}`}>
-            {/* The accent glowing around the pointer while it's on the row, under the tabs and buttons. */}
+            {/* Mist drifting along the row, then the accent glowing around the pointer, both under the tabs and buttons. */}
+            <Mist variant="row" />
             <div className="pointer-glow" aria-hidden="true" />
             <TabBar
               tabs={workspaceTabs}
@@ -655,6 +717,7 @@ export function App() {
                 onNew={newMarkdownFile}
                 onOpen={openMarkdownFile}
                 onClose={closeMarkdownFile}
+                onDelete={openDeleteNote}
                 onSetMode={setMarkdownMode}
                 onSetDisplay={setMarkdownDisplay}
                 onNavigate={navigateMarkdownHistory}
@@ -824,7 +887,9 @@ export function App() {
           <MetalBackground />
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
               terminal or History page draws its own frame, and Focus Mode shows none. */}
-          {activeTab?.kind === 'browser' && !focusMode && <div className="tab-content__frame" aria-hidden="true" />}
+          {activeTab?.kind === 'browser' && !focusMode && (
+            <div className={`tab-content__frame${contentFocused ? ' tab-content__frame--focused' : ''}`} aria-hidden="true" />
+          )}
           {/* The tab's pages in picture, standing in for them while the sidebar slides. */}
           <ContentSnapshot />
           {/* In the strip main keeps free below a web page; a note or PDF draws its own, and Focus Mode shows none. */}
@@ -874,6 +939,16 @@ export function App() {
                 previewImage={clearHistoryPopup.previewImage}
                 onConfirm={() => closeClearHistory(true)}
                 onClose={() => closeClearHistory(false)}
+              />
+            </PopupTransition>
+          )}
+          {deleteNotePopup && (
+            <PopupTransition closing={closingPopups.has('deleteNote')} onExited={() => finishPopupClose('deleteNote')}>
+              <DeleteNotePopup
+                fileName={deleteNotePopup.fileName}
+                previewImage={deleteNotePopup.previewImage}
+                onConfirm={() => closeDeleteNote(true)}
+                onClose={() => closeDeleteNote(false)}
               />
             </PopupTransition>
           )}

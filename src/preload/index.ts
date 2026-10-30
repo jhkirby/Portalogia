@@ -1,12 +1,13 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
   IpcChannel,
   type AdBlockState,
+  type AudioStatus,
   type BluetoothStatus,
   type ColorPickerColorChangedPayload,
   type ContentSnapshotMessage,
@@ -89,6 +90,7 @@ const api: NorthstarApi = {
   openMarkdownFile: (id) => invoke(IpcChannel.MarkdownOpenFile, { id }),
   newMarkdownFile: (id) => invoke(IpcChannel.MarkdownNewFile, { id }),
   closeMarkdownFile: (id) => invoke(IpcChannel.MarkdownCloseFile, { id }),
+  deleteMarkdownFile: (id) => invoke(IpcChannel.MarkdownDeleteFile, { id }),
   renameMarkdownFile: (id, name) => invoke(IpcChannel.MarkdownRename, { id, name }),
   setMarkdownMode: (id, mode) => invoke(IpcChannel.MarkdownSetMode, { id, mode }),
   setMarkdownDisplay: (id, display) => invoke(IpcChannel.MarkdownSetDisplay, { id, display }),
@@ -152,6 +154,7 @@ const api: NorthstarApi = {
   exitSplitView: () => invoke(IpcChannel.SplitExit),
 
   toggleSidebar: () => invoke(IpcChannel.SidebarToggle),
+  focusContent: () => invoke(IpcChannel.TabsFocusContent),
 
   setFocusMode: (enabled) => invoke(IpcChannel.FocusModeSet, { enabled }),
   setLaserPointer: (enabled) => invoke(IpcChannel.LaserPointerSet, { enabled }),
@@ -261,6 +264,14 @@ const api: NorthstarApi = {
     };
     ipcRenderer.on(IpcChannel.StatusWifiChanged, handler);
     return () => ipcRenderer.removeListener(IpcChannel.StatusWifiChanged, handler);
+  },
+  getAudioStatus: () => ipcRenderer.invoke(IpcChannel.StatusAudioGet),
+  onAudioStatusChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: AudioStatus): void => {
+      listener(status);
+    };
+    ipcRenderer.on(IpcChannel.StatusAudioChanged, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.StatusAudioChanged, handler);
   },
   getBluetoothStatus: () => ipcRenderer.invoke(IpcChannel.StatusBluetoothGet),
   onBluetoothStatusChanged: (listener) => {

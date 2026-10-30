@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -15,6 +15,7 @@ import {
   ipcMain,
   nativeTheme,
   screen,
+  shell,
   type IpcMainEvent,
   type WebContents,
 } from 'electron';
@@ -89,11 +90,13 @@ import { isRunnableLanguage, runCodeBlock } from './MarkdownCodeRunner';
 import { readFileCapped } from '../platform/readFileCapped';
 import { beginLoad, endLoad } from './loadProgress';
 import { trackDomainLoadBlur } from './domainLoadBlur';
-import { markdownAnnotationStore } from './MarkdownAnnotationStore';
+import { EMPTY_MARKDOWN_ANNOTATIONS, markdownAnnotationStore } from './MarkdownAnnotationStore';
+import { FileLoadProgress } from './FileLoadProgress';
 import { MarkdownDocuments } from './MarkdownDocuments';
 import {
   MARKDOWN_EXTENSION_PATTERN,
   findBacklinks,
+  forgetVaultScans,
   isMarkdownPath,
   listNoteNames,
   fetchRemoteImageDataUrl,
@@ -215,6 +218,27 @@ const markdownDocuments = new MarkdownDocuments();
 
 /** How long the address bar's progress line stays at 100% after a page finishes loading, so it can be read. */
 const LOAD_PROGRESS_HOLD_MS = 1000;
+
+/**
+ * The views of tabs that have closed. Taking a view off the window doesn't stop its page: a closed YouTube tab went on
+ * playing, unseen, and every closed tab's page stayed in memory. A closed tab's page is silenced the moment the tab
+ * closes and closed outright once its view is off the window (`releaseView`) — not at once, since the active tab's
+ * page stays up a moment over the one fading in to take its place. Module-level, like `pdfFilePaths`: a tab can close
+ * in one window while another took its view down.
+ */
+const retiredViews = new WeakSet<WebContentsView>();
+
+/**
+ * Each PDF or Markdown tab's file load, for its file bar's progress (see `FileLoadProgress`). Module-level for the same
+ * reason as `pdfFilePaths`: a tab can move between windows' managers while a file loads.
+ */
+const fileLoads = new Map<string, FileLoadProgress>();
+
+/** How much of a PDF's load is reading it from disk; the rest is its page parsing the document and measuring its pages. */
+const PDF_READ_SHARE_PERCENT = 50;
+
+/** How much of a note's load is reading it from disk; the rest is sending it to its page to draw. */
+const NOTE_READ_SHARE_PERCENT = 90;
 
 /** Each web page's latest stats, from its own page (`setPageStats`); shared, since a tab can move between windows. */
 const pageStatsByTab = new Map<string, PageStats>();
@@ -888,6 +912,7 @@ export class TabManager {
       filePath: null,
       page: 1,
       pageCount: 0,
+      loadProgress: null,
       canGoBack: false,
       canGoForward: false,
       pointerMode: 'pan',
@@ -988,6 +1013,7 @@ export class TabManager {
       filePath: null,
       mode: 'view',
       display: 'formatted',
+      loadProgress: null,
       canGoBack: false,
       canGoForward: false,
       pointerMode: 'select',
@@ -1086,11 +1112,17 @@ export class TabManager {
     if (this.states.get(id)?.kind !== 'markdown') {
       return false;
     }
+    const load = this.fileLoadOf(id);
+    load.begin();
     try {
-      const note = await markdownDocuments.open(id, path, history);
+      const note = await markdownDocuments.open(id, path, history, (fraction) =>
+        load.update(fraction * NOTE_READ_SHARE_PERCENT),
+      );
       this.adoptMarkdownNote(id, path, note.name, 'open', history === 'push' ? null : 'view', anchor);
+      load.finish();
       return true;
     } catch (error) {
+      load.cancel();
       dialog.showErrorBox('Could not open note', error instanceof Error ? error.message : String(error));
       return false;
     }
@@ -1179,6 +1211,7 @@ export class TabManager {
       return;
     }
     markdownDocuments.close(id);
+    fileLoads.get(id)?.cancel();
     this.states.set(id, {
       ...current,
       title: 'Markdown',
@@ -1186,6 +1219,7 @@ export class TabManager {
       filePath: null,
       mode: 'view',
       display: 'formatted',
+      loadProgress: null,
       canGoBack: false,
       canGoForward: false,
     });
@@ -1199,6 +1233,34 @@ export class TabManager {
     this.views.get(id)?.webContents.send(IpcChannel.MarkdownClosed);
     // Back to the empty page: re-check the bookmarked notes before it lists them.
     void this.refreshMarkdownBookmarks();
+  }
+
+  /**
+   * Deletes a Markdown tab's open note: the file goes to the Recycle Bin (where it can still be restored from), its
+   * saved marks are dropped, and every tab of this window that had it open goes back to empty. The chrome has
+   * already had the user confirm it. A failure is reported in a native error box, like opening one.
+   * @param id The Markdown tab. A no-op if it isn't one or has no note open.
+   */
+  public async deleteMarkdownFile(id: string): Promise<void> {
+    const path = this.states.get(id)?.kind === 'markdown' ? markdownDocuments.pathOf(id) : undefined;
+    if (!path) {
+      return;
+    }
+    try {
+      await shell.trashItem(path);
+    } catch (error) {
+      dialog.showErrorBox('Could not delete note', error instanceof Error ? error.message : String(error));
+      return;
+    }
+    markdownAnnotationStore.set(path, EMPTY_MARKDOWN_ANNOTATIONS);
+    // Links to it no longer resolve, and the names offered for links no longer include it.
+    forgetVaultScans();
+    for (const [tabId, state] of this.states) {
+      const openPath = markdownDocuments.pathOf(tabId);
+      if (state.kind === 'markdown' && this.views.has(tabId) && openPath !== undefined && samePath(openPath, path)) {
+        this.closeMarkdownFile(tabId);
+      }
+    }
   }
 
   /**
@@ -2162,9 +2224,14 @@ export class TabManager {
     if (this.states.get(id)?.kind !== 'pdf' || !view) {
       return;
     }
+    const load = this.fileLoadOf(id);
+    load.begin();
     let data: Buffer;
     try {
-      const read = await readFileCapped(filePath, MAX_PDF_BYTES);
+      // Reading is the first part of the load; the page reports the rest (`setPdfLoadProgress`).
+      const read = await readFileCapped(filePath, MAX_PDF_BYTES, (bytesRead, totalBytes) =>
+        load.update((Math.min(bytesRead, totalBytes) / Math.max(totalBytes, 1)) * PDF_READ_SHARE_PERCENT),
+      );
       if (read.kind === 'too-large') {
         throw new Error('That PDF is too large to open (limit 512 MB).');
       }
@@ -2173,6 +2240,7 @@ export class TabManager {
       }
       data = read.data;
     } catch (error) {
+      load.cancel();
       dialog.showErrorBox('Could not open PDF', error instanceof Error ? error.message : String(error));
       return;
     }
@@ -2200,6 +2268,8 @@ export class TabManager {
       } satisfies PdfOpenResult);
       // The grab tool's pointer helper takes a moment to start; have it ready before the first pan ends.
       cursorWarper.prepare();
+    } else {
+      load.cancel();
     }
   }
 
@@ -2251,6 +2321,7 @@ export class TabManager {
     pdfFilePaths.delete(id);
     pdfFileKeys.delete(id);
     pdfBacklinkPaths.delete(id);
+    fileLoads.get(id)?.cancel();
     this.states.set(id, {
       ...current,
       title: 'PDF',
@@ -2258,6 +2329,7 @@ export class TabManager {
       filePath: null,
       page: 1,
       pageCount: 0,
+      loadProgress: null,
       canGoBack: false,
       canGoForward: false,
     });
@@ -2315,6 +2387,46 @@ export class TabManager {
       return;
     }
     this.states.set(id, { ...current, page, pageCount });
+    this.emitState();
+  }
+
+  /**
+   * Takes a PDF tab's page's word on how far it has got with the file it was sent: the part of the load after reading
+   * it from disk. At 100% the load is done.
+   * @param id The PDF tab. A no-op if it isn't one.
+   * @param percent How far the page has got, 0-100.
+   */
+  public setPdfLoadProgress(id: string, percent: number): void {
+    if (this.states.get(id)?.kind !== 'pdf') {
+      return;
+    }
+    const load = this.fileLoadOf(id);
+    load.update(PDF_READ_SHARE_PERCENT + (percent / 100) * (100 - PDF_READ_SHARE_PERCENT));
+    if (percent >= 100) {
+      load.finish();
+    }
+  }
+
+  /**
+   * A tab's file load, made on first use: it reports into the tab's `loadProgress`.
+   * @param id The PDF or Markdown tab.
+   */
+  private fileLoadOf(id: string): FileLoadProgress {
+    let load = fileLoads.get(id);
+    if (!load) {
+      load = new FileLoadProgress((percent) => this.setFileLoadProgress(id, percent), LOAD_PROGRESS_HOLD_MS);
+      fileLoads.set(id, load);
+    }
+    return load;
+  }
+
+  /** Sets a PDF or Markdown tab's `loadProgress`, for its file bar. */
+  private setFileLoadProgress(id: string, loadProgress: number | null): void {
+    const current = this.states.get(id);
+    if ((current?.kind !== 'pdf' && current?.kind !== 'markdown') || current.loadProgress === loadProgress) {
+      return;
+    }
+    this.states.set(id, { ...current, loadProgress });
     this.emitState();
   }
 
@@ -2982,7 +3094,8 @@ export class TabManager {
       const showingWindow = this.registry.mountOwners.get(memberId);
       const view = this.views.get(memberId);
       if (view) {
-        (showingWindow ?? this).window.contentView.removeChildView(view);
+        retireView(view);
+        releaseView(view, (showingWindow ?? this).window);
         this.views.delete(memberId);
       }
       this.states.delete(memberId);
@@ -3053,6 +3166,8 @@ export class TabManager {
     markdownPagesReady.delete(id);
     markdownRunning.delete(id);
     markdownSaveErrorShown.delete(id);
+    fileLoads.get(id)?.cancel();
+    fileLoads.delete(id);
     markdownCspRemovers.get(id)?.();
     markdownCspRemovers.delete(id);
     this.unlinkTab(id);
@@ -3072,10 +3187,13 @@ export class TabManager {
 
     const view = this.views.get(id);
     const closedWorkspaceId = closedState.workspaceId;
+    if (view) {
+      retireView(view);
+    }
 
     if (this.splitView?.secondaryTabId === id) {
       if (view) {
-        this.window.contentView.removeChildView(view);
+        releaseView(view, this.window);
       }
       this.views.delete(id);
       this.states.delete(id);
@@ -3089,7 +3207,7 @@ export class TabManager {
       const secondaryId = this.splitView.secondaryTabId;
       this.splitView = null;
       if (view) {
-        this.window.contentView.removeChildView(view);
+        releaseView(view, this.window);
       }
       this.views.delete(id);
       this.states.delete(id);
@@ -3110,7 +3228,7 @@ export class TabManager {
     if (view) {
       // The active tab's page stays up over the tab shown in its place while that fades in (`closingTab`).
       if (!wasActive) {
-        this.window.contentView.removeChildView(view);
+        releaseView(view, this.window);
       }
       this.views.delete(id);
     }
@@ -3132,7 +3250,7 @@ export class TabManager {
       }
       // Nothing took it over (no tab came up in its place): it goes now.
       if (this.closingTab) {
-        this.window.contentView.removeChildView(this.closingTab.view);
+        releaseView(this.closingTab.view, this.window);
         this.closingTab = null;
       }
     } else {
@@ -3292,7 +3410,7 @@ export class TabManager {
     if (leaving && view) {
       this.fadeInTab(view, leaving);
     } else if (leaving) {
-      this.window.contentView.removeChildView(leaving.view);
+      releaseView(leaving.view, this.window);
     }
     // Sized again now it's the active tab: whether the bottom is kept for the web stat bar depends on its kind.
     view?.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
@@ -3487,7 +3605,7 @@ export class TabManager {
       this.splitView?.secondaryTabId === leaving.id ||
       this.registry.mountOwners.has(leaving.id);
     if (!showing && !this.window.isDestroyed() && !leaving.view.webContents.isDestroyed()) {
-      this.window.contentView.removeChildView(leaving.view);
+      releaseView(leaving.view, this.window);
     }
   }
 
@@ -4500,7 +4618,8 @@ export class TabManager {
       }
       const view = this.views.get(tabId);
       if (view) {
-        this.window.contentView.removeChildView(view);
+        retireView(view);
+        releaseView(view, this.window);
       }
       this.views.delete(tabId);
       this.states.delete(tabId);
@@ -6382,6 +6501,26 @@ export class TabManager {
   }
 
   /**
+   * Hands the keyboard to the active tab's own page — a web page, PDF, note or terminal — when Escape is pressed in
+   * the chrome with nothing there using it: the other half of Shift+Escape (and a PDF or note's own Escape), which
+   * give it back to the chrome. The page comes back with whatever it had focused (a text box keeps its caret).
+   */
+  public focusActiveContent(): void {
+    const kind = this.activeTabId ? this.states.get(this.activeTabId)?.kind : undefined;
+    const view = this.activeTabId ? this.views.get(this.activeTabId) : undefined;
+    if (!view || view.webContents.isDestroyed() || !(kind === 'browser' || kind === 'pdf' || kind === 'markdown' || kind === 'terminal')) {
+      return;
+    }
+    view.webContents.focus();
+  }
+
+  /** Whether the active tab's own page has the keyboard — see `BrowserState.contentFocused`. */
+  private isContentFocused(): boolean {
+    const view = this.activeTabId ? this.views.get(this.activeTabId) : undefined;
+    return view !== undefined && !view.webContents.isDestroyed() && view.webContents.isFocused();
+  }
+
+  /**
    * Hands native OS keyboard focus into the active tab's own view, if it's
    * a terminal — the constructor's chrome-wide Ctrl+` handler's other
    * half, for whenever that's pressed while the chrome (rather than a
@@ -6442,6 +6581,7 @@ export class TabManager {
       savedWorkspaceImages: this.savedWorkspaceImages(),
       splitView: this.splitView,
       focusMode: this.focusMode,
+      contentFocused: this.isContentFocused(),
       sidebarVisible: this.sidebarVisible,
       grabbedTabId: this.grabbedTabId,
       selectedTabIds: this.currentTabSelection(),
@@ -6516,10 +6656,10 @@ export class TabManager {
   /**
    * The sidebar's resting horizontal inset: `SIDEBAR_WIDTH_PX` while
    * shown, 0 in Focus Mode (nothing left to clear — full immersion, no
-   * lingering nub), or `SIDEBAR_COLLAPSED_WIDTH_PX` when toggled off
-   * (`toggleSidebar`) but Focus Mode isn't on — just enough room for
-   * `WorkspaceBar`'s own `.sidebar__toggle` button to stay clear of the
-   * tab's native content instead of being covered by it. Mid-toggle,
+   * lingering rail), or `SIDEBAR_COLLAPSED_WIDTH_PX` when toggled off
+   * (`toggleSidebar`) but Focus Mode isn't on — just enough room for the
+   * rail of workspace icons and `WorkspaceBar`'s own `.sidebar__toggle`
+   * button to stay clear of the tab's native content instead of being covered by it. Mid-toggle,
    * `applyBounds` is driven by the animation loop instead — this is only
    * the value things settle back to.
    */
@@ -6737,6 +6877,10 @@ export class TabManager {
     let progressClear: NodeJS.Timeout | null = null;
     let webLoad = false;
     wc.on('did-start-loading', () => this.patchState(id, { isLoading: true }));
+    // The frame around the page lights up while it has the keyboard (`BrowserState.contentFocused`); the chrome draws
+    // that frame, so it hears of each change.
+    wc.on('focus', () => this.emitState());
+    wc.on('blur', () => this.emitState());
     wc.on('did-start-navigation', (details) => {
       if (!details.isMainFrame || details.isSameDocument || !/^https?:/i.test(details.url)) {
         return;
@@ -6902,6 +7046,13 @@ export class TabManager {
         if (input.type !== 'keyDown' || input.isAutoRepeat) {
           return;
         }
+        // Shift+Escape gives the keyboard back to the chrome, as it does from a web page; Escape in the chrome hands it
+        // back. Plain Escape can't: it belongs to the shell (a vi-mode readline leaves insert mode with it).
+        if (input.key.toLowerCase() === 'escape' && input.shift && !input.control && !input.meta && !input.alt) {
+          event.preventDefault();
+          owner.focusChrome();
+          return;
+        }
         // Checked before the `cmdOrCtrl` gate below, since Escape carries no
         // modifier — unlike every other shortcut in this branch, only acted
         // on here when the laser pointer/highlighter is actually on (a
@@ -6988,12 +7139,24 @@ export class TabManager {
         return;
       }
 
-      // Shift+Escape always takes the caret out of a page's text box. Plain Escape does too, but only when the page
-      // leaves it alone, and some (Google Docs) take every Escape for themselves. Ctrl+Escape and Alt+Escape would read
-      // better, but Windows keeps both (the Start menu, switching windows), so neither ever reaches the app.
-      if (key === 'escape' && input.shift && !input.control && !input.meta && !input.alt && this.states.get(id)?.kind === 'browser') {
+      // Shift+Escape always takes the caret out of a page's text box and gives the keyboard back to the chrome (Escape
+      // there hands it back). Plain Escape leaves a text box too, but only when the page leaves it alone, and some
+      // (Google Docs) take every Escape for themselves. Ctrl+Escape and Alt+Escape would read better, but Windows keeps
+      // both (the Start menu, switching windows), so neither ever reaches the app.
+      const kind = this.states.get(id)?.kind;
+      if (
+        key === 'escape' &&
+        input.shift &&
+        !input.control &&
+        !input.meta &&
+        !input.alt &&
+        (kind === 'browser' || kind === 'pdf' || kind === 'markdown')
+      ) {
         event.preventDefault();
-        wc.send(IpcChannel.TabLeaveTextBox);
+        if (kind === 'browser') {
+          wc.send(IpcChannel.TabLeaveTextBox);
+        }
+        owner.focusChrome();
         return;
       }
 
@@ -7345,4 +7508,31 @@ function clampZoomPercent(percent: number): number {
     return ZOOM_PERCENT_DEFAULT;
   }
   return Math.min(ZOOM_PERCENT_MAX, Math.max(ZOOM_PERCENT_MIN, Math.round(percent)));
+}
+
+/**
+ * Marks a view as its tab's last: the tab has closed. Its page is muted at once, so nothing it plays is heard while it
+ * fades out, and `releaseView` closes it once it's off the window.
+ * @param view The closed tab's view.
+ */
+function retireView(view: WebContentsView): void {
+  retiredViews.add(view);
+  if (!view.webContents.isDestroyed()) {
+    view.webContents.setAudioMuted(true);
+  }
+}
+
+/**
+ * Takes a view off a window and, if its tab has closed (`retireView`), closes its page too: that stops whatever it was
+ * still doing (a video, a sound, a timer) and frees it.
+ * @param view The view.
+ * @param window The window it's on.
+ */
+function releaseView(view: WebContentsView, window: BrowserWindow): void {
+  if (!window.isDestroyed()) {
+    window.contentView.removeChildView(view);
+  }
+  if (retiredViews.has(view) && !view.webContents.isDestroyed()) {
+    view.webContents.close();
+  }
 }

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-10-29
 
 import { useEffect, useRef, useState } from 'react';
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
@@ -86,7 +86,8 @@ export function MarkdownStatusBar({
   }, []);
 
   const count = (value: number): string => value.toLocaleString();
-  const pointer = usePointerPosition();
+  // Measured in the framed note, as a web page's is in its own view: blank over the background around it.
+  const pointer = usePointerPosition('.md-viewer > :is(.md-viewer__body, .md-viewer__empty)');
 
   return (
     <footer ref={barRef} className="md-status" aria-label="Note statistics">

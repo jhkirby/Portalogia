@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-26 */
+   Last Modified: 2026-10-29 */
 
 /* `useTheme` sets `data-theme` on `<html>` before first paint (see its
    `useLayoutEffect`) reflecting either a stored choice or, on first ever
@@ -118,6 +118,10 @@
 
   --color-tooltip-bg: #202124;
   --color-tooltip-text: #ffffff;
+
+  /* A hovered sidebar or nav button's glow (`.hover-glow`): a light glow can't show on this theme's light chrome, so
+     it's the accent, softened. */
+  --color-hover-glow: rgba(var(--color-accent-rgb), 0.55);
 }
 
 :root[data-theme='dark'] {
@@ -171,6 +175,9 @@
 
   --color-tooltip-bg: #5f6368;
   --color-tooltip-text: #ffffff;
+
+  /* A hovered sidebar or nav button's glow (`.hover-glow`): the same soft white as the workspaces' shimmer. */
+  --color-hover-glow: rgba(255, 255, 255, 0.55);
 }
 
 /* ── MARKDOWN NOTES ───────────────────────────────────────────────────── */

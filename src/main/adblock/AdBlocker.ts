@@ -1,12 +1,12 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-10-29
 
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { ipcMain, type Session } from 'electron';
+import { ipcMain, type IpcMainInvokeEvent, type Session } from 'electron';
 import { ElectronBlocker, Request } from '@ghostery/adblocker-electron';
 import type { AdBlockState } from '@shared/ipc-contract';
 import type { AdBlockStore } from './AdBlockStore';
@@ -26,6 +26,64 @@ const NOTIFY_THROTTLE_MS = 250;
 export type HeadersInterceptor = (
   details: Electron.OnHeadersReceivedListenerDetails,
 ) => Electron.HeadersReceivedResponse | null;
+
+/**
+ * Sites (and their subdomains) whose pages get no scriptlets, only the network and cosmetic filters. The lists'
+ * scriptlets for YouTube rewrite its player's own requests and responses, and are written for an injector that runs
+ * them before any of the page's scripts (uBlock Origin's); this engine can only run them once the page is under way,
+ * and YouTube's player, already holding the originals, then restarted its video over and over and never played it —
+ * a reload sometimes got past it. Without them the video plays at once (its own ads may play first).
+ */
+const SCRIPTLET_FREE_SITES = ['youtube.com', 'youtube-nocookie.com'];
+
+/** @returns Whether a frame at this address gets no scriptlets (`SCRIPTLET_FREE_SITES`). */
+function isScriptletFree(url: string): boolean {
+  const host = hostOf(url);
+  return SCRIPTLET_FREE_SITES.some((site) => host === site || host.endsWith(`.${site}`));
+}
+
+/**
+ * A scriptlet's source, in a function of its own. The engine hands each scriptlet over as bare source, and the
+ * scriptlets are written for injectors that wrap each one this way: several declare the same top-level helper
+ * (`class JSONPath`), so run as separate top-level scripts in one page, the second and every later one failed on
+ * "already declared", half-applied. `this` stays the page's `window`, as at top level.
+ * @param code The scriptlet's source.
+ * @returns The same source, scoped to itself.
+ */
+function scopeScriptlet(code: string): string {
+  return `(function () {\n${code}\n}).call(this);`;
+}
+
+/**
+ * The event the engine's cosmetic handler is given, with a stand-in `sender` that injects into the frame that asked:
+ * the engine injects through `event.sender`, the whole page's `webContents`, which always lands in the page's top
+ * frame — so a frame below it (YouTube has several) had its filters run in the top frame instead. Every scriptlet is
+ * scoped to itself on the way (`scopeScriptlet`), and none is run on a site that breaks under them
+ * (`SCRIPTLET_FREE_SITES`). The top frame's styles go in as the page's own user stylesheet, as before; a frame below
+ * it, which has no `insertCSS`, gets them as a `<style>` element.
+ * @param event The request, as the page's preload sent it.
+ * @returns The event to hand the engine, or `null` when the frame that asked is already gone.
+ */
+function frameScopedEvent(event: IpcMainInvokeEvent): IpcMainInvokeEvent | null {
+  const frame = event.senderFrame;
+  if (!frame || frame.isDestroyed()) {
+    return null;
+  }
+  const isTopFrame = frame === event.sender.mainFrame;
+  const sender = {
+    executeJavaScript: (code: string, userGesture?: boolean): Promise<unknown> =>
+      isScriptletFree(frame.url) ? Promise.resolve() : frame.executeJavaScript(scopeScriptlet(code), userGesture),
+    insertCSS: (css: string, options?: Electron.InsertCSSOptions): Promise<unknown> =>
+      isTopFrame
+        ? event.sender.insertCSS(css, options)
+        : frame.executeJavaScript(
+            `(() => { const style = document.createElement('style'); style.textContent = ${JSON.stringify(css)}; ` +
+              `(document.head || document.documentElement).appendChild(style); })()`,
+          ),
+  };
+  // The engine reads `frameId` and `processId` too: they come through from the real event underneath.
+  return Object.create(event, { sender: { value: sender } }) as IpcMainInvokeEvent;
+}
 
 /** @returns The hostname of a URL, or `''` if it has none. */
 function hostOf(url: string): string {
@@ -238,7 +296,11 @@ export class AdBlocker {
       if (!/^https?:/i.test(url) || !this.isActiveFor(event.sender.getURL() || url)) {
         return;
       }
-      await onInject(event, url, msg);
+      // Each frame's filters go into that frame, not its page's top frame (see `frameScopedEvent`).
+      const scoped = frameScopedEvent(event);
+      if (scoped) {
+        await onInject(scoped, url, msg);
+      }
     };
 
     const onHeaders = blocker.onHeadersReceived;

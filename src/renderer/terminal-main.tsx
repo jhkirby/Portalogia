@@ -1,12 +1,14 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-09-24
+// Last Modified: 2026-10-29
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Terminal } from './components/Terminal';
 import { watchAccentColor } from './lib/accentStorage';
+import { trackPageFocus } from './lib/pageFocus';
+import { followSystemTheme } from './lib/themeFade';
 
 // `colors.css`'s `::selection` rule (this page loads it too) reads
 // `--color-accent-rgb` the same as every other page — xterm's own
@@ -16,6 +18,11 @@ import { watchAccentColor } from './lib/accentStorage';
 // renders outside the terminal itself. See `watchAccentColor`'s own doc
 // comment.
 watchAccentColor();
+// Like the note and PDF pages: `data-theme` follows the chrome's choice, so colors.css's tokens — the frame's border
+// among them — are the same here as on every other page.
+followSystemTheme();
+// The frame around the content lights up in the accent while this page has the keyboard.
+trackPageFocus();
 
 // This page is loaded once per terminal tab, each with its own `?id=` (see
 // `TabManager.createTerminalTab`) — there's no chrome here to pass it down

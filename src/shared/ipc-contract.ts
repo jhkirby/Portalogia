@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-26
+// Last Modified: 2026-10-29
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
@@ -152,6 +152,8 @@ export const IpcChannel = {
   PdfFile: 'pdf:file',
   /** PDF page → main: which page is in view, and how many there are. */
   PdfPageInfo: 'pdf:page-info',
+  /** PDF page → main: how far it has got reading the file it was sent (its pages measured), for the file bar. */
+  PdfLoadProgress: 'pdf:load-progress',
   /** Chrome → main: open a bookmarked PDF in this tab (picked from the toolbar's PDF search). */
   PdfOpenBookmark: 'pdf:open-bookmark',
   /** Chrome → main: save a copy of the tab's PDF with its crop boxes applied. */
@@ -214,6 +216,8 @@ export const IpcChannel = {
   MarkdownNewFile: 'markdown:new-file',
   /** Chrome → main: close the tab's open note (the tab stays, empty). */
   MarkdownCloseFile: 'markdown:close-file',
+  /** Chrome → main: delete the tab's open note (to the Recycle Bin), once the chrome's popup has confirmed it. */
+  MarkdownDeleteFile: 'markdown:delete-file',
   /** Chrome → main: rename the tab's note on disk. */
   MarkdownRename: 'markdown:rename',
   /** Chrome → main: switch the tab between read-only (view) and editable (edit). */
@@ -325,6 +329,10 @@ export const IpcChannel = {
   // `contents.zoomLevel` from main.
   ZoomApply: 'zoom:apply',
   SidebarToggle: 'sidebar:toggle',
+  /** Chrome → main: Escape in the chrome, with nothing there using it — the active tab's page takes the keyboard. */
+  TabsFocusContent: 'tabs:focus-content',
+  /** PDF or Markdown page → main: Escape with nothing in the page using it — the keyboard goes back to the chrome. */
+  TabReleaseKeyboard: 'tab:release-keyboard',
   /** Main → chrome: put up (or take down) the picture of the tab's pages that slides with the sidebar. */
   UiContentSnapshot: 'ui:content-snapshot',
   /** Chrome → main: that picture is on screen, so the live pages can step away for the slide. */
@@ -357,6 +365,10 @@ export const IpcChannel = {
   StatusWifiChanged: 'status:wifi-changed',
   /** Chrome → main: the Wi-Fi connection now. */
   StatusWifiGet: 'status:wifi-get',
+  /** Main → chrome: the default playback device, its volume or its mute changed. */
+  StatusAudioChanged: 'status:audio-changed',
+  /** Chrome → main: the default playback device, its volume and mute now. */
+  StatusAudioGet: 'status:audio-get',
   /** Main → chrome: Bluetooth's connected devices changed. */
   StatusBluetoothChanged: 'status:bluetooth-changed',
   /** Chrome → main: Bluetooth's connected devices now. */
@@ -468,6 +480,18 @@ export interface WifiStatus {
   readonly ssid: string | null;
 }
 
+/** The computer's sound, for the titlebar's audio section: the default playback device. */
+export interface AudioStatus {
+  /** `on`: a playback device is there to read. `unavailable`: none, or it couldn't be read; the section hides. */
+  readonly state: 'on' | 'unavailable';
+  /** The device's name as Windows' sound settings show it, or `null` if it has none (or is unavailable). */
+  readonly device: string | null;
+  /** The master volume, 0-100 (of its maximum); 0 unless `on`. */
+  readonly volume: number;
+  /** Whether it's muted. */
+  readonly muted: boolean;
+}
+
 /** The computer's Bluetooth, for the titlebar's status icon. */
 export interface BluetoothStatus {
   /**
@@ -514,11 +538,10 @@ export interface AddressSuggestionsSyncPayload {
 }
 
 /**
- * What a chrome element pushes to `TooltipOverlay` on hover (see
- * `useOverlayTooltip`) — used only by the handful of collapsed-sidebar
- * buttons whose plain CSS tooltip (tooltip.css) can't safely grow past
- * `SIDEBAR_COLLAPSED_WIDTH_PX` without the active tab's native content
- * painting over it. `rect` is `null` whenever `visible` is `false`, same
+ * What the chrome pushes to `TooltipOverlay` as a tooltip shows or hides
+ * (see `installChromeTooltips`): every chrome tooltip is drawn there, above
+ * everything in the window, so no layer — the tab's own native view
+ * included — can paint over it. `rect` is `null` whenever `visible` is `false`, same
  * relationship `AddressSuggestionsSyncPayload.rect` has with `open`.
  * Already sized to fit `text` exactly (`computeTooltipOverlayRect`) —
  * unlike `SuggestionsOverlay`, this overlay's own page never has to
@@ -716,6 +739,8 @@ export interface NorthstarApi {
   newMarkdownFile(id: string): Promise<IpcResult<null>>;
   /** Closes the tab's open note, leaving the tab empty. */
   closeMarkdownFile(id: string): Promise<IpcResult<null>>;
+  /** Moves the tab's open note to the Recycle Bin and leaves the tab empty. The chrome confirms with the user first. */
+  deleteMarkdownFile(id: string): Promise<IpcResult<null>>;
   /** Renames a Markdown tab's note on disk (same folder). Fails unless the name ends in `.md` or `.markdown` and doesn't already exist. */
   renameMarkdownFile(id: string, name: string): Promise<IpcResult<null>>;
   /** Switches a Markdown tab between read-only (view) and editable (edit). */
@@ -855,6 +880,8 @@ export interface NorthstarApi {
 
   /** Shows or hides the workspace sidebar — `WorkspaceBar`'s own `.sidebar__toggle` button doing the same thing Ctrl+L already does. */
   toggleSidebar(): Promise<IpcResult<BrowserState>>;
+  /** Hands the keyboard to the active tab's page (a web page, PDF, note or terminal): Escape pressed in the chrome. */
+  focusContent(): Promise<IpcResult<null>>;
 
   setFocusMode(enabled: boolean): Promise<IpcResult<BrowserState>>;
 
@@ -1028,6 +1055,10 @@ export interface NorthstarApi {
   getBatteryPresent(): Promise<boolean | null>;
   /** Pushed whenever the Wi-Fi connection or its signal changes. Returns an unsubscribe function. */
   onWifiStatusChanged(listener: (status: WifiStatus) => void): () => void;
+  /** The default playback device, its volume and mute now (`null` if asked from anywhere but the chrome). */
+  getAudioStatus(): Promise<AudioStatus | null>;
+  /** Pushed whenever the default playback device, its volume or its mute changes. Returns an unsubscribe function. */
+  onAudioStatusChanged(listener: (status: AudioStatus) => void): () => void;
   /** Bluetooth's connected devices now (`null` if asked from anywhere but the chrome). */
   getBluetoothStatus(): Promise<BluetoothStatus | null>;
   /** Pushed whenever a Bluetooth device connects or disconnects. Returns an unsubscribe function. */
@@ -1188,6 +1219,8 @@ export interface NorthstarPdfApi {
   reportPage(page: number, pageCount: number): void;
   /** Tells main whether the document's jump history can step back and forward, for the toolbar's arrows. */
   reportHistory(canGoBack: boolean, canGoForward: boolean): void;
+  /** Reports how far reading the file it was sent has got (0-100: the document parsed, then its pages measured). Fire-and-forget. */
+  reportLoadProgress(percent: number): void;
   /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
   onFocusMode(listener: (focusMode: boolean) => void): () => void;
   /** Subscribes to the side panel's shortcut (Ctrl+Alt+B), which main owns: it shows or hides the panel. */

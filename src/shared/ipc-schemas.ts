@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -333,6 +333,11 @@ export const pdfHistoryInfoRequestSchema = z.object({
   id: z.string().min(1),
   canGoBack: z.boolean(),
   canGoForward: z.boolean(),
+});
+
+export const pdfLoadProgressRequestSchema = z.object({
+  id: z.string().min(1),
+  percent: z.number().int().min(0).max(100),
 });
 
 export const pdfPageInfoRequestSchema = z.object({

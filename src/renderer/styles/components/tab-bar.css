@@ -1,7 +1,7 @@
 /* Project: Northstar
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-22 */
+   Last Modified: 2026-10-29 */
 
 /* ── TAB BAR ──────────────────────────────────────────────────────────── */
 
@@ -81,8 +81,7 @@
 }
 
 /* Opening: the neighbours make room while the tab springs up out of the
-   toolbar, the way the hover colour rises, overshooting a little before it
-   settles. Closing is the reverse: the tab sinks into the toolbar until it's
+   toolbar, overshooting a little before it settles. Closing is the reverse: the tab sinks into the toolbar until it's
    gone, then the gap closes. The part below the tab's resting bottom edge is
    clipped (the clip moves against the tab), so it never covers the toolbar.
    Its content is clipped sideways too while its width changes, rather than
@@ -114,8 +113,14 @@
   z-index: 1;
 }
 
+/* The active tab is the one outlined in the accent, on all four sides: with several tabs selected (all drawn alike,
+   below), the outline still tells which one is in view. Above its neighbours, so their shared edges don't cover it. */
 .tab-bar__tab--active {
+  z-index: 2;
+
   background: var(--color-tab-bg-active);
+  border-color: var(--color-accent-text);
+  border-bottom: 1px solid var(--color-accent-text);
   color: var(--color-tab-text-active);
 }
 
@@ -136,8 +141,9 @@
   background: var(--color-tab-dragging-bg);
 }
 
-/* The hover fill and the click ripples, clipped to the tab's own rounded shape so neither spills past it. Its own box
-   rather than `overflow: hidden` on the tab, which would also clip the close button's tooltip (see `.tab-bar__tab`). */
+/* The sliding active background and the click ripples, clipped to the tab's own rounded shape so neither spills past
+   it. Its own box rather than `overflow: hidden` on the tab, which would also clip the close button's tooltip (see
+   `.tab-bar__tab`). */
 .tab-bar__effects {
   position: absolute;
   inset: 0;
@@ -148,21 +154,17 @@
   pointer-events: none;
 }
 
-/* Hovering fills the tab with its hover colour from the bottom edge up, every tab the active one included (the close
-   button's own hover circle uses a distinct color, so it stays visible against it). */
-.tab-bar__hover-fill {
-  position: absolute;
-  inset: 0;
-
-  background: var(--color-tab-hover-bg);
-
-  transform: scaleY(0);
-  transform-origin: bottom;
-  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.3, 1);
+/* Hovering a tab, the active one included, makes its name glow: the same glow as the sidebar's buttons
+   (`.hover-glow`), with nothing filling in behind it. A dragged tab's own highlight is its cue instead. */
+.tab-bar__title {
+  transition:
+    color 160ms ease-out,
+    text-shadow 160ms ease-out;
 }
 
-.tab-bar__tab:hover .tab-bar__hover-fill {
-  transform: scaleY(1);
+.tab-bar__tab:hover:not(.tab-bar__tab--dragging) .tab-bar__title {
+  color: var(--color-tab-text-active);
+  text-shadow: var(--hover-glow-text-shadow);
 }
 
 /* The active background sliding from the tab that was active to the newly active one (`useActiveTabSlide`). Each
@@ -184,11 +186,6 @@
 /* The newly active tab waits for the sliding background rather than showing its own at once. */
 .tab-bar__tab--active[data-slide-target] {
   background: var(--color-tab-bg);
-}
-
-/* A dragged tab's own highlight is the cue; the fill would cover it. */
-.tab-bar__tab--dragging .tab-bar__hover-fill {
-  display: none;
 }
 
 /* While a tab from another window is dragged over this strip, the slot it
@@ -272,10 +269,14 @@
 
   /* Only shown while its own tab is hovered (or keyboard-focused). Faded out
      rather than removed, so its space stays reserved and a tab's title
-     doesn't shift width as the pointer moves across the strip. */
+     doesn't shift width as the pointer moves across the strip. Its own glow
+     (`.hover-glow`) eases in alongside. */
   opacity: 0;
   pointer-events: none;
-  transition: opacity 150ms ease-out;
+  transition:
+    opacity 150ms ease-out,
+    color 160ms ease-out,
+    text-shadow 160ms ease-out;
 }
 
 .tab-bar__tab:hover .tab-bar__close,
@@ -284,45 +285,10 @@
   pointer-events: auto;
 }
 
-/* Distinct from --color-tab-hover-bg: the tab underneath is already that
-   color on hover (the pointer is still over the parent tab), so reusing
-   it would leave the circle invisible against its own background. */
-.tab-bar__close {
-  --hover-grow-bg: var(--color-close-hover-bg);
-}
-
-/* This row is the very top of the chrome, so — unlike the toolbar buttons'
-   tooltips — there's no room above it to open upward; it opens down into
-   the toolbar instead, which is still our own chrome DOM, not the tab
-   content's native view. Horizontally, a tab can land anywhere from the
-   window's left edge to its right, so this defaults to centered and only
-   the first/last tab (the two that can actually reach a window edge)
-   override it to anchor away from that edge instead. */
-.tab-bar__close::after {
-  top: 100%;
-  bottom: auto;
-  left: 50%;
-  margin-top: 6px;
-  margin-bottom: 0;
-  transform: translateX(-50%);
-}
-
-.tab-bar__tab:first-of-type .tab-bar__close::after {
-  left: 0;
-  transform: none;
-}
-
-.tab-bar__tab:last-of-type .tab-bar__close::after {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 .tab-bar__new {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Smaller than the toolbar's 28px circles, so its hover fill keeps clear of the tab beside it. */
   width: 21px;
   height: 21px;
   margin-bottom: 6px;
@@ -340,19 +306,6 @@
 
   /* Opts out of `.tab-bar`'s drag region — see `.tab-bar__tab` above. */
   -webkit-app-region: no-drag;
-}
-
-/* Opens downward for the same reason as `.tab-bar__close` above. This
-   button doesn't shrink with the tabs (see `.tab-bar`), so once there are
-   enough tabs to fill the row it sits right at the row's right edge —
-   anchored right and growing leftward keeps it inside the window there,
-   same as `.page-actions__button`'s tooltips. */
-.tab-bar__new::after {
-  top: 100%;
-  bottom: auto;
-  right: 0;
-  margin-top: 6px;
-  margin-bottom: 0;
 }
 
 @keyframes tab-bar-tab-open {
@@ -405,7 +358,7 @@
 
 /* Still run (instantly), since a closing tab removes itself when its animation ends. */
 @media (prefers-reduced-motion: reduce) {
-  .tab-bar__hover-fill,
+  .tab-bar__title,
   .tab-bar__close {
     transition: none;
   }
@@ -425,7 +378,7 @@
 
 /* ── Shimmer ──
    Every 20 seconds (`useShimmerTick`) a wave runs along the tabs, left to right: each one's icon
-   and name brighten and lift a little, one after another, `--shimmer-index`
+   and name brighten where they are, one after another, `--shimmer-index`
    setting how far along the wave each is. Two identical keyframes taken by
    turns (`data-shimmer` a/b), since an animation only restarts when its name
    changes. */
@@ -440,14 +393,12 @@
 @keyframes tab-shimmer-a {
   45% {
     filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
-    transform: translateY(-1px);
   }
 }
 
 @keyframes tab-shimmer-b {
   45% {
     filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
-    transform: translateY(-1px);
   }
 }
 

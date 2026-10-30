@@ -1,0 +1,63 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── HOVER GLOW ───────────────────────────────────────────────────────── */
+
+/* A button whose hover cue is its own text and icon glowing, rather than a filled shape behind them (`.hover-grow`):
+   the sidebar's buttons and workspaces, the toolbar's Back, Forward, Reload and Home, and the tab row's close and
+   new-tab buttons.
+
+   The glow is a text shadow for the text and a drop shadow on each icon, not a filter on the button itself, which
+   would also blur its edges and any layer of its own (a workspace's selected colour).
+
+   Loaded after `hover-grow.css`, with the same positioning: a button positioned itself keeps its own `position`, and a
+   layer of its own at `z-index: -1` (a workspace's selected colour) still lands between its background and its
+   content. */
+.hover-glow {
+  position: relative;
+  isolation: isolate;
+
+  transition:
+    color 160ms ease-out,
+    text-shadow 160ms ease-out;
+}
+
+.hover-glow svg {
+  transition: filter 160ms ease-out;
+}
+
+/* As with `.hover-grow`: the hovered button rises above its siblings, so its glow isn't painted over. */
+.hover-glow:hover {
+  z-index: 10;
+}
+
+/* The glow is laid down twice, one over the other, for twice the brightness of one: a single shadow can't be made
+   brighter than its colour allows, and widening it only spreads it thinner. Shared with a tab's name (tab-bar.css). */
+.hover-glow:hover:not(:disabled) {
+  color: var(--color-tab-text-active);
+  text-shadow: var(--hover-glow-text-shadow);
+}
+
+.hover-glow:hover:not(:disabled) svg {
+  filter: var(--hover-glow-icon-filter);
+}
+
+/* Declared on each glowing element as well as the root, so an element that sets its own `--color-hover-glow` (the
+   window's close button glows red) glows in that colour: a custom property resolves the ones inside it where it is
+   declared. */
+:root,
+.hover-glow {
+  --hover-glow-text-shadow: 0 0 6px var(--color-hover-glow), 0 0 6px var(--color-hover-glow);
+  --hover-glow-icon-filter: drop-shadow(0 0 3px var(--color-hover-glow)) drop-shadow(0 0 3px var(--color-hover-glow));
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .hover-glow,
+  .hover-glow svg {
+    transition: none;
+  }
+}

@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-19
+// Last Modified: 2026-10-29
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
@@ -18,6 +18,7 @@ const EMPTY_STATE: BrowserState = {
   savedWorkspaceImages: {},
   splitView: null,
   focusMode: false,
+  contentFocused: false,
   sidebarVisible: true,
   grabbedTabId: null,
   selectedTabIds: [],
@@ -369,6 +370,7 @@ export function useTabs() {
     splitView: state.splitView,
     secondaryTab,
     focusMode: state.focusMode,
+    contentFocused: state.contentFocused,
     sidebarVisible: state.sidebarVisible,
     grabbedTabId: state.grabbedTabId,
     selectedTabIds: state.selectedTabIds,

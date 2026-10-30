@@ -1,7 +1,7 @@
 // Project: Northstar
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-27
+// Last Modified: 2026-10-29
 
 import { useState } from 'react';
 import { sortDirectionOf, toggleSortKey, type SortDirection, type SortKeys } from '../../lib/tableSort';
@@ -41,15 +41,17 @@ interface SortHeaderProps {
   readonly onToggle: () => void;
   /** The `<th>`'s own classes: its table's heading look and the column's width. */
   readonly className: string;
+  /** Holds the sort where it is: the mark still shows it, but a click does nothing. */
+  readonly disabled?: boolean;
 }
 
 /**
  * A column heading that sorts its table: its name, then a mark for how the
  * column is sorted. A click steps it to ascending, then descending, then
  * unsorted, and round again; the column clicked last sorts first. Shared by
- * the History and Bookmarks tables.
+ * the History, Bookmarks and Secrets tables.
  */
-export function SortHeader({ label, direction, onToggle, className }: SortHeaderProps) {
+export function SortHeader({ label, direction, onToggle, className, disabled = false }: SortHeaderProps) {
   const next = direction === null ? 'ascending' : direction === 'asc' ? 'descending' : 'unsorted';
   return (
     <th
@@ -60,7 +62,8 @@ export function SortHeader({ label, direction, onToggle, className }: SortHeader
         type="button"
         className={`sort-header${direction ? ' sort-header--sorted' : ''}`}
         onClick={onToggle}
-        title={`Sort by ${label.toLowerCase()} (${next})`}
+        disabled={disabled}
+        title={disabled ? undefined : `Sort by ${label.toLowerCase()} (${next})`}
       >
         <span className="sort-header__label">{label}</span>
         <SortMark direction={direction} />

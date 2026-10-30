@@ -1,0 +1,159 @@
+/* Project: Northstar
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── MIST ─────────────────────────────────────────────────────────────── */
+/* Mist drifting across the tab row's and the sidebar's backgrounds (`Mist`). Like the pointer's glow
+   (pointer-glow.css), it sits at the bottom of its area's stacking context, so everything in the area paints over it;
+   it comes first in the area, so the glow paints over it too. The tabs carry the row's own colour, so on the row it
+   shows only in the empty space around them.
+
+   Each wisp is a large, soft ellipse of light grey, barely there, drifting on a slow loop of its own. The row's wisps
+   move along it and the sidebar's up and down it, on different durations, so the two areas never move in step. Only
+   transforms animate, so the drift costs the compositor and nothing else. */
+
+.mist {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+
+  pointer-events: none;
+}
+
+.mist__wisp {
+  position: absolute;
+
+  background: radial-gradient(closest-side, rgba(var(--mist-rgb), var(--mist-strength)), transparent);
+  border-radius: 50%;
+  filter: blur(14px);
+
+  will-change: transform;
+  animation: var(--mist-path) var(--mist-duration) ease-in-out var(--mist-delay) infinite alternate;
+}
+
+/* A light grey on the dark theme; on the light one a mid grey, fainter, since any grey shows more against the pale
+   chrome. */
+:root[data-theme='dark'] .mist {
+  --mist-rgb: 200, 203, 208;
+  --mist-strength: 0.12;
+}
+
+:root[data-theme='light'] .mist {
+  --mist-rgb: 120, 124, 130;
+  --mist-strength: 0.1;
+}
+
+/* ── The tab row: wide, low wisps drifting along it ── */
+
+.mist--row .mist__wisp {
+  top: -40%;
+  width: 46%;
+  height: 180%;
+}
+
+.mist--row .mist__wisp--1 {
+  --mist-path: mist-row-a;
+  --mist-duration: 47s;
+  --mist-delay: -12s;
+
+  left: -10%;
+}
+
+.mist--row .mist__wisp--2 {
+  --mist-path: mist-row-b;
+  --mist-duration: 61s;
+  --mist-delay: -33s;
+
+  left: 30%;
+}
+
+.mist--row .mist__wisp--3 {
+  --mist-path: mist-row-a;
+  --mist-duration: 73s;
+  --mist-delay: -51s;
+
+  left: 62%;
+}
+
+@keyframes mist-row-a {
+  from {
+    transform: translate(-18%, -6%) scale(1, 0.9);
+  }
+
+  to {
+    transform: translate(42%, 8%) scale(1.25, 1.1);
+  }
+}
+
+@keyframes mist-row-b {
+  from {
+    transform: translate(28%, 6%) scale(1.15, 1);
+  }
+
+  to {
+    transform: translate(-36%, -8%) scale(0.9, 1.15);
+  }
+}
+
+/* ── The sidebar: tall wisps drifting up and down it ── */
+
+.mist--rail .mist__wisp {
+  left: -45%;
+  width: 190%;
+  height: 34%;
+}
+
+.mist--rail .mist__wisp--1 {
+  --mist-path: mist-rail-a;
+  --mist-duration: 53s;
+  --mist-delay: -7s;
+
+  top: -5%;
+}
+
+.mist--rail .mist__wisp--2 {
+  --mist-path: mist-rail-b;
+  --mist-duration: 67s;
+  --mist-delay: -29s;
+
+  top: 35%;
+}
+
+.mist--rail .mist__wisp--3 {
+  --mist-path: mist-rail-a;
+  --mist-duration: 79s;
+  --mist-delay: -44s;
+
+  top: 70%;
+}
+
+@keyframes mist-rail-a {
+  from {
+    transform: translate(-8%, -22%) scale(0.95, 1);
+  }
+
+  to {
+    transform: translate(10%, 48%) scale(1.1, 1.3);
+  }
+}
+
+@keyframes mist-rail-b {
+  from {
+    transform: translate(6%, 36%) scale(1.1, 1.15);
+  }
+
+  to {
+    transform: translate(-10%, -40%) scale(0.9, 0.95);
+  }
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+
+/* Still mist, where it starts: no drift. */
+@media (prefers-reduced-motion: reduce) {
+  .mist__wisp {
+    animation: none;
+  }
+}
