@@ -161,3 +161,30 @@ export function reanchorHighlight(
   }
   return best === -1 ? null : { start: best, end: best + quote.length };
 }
+
+/** How far ahead in the source a rendered character is looked for before it's taken as one the source doesn't have. */
+const MATCH_LOOKAHEAD = 40;
+
+/**
+ * Where in a block's source a point of its rendered text falls: the source is
+ * walked alongside the rendered characters, skipping the markup the rendering
+ * dropped (`**`, `#`, link addresses). A rendered character the source lacks
+ * nearby (KaTeX's drawing of a formula) is passed over.
+ * @param source The block's source.
+ * @param rendered The block's rendered text up to the point.
+ * @returns The matching offset in `source`.
+ */
+export function sourceOffsetForRendered(source: string, rendered: string): number {
+  const sameCharacter = (a: string, b: string): boolean => a === b || (/\s/.test(a) && /\s/.test(b));
+  let offset = 0;
+  for (const character of rendered) {
+    const limit = Math.min(source.length, offset + MATCH_LOOKAHEAD);
+    for (let probe = offset; probe < limit; probe += 1) {
+      if (sameCharacter(source[probe]!, character)) {
+        offset = probe + 1;
+        break;
+      }
+    }
+  }
+  return offset;
+}

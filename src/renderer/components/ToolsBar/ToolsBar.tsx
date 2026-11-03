@@ -320,7 +320,7 @@ function toolsFor(props: ToolsBarProps): readonly Tool[] {
   const tools: Tool[] = [];
 
   if (props.showPointerModes) {
-    // Alt+1 / Alt+2: Ctrl+1–8 jump to tabs.
+    // Alt+1 / Alt+2: F1–F7 jump to tabs.
     tools.push(
       {
         id: 'pan',

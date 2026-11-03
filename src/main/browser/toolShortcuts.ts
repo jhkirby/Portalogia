@@ -14,15 +14,15 @@ export interface PhysicalKeyChord extends KeyChord {
 /**
  * The Ctrl+letter keys that pick a toolbar tool: the laser pointer (I), pen
  * (P), highlighter (J), comments (M) and text box (E). Pan and Select are
- * Alt+1 and Alt+2 (`pointerModeShortcut`): Ctrl+1–8 jump to tabs.
+ * Alt+1 and Alt+2 (`pointerModeShortcut`); F1–F7 jump to tabs.
  */
 const TOOL_KEYS = new Set(['i', 'p', 'j', 'm', 'e']);
 
 /** The physical keys Alt+1 and Alt+2 come from, and the pointer mode each picks. */
 const POINTER_MODE_CODES: Readonly<Record<string, 'pan' | 'select'>> = { Digit1: 'pan', Digit2: 'select' };
 
-/** The physical keys for Ctrl+1 to Ctrl+8, in order, top row and number pad alike. */
-const TAB_JUMP_CODES = ['1', '2', '3', '4', '5', '6', '7', '8'].flatMap((digit) => [`Digit${digit}`, `Numpad${digit}`]);
+/** The physical keys F1 to F7, in order: each jumps to that tab. */
+const TAB_JUMP_CODES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7'];
 
 /** The Ctrl+Shift+letter keys that work a tool: Crop (X) and Revert Annotations (R). */
 const SHIFTED_TOOL_KEYS = new Set(['x', 'r']);
@@ -57,18 +57,18 @@ export function pointerModeShortcut(input: PhysicalKeyChord): 'pan' | 'select' |
 }
 
 /**
- * Which tab Ctrl+1 to Ctrl+8 jumps to: the first to the eighth of the
- * workspace, as many as a workspace can hold. Matched by physical key, number
- * pad included.
+ * Which tab F1 to F7 jumps to: the first to the seventh of the workspace.
+ * Only the bare key counts, so a page's own Ctrl/Alt/Shift+F-key chords are
+ * left alone. Matched by physical key.
  * @param input The key event.
  * @returns The tab's 0-based place, or `null` for any other key.
  */
 export function tabJumpIndex(input: PhysicalKeyChord): number | null {
-  if (!(input.control || input.meta) || input.alt || input.shift) {
+  if (input.control || input.meta || input.alt || input.shift) {
     return null;
   }
   const at = TAB_JUMP_CODES.indexOf(input.code);
-  return at === -1 ? null : Math.floor(at / 2);
+  return at === -1 ? null : at;
 }
 
 /**

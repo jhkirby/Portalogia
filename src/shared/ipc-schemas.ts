@@ -304,6 +304,7 @@ export const pageStatsSchema = z.object({
     .object({ x: z.number().int().min(-100_000).max(100_000), y: z.number().int().min(-100_000).max(100_000) })
     .nullable(),
   selection: z.object({ words: pageCount, characters: pageCount }).nullable(),
+  scroll: z.object({ top: z.number().int().min(0).max(100), bottom: z.number().int().min(0).max(100) }),
 });
 
 export const tabWarpPointerRequestSchema = z.object({
@@ -429,6 +430,12 @@ export const markdownModeRequestSchema = z.object({
 export const markdownDisplayRequestSchema = z.object({
   id: z.string().min(1),
   display: z.enum(['formatted', 'raw']),
+});
+
+/** A note's width, as a percent of its page's width: the chrome's slider (`contentWidth`) or the page's own column. */
+export const markdownContentWidthRequestSchema = z.object({
+  id: z.string().min(1),
+  percent: z.number().finite().min(0).max(100),
 });
 
 /** A link clicked in a note: a `[[wikilink]]` (its text inside the brackets) or an ordinary link's target. */

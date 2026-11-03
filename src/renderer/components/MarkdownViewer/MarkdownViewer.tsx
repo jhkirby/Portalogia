@@ -40,6 +40,7 @@ import { MarkdownSidePanel } from './MarkdownSidePanel';
 import { MarkdownStatusBar } from './MarkdownStatusBar';
 import { useMarkdownFind } from './useMarkdownFind';
 import { useMarkdownPan } from './useMarkdownPan';
+import { useNoteWidth } from './useNoteWidth';
 import { CONTENT_FADE_MS, useLoadBlur } from '../../hooks/useLoadBlur';
 import { FluidBackground } from '../FluidBackground';
 import { SidePanelToggle } from '../SidePanel';
@@ -377,6 +378,8 @@ export function MarkdownViewer() {
   const [focusMode, setFocusMode] = useState(false);
   useEffect(() => window.portalogiaMarkdown.onFocusMode(setFocusMode), []);
   const bodyRef = useRef<HTMLDivElement>(null);
+  // The toolbar's width slider: how wide the formatted note is drawn (a printout keeps the usual column).
+  const noteWidthStyle = useNoteWidth(bodyRef, hasNote && !printing);
   const pannerScroller = useCallback(
     (): HTMLElement | null => (showReader ? scrollRef.current : (editorViewRef.current?.scrollDOM ?? null)),
     [showReader],
@@ -849,11 +852,10 @@ export function MarkdownViewer() {
       data-mode={mode}
       data-display={display}
       data-pan={panEnabled ? (panning ? 'grabbing' : 'ready') : undefined}
-      style={
-        panEnabled
-          ? ({ '--md-hand-cursor': panning ? HAND_CLOSED_CURSOR : HAND_OPEN_CURSOR } as CSSProperties)
-          : undefined
-      }
+      style={{
+        ...(printing ? {} : noteWidthStyle),
+        ...(panEnabled ? ({ '--md-hand-cursor': panning ? HAND_CLOSED_CURSOR : HAND_OPEN_CURSOR } as CSSProperties) : {}),
+      }}
     >
       <style>{`::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(${r}, ${g}, ${b}, 0.55); }`}</style>
       {!hasNote ? (

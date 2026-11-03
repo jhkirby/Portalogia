@@ -9,6 +9,7 @@ import { IpcChannel, type IpcResult } from '@shared/ipc-contract';
 import {
   addPdfBookmarkRequestSchema,
   markdownApplyFormatRequestSchema,
+  markdownContentWidthRequestSchema,
   markdownDisplayRequestSchema,
   markdownExportRequestSchema,
   markdownModeRequestSchema,
@@ -70,6 +71,9 @@ export function registerMarkdownIpc(
   invokeForTab(IpcChannel.MarkdownSetDisplay, markdownDisplayRequestSchema, (manager, request) =>
     manager.setMarkdownDisplay(request.id, request.display),
   );
+  invokeForTab(IpcChannel.MarkdownSetContentWidth, markdownContentWidthRequestSchema, (manager, request) =>
+    manager.setMarkdownContentWidth(request.id, request.percent),
+  );
   invokeForTab(IpcChannel.MarkdownNavigateHistory, markdownNavigateHistoryRequestSchema, (manager, request) =>
     manager.navigateMarkdownHistory(request.id, request.direction),
   );
@@ -113,6 +117,13 @@ export function registerMarkdownIpc(
       pageManager(event, parsed.data.id)?.saveMarkdown(parsed.data.id, parsed.data.content, parsed.data.generation);
     }
   });
+  ipcMain.on(IpcChannel.MarkdownContentWidthMin, (event: IpcMainEvent, rawRequest: unknown) => {
+    const parsed = markdownContentWidthRequestSchema.safeParse(rawRequest);
+    if (parsed.success) {
+      pageManager(event, parsed.data.id)?.setMarkdownContentWidthMin(parsed.data.id, parsed.data.percent);
+    }
+  });
+
   ipcMain.on(IpcChannel.MarkdownSaveAnnotations, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = markdownSaveAnnotationsRequestSchema.safeParse(rawRequest);
     if (parsed.success) {

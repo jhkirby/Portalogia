@@ -363,8 +363,9 @@ export function App() {
 
   const browserTab = activeTab?.kind === 'browser' ? activeTab : null;
   // Find searches a page, a terminal's buffer, or a PDF or note that has a file open — not a History, Bookmarks or Secrets tab (each has its own search) or an empty PDF or note.
+  // A web tab with no site loaded (its home page) has nothing to search either.
   const canFind =
-    activeTab?.kind === 'browser' ||
+    (activeTab?.kind === 'browser' && activeTab.url !== '' && activeTab.url !== HOME_URL && !activeTab.url.startsWith('about:')) ||
     activeTab?.kind === 'terminal' ||
     ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName !== null);
   // The History, Bookmarks and Secrets tabs are fixed tables: no zoom, laser pointer or export.
@@ -615,6 +616,16 @@ export function App() {
         onZoomOut={zoom.zoomOut}
         onZoomIn={zoom.zoomIn}
         onSetZoom={zoom.set}
+        noteWidth={
+          tab?.kind === 'markdown' && tab.fileName !== null
+            ? {
+                percent: tab.contentWidth,
+                minPercent: tab.contentWidthMin,
+                enabled: tab.display === 'formatted',
+                onChange: (percent: number) => void window.portalogia.setMarkdownContentWidth(tab.id, percent),
+              }
+            : null
+        }
         inStrip={inStrip}
       />
     );

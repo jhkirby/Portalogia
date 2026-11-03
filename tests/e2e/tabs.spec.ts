@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-import { test, expect, pressInTab } from './fixtures';
+import { test, expect, pressInTab, pressInChrome } from './fixtures';
 
 test.describe('tabs', () => {
   test('the new-tab button opens another tab and focuses the address bar', async ({ window }) => {
@@ -93,7 +93,7 @@ test.describe('tabs', () => {
 });
 
 test.describe('jumping to a tab by number', () => {
-  test('Ctrl+1 to Ctrl+8 pick that tab, from a page or from the chrome; a number past the last does nothing', async ({
+  test('F1 to F7 pick that tab, from a page or from the chrome; a key past the last tab does nothing', async ({
     electronApp,
     window,
   }) => {
@@ -107,20 +107,14 @@ test.describe('jumping to a tab by number', () => {
     await expect.poll(selected).toBe(2);
 
     // From a tab's own page (every tab here is the home page).
-    await pressInTab(electronApp, 'portalogia://home', 'Control+1');
+    await pressInTab(electronApp, 'portalogia://home', 'F1');
     await expect.poll(selected).toBe(0);
 
-    // From the chrome, through its own input pipeline as a physical key press would arrive.
-    const pressInChrome = (keyCode: string): Promise<void> =>
-      electronApp.evaluate(({ BrowserWindow }, code) => {
-        const win = BrowserWindow.getAllWindows().find((candidate) => candidate.isVisible())!;
-        win.webContents.sendInputEvent({ type: 'keyDown', keyCode: code, modifiers: ['control'] });
-        win.webContents.sendInputEvent({ type: 'keyUp', keyCode: code, modifiers: ['control'] });
-      }, keyCode);
-    await pressInChrome('2');
+    // From the chrome.
+    await pressInChrome(electronApp, 'F2');
     await expect.poll(selected).toBe(1);
 
-    await pressInChrome('8');
+    await pressInChrome(electronApp, 'F7');
     await window.waitForTimeout(300);
     expect(await selected()).toBe(1);
   });

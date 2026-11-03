@@ -4,7 +4,7 @@
 // Last Modified: 2026-10-29
 
 import type { Page } from 'playwright';
-import { test, expect, openInActiveTab, pressInTab } from './fixtures';
+import { test, expect, openInActiveTab, pressInChrome, pressInTab } from './fixtures';
 
 /** Which tab (by position) the chrome shows as selected; the editor page is the second, at 1. */
 async function selectedTabIndex(window: Page): Promise<number> {
@@ -44,28 +44,6 @@ test.describe('Ctrl+Left/Right in a web page text box', () => {
     await expect(page.frameLocator('#frame').locator('body')).toContainText(/(^|\s)X\w*/);
   });
 
-  test('Escape takes the caret out of the frame’s editor, and Ctrl+Left switches tabs again', async ({
-    electronApp,
-    window,
-    server,
-  }) => {
-    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
-    await page.frameLocator('#frame').locator('body').click();
-    await pressInTab(electronApp, '/editor', 'Escape');
-    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe('IFRAME');
-    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
-    await expect.poll(() => selectedTabIndex(window)).toBe(0);
-  });
-
-  test('Escape in a plain text box leaves it too', async ({ electronApp, window, server }) => {
-    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
-    await page.locator('#box').click();
-    await pressInTab(electronApp, '/editor', 'Escape');
-    await expect.poll(() => page.evaluate(() => document.activeElement?.id ?? '')).not.toBe('box');
-    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
-    await expect.poll(() => selectedTabIndex(window)).toBe(0);
-  });
-
   test('Shift+Escape leaves the frame’s editor even when the page keeps Escape for itself (as Google Docs does)', async ({
     electronApp,
     window,
@@ -82,7 +60,8 @@ test.describe('Ctrl+Left/Right in a web page text box', () => {
     expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
     await pressInTab(electronApp, '/editor', 'Shift+Escape');
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe('IFRAME');
-    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
+    // The keyboard is the chrome's now, where Ctrl+Left switches tabs.
+    await pressInChrome(electronApp, 'Control+ArrowLeft');
     await expect.poll(() => selectedTabIndex(window)).toBe(0);
   });
 

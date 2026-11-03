@@ -37,6 +37,7 @@ let hovered: string | null = null;
 let focused: string | null = null;
 let pointer: { x: number; y: number } | null = null;
 let selection: { words: number; characters: number } | null = null;
+let scroll: { top: number; bottom: number } = { top: 0, bottom: 100 };
 let recountTimer = 0;
 let reportTimer = 0;
 let lastReport = 0;
@@ -64,7 +65,7 @@ function report(): void {
   window.clearTimeout(reportTimer);
   reportTimer = 0;
   lastReport = performance.now();
-  ipcRenderer.send(TabPageStats, { ...counts, hovered, focused, pointer, selection });
+  ipcRenderer.send(TabPageStats, { ...counts, hovered, focused, pointer, selection, scroll });
 }
 
 /** Sends everything soon: at once if it hasn't been sent lately, else once the pause is up. */
@@ -95,6 +96,7 @@ const IS_WEBSITE = location.protocol === 'http:' || location.protocol === 'https
 /** Counts the whole page: its visible text, images, links, bytes and elements. */
 function recount(): void {
   recountTimer = 0;
+  measureScroll(scrollSource ?? document.scrollingElement ?? document.documentElement);
   if (!IS_WEBSITE) {
     report();
     return;
@@ -160,6 +162,39 @@ ipcRenderer.on('tab:pointer-position', (_event, point: { x: number; y: number } 
   pointer = point ? { x: point.x, y: point.y } : null;
   reportSoon();
 });
+
+/**
+ * How much of the page is in view, for the stat bar's `top%–bottom%`: measured on the page's own scroll, or, for a
+ * page that scrolls a box of its own instead (a web app's main pane), on the box that scrolled last.
+ * @param scroller The element that scrolled, or the page's.
+ */
+function measureScroll(scroller: Element): void {
+  const { scrollTop, scrollHeight, clientHeight } = scroller;
+  let next = { top: 0, bottom: 100 };
+  if (scrollHeight > clientHeight && scrollHeight > 0) {
+    const top = Math.max(0, Math.min(100, Math.round((scrollTop / scrollHeight) * 100)));
+    next = { top, bottom: Math.max(top, Math.min(100, Math.round(((scrollTop + clientHeight) / scrollHeight) * 100))) };
+  }
+  if (next.top !== scroll.top || next.bottom !== scroll.bottom) {
+    scroll = next;
+    reportSoon();
+  }
+}
+
+/** The element whose scroll the stat bar follows: the page's own, until a box of the page's scrolls instead. */
+let scrollSource: Element | null = null;
+
+document.addEventListener(
+  'scroll',
+  (event) => {
+    const target = event.target;
+    scrollSource = target instanceof Element && target !== document.documentElement && target !== document.body ? target : null;
+    measureScroll(scrollSource ?? document.scrollingElement ?? document.documentElement);
+  },
+  { capture: true, passive: true },
+);
+// A page that grows (more loads in) or a window resize moves the bottom edge without a scroll.
+window.addEventListener('resize', () => measureScroll(scrollSource ?? document.scrollingElement ?? document.documentElement));
 
 // Where the pointer is, for the stat bar's x×y; sent no more often than the hover (`LIVE_REPORT_MS`). Any page, the
 // app's own included: it's a position on the screen, not something of the site's.

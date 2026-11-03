@@ -1,0 +1,87 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-03 */
+
+/* ── NOTE WIDTH ───────────────────────────────────────────────────────── */
+
+/* A note's width beside the zoom (`NoteWidthControl`): a short bar, then the percent it gives. */
+.note-width {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-sm);
+  height: 30px;
+  padding: 0 var(--size-spacing-sm);
+}
+
+.note-width__slider {
+  --note-width-track: rgba(var(--color-accent-rgb), 0.18);
+  --note-width-filled: rgba(var(--color-accent-rgb), 0.7);
+
+  width: 72px;
+  height: 14px;
+  margin: 0;
+
+  /* Drawn by hand rather than the platform's slider, whose thick white track stood out against the toolbar. */
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* A hairline track: the part left of the thumb (`--note-width-fill`, set by `NoteWidthControl`) in the accent, the
+   rest a faint tint of it. */
+.note-width__slider::-webkit-slider-runnable-track {
+  height: 3px;
+
+  background: linear-gradient(
+    to right,
+    var(--note-width-filled) var(--note-width-fill, 0%),
+    var(--note-width-track) var(--note-width-fill, 0%)
+  );
+  border-radius: var(--size-radius-pill);
+}
+
+.note-width__slider::-webkit-slider-thumb {
+  width: 10px;
+  height: 10px;
+  /* Centred on the 3px track. */
+  margin-top: -3.5px;
+
+  appearance: none;
+  background: rgb(var(--color-accent-rgb));
+  border: none;
+  border-radius: 50%;
+  transition: transform 120ms ease-out;
+}
+
+.note-width__slider:hover:not(:disabled)::-webkit-slider-thumb,
+.note-width__slider:active:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+.note-width__slider:focus-visible {
+  outline: none;
+}
+
+.note-width__slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.35);
+}
+
+.note-width__slider:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* Wide enough for "100%", so the bar doesn't shift as the digits change. */
+.note-width__value {
+  min-width: 4ch;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tab-text);
+  text-align: right;
+}
+
+.note-width--disabled .note-width__value {
+  color: var(--color-button-disabled-text);
+}

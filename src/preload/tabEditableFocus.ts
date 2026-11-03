@@ -20,7 +20,7 @@ const EditableFocus = 'ui:editable-focus';
 const LeaveTextBox = 'tab:leave-text-box';
 const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
 
-/** Frames whose focus changes and Escape presses are already being listened to. */
+/** Frames whose focus changes are already being listened to. */
 const watchedWindows = new WeakSet<Window>();
 
 let editableReported: 'plain' | 'rich' | false = false;
@@ -108,29 +108,7 @@ function leaveTextBox(expected?: Element): void {
 }
 
 /**
- * Takes the caret out of a text box after Escape, so the shortcuts that stand aside while one has it work again.
- * Decided once the page's own handlers have had the key: one that used Escape itself (closing a suggestion list or a
- * popup) called `preventDefault`, and then the caret stays for the next press. A page that takes every Escape for
- * itself (Google Docs does) never lets this through, which is what Shift+Escape (`LeaveTextBox`) is for.
- * @param event The keydown, from this page or any frame in it.
- */
-function leaveTextBoxOnEscape(event: KeyboardEvent): void {
-  if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
-    return;
-  }
-  const element = innermostActiveElement();
-  if (!isEditableElement(element)) {
-    return;
-  }
-  setTimeout(() => {
-    if (!event.defaultPrevented) {
-      leaveTextBox(element);
-    }
-  }, 0);
-}
-
-/**
- * Listens to a window's focus changes and Escape presses.
+ * Listens to a window's focus changes.
  * @param target This page's window, or a same-origin frame's.
  */
 function watchWindow(target: Window): void {
@@ -143,7 +121,6 @@ function watchWindow(target: Window): void {
   target.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
   // Focus going into a frame shows up out here only as the window losing it.
   target.addEventListener('blur', () => setTimeout(reportEditableFocus, 0), true);
-  target.addEventListener('keydown', leaveTextBoxOnEscape, true);
 }
 
 watchWindow(window);

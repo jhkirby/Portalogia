@@ -110,6 +110,16 @@ export class LaserPointerOverlay {
       }
     });
 
+    // A press on the overlay is the pointer at work, not a move of the keyboard: it goes back to the chrome, where the
+    // tools' keys and the keys between tabs work (Escape and Ctrl+I still turn the pointer off there).
+    this.view.webContents.on('focus', () => {
+      setImmediate(() => {
+        if (!window.isDestroyed() && this.view.webContents.isFocused()) {
+          window.webContents.focus();
+        }
+      });
+    });
+
     this.view.webContents.on('will-navigate', (event) => event.preventDefault());
     this.view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 

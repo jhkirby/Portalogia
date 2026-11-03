@@ -30,6 +30,8 @@ export const editorTheme = EditorView.theme({
     margin: '0 auto',
     padding: '2rem 1.5rem 40vh',
   },
+  // The formatted editor is as wide as the toolbar's width slider says (`useNoteWidth`); the raw text keeps its column.
+  '&.cm-live-preview .cm-content': { maxWidth: 'var(--md-formatted-width, var(--md-column-width))' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--color-accent-text)' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
     backgroundColor: 'rgba(var(--color-accent-rgb), 0.35)',

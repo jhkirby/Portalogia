@@ -52,7 +52,7 @@ test.describe('isToolShortcut', () => {
   });
 
   test('app shortcuts that are not tools are left alone', () => {
-    // Ctrl+1–8 jump to tabs now, so the digits are no tool's.
+    // Digits are no tool's: Alt+1 and Alt+2 are the pointer modes.
     for (const key of ['w', 'n', 't', 'b', 'f', 'l', 'z', 'arrowleft', '1', '2', '3']) {
       expect(isToolShortcut(chord(key, '', 'control'))).toBe(false);
     }
@@ -90,7 +90,7 @@ test.describe('pointerModeShortcut', () => {
     expect(pointerModeShortcut(chord('&', 'Digit1', 'alt'))).toBe('pan');
   });
 
-  test('needs Alt alone: Ctrl+1 is a tab, and other digits are nothing', () => {
+  test('needs Alt alone, and other digits are nothing', () => {
     expect(pointerModeShortcut(chord('1', 'Digit1'))).toBeNull();
     expect(pointerModeShortcut(chord('1', 'Digit1', 'control'))).toBeNull();
     expect(pointerModeShortcut(chord('1', 'Digit1', 'control', 'alt'))).toBeNull();
@@ -100,19 +100,17 @@ test.describe('pointerModeShortcut', () => {
 });
 
 test.describe('tabJumpIndex', () => {
-  test('Ctrl+1 to Ctrl+8 pick the first to the eighth tab, number pad too', () => {
-    for (let digit = 1; digit <= 8; digit += 1) {
-      expect(tabJumpIndex(chord(String(digit), `Digit${digit}`, 'control'))).toBe(digit - 1);
-      expect(tabJumpIndex(chord(String(digit), `Numpad${digit}`, 'control'))).toBe(digit - 1);
+  test('F1 to F7 pick the first to the seventh tab', () => {
+    for (let n = 1; n <= 7; n += 1) {
+      expect(tabJumpIndex(chord(`F${n}`, `F${n}`))).toBe(n - 1);
     }
-    expect(tabJumpIndex(chord('3', 'Digit3', 'meta'))).toBe(2);
   });
 
-  test('9, 0, and any other modifier are not tab jumps', () => {
-    expect(tabJumpIndex(chord('9', 'Digit9', 'control'))).toBeNull();
-    expect(tabJumpIndex(chord('0', 'Digit0', 'control'))).toBeNull();
-    expect(tabJumpIndex(chord('1', 'Digit1'))).toBeNull();
-    expect(tabJumpIndex(chord('1', 'Digit1', 'control', 'shift'))).toBeNull();
-    expect(tabJumpIndex(chord('1', 'Digit1', 'control', 'alt'))).toBeNull();
+  test('only the bare key counts; F8 and digits are nothing', () => {
+    expect(tabJumpIndex(chord('F8', 'F8'))).toBeNull();
+    expect(tabJumpIndex(chord('1', 'Digit1', 'control'))).toBeNull();
+    expect(tabJumpIndex(chord('F1', 'F1', 'control'))).toBeNull();
+    expect(tabJumpIndex(chord('F1', 'F1', 'shift'))).toBeNull();
+    expect(tabJumpIndex(chord('F1', 'F1', 'alt'))).toBeNull();
   });
 });

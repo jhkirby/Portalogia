@@ -5,6 +5,7 @@
 
 import { formatShortcut } from '../../lib/shortcuts';
 import { ShieldIcon } from '../icons';
+import { NoteWidthControl } from '../NoteWidthControl';
 import { ZoomControl } from '../ZoomControl';
 
 interface TabActionsProps {
@@ -28,6 +29,13 @@ interface TabActionsProps {
   readonly onZoomOut: () => void;
   readonly onZoomIn: () => void;
   readonly onSetZoom: (percent: number) => void;
+  /** A note's width slider, shown just left of the zoom on a Markdown tab with a note open; `null` elsewhere. */
+  readonly noteWidth: {
+    readonly percent: number;
+    readonly minPercent: number;
+    readonly enabled: boolean;
+    readonly onChange: (percent: number) => void;
+  } | null;
   /**
    * Whether these sit in the toolbar's one strip of page tools (`PageActions`), each group followed by a divider
    * from what comes next — rather than at the end of one half of a split's toolbar, with nothing after them.
@@ -52,6 +60,7 @@ export function TabActions({
   onZoomOut,
   onZoomIn,
   onSetZoom,
+  noteWidth,
   inStrip,
 }: TabActionsProps) {
   return (
@@ -79,6 +88,7 @@ export function TabActions({
       {(inStrip || (showAdBlock && showZoom)) && <span className="page-actions__divider" role="separator" aria-hidden="true" />}
       {showZoom && (
         <>
+          {noteWidth && <NoteWidthControl {...noteWidth} />}
           <ZoomControl percent={zoomPercent} canZoom={canZoom} onZoomOut={onZoomOut} onZoomIn={onZoomIn} onSetZoom={onSetZoom} />
           {inStrip && <span className="page-actions__divider" role="separator" aria-hidden="true" />}
         </>

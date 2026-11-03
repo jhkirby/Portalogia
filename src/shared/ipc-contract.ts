@@ -227,6 +227,12 @@ export const IpcChannel = {
   MarkdownSetMode: 'markdown:set-mode',
   /** Chrome → main: switch the tab between its formatted note and its raw text. */
   MarkdownSetDisplay: 'markdown:set-display',
+  /** Chrome → main: how wide to draw a formatted note, as a percent of its page's width (the toolbar's width slider). */
+  MarkdownSetContentWidth: 'markdown:set-content-width',
+  /** Main → Markdown page: how wide to draw the formatted note, as a percent of the page's width. */
+  MarkdownContentWidth: 'markdown:content-width',
+  /** Markdown page → main: the percent of the page's width the note's usual column takes, as the page resizes. */
+  MarkdownContentWidthMin: 'markdown:content-width-min',
   /** Chrome → main: step the tab back or forward through the notes it followed links through. */
   MarkdownNavigateHistory: 'markdown:navigate-history',
   /** Chrome → main: a formatting button in the Tools sidebar (bold, italic, link, LaTeX, code block, table). */
@@ -347,8 +353,6 @@ export const IpcChannel = {
   ToolsSidebarToggle: 'tools-sidebar:toggle',
   /** Chrome → main: Escape in the chrome, with nothing there using it — the active tab's page takes the keyboard. */
   TabsFocusContent: 'tabs:focus-content',
-  /** PDF or Markdown page → main: Escape with nothing in the page using it — the keyboard goes back to the chrome. */
-  TabReleaseKeyboard: 'tab:release-keyboard',
   /** Main → chrome: put up (or take down) the picture of the tab's pages that slides with the sidebar. */
   UiContentSnapshot: 'ui:content-snapshot',
   /** Chrome → main: that picture is on screen, so the live pages can step away for the slide. */
@@ -443,6 +447,8 @@ export interface PageStats {
   readonly pointer: { readonly x: number; readonly y: number } | null;
   /** The selection's words and characters, or `null` when nothing is selected. */
   readonly selection: { readonly words: number; readonly characters: number } | null;
+  /** How much of the page is in view: where the view's top and bottom fall, as whole percents of the page's height. */
+  readonly scroll: { readonly top: number; readonly bottom: number };
 }
 
 /** Where the sidebar slide's snapshot sits in the chrome's tab area (`.tab-content`), as insets in CSS pixels. */
@@ -780,6 +786,8 @@ export interface PortalogiaApi {
   setMarkdownMode(id: string, mode: 'view' | 'edit'): Promise<IpcResult<null>>;
   /** Switches a Markdown tab between its formatted note and its raw text. */
   setMarkdownDisplay(id: string, display: MarkdownDisplay): Promise<IpcResult<null>>;
+  /** Draws a formatted note this wide, as a percent of its page's width (no narrower than its usual column). */
+  setMarkdownContentWidth(id: string, percent: number): Promise<IpcResult<null>>;
   /** Steps a Markdown tab back (`-1`) or forward (`1`) through the notes it followed links through. */
   navigateMarkdownHistory(id: string, direction: 1 | -1): Promise<IpcResult<null>>;
   /** Runs a formatting command on a Markdown tab's editor (the Tools sidebar's buttons), handing it the keyboard. */
@@ -1393,6 +1401,10 @@ export interface PortalogiaMarkdownApi {
   onMode(listener: (mode: 'view' | 'edit') => void): () => void;
   /** Subscribes to the formatted/raw display; called immediately with the latest value if one already arrived. */
   onDisplay(listener: (display: MarkdownDisplay) => void): () => void;
+  /** Calls `listener` with how wide to draw the formatted note (a percent of the page's width), the latest first. */
+  onContentWidth(listener: (percent: number) => void): () => void;
+  /** Tells main the percent of the page's width the note's usual column takes, for the toolbar's width slider. */
+  reportContentWidthMin(percent: number): void;
   /** Subscribes to the tab's pointer mode (Pan or Select); called immediately with the latest value if one already arrived. */
   /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
   onFocusMode(listener: (focusMode: boolean) => void): () => void;

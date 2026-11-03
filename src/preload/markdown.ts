@@ -21,12 +21,13 @@ import type { MarkdownDisplay, PointerMode } from '@shared/tab-state';
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object.
 const MarkdownFile = 'markdown:file';
-const TabReleaseKeyboard = 'tab:release-keyboard';
 const MarkdownClosed = 'markdown:closed';
 const MarkdownMode = 'markdown:mode';
 const MarkdownPointerModeChannel = 'markdown:pointer-mode';
 const TabWarpPointer = 'tab:warp-pointer';
 const MarkdownDisplayChannel = 'markdown:display';
+const MarkdownContentWidthChannel = 'markdown:content-width';
+const MarkdownContentWidthMin = 'markdown:content-width-min';
 const MarkdownFormat = 'markdown:format';
 const MarkdownSave = 'markdown:save';
 const MarkdownSaveAnnotations = 'markdown:save-annotations';
@@ -106,6 +107,15 @@ const displayListeners = new Set<(display: MarkdownDisplay) => void>();
 ipcRenderer.on(MarkdownDisplayChannel, (_event, display: MarkdownDisplay) => {
   latestDisplay = display;
   displayListeners.forEach((listener) => listener(display));
+});
+
+let latestContentWidth: number | null = null;
+const contentWidthListeners = new Set<(percent: number) => void>();
+ipcRenderer.on(MarkdownContentWidthChannel, (_event, percent: unknown) => {
+  if (typeof percent === 'number' && Number.isFinite(percent)) {
+    latestContentWidth = percent;
+    contentWidthListeners.forEach((listener) => listener(percent));
+  }
 });
 
 let penOn = false;
@@ -234,6 +244,15 @@ const api: PortalogiaMarkdownApi = {
     }
     return subscribe(displayListeners, listener);
   },
+  onContentWidth: (listener) => {
+    if (latestContentWidth !== null) {
+      listener(latestContentWidth);
+    }
+    return subscribe(contentWidthListeners, listener);
+  },
+  reportContentWidthMin: (percent) => {
+    ipcRenderer.send(MarkdownContentWidthMin, { id: tabId, percent });
+  },
   onFormat: (listener) => subscribe(formatListeners, listener),
   save: (content: string, generation: number) => {
     ipcRenderer.send(MarkdownSave, { id: tabId, content, generation });
@@ -312,26 +331,6 @@ function reportEditableFocus(): void {
 window.addEventListener('focusin', reportEditableFocus, true);
 // `focusout` fires before the next element has focus, so look once focus has settled.
 window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
-
-// Escape gives the keyboard back to the chrome, so the app's shortcuts work again; Escape there hands it back. A text
-// box (the note's editor among them) keeps its caret where it was rather than being left, so coming back puts the
-// cursor in the same place. Decided once the page's own handlers have had the key: one that used Escape itself
-// (closing a suggestion list or a popup) called `preventDefault`, and then the page keeps the keyboard for the next
-// press.
-window.addEventListener(
-  'keydown',
-  (event) => {
-    if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
-      return;
-    }
-    setTimeout(() => {
-      if (!event.defaultPrevented) {
-        ipcRenderer.send(TabReleaseKeyboard);
-      }
-    }, 0);
-  },
-  true,
-);
 
 // The page's own stat bar, read out for the chrome: in split screen the chrome draws the one bar along the window's
 // bottom, with the stats of whichever side was used last, and this page's own is hidden

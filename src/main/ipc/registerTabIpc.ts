@@ -237,15 +237,6 @@ export function registerTabIpc(
     }
   });
 
-  // Fire-and-forget from a PDF or Markdown page on an Escape it had no use for. Only a page that has the keyboard can
-  // give it away, so one in the background can't take it from whatever has it.
-  ipcMain.on(IpcChannel.TabReleaseKeyboard, (event) => {
-    const tab = resolveTabForContents(event.sender);
-    if (tab && event.sender.isFocused()) {
-      tab.manager.focusChrome();
-    }
-  });
-
   ipcMain.handle(IpcChannel.SplitSwap, (event): IpcResult<BrowserState> => {
     try {
       return { ok: true, data: resolveTabManager(event).swapSplitSides() };

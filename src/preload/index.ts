@@ -94,6 +94,7 @@ const api: PortalogiaApi = {
   renameMarkdownFile: (id, name) => invoke(IpcChannel.MarkdownRename, { id, name }),
   setMarkdownMode: (id, mode) => invoke(IpcChannel.MarkdownSetMode, { id, mode }),
   setMarkdownDisplay: (id, display) => invoke(IpcChannel.MarkdownSetDisplay, { id, display }),
+  setMarkdownContentWidth: (id, percent) => invoke(IpcChannel.MarkdownSetContentWidth, { id, percent }),
   navigateMarkdownHistory: (id, direction) => invoke(IpcChannel.MarkdownNavigateHistory, { id, direction }),
   formatMarkdown: (id, action) => invoke(IpcChannel.MarkdownApplyFormat, { id, action }),
   exportMarkdown: (id, format) => invoke(IpcChannel.MarkdownExport, { id, format }),

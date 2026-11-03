@@ -149,6 +149,13 @@ export interface MarkdownTabState {
    * formatted edits the drawn note in place.
    */
   readonly display: MarkdownDisplay;
+  /**
+   * How wide the formatted note is drawn, as a percent of the page's width — the toolbar's width slider. Never less
+   * than `contentWidthMin` (0 means as narrow as that); the raw text keeps a text file's own width.
+   */
+  readonly contentWidth: number;
+  /** The percent of the page's width the note's usual column takes — the slider's least — as the page measures it. */
+  readonly contentWidthMin: number;
   /** How far the note being opened has got, 0-100, or `null` when there's none to show — see `PdfTabState.loadProgress`. */
   readonly loadProgress: number | null;
   /** Whether following a link has left an earlier note this tab can step back to. */

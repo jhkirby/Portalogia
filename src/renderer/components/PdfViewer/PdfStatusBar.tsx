@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
+import { formatScrollExtent, SCROLL_EXTENT_TITLE, useScrollExtent } from '../../hooks/useScrollExtent';
 import { FocusHint, PAGE_UNFOCUS_KEYS, usePageHasFocus } from '../FocusHint';
 
 /** The document's text and links, counted once it has loaded; `null` while still counting. */
@@ -39,6 +40,7 @@ export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToP
   const [draft, setDraft] = useState<string | null>(null);
   // Measured in the framed document, as a web page's is in its own view: blank over the background around it.
   const pointer = usePointerPosition('.pdf-viewer__body');
+  const scrollExtent = useScrollExtent('.pdf-viewer__body');
   const pageFocused = usePageHasFocus();
   const count = (value: number): string => value.toLocaleString();
   const counted = (value: number | undefined, one: string, many: string): string =>
@@ -48,6 +50,9 @@ export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToP
     <footer className="pdf-status" aria-label="PDF statistics">
       <span className="pdf-status__item pdf-status__pointer" title="Pointer position in the page (x×y, in CSS pixels from its top-left)">
         {formatPointerPosition(pointer)}
+      </span>
+      <span className="pdf-status__item pdf-status__scroll" title={SCROLL_EXTENT_TITLE}>
+        {formatScrollExtent(scrollExtent)}
       </span>
       <span className="pdf-status__item">
         <input

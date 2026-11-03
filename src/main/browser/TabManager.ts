@@ -251,6 +251,12 @@ const pageHadKeyboard = new Map<string, boolean>();
 const PAGE_FOCUS_SETTLE_MS = 1000;
 
 /**
+ * How long after a page gets the keyboard with the comment or text box tool in hand the box the press made has to
+ * take the caret, before the keyboard goes back to the chrome (`keepKeyboardOffPage`).
+ */
+const TOOL_BOX_FOCUS_SETTLE_MS = 200;
+
+/**
  * In split screen, the side margin a page that draws its own frame (a note, PDF, terminal, History…) keeps around it:
  * half the gap between the two frames, so the two pages meet in the middle of it. A web page's frame is the chrome's,
  * so it needs none. See `TabManager.computeSplitPanes`.
@@ -1062,6 +1068,7 @@ export class TabManager {
       this.pushHighlighterStateTo(id);
       this.pushMarkdownModeTo(id);
       this.pushMarkdownDisplayTo(id);
+      this.pushMarkdownContentWidthTo(id);
       this.pushPointerModeTo(id);
       this.pushFocusModeTo(id);
       // A note opened before the page was up (a restored tab) is delivered now.
@@ -1084,6 +1091,8 @@ export class TabManager {
       filePath: null,
       mode: 'view',
       display: 'formatted',
+      contentWidth: 0,
+      contentWidthMin: 0,
       loadProgress: null,
       canGoBack: false,
       canGoForward: false,
@@ -1260,6 +1269,48 @@ export class TabManager {
     if (state?.kind === 'markdown' && view && !view.webContents.isDestroyed()) {
       view.webContents.send(IpcChannel.MarkdownDisplay, state.display);
     }
+  }
+
+  /** Tells a tab's page how wide to draw the formatted note (`MarkdownTabState.contentWidth`). */
+  private pushMarkdownContentWidthTo(id: string): void {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind === 'markdown' && view && !view.webContents.isDestroyed()) {
+      view.webContents.send(IpcChannel.MarkdownContentWidth, state.contentWidth);
+    }
+  }
+
+  /**
+   * Draws a Markdown tab's formatted note this wide — the toolbar's width slider. Kept through opening other notes in
+   * the tab, as its zoom is.
+   * @param id The Markdown tab. A no-op if it isn't one.
+   * @param percent The width, as a percent of the page's width; anything under the note's usual column is that column.
+   */
+  public setMarkdownContentWidth(id: string, percent: number): void {
+    const current = this.states.get(id);
+    const contentWidth = Math.round(Math.min(100, Math.max(0, percent)));
+    if (current?.kind !== 'markdown' || current.contentWidth === contentWidth) {
+      return;
+    }
+    this.states.set(id, { ...current, contentWidth });
+    this.pushMarkdownContentWidthTo(id);
+    this.emitState();
+  }
+
+  /**
+   * Takes a Markdown tab's page's measure of its note's usual column, as a percent of the page's width: the toolbar's
+   * width slider starts there.
+   * @param id The Markdown tab. A no-op if it isn't one.
+   * @param percent The column's width, as a percent of the page's.
+   */
+  public setMarkdownContentWidthMin(id: string, percent: number): void {
+    const current = this.states.get(id);
+    const contentWidthMin = Math.round(Math.min(100, Math.max(0, percent)));
+    if (current?.kind !== 'markdown' || current.contentWidthMin === contentWidthMin) {
+      return;
+    }
+    this.states.set(id, { ...current, contentWidthMin });
+    this.emitState();
   }
 
   /** Tells a tab's page whether the note is read-only (view) or editable (edit). */
@@ -1448,7 +1499,7 @@ export class TabManager {
     if (state?.kind !== 'markdown' || state.mode !== 'edit' || !view || view.webContents.isDestroyed()) {
       return false;
     }
-    // Only while the editor has the caret: after Escape (or a click into the chrome) the key is the app's again.
+    // Only while the editor has the caret: after Shift+Escape (or a click into the chrome) the key is the app's again.
     if (!view.webContents.isFocused() || !hasEditableFocus(view.webContents.id)) {
       return false;
     }
@@ -5937,8 +5988,9 @@ export class TabManager {
     if (!state) {
       return false;
     }
+    // A web tab with no site loaded (its home page, or nothing yet) has nothing of a site's to search.
     return (
-      state.kind === 'browser' ||
+      (state.kind === 'browser' && hasSiteLoaded(state.url)) ||
       state.kind === 'terminal' ||
       ((state.kind === 'pdf' || state.kind === 'markdown') && state.fileName !== null)
     );
@@ -6715,7 +6767,7 @@ export class TabManager {
   }
 
   /**
-   * Ctrl+1 to Ctrl+8: the first to the eighth tab of the workspace, as this
+   * F1 to F7: the first to the seventh tab of the workspace, as this
    * window's tab bar lists them (a number past the last tab does nothing).
    * Handled with the window's own keys, ahead of everything else, so it works
    * from the chrome and from any tab, a terminal or a text box included —
@@ -6743,6 +6795,7 @@ export class TabManager {
    * because menu accelerators are unreliable while a tab's view holds the keyboard (see
    * `wireSharedInputHandling`). Matched by physical key (`code`), since on Windows
    * Ctrl+Alt is AltGr and can turn `key` into another character.
+   * F1–F7 (`handleTabJumpShortcut`) ride along, from the chrome and from a tab's page alike.
    * @param event The input event, so a handled key can `preventDefault`.
    * @param input Electron's parsed key info.
    * @returns Whether the key was one of them and was handled.
@@ -7072,7 +7125,7 @@ export class TabManager {
    * address bar — so this is just the bare `webContents.focus()` half.
    */
   public focusChrome(): void {
-    // Given to the chrome on purpose (Shift+Escape, a page's own Escape, Ctrl+`): the tab is left without the keyboard.
+    // Given to the chrome on purpose (Shift+Escape, Ctrl+`): the tab is left without the keyboard.
     if (this.activeTabId) {
       pageHadKeyboard.set(this.activeTabId, false);
     }
@@ -7094,9 +7147,38 @@ export class TabManager {
   }
 
   /**
+   * A press on a page with a tool in hand (the laser pointer, pen, highlighter or crop) marks the page, and doesn't
+   * give it the keyboard: the keyboard goes straight back to the chrome, so the tools' keys and the keys between tabs
+   * keep working while the tool is used. The comment and text box tools type into the page, so they keep the
+   * keyboard there while a box of theirs has the caret, and give it back to the chrome otherwise.
+   * @param wc The page's webContents, which has just got the keyboard.
+   * @returns Whether the keyboard is being taken back from the page.
+   */
+  private keepKeyboardOffPage(wc: WebContents): boolean {
+    const giveBack = (): void => {
+      if (!wc.isDestroyed() && wc.isFocused() && !this.window.isDestroyed()) {
+        this.window.webContents.focus();
+      }
+    };
+    if (this.laserPointerActive || this.penActive || this.highlighterActive || this.cropActive) {
+      setImmediate(giveBack);
+      return true;
+    }
+    if (this.commentToolActive || this.textToolActive) {
+      // The box a press makes takes the caret a moment after the page gets the keyboard, and says so (`hasEditableFocus`).
+      setTimeout(() => {
+        if ((this.commentToolActive || this.textToolActive) && !hasEditableFocus(wc.id)) {
+          giveBack();
+        }
+      }, TOOL_BOX_FOCUS_SETTLE_MS);
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Hands the keyboard to the active tab's own page — a web page, PDF, note or terminal — when Escape is pressed in
-   * the chrome with nothing there using it: the other half of Shift+Escape (and a PDF or note's own Escape), which
-   * give it back to the chrome. The page comes back with whatever it had focused (a text box keeps its caret).
+   * the chrome with nothing there using it: the other half of Shift+Escape, which gives it back to the chrome. The page comes back with whatever it had focused (a text box keeps its caret).
    */
   public focusActiveContent(): void {
     const kind = this.activeTabId ? this.states.get(this.activeTabId)?.kind : undefined;
@@ -7764,9 +7846,12 @@ export class TabManager {
 
     // The page's keyboard focus, remembered for when its tab is next shown (`pageHadKeyboard`).
     wc.on('focus', () => {
-      pageHadKeyboard.set(id, true);
       // In split screen, the side the keyboard goes to becomes the active one (its tools shown, Find in it).
       owningManager().focusSplitSide(id);
+      if (owningManager().keepKeyboardOffPage(wc)) {
+        return;
+      }
+      pageHadKeyboard.set(id, true);
     });
     wc.on('blur', () => {
       setTimeout(() => {
@@ -7820,12 +7905,6 @@ export class TabManager {
         }
         const cmdOrCtrl = input.control || input.meta;
         if (!cmdOrCtrl || input.alt) {
-          return;
-        }
-        // Ctrl+Left/Right still switches tabs from a terminal, as it always has (the menu used to do it).
-        if (!input.shift && (input.key === 'ArrowLeft' || input.key === 'ArrowRight')) {
-          event.preventDefault();
-          owner.cycleTab(input.key === 'ArrowRight' ? 1 : -1);
           return;
         }
         // Ctrl+` (no shell or readline binding uses backtick) hands OS
@@ -7887,9 +7966,9 @@ export class TabManager {
       }
 
       // Shift+Escape always takes the caret out of a page's text box and gives the keyboard back to the chrome (Escape
-      // there hands it back). Plain Escape leaves a text box too, but only when the page leaves it alone, and some
-      // (Google Docs) take every Escape for themselves. Ctrl+Escape and Alt+Escape would read better, but Windows keeps
-      // both (the Start menu, switching windows), so neither ever reaches the app.
+      // there hands it back). It is the only way out: plain Escape is the page's own (closing a popup, or Google Docs'
+      // every use of it). Ctrl+Escape and Alt+Escape would read better, but Windows keeps both (the Start menu,
+      // switching windows), so neither ever reaches the app.
       const kind = this.states.get(id)?.kind;
       if (
         key === 'escape' &&
@@ -7907,17 +7986,14 @@ export class TabManager {
         return;
       }
 
-      // The caret is in a text box: every key it edits with stays with it, Escape included (which leaves the box),
-      // so no shortcut below can take one. Once out of the box, they all work again.
+      // The caret is in a text box: every key it edits with stays with it, Escape included, so no shortcut below can
+      // take one. Once out of the box (Shift+Escape, or a click elsewhere), they all work again.
       if (hasEditableFocus(wc.id) && isTextEditingChord(input, owner.textBoxContextOf(id, wc))) {
         return;
       }
 
-      // The tools' keys (Ctrl+I, P, J, M, E, 1, 2, Shift+X, Shift+R) and edit mode's switch. Ctrl+M never reaches
-      // here from a terminal, where it is carriage return: the terminal branch above has already returned.
-      if (owner.handleToolShortcut(event, input, id)) {
-        return;
-      }
+      // The tools' keys (Ctrl+I, P, J, M, E, Alt+1, 2, Ctrl+Shift+X, R) and edit mode's switch work only from the
+      // chrome: with the keyboard in the page they are the page's, like every key that moves between tabs.
 
       // No modifier, so it falls outside the `cmdOrCtrl`-gated switch below
       // — Escape exits Focus Mode if it's on, and/or turns off the laser
@@ -8171,20 +8247,8 @@ export class TabManager {
           event.preventDefault();
           owner.requestFocusAddressBar();
           return;
-        case 'arrowleft':
-        case 'arrowright':
-          // In a text box these were left to the caret (a word jump) by the check above.
-          event.preventDefault();
-          owner.cycleTab(key === 'arrowright' ? 1 : -1);
-          return;
-        case 'arrowup':
-          event.preventDefault();
-          owner.cycleWorkspace(-1);
-          return;
-        case 'arrowdown':
-          event.preventDefault();
-          owner.cycleWorkspace(1);
-          return;
+        // Ctrl+←/→/↑/↓ (tabs and workspaces) are left to the page: they move between tabs only from the chrome
+        // (`handleTextSensitiveShortcut`), once Shift+Escape has left the page. F1–F7 work from anywhere.
         default:
           return;
       }
@@ -8207,6 +8271,14 @@ export class TabManager {
       `<p><code>${escapeHtml(failedUrl)}</code></p>`;
     return `data:text/html,${encodeURIComponent(html)}`;
   }
+}
+
+/**
+ * Whether a web tab has a site loaded: not its home page, a blank page or nothing at all.
+ * @param url The tab's address.
+ */
+function hasSiteLoaded(url: string): boolean {
+  return url !== '' && url !== HOME_URL && !url.startsWith('about:');
 }
 
 /**

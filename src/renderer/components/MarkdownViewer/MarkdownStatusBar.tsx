@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
+import { formatScrollExtent, SCROLL_EXTENT_TITLE, useScrollExtent } from '../../hooks/useScrollExtent';
 import { FocusHint, PAGE_UNFOCUS_KEYS, usePageHasFocus } from '../FocusHint';
 
 /** The fields a keyboard command jumps into, and the Alt+key for each. */
@@ -89,12 +90,16 @@ export function MarkdownStatusBar({
   const count = (value: number): string => value.toLocaleString();
   // Measured in the framed note, as a web page's is in its own view: blank over the background around it.
   const pointer = usePointerPosition('.md-viewer > :is(.md-viewer__body, .md-viewer__empty)');
+  const scrollExtent = useScrollExtent('.md-viewer > .md-viewer__body');
   const pageFocused = usePageHasFocus();
 
   return (
     <footer ref={barRef} className="md-status" aria-label="Note statistics">
       <span className="md-status__item md-status__pointer" title="Pointer position in the page (x×y, in CSS pixels from its top-left)">
         {formatPointerPosition(pointer)}
+      </span>
+      <span className="md-status__item md-status__scroll" title={SCROLL_EXTENT_TITLE}>
+        {formatScrollExtent(scrollExtent)}
       </span>
       <span className="md-status__item">
         Ln{' '}

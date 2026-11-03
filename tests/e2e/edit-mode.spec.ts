@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-import { test, expect, openInActiveTab, pressInTab } from './fixtures';
+import { test, expect, openInActiveTab, pressInChrome, pressInTab } from './fixtures';
 
 test.describe('edit mode', () => {
   test('its button sits just left of the laser pointer, with its shortcut in the tooltip', async ({ window }) => {
@@ -23,11 +23,11 @@ test.describe('edit mode', () => {
     await expect(window.getByRole('button', { name: 'Turn on edit mode' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('Ctrl+Alt+Shift+E turns it on and off from the page', async ({ electronApp, window, server }) => {
+  test('Ctrl+Alt+Shift+E turns it on and off from the chrome', async ({ electronApp, window, server }) => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
-    await pressInTab(electronApp, '/editor', 'Control+Alt+Shift+E');
+    await pressInChrome(electronApp, 'Control+Alt+Shift+E');
     await expect(window.getByRole('button', { name: 'Turn off edit mode' })).toBeVisible();
-    await pressInTab(electronApp, '/editor', 'Control+Alt+Shift+E');
+    await pressInChrome(electronApp, 'Control+Alt+Shift+E');
     await expect(window.getByRole('button', { name: 'Turn on edit mode' })).toBeVisible();
   });
 
@@ -38,7 +38,13 @@ test.describe('edit mode', () => {
     await expect(window.getByRole('button', { name: 'Turn on edit mode' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('a tool shortcut works as usual with edit mode off, and the page never sees the key', async ({
+  test('a tool shortcut works from the chrome with edit mode off', async ({ electronApp, window, server }) => {
+    await openInActiveTab(electronApp, window, server.url('/editor'));
+    await pressInChrome(electronApp, 'Control+j');
+    await expect(window.getByRole('button', { name: 'Turn off highlighter' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('with the keyboard in the page, a tool shortcut is the page’s and no tool turns on', async ({
     electronApp,
     window,
     server,
@@ -46,8 +52,10 @@ test.describe('edit mode', () => {
     const page = await openInActiveTab(electronApp, window, server.url('/editor'));
     await page.locator('body').click({ position: { x: 600, y: 300 } });
     await pressInTab(electronApp, '/editor', 'Control+j');
-    await expect(window.getByRole('button', { name: 'Turn off highlighter' })).toHaveAttribute('aria-pressed', 'true');
-    expect(await page.evaluate(() => (window as unknown as { seenKeys: string[] }).seenKeys)).not.toContain('Ctrl+j');
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { seenKeys: string[] }).seenKeys))
+      .toContain('Ctrl+j');
+    await expect(window.getByRole('button', { name: 'Turn on highlighter' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('with edit mode on, the page gets the tools’ keys and no tool turns on', async ({ electronApp, window, server }) => {

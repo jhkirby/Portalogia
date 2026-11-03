@@ -19,7 +19,6 @@ import type { RGB } from '@shared/color';
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object.
 const PdfFile = 'pdf:file';
-const TabReleaseKeyboard = 'tab:release-keyboard';
 const PdfSaveAnnotations = 'pdf:save-annotations';
 const PdfClear = 'pdf:clear';
 const PdfClosed = 'pdf:closed';
@@ -346,26 +345,6 @@ function reportEditableFocus(): void {
 window.addEventListener('focusin', reportEditableFocus, true);
 // `focusout` fires before the next element has focus, so look once focus has settled.
 window.addEventListener('focusout', () => setTimeout(reportEditableFocus, 0), true);
-
-// Escape gives the keyboard back to the chrome, so the app's shortcuts work again; Escape there hands it back. A text
-// box (the note's editor among them) keeps its caret where it was rather than being left, so coming back puts the
-// cursor in the same place. Decided once the page's own handlers have had the key: one that used Escape itself
-// (closing a suggestion list or a popup) called `preventDefault`, and then the page keeps the keyboard for the next
-// press.
-window.addEventListener(
-  'keydown',
-  (event) => {
-    if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) {
-      return;
-    }
-    setTimeout(() => {
-      if (!event.defaultPrevented) {
-        ipcRenderer.send(TabReleaseKeyboard);
-      }
-    }, 0);
-  },
-  true,
-);
 
 // The page's own stat bar, read out for the chrome: in split screen the chrome draws the one bar along the window's
 // bottom, with the stats of whichever side was used last, and this page's own is hidden

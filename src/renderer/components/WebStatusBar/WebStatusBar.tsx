@@ -5,6 +5,7 @@
 
 import type { PageStats } from '@shared/ipc-contract';
 import { formatPointerPosition } from '../../hooks/usePointerPosition';
+import { formatScrollExtent, SCROLL_EXTENT_TITLE } from '../../hooks/useScrollExtent';
 import { FocusHint, PAGE_UNFOCUS_KEYS } from '../FocusHint';
 
 interface WebStatusBarProps {
@@ -29,6 +30,9 @@ export function WebStatusBar({ stats, contentFocused }: WebStatusBarProps) {
     <footer className="web-status" aria-label="Page statistics">
       <span className="web-status__item web-status__pointer" title="Pointer position in the page (x×y, in CSS pixels from its top-left)">
         {formatPointerPosition(stats?.pointer ?? null)}
+      </span>
+      <span className="web-status__item web-status__scroll" title={SCROLL_EXTENT_TITLE}>
+        {formatScrollExtent(stats?.scroll ?? null)}
       </span>
       <span className="web-status__item">{count(stats?.words, 'word', 'words')}</span>
       <span className="web-status__item">{count(stats?.characters, 'character', 'characters')}</span>

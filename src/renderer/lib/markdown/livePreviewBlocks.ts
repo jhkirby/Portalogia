@@ -18,6 +18,8 @@ import {
   typesetMath,
 } from './enhance';
 import { renderNote } from './renderNote';
+import { TableWidget, enterTable } from './livePreviewTable';
+import { sourceOffsetForRendered } from './textOffsets';
 
 // ── FOCUS ───────────────────────────────────────────────────────────────
 
@@ -44,34 +46,75 @@ const focusTracker = EditorView.focusChangeEffect.of((_state, focusing) => setFo
 /** Pictures already read, by name: a block redrawn after an edit shouldn't read them again. */
 const imageCache = new Map<string, string>();
 
-/** How far ahead in the source a rendered character is looked for before it's taken as one the source doesn't have. */
-const MATCH_LOOKAHEAD = 40;
-
 /** Top-level nodes that draw nothing: left as text, since a widget for them would be an empty, unclickable strip. */
 const UNDRAWN_BLOCKS = new Set(['LinkReference', 'CommentBlock', 'ProcessingInstructionBlock']);
 
 /**
- * Where in a block's source a point of its rendered text falls: the source is
- * walked alongside the rendered characters, skipping the markup the rendering
- * dropped (`**`, `#`, link addresses). A rendered character the source lacks
- * nearby (KaTeX's drawing of a formula) is passed over.
- * @param source The block's source.
- * @param rendered The block's rendered text up to the point.
- * @returns The matching offset in `source`.
+ * Reads a drawn block's local pictures through main, as the reader does; the
+ * editor is told to re-measure as each arrives, since the block grows.
+ * @param block The rendered block.
+ * @param view The editor.
  */
-export function sourceOffsetForRendered(source: string, rendered: string): number {
-  const sameCharacter = (a: string, b: string): boolean => a === b || (/\s/.test(a) && /\s/.test(b));
-  let offset = 0;
-  for (const character of rendered) {
-    const limit = Math.min(source.length, offset + MATCH_LOOKAHEAD);
-    for (let probe = offset; probe < limit; probe += 1) {
-      if (sameCharacter(source[probe]!, character)) {
-        offset = probe + 1;
-        break;
+function loadPictures(block: HTMLElement, view: EditorView): void {
+  for (const { image, src } of collectLocalImages(block)) {
+    const show = (url: string | null): void => {
+      image.classList.remove('md-image--loading');
+      if (url) {
+        image.src = url;
+        image.addEventListener('load', () => view.requestMeasure(), { once: true });
+      } else {
+        image.classList.add('md-image--broken');
       }
+    };
+    const cached = imageCache.get(src);
+    if (cached !== undefined) {
+      show(cached);
+      continue;
     }
+    void window.portalogiaMarkdown.readImage(src).then((url) => {
+      if (url) {
+        imageCache.set(src, url);
+      }
+      if (image.isConnected) {
+        show(url);
+      }
+    });
   }
-  return offset;
+}
+
+/**
+ * Draws one block of the note exactly as the reader draws it — the same
+ * renderer and the same finishing touches — for a widget to stand in for its source.
+ * @param source The block's source.
+ * @param first Whether it is the note's first block, which (as in the reader) has no space above it.
+ * @param view The editor it is drawn in.
+ * @returns The drawn block.
+ */
+function drawRenderedBlock(source: string, first: boolean, view: EditorView): HTMLElement {
+  const block = document.createElement('div');
+  block.className = `md-reader cm-lp-block${first ? ' cm-lp-block--first' : ''}`;
+  // The content sits one level down, so the reader's "no space above the first element" rule meets this wrapper
+  // instead, and each block keeps the space above it that it has in the reader.
+  const content = document.createElement('div');
+  content.className = 'cm-lp-block__content';
+  // The renderer's HTML is sanitized (see `renderNote`), the same as the reader's.
+  content.innerHTML = renderNote(source);
+  block.appendChild(content);
+  convertCallouts(block);
+  typesetMath(block);
+  enableTasks(block);
+  decorateTags(block);
+  markExternalLinks(block);
+  loadPictures(block, view);
+  const names = collectWikiLinks(block);
+  if (names.length > 0) {
+    void window.portalogiaMarkdown.resolveLinks(names).then((resolved) => {
+      if (block.isConnected) {
+        markMissingWikiLinks(block, resolved);
+      }
+    });
+  }
+  return block;
 }
 
 /**
@@ -111,29 +154,7 @@ class RenderedBlockWidget extends WidgetType {
    * @returns The rendered block.
    */
   public override toDOM(view: EditorView): HTMLElement {
-    const block = document.createElement('div');
-    block.className = `md-reader cm-lp-block${this.first ? ' cm-lp-block--first' : ''}`;
-    // The content sits one level down, so the reader's "no space above the first element" rule meets this wrapper
-    // instead, and each block keeps the space above it that it has in the reader.
-    const content = document.createElement('div');
-    content.className = 'cm-lp-block__content';
-    // The renderer's HTML is sanitized (see `renderNote`), the same as the reader's.
-    content.innerHTML = renderNote(this.source);
-    block.appendChild(content);
-    convertCallouts(block);
-    typesetMath(block);
-    enableTasks(block);
-    decorateTags(block);
-    markExternalLinks(block);
-    this.loadPictures(block, view);
-    const names = collectWikiLinks(block);
-    if (names.length > 0) {
-      void window.portalogiaMarkdown.resolveLinks(names).then((resolved) => {
-        if (block.isConnected) {
-          markMissingWikiLinks(block, resolved);
-        }
-      });
-    }
+    const block = drawRenderedBlock(this.source, this.first, view);
     block.addEventListener('mousedown', (event) => this.handlePress(event, block, view));
     // A click's default (following a link) is never wanted: a press already placed the caret, or followed it.
     block.addEventListener('click', (event) => event.preventDefault());
@@ -143,39 +164,6 @@ class RenderedBlockWidget extends WidgetType {
   /** @returns `true`: the block handles its own presses (see `handlePress`). */
   public override ignoreEvent(): boolean {
     return true;
-  }
-
-  /**
-   * Reads the block's local pictures through main, as the reader does; the
-   * editor is told to re-measure as each arrives, since the block grows.
-   * @param block The rendered block.
-   * @param view The editor.
-   */
-  private loadPictures(block: HTMLElement, view: EditorView): void {
-    for (const { image, src } of collectLocalImages(block)) {
-      const show = (url: string | null): void => {
-        image.classList.remove('md-image--loading');
-        if (url) {
-          image.src = url;
-          image.addEventListener('load', () => view.requestMeasure(), { once: true });
-        } else {
-          image.classList.add('md-image--broken');
-        }
-      };
-      const cached = imageCache.get(src);
-      if (cached !== undefined) {
-        show(cached);
-        continue;
-      }
-      void window.portalogiaMarkdown.readImage(src).then((url) => {
-        if (url) {
-          imageCache.set(src, url);
-        }
-        if (image.isConnected) {
-          show(url);
-        }
-      });
-    }
   }
 
   /**
@@ -240,31 +228,62 @@ class RenderedBlockWidget extends WidgetType {
 function buildBlocks(state: EditorState): DecorationSet {
   const { doc } = state;
   const tree = ensureSyntaxTree(state, doc.length, 200) ?? syntaxTree(state);
-  const blocks: { from: number; to: number; drawn: boolean }[] = [];
+  const blocks: { from: number; to: number; drawn: boolean; table: boolean }[] = [];
   for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
     const from = doc.lineAt(node.from).from;
     // A node can end at the start of the next line (its own line break included); its last line is the one before.
     const to = doc.lineAt(node.to > node.from && doc.lineAt(node.to).from === node.to ? node.to - 1 : node.to).to;
-    blocks.push({ from, to, drawn: !UNDRAWN_BLOCKS.has(node.name) });
+    blocks.push({ from, to, drawn: !UNDRAWN_BLOCKS.has(node.name), table: node.name === 'Table' });
   }
   const focused = state.field(focusedField);
   const touches = (from: number, to: number): boolean =>
     focused && state.selection.ranges.some((range) => range.from <= to && range.to >= from);
+  // A table stays drawn with the caret in it: it is edited cell by cell where it stands (see `TableWidget`).
+  const isText = (block: (typeof blocks)[number]): boolean =>
+    !block.drawn || (!block.table && touches(block.from, block.to));
   const ranges: Range<Decoration>[] = [];
   blocks.forEach((block, index) => {
     const next = blocks[index + 1];
     // The block's reach: itself and the blank lines after it, up to the next block.
     const reach = next ? Math.max(block.to, doc.lineAt(next.from - 1).to) : doc.length;
-    if (!block.drawn || touches(block.from, reach)) {
+    if (!block.drawn || (!block.table && touches(block.from, reach))) {
       return;
     }
-    const nextIsText = next !== undefined && (!next.drawn || touches(next.from, next.to));
-    const end = nextIsText ? block.to : reach;
-    const widget = new RenderedBlockWidget(doc.sliceString(block.from, block.to), index === 0);
+    // A table keeps the blank lines after it as text while the caret is on them, so they can be typed on.
+    const blankLinesInUse = block.table && reach > block.to && touches(block.to + 1, reach);
+    const nextIsText = next !== undefined && isText(next);
+    const end = nextIsText || blankLinesInUse ? block.to : reach;
+    const source = doc.sliceString(block.from, block.to);
+    const widget = block.table
+      ? new TableWidget(source, index === 0, drawRenderedBlock)
+      : new RenderedBlockWidget(source, index === 0);
     ranges.push(Decoration.replace({ widget, block: true }).range(block.from, end));
   });
   return Decoration.set(ranges, true);
 }
+
+/**
+ * Carries the caret on into a table when the arrows bring the note's caret
+ * onto it (see `enterTable`): the table stays drawn, so its source can't be
+ * typed in as text.
+ */
+const tableEntry = EditorView.updateListener.of((update) => {
+  if (!update.selectionSet || update.docChanged || !update.view.hasFocus) {
+    return;
+  }
+  const head = update.state.selection.main;
+  if (!head.empty) {
+    return;
+  }
+  const previous = update.startState.selection.main.head;
+  update.state.field(blocksField).between(head.head, head.head, (from, to, decoration) => {
+    if (!(decoration.spec.widget instanceof TableWidget) || head.head < from || head.head > to) {
+      return;
+    }
+    enterTable(update.view, from, previous < from);
+    return false;
+  });
+});
 
 const blocksField = StateField.define<DecorationSet>({
   create: buildBlocks,
@@ -390,5 +409,5 @@ export function syncRenderedBlocksFocus(view: EditorView): void {
  * @returns The extension.
  */
 export function renderedBlocks(): Extension {
-  return [focusedField, focusTracker, blocksField, blockSpacing];
+  return [focusedField, focusTracker, blocksField, blockSpacing, tableEntry];
 }

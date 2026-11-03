@@ -170,6 +170,33 @@ export async function pressInTab(app: ElectronApplication, urlPart: string, chor
 }
 
 /**
+ * Presses a key in the chrome the way a physical key press arrives there, through the chrome window's own input
+ * pipeline — as with the keyboard out of the page (after Shift+Escape), where the keys between tabs and the tools'
+ * keys work. See `pressInTab` for the page's side.
+ * @param app The launched app.
+ * @param chord The key, Playwright style: `Control+ArrowLeft`, `Control+j`, `Control+Alt+Shift+E`.
+ */
+export async function pressInChrome(app: ElectronApplication, chord: string): Promise<void> {
+  const parts = chord.split('+');
+  const key = parts.pop()!;
+  const names: Record<string, 'control' | 'alt' | 'shift' | 'meta'> = { Control: 'control', Alt: 'alt', Shift: 'shift', Meta: 'meta' };
+  const modifiers = parts.map((part) => names[part]!).filter(Boolean);
+  const keyCodes: Record<string, string> = { ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down' };
+  const keyCode = keyCodes[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+  await app.evaluate(
+    ({ BrowserWindow }, { keyCode: code, modifiers: mods }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.isVisible());
+      if (!win) {
+        throw new Error('No chrome window is showing');
+      }
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: code, modifiers: mods });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: code, modifiers: mods });
+    },
+    { keyCode, modifiers },
+  );
+}
+
+/**
  * Opens a Markdown note in a new note tab, the way a person does (the toolbar's Open button and its file dialog),
  * and returns that tab's page. The dialog is answered with `path` instead of being shown. Opening by path over IPC
  * isn't an option: main opens only notes already in the history there, so a page can't name any file on disk.
