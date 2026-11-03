@@ -1,26 +1,26 @@
-# Project: Northstar
+# Project: Portalogia
 # Owner: Joshua H. Kirby
 # Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 # Last Modified: 2026-10-06
 
 <#
 .SYNOPSIS
-    Installs the Northstar build for the current user.
+    Installs the Portalogia build for the current user.
 
 .DESCRIPTION
-    Copies release\Northstar-win32-x64 (made by build.ps1) into the install
-    folder, adds a Start Menu shortcut, and registers Northstar under
+    Copies release\Portalogia-win32-x64 (made by build.ps1) into the install
+    folder, adds a Start Menu shortcut, and registers Portalogia under
     Settings > Apps > Installed apps so it can be uninstalled from there.
 
     Everything is per-user (no administrator rights needed). Running it
-    again upgrades in place; browsing data in %APPDATA%\Northstar is never
+    again upgrades in place; browsing data in %APPDATA%\Portalogia is never
     touched.
 
 .PARAMETER Build
     Run build.ps1 first.
 
 .PARAMETER InstallDir
-    Where to install. Defaults to %LOCALAPPDATA%\Programs\Northstar.
+    Where to install. Defaults to %LOCALAPPDATA%\Programs\Portalogia.
 
 .PARAMETER DesktopShortcut
     Also put a shortcut on the desktop.
@@ -32,14 +32,14 @@
 [CmdletBinding()]
 param(
     [switch]$Build,
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\Northstar'),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\Portalogia'),
     [switch]$DesktopShortcut
 )
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$appName = 'Northstar'
+$appName = 'Portalogia'
 $sourceDir = Join-Path $repoRoot "release\$appName-win32-x64"
 $exeName = "$appName.exe"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appName"
@@ -56,7 +56,7 @@ function New-Shortcut([string]$path, [string]$target, [string]$icon) {
     $shortcut.TargetPath = $target
     $shortcut.WorkingDirectory = Split-Path $target
     $shortcut.IconLocation = "$icon,0"
-    $shortcut.Description = 'Northstar browser'
+    $shortcut.Description = 'Portalogia browser'
     $shortcut.Save()
 }
 
@@ -82,7 +82,7 @@ if ($running) {
 }
 
 # The old install is deleted wholesale, so only delete a folder that is
-# provably a Northstar install - never whatever -InstallDir happens to name.
+# provably a Portalogia install - never whatever -InstallDir happens to name.
 if (Test-Path $InstallDir) {
     $isOurs = Test-Path (Join-Path $InstallDir $exeName)
     $isEmpty = -not (Get-ChildItem $InstallDir -Force | Select-Object -First 1)

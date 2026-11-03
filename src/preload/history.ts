@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-19
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry, NorthstarHistoryApi } from '@shared/ipc-contract';
+import type { HistoryBookmarkIndex, HistoryClearRange, HistoryEntry, PortalogiaHistoryApi } from '@shared/ipc-contract';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object. `HistoryController`
@@ -56,7 +56,7 @@ ipcRenderer.on(HistoryBookmarks, (_event, index: HistoryBookmarkIndex) => {
   bookmarkListeners.forEach((listener) => listener(index));
 });
 
-const api: NorthstarHistoryApi = {
+const api: PortalogiaHistoryApi = {
   onEntries: (listener) => {
     entryListeners.add(listener);
     if (latestEntries !== null) {
@@ -104,4 +104,4 @@ const api: NorthstarHistoryApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarHistory', api satisfies NorthstarHistoryApi);
+contextBridge.exposeInMainWorld('portalogiaHistory', api satisfies PortalogiaHistoryApi);

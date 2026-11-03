@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -45,7 +45,7 @@ const PDF_PARSE_SHARE_PERCENT = 10;
 const RENDER_SCALE_DEBOUNCE_MS = 150;
 
 /** Name registered with `CSS.highlights` for the live drag preview, like the browser highlighter's. */
-const PREVIEW_HIGHLIGHT_NAME = 'northstar-pdf-highlighter-preview';
+const PREVIEW_HIGHLIGHT_NAME = 'portalogia-pdf-highlighter-preview';
 
 /** A finished highlight's alpha, halved for the drag preview (`tabHighlighter.ts`'s `MARK_ALPHA * HOVER_OPACITY`). */
 const PREVIEW_ALPHA = 0.55 * 0.5;
@@ -181,10 +181,10 @@ export function PdfViewer() {
   const [renderPercent, setRenderPercent] = useState(ZOOM_PERCENT_DEFAULT);
   const [isPanning, setIsPanning] = useState(false);
   const [pointerMode, setPointerMode] = useState<PointerMode>('pan');
-  useEffect(() => window.northstarPdf.onPointerMode(setPointerMode), []);
+  useEffect(() => window.portalogiaPdf.onPointerMode(setPointerMode), []);
   /** The window's Focus Mode: the stat bar hides with the chrome. */
   const [focusMode, setFocusMode] = useState(false);
-  useEffect(() => window.northstarPdf.onFocusMode(setFocusMode), []);
+  useEffect(() => window.portalogiaPdf.onFocusMode(setFocusMode), []);
   /** The page in view, for the stat bar (main hears it too, through `reportPage`). */
   const [visiblePage, setVisiblePage] = useState(1);
   /** The open file's size in bytes, for the stat bar. */
@@ -207,11 +207,11 @@ export function PdfViewer() {
     setEditRequest(0);
   }, []);
   // Ctrl+Alt+B (main's accelerator) shows or hides the panel too.
-  useEffect(() => window.northstarPdf.onToggleSidePanel(togglePanel), [togglePanel]);
+  useEffect(() => window.portalogiaPdf.onToggleSidePanel(togglePanel), [togglePanel]);
   // Ctrl+Alt+E edits the sections, opening the panel first if it's closed.
   useEffect(
     () =>
-      window.northstarPdf.onToggleSectionEditing(() => {
+      window.portalogiaPdf.onToggleSectionEditing(() => {
         setPanelOpen(true);
         setEditRequest((count) => count + 1);
       }),
@@ -250,7 +250,7 @@ export function PdfViewer() {
 
   useEffect(
     () =>
-      window.northstarPdf.onZoom((percent) => {
+      window.portalogiaPdf.onZoom((percent) => {
         const el = scrollRef.current;
         if (el && el.scrollWidth > 0 && el.scrollHeight > 0) {
           anchorRef.current = {
@@ -293,7 +293,7 @@ export function PdfViewer() {
       const whole = Math.floor(percent);
       if (whole > reported) {
         reported = whole;
-        window.northstarPdf.reportLoadProgress(whole);
+        window.portalogiaPdf.reportLoadProgress(whole);
       }
     };
     try {
@@ -347,7 +347,7 @@ export function PdfViewer() {
     const el = scrollRef.current;
     if (!el || pageSizes.length === 0) {
       setVisiblePage(1);
-      window.northstarPdf.reportPage(1, pageSizes.length);
+      window.portalogiaPdf.reportPage(1, pageSizes.length);
       return;
     }
     const middle = el.getBoundingClientRect().top + el.clientHeight / 2;
@@ -358,7 +358,7 @@ export function PdfViewer() {
       }
     });
     setVisiblePage(current);
-    window.northstarPdf.reportPage(current, pageSizes.length);
+    window.portalogiaPdf.reportPage(current, pageSizes.length);
   }, [pageSizes]);
 
   // The document's words, characters and links for the stat bar, and its sections and links for the side panel: read
@@ -424,7 +424,7 @@ export function PdfViewer() {
   const historyRef = useRef<{ back: number[]; forward: number[] }>({ back: [], forward: [] });
 
   const reportHistory = useCallback((): void => {
-    window.northstarPdf.reportHistory(historyRef.current.back.length > 0, historyRef.current.forward.length > 0);
+    window.portalogiaPdf.reportHistory(historyRef.current.back.length > 0, historyRef.current.forward.length > 0);
   }, []);
 
   /** The view's place as a fraction of the document's height. */
@@ -450,7 +450,7 @@ export function PdfViewer() {
   // Back or Forward: the place left is kept on the other side, so the step can be undone.
   useEffect(
     () =>
-      window.northstarPdf.onHistoryGo((direction) => {
+      window.portalogiaPdf.onHistoryGo((direction) => {
         const el = scrollRef.current;
         const { back, forward } = historyRef.current;
         const from = direction === -1 ? back : forward;
@@ -488,14 +488,14 @@ export function PdfViewer() {
   );
 
   // Main asks for a page too (`goToPdfPage`).
-  useEffect(() => window.northstarPdf.onScrollToPage(goToPage), [goToPage]);
+  useEffect(() => window.portalogiaPdf.onScrollToPage(goToPage), [goToPage]);
 
-  useEffect(() => window.northstarPdf.onFile((file) => void loadFile(file)), [loadFile]);
+  useEffect(() => window.portalogiaPdf.onFile((file) => void loadFile(file)), [loadFile]);
 
   // The toolbar's Close: back to the empty page, as before a file was opened.
   useEffect(
     () =>
-      window.northstarPdf.onClose(() => {
+      window.portalogiaPdf.onClose(() => {
         // The document fades away first, then the empty page takes its place.
         window.clearTimeout(closeTimerRef.current);
         setClosing(true);
@@ -523,12 +523,12 @@ export function PdfViewer() {
     [],
   );
   useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
-  useEffect(() => window.northstarPdf.onTool(setTool), []);
+  useEffect(() => window.portalogiaPdf.onTool(setTool), []);
 
   // Revert Annotations.
   useEffect(
     () =>
-      window.northstarPdf.onClear(() => {
+      window.portalogiaPdf.onClear(() => {
         setStrokes([]);
         setComments([]);
         setTextBoxes([]);
@@ -550,7 +550,7 @@ export function PdfViewer() {
     } else if (sectionsAreValid(editedSections, pageSizes.length)) {
       savedSectionsRef.current = editedSections.map(({ title, page, level }) => ({ title, page, level }));
     }
-    window.northstarPdf.saveAnnotations(docKey, {
+    window.portalogiaPdf.saveAnnotations(docKey, {
       strokes: strokes.map(({ id, page, points }) => ({ id, page, points: [...points] })),
       comments: comments.filter((c) => c.committed).map(({ id, page, x, y, text }) => ({ id, page, x, y, text })),
       highlights: highlights.map(({ id, page, rects }) => ({ id, page, rects: [...rects] })),
@@ -600,7 +600,7 @@ export function PdfViewer() {
 
   useEffect(
     () =>
-      window.northstarPdf.onUndo(() => {
+      window.portalogiaPdf.onUndo(() => {
         const previous = undoRef.current.pop();
         if (previous) {
           redoRef.current.push(baselineRef.current);
@@ -611,7 +611,7 @@ export function PdfViewer() {
   );
   useEffect(
     () =>
-      window.northstarPdf.onRedo(() => {
+      window.portalogiaPdf.onRedo(() => {
         const next = redoRef.current.pop();
         if (next) {
           undoRef.current.push(baselineRef.current);
@@ -835,7 +835,7 @@ export function PdfViewer() {
       const target = wrapTargetAt(rect, pan.x, pan.y);
       if (target) {
         pan.wrap = { ...target, requestedAt: performance.now() };
-        window.northstarPdf.warpPointer(target.x ?? pan.x, target.y ?? pan.y);
+        window.portalogiaPdf.warpPointer(target.x ?? pan.x, target.y ?? pan.y);
       }
     }
   };
@@ -843,7 +843,7 @@ export function PdfViewer() {
   /** Follows a link clicked in the document: a web link opens in a new tab, an internal one scrolls to its page. */
   const followLink = (link: PageLink): void => {
     if (link.url !== null) {
-      window.northstarPdf.openLink(link.url);
+      window.portalogiaPdf.openLink(link.url);
       return;
     }
     if (!doc) {
@@ -1077,7 +1077,7 @@ export function PdfViewer() {
                 currentPage={visiblePage}
                 docKey={docKey ?? ''}
                 onGoToPage={goToPage}
-                onOpenUrl={(url) => window.northstarPdf.openLink(url)}
+                onOpenUrl={(url) => window.portalogiaPdf.openLink(url)}
                 onChangeSections={setEditedSections}
                 onRevertSections={() =>
                   setEditedSections(savedSectionsRef.current === null ? null : withIds(savedSectionsRef.current))

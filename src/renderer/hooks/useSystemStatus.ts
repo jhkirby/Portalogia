@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -28,30 +28,30 @@ export function useSystemStatus(): SystemStatus {
 
   useEffect(() => {
     let cancelled = false;
-    void window.northstar.getAudioStatus().then((status) => {
+    void window.portalogia.getAudioStatus().then((status) => {
       if (!cancelled && status) {
         setAudio(status);
       }
     });
-    void window.northstar.getWifiStatus().then((status) => {
+    void window.portalogia.getWifiStatus().then((status) => {
       if (!cancelled && status) {
         setWifi(status);
       }
     });
-    void window.northstar.getBluetoothStatus().then((status) => {
+    void window.portalogia.getBluetoothStatus().then((status) => {
       if (!cancelled && status) {
         setBluetooth(status);
       }
     });
-    void window.northstar.getWeather().then((state) => {
+    void window.portalogia.getWeather().then((state) => {
       if (!cancelled && state) {
         setWeather(state);
       }
     });
-    const stopAudio = window.northstar.onAudioStatusChanged(setAudio);
-    const stopWifi = window.northstar.onWifiStatusChanged(setWifi);
-    const stopBluetooth = window.northstar.onBluetoothStatusChanged(setBluetooth);
-    const stopWeather = window.northstar.onWeatherChanged(setWeather);
+    const stopAudio = window.portalogia.onAudioStatusChanged(setAudio);
+    const stopWifi = window.portalogia.onWifiStatusChanged(setWifi);
+    const stopBluetooth = window.portalogia.onBluetoothStatusChanged(setBluetooth);
+    const stopWeather = window.portalogia.onWeatherChanged(setWeather);
     return () => {
       cancelled = true;
       stopAudio();

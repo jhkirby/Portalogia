@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -16,7 +16,7 @@ export function WindowControls() {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(
-    () => window.northstar.onWindowStateChanged((state) => setIsMaximized(state.isMaximized)),
+    () => window.portalogia.onWindowStateChanged((state) => setIsMaximized(state.isMaximized)),
     [],
   );
 
@@ -25,7 +25,7 @@ export function WindowControls() {
       <button
         type="button"
         className="window-controls__button hover-glow chrome-tooltip"
-        onClick={() => window.northstar.minimizeWindow()}
+        onClick={() => window.portalogia.minimizeWindow()}
         aria-label="Minimize"
         data-tooltip={`Minimize (${formatShortcut('Alt+M')})`}
       >
@@ -36,7 +36,7 @@ export function WindowControls() {
       <button
         type="button"
         className="window-controls__button hover-glow chrome-tooltip"
-        onClick={() => window.northstar.toggleMaximizeWindow()}
+        onClick={() => window.portalogia.toggleMaximizeWindow()}
         aria-label={isMaximized ? 'Restore' : 'Maximize'}
         data-tooltip={`${isMaximized ? 'Restore' : 'Maximize'} (${formatShortcut('Alt+Enter')})`}
       >
@@ -54,7 +54,7 @@ export function WindowControls() {
       <button
         type="button"
         className="window-controls__button hover-glow window-controls__button--close chrome-tooltip"
-        onClick={() => window.northstar.closeWindow()}
+        onClick={() => window.portalogia.closeWindow()}
         aria-label="Close"
         // Alt+F4 is the OS's own, on every platform this runs on the same way, so it is not `formatShortcut`'d.
         data-tooltip="Close (Alt+F4)"

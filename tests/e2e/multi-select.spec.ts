@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -16,7 +16,7 @@ interface SnapshotState {
 }
 
 async function stateOf(page: Page): Promise<SnapshotState> {
-  const result = await page.evaluate(() => window.northstar.getState());
+  const result = await page.evaluate(() => window.portalogia.getState());
   return ((result as { data?: unknown }).data ?? result) as SnapshotState;
 }
 
@@ -24,7 +24,7 @@ async function stateOf(page: Page): Promise<SnapshotState> {
 async function openTabs(page: Page, count: number): Promise<void> {
   const tabs = page.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
   while ((await tabs.count()) < count) {
-    await page.evaluate(() => window.northstar.createTab());
+    await page.evaluate(() => window.portalogia.createTab());
   }
   await expect(tabs).toHaveCount(count);
 }
@@ -105,7 +105,7 @@ test.describe('multi-selecting tabs', () => {
 
     // What a drop on the second workspace's pill sends: one tab's id.
     const secondWorkspaceId = state.workspaces[1]!.id;
-    await window.evaluate(([id, ws]) => window.northstar.moveTabToWorkspace(id!, ws!), [state.selectedTabIds[0], secondWorkspaceId]);
+    await window.evaluate(([id, ws]) => window.portalogia.moveTabToWorkspace(id!, ws!), [state.selectedTabIds[0], secondWorkspaceId]);
 
     await expect(tabs).toHaveCount(2); // Home keeps the two that weren't selected
     await workspaces.nth(1).click();
@@ -122,7 +122,7 @@ test.describe('multi-selecting tabs', () => {
     const selected = state.selectedTabIds;
 
     // A release far outside the window is a tear-off (not live).
-    await window.evaluate((id) => window.northstar.tearOffTab(id!, 6000, 6000), selected[0]);
+    await window.evaluate((id) => window.portalogia.tearOffTab(id!, 6000, 6000), selected[0]);
 
     await expect
       .poll(async () => {

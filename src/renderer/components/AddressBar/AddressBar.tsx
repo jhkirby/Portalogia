@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -99,7 +99,7 @@ export function AddressBar({
   // Ctrl+Shift+? empties it as well, for a new search.
   useEffect(
     () =>
-      window.northstar.onFocusAddressBar((clear) => {
+      window.portalogia.onFocusAddressBar((clear) => {
         if (clear) {
           setDraft('');
         }
@@ -156,10 +156,10 @@ export function AddressBar({
   // overlay's own view mounts/unmounts and resizes itself in response.
   useEffect(() => {
     if (!isDropdownOpen || !dropdownRect) {
-      window.northstar.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
+      window.portalogia.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
       return;
     }
-    window.northstar.syncAddressSuggestions({
+    window.portalogia.syncAddressSuggestions({
       open: true,
       rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
       suggestions,
@@ -173,7 +173,7 @@ export function AddressBar({
   // it's open skips straight to unmount without that transition firing.
   useEffect(
     () => () => {
-      window.northstar.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
+      window.portalogia.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
     },
     [],
   );
@@ -195,7 +195,7 @@ export function AddressBar({
   // changes so the index always resolves against the list the overlay was
   // actually showing when the click happened, rather than a stale closure.
   useEffect(() => {
-    return window.northstar.onAddressSuggestionSelected((index) => {
+    return window.portalogia.onAddressSuggestionSelected((index) => {
       const target = suggestions[index];
       if (target) {
         selectSuggestion(target);

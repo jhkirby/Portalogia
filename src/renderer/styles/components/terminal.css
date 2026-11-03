@@ -1,4 +1,4 @@
-/* Project: Northstar
+/* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
    Last Modified: 2026-10-29 */
@@ -13,7 +13,7 @@
 html {
   /* Lets `light-dark()` below (and `prefers-color-scheme` for
      `xtermThemes.ts`) follow `nativeTheme.themeSource` instead of always
-     the OS default — same mechanism as the `northstar://home` page
+     the OS default — same mechanism as the `portalogia://home` page
      (see homePage.ts and `useTheme`'s doc comment). */
   color-scheme: light dark;
 }
@@ -110,7 +110,7 @@ body {
 
 /* Toggled by `Terminal.tsx`'s own hover tracking (`setHoveredHighlight`) —
    the visual cue that hovering this decoration and pressing D/Delete would
-   remove it, same as a browser tab's `.northstar-highlight--hovered`. */
+   remove it, same as a browser tab's `.portalogia-highlight--hovered`. */
 .terminal-highlight--hovered {
   opacity: 0.5;
 }

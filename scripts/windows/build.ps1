@@ -1,23 +1,23 @@
-# Project: Northstar
+# Project: Portalogia
 # Owner: Joshua H. Kirby
 # Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 # Last Modified: 2026-10-17
 
 <#
 .SYNOPSIS
-    Builds Northstar and assembles a runnable Windows app folder.
+    Builds Portalogia and assembles a runnable Windows app folder.
 
 .DESCRIPTION
     Runs the production build, then lays the app out the way Electron expects
     a packaged app: Electron's own runtime files, with electron.exe renamed to
-    Northstar.exe and the app's code in resources\app.
+    Portalogia.exe and the app's code in resources\app.
 
     This replaces electron-builder, which was removed over its build-time
     advisories (SEC-007 in security\security-report-2026-10-06.md). It needs
     nothing beyond Node, npm, and the dev dependencies already installed.
 
-    The output is release\Northstar-win32-x64. Run install.ps1 to install it,
-    or launch Northstar.exe in place.
+    The output is release\Portalogia-win32-x64. Run install.ps1 to install it,
+    or launch Portalogia.exe in place.
 
 .PARAMETER Clean
     Reinstall the dev dependencies from the lockfile (npm ci) before
@@ -40,7 +40,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $releaseDir = Join-Path $repoRoot 'release'
-$appName = 'Northstar'
+$appName = 'Portalogia'
 $outputDir = Join-Path $releaseDir "$appName-win32-x64"
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ if (Test-Path $outputDir) {
         Remove-Item $outputDir -Recurse -Force
     }
     catch {
-        throw "Could not clear $outputDir. Close any Northstar running from it and try again."
+        throw "Could not clear $outputDir. Close any Portalogia running from it and try again."
     }
 }
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
@@ -121,7 +121,7 @@ Copy-Item (Join-Path $electronDist '*') $outputDir -Recurse
 # A renamed executable is what makes app.isPackaged true, so the app loads
 # its built pages from disk instead of looking for the dev server.
 Rename-Item (Join-Path $outputDir 'electron.exe') "$appName.exe"
-# Electron's own license, renamed so it doesn't read as Northstar's.
+# Electron's own license, renamed so it doesn't read as Portalogia's.
 Rename-Item (Join-Path $outputDir 'LICENSE') 'LICENSE.electron.txt'
 # Electron's placeholder app. Electron prefers resources\app anyway, but
 # shipping it serves no purpose.
@@ -149,7 +149,7 @@ Invoke-Npm $appDir @('ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no
 foreach ($file in 'license\LICENSE', 'docs\privacy.md', 'license\THIRD_PARTY_NOTICES.txt') {
     Copy-Item (Join-Path $repoRoot $file) $outputDir
 }
-# install.ps1 points the shortcuts at this icon. Northstar.exe itself still
+# install.ps1 points the shortcuts at this icon. Portalogia.exe itself still
 # carries Electron's icon, since changing an exe's icon needs a resource
 # editor this script doesn't depend on.
 Copy-Item (Join-Path $repoRoot 'resources\icon.ico') (Join-Path $outputDir "$appName.ico")

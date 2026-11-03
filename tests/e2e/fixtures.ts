@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -181,8 +181,8 @@ export async function openNote(app: ElectronApplication, window: Page, path: str
   await app.evaluate(({ dialog }, notePath) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [notePath] })) as typeof dialog.showOpenDialog;
   }, path);
-  await window.evaluate(() => window.northstar.createMarkdownTab());
-  await window.getByRole('button', { name: /Open a note/ }).click();
+  await window.evaluate(() => window.portalogia.createMarkdownTab());
+  await window.getByRole('complementary', { name: 'Tools' }).getByRole('button', { name: 'Open', exact: true }).click();
   return findTabPage(app, 'markdown.html');
 }
 
@@ -224,7 +224,7 @@ export const test = base.extend<TestFixtures>({
 
   // eslint-disable-next-line no-empty-pattern -- Playwright fixture signature requires the destructure even with no dependencies.
   electronApp: async ({}, use) => {
-    const userDataDir = mkdtempSync(join(tmpdir(), 'northstar-e2e-'));
+    const userDataDir = mkdtempSync(join(tmpdir(), 'portalogia-e2e-'));
     const app = await electron.launch({
       args: [join(ROOT_DIR, 'out/main/index.js'), `--user-data-dir=${userDataDir}`],
       cwd: ROOT_DIR,

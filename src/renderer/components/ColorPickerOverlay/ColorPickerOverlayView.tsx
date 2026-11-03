@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-25
@@ -54,7 +54,7 @@ export function ColorPickerOverlayView() {
 
   useEffect(
     () =>
-      window.northstarColorPicker.onSync((next) => {
+      window.portalogiaColorPicker.onSync((next) => {
         setPayload(next);
         if (next.open && !wasOpenRef.current) {
           setLocalAccent(next.accent);
@@ -67,7 +67,7 @@ export function ColorPickerOverlayView() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
-        window.northstarColorPicker.requestClose();
+        window.portalogiaColorPicker.requestClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -87,7 +87,7 @@ export function ColorPickerOverlayView() {
   /** Applies a new color locally (instant feedback) and reports it up to the chrome. `commit` (a settle point: pointerup, blur, Enter, or picking a swatch) is what tells the chrome to file it into the recents list — a drag mid-gesture or a mid-keystroke draft doesn't, or the list would fill with noise instead of 10 deliberate choices. */
   const applyColor = (next: RGB, options?: { commit?: boolean }): void => {
     setLocalAccent(next);
-    window.northstarColorPicker.changeColor(next, options?.commit ?? false);
+    window.portalogiaColorPicker.changeColor(next, options?.commit ?? false);
   };
 
   const handleChannelChange =

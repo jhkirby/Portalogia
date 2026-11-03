@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-24
@@ -60,7 +60,7 @@ export const XTERM_DARK_THEME: ITheme = {
  * reports every theme change to main via `setNativeTheme`, which sets
  * `nativeTheme.themeSource` process-wide, and that in turn drives
  * `prefers-color-scheme` for every renderer, this one included. Same
- * mechanism the `northstar://home` page already relies on.
+ * mechanism the `portalogia://home` page already relies on.
  *
  * For the dark theme that's the whole story — `XTERM_DARK_THEME` is a
  * complete, static `ITheme`, its own `selectionBackground` deliberately

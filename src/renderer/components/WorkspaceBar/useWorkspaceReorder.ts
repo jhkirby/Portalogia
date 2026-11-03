@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-18
@@ -11,7 +11,7 @@ import { tabDropTargetAt, type TabDropTarget } from '../../lib/tabDropTarget';
  * What a dragged workspace carries, so the sidebar can tell it from a tab
  * dragged in from the tab strip (`text/plain`), which drops *into* a workspace.
  */
-export const WORKSPACE_DRAG_TYPE = 'application/x-northstar-workspace';
+export const WORKSPACE_DRAG_TYPE = 'application/x-portalogia-workspace';
 
 /** How long a workspace takes to slide to its new place; the same as a reordered tab's. */
 const SLIDE_MS = 220;

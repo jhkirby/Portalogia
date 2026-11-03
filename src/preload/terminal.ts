@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { FindCommand, FindResult, NorthstarTerminalApi } from '@shared/ipc-contract';
+import type { FindCommand, FindResult, PortalogiaTerminalApi } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 
 // Deliberately NOT importing the `IpcChannel` runtime object from
@@ -74,7 +74,7 @@ window.addEventListener(
 // numbers in a DOM event cross into the page, where a preload object wouldn't.
 ipcRenderer.on('tab:pointer-position', (_event, point: { x: number; y: number } | null) => {
   window.dispatchEvent(
-    point ? new MouseEvent('northstar-pointer', { clientX: point.x, clientY: point.y }) : new Event('northstar-pointer-leave'),
+    point ? new MouseEvent('portalogia-pointer', { clientX: point.x, clientY: point.y }) : new Event('portalogia-pointer-leave'),
   );
 });
 
@@ -87,7 +87,7 @@ ipcRenderer.on(TabFocusMode, (_event, focusMode: unknown) => {
   focusModeListeners.forEach((listener) => listener(latestFocusMode));
 });
 
-const api: NorthstarTerminalApi = {
+const api: PortalogiaTerminalApi = {
   onZoom: (listener) => {
     listener(latestZoomLevel);
     zoomListeners.add(listener);
@@ -134,7 +134,7 @@ const api: NorthstarTerminalApi = {
   reportFind: (result: FindResult) => ipcRenderer.send(FindResultChannel, result),
 };
 
-contextBridge.exposeInMainWorld('northstarTerminal', api satisfies NorthstarTerminalApi);
+contextBridge.exposeInMainWorld('portalogiaTerminal', api satisfies PortalogiaTerminalApi);
 
 // The page's own stat bar, read out for the chrome: in split screen the chrome draws the one bar along the window's
 // bottom, with the stats of whichever side was used last, and this page's own is hidden

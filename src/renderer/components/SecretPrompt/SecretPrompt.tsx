@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -35,7 +35,7 @@ export function SecretPrompt() {
 
   useEffect(
     () =>
-      window.northstarSecretPrompt.onOffer((next) => {
+      window.portalogiaSecretPrompt.onOffer((next) => {
         setOffer(next);
         setLeaving(null);
         setPasswordShown(false);
@@ -56,7 +56,7 @@ export function SecretPrompt() {
     if (!card) {
       return undefined;
     }
-    const report = (): void => window.northstarSecretPrompt.reportHeight(card.getBoundingClientRect().height);
+    const report = (): void => window.portalogiaSecretPrompt.reportHeight(card.getBoundingClientRect().height);
     report();
     const observer = new ResizeObserver(report);
     observer.observe(card);
@@ -68,7 +68,7 @@ export function SecretPrompt() {
     if (!leaving) {
       return undefined;
     }
-    const timer = window.setTimeout(() => window.northstarSecretPrompt.answer(leaving), EXIT_MS);
+    const timer = window.setTimeout(() => window.portalogiaSecretPrompt.answer(leaving), EXIT_MS);
     return () => window.clearTimeout(timer);
   }, [leaving]);
 

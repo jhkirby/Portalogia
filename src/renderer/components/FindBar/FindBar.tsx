@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-17
@@ -78,7 +78,7 @@ export function FindBar() {
 
   useEffect(
     () =>
-      window.northstarFind.onState((state) => {
+      window.portalogiaFind.onState((state) => {
         if (!seeded.current) {
           seeded.current = true;
           setQuery(state.query);
@@ -93,7 +93,7 @@ export function FindBar() {
   // Ctrl+F while the bar is open: take the keyboard and select the query, ready to type over.
   useEffect(
     () =>
-      window.northstarFind.onFocus(() => {
+      window.portalogiaFind.onFocus(() => {
         queryRef.current?.focus();
         queryRef.current?.select();
       }),
@@ -105,7 +105,7 @@ export function FindBar() {
     if (!ready) {
       return undefined;
     }
-    const timer = window.setTimeout(() => window.northstarFind.search(query, options), SEARCH_DEBOUNCE_MS);
+    const timer = window.setTimeout(() => window.portalogiaFind.search(query, options), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [ready, query, options]);
 
@@ -114,7 +114,7 @@ export function FindBar() {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault();
-      window.northstarFind.close();
+      window.portalogiaFind.close();
     } else if (event.altKey && !event.ctrlKey && !event.metaKey) {
       // VS Code's own shortcuts for the switches.
       const key = event.key.toLowerCase();
@@ -133,7 +133,7 @@ export function FindBar() {
     const requested = Number.parseInt(numeratorDraft ?? '', 10);
     setNumeratorDraft(null);
     if (Number.isInteger(requested) && hasMatches) {
-      window.northstarFind.goTo(requested);
+      window.portalogiaFind.goTo(requested);
     }
   };
 
@@ -155,7 +155,7 @@ export function FindBar() {
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
-            window.northstarFind.step(event.shiftKey ? -1 : 1);
+            window.portalogiaFind.step(event.shiftKey ? -1 : 1);
           }
         }}
       />
@@ -211,7 +211,7 @@ export function FindBar() {
         title="Previous Match (Shift+Enter)"
         disabled={!hasMatches}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => window.northstarFind.step(-1)}
+        onClick={() => window.portalogiaFind.step(-1)}
       >
         <Chevron direction="up" />
       </button>
@@ -222,7 +222,7 @@ export function FindBar() {
         title="Next Match (Enter)"
         disabled={!hasMatches}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => window.northstarFind.step(1)}
+        onClick={() => window.portalogiaFind.step(1)}
       >
         <Chevron direction="down" />
       </button>
@@ -232,7 +232,7 @@ export function FindBar() {
         aria-label="Close (Escape)"
         title="Close (Escape)"
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => window.northstarFind.close()}
+        onClick={() => window.portalogiaFind.close()}
       >
         ×
       </button>

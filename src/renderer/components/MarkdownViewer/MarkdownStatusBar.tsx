@@ -1,10 +1,11 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { useEffect, useRef, useState } from 'react';
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
+import { FocusHint, PAGE_UNFOCUS_KEYS, usePageHasFocus } from '../FocusHint';
 
 /** The fields a keyboard command jumps into, and the Alt+key for each. */
 const JUMP_KEYS: Readonly<Record<string, JumpFieldName>> = { KeyG: 'line', KeyC: 'column', KeyW: 'word' };
@@ -88,6 +89,7 @@ export function MarkdownStatusBar({
   const count = (value: number): string => value.toLocaleString();
   // Measured in the framed note, as a web page's is in its own view: blank over the background around it.
   const pointer = usePointerPosition('.md-viewer > :is(.md-viewer__body, .md-viewer__empty)');
+  const pageFocused = usePageHasFocus();
 
   return (
     <footer ref={barRef} className="md-status" aria-label="Note statistics">
@@ -128,6 +130,7 @@ export function MarkdownStatusBar({
           </span>
         </span>
       )}
+      <FocusHint focused={pageFocused} unfocusKeys={PAGE_UNFOCUS_KEYS} />
     </footer>
   );
 }

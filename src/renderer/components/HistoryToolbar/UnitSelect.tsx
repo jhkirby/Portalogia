@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-05
@@ -57,10 +57,10 @@ export function UnitSelect<T extends string>({ options, value, onChange, label }
   useEffect(() => {
     const rect = buttonRef.current?.getBoundingClientRect();
     if (!isOpen || !rect) {
-      window.northstar.syncAddressSuggestions({ ...CLOSED });
+      window.portalogia.syncAddressSuggestions({ ...CLOSED });
       return;
     }
-    window.northstar.syncAddressSuggestions({
+    window.portalogia.syncAddressSuggestions({
       variant: 'menu',
       open: true,
       rect: { top: rect.bottom + LIST_GAP_PX, left: rect.left, width: rect.width },
@@ -72,7 +72,7 @@ export function UnitSelect<T extends string>({ options, value, onChange, label }
   // A tab switch while open skips straight to unmount, so close the overlay here too.
   useEffect(
     () => () => {
-      window.northstar.syncAddressSuggestions({ ...CLOSED });
+      window.portalogia.syncAddressSuggestions({ ...CLOSED });
     },
     [],
   );
@@ -99,7 +99,7 @@ export function UnitSelect<T extends string>({ options, value, onChange, label }
   isOpenRef.current = isOpen;
   useEffect(
     () =>
-      window.northstar.onAddressSuggestionSelected((index) => {
+      window.portalogia.onAddressSuggestionSelected((index) => {
         if (isOpenRef.current || Date.now() - closedAtRef.current < SELECT_GRACE_MS) {
           chooseRef.current(index);
         }

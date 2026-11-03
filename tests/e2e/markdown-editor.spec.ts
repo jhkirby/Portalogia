@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -23,7 +23,7 @@ test.describe('editing a note', () => {
   let noteDir = '';
 
   test.beforeEach(() => {
-    noteDir = mkdtempSync(join(tmpdir(), 'northstar-edit-note-'));
+    noteDir = mkdtempSync(join(tmpdir(), 'portalogia-edit-note-'));
   });
 
   test.afterEach(() => {
@@ -36,7 +36,7 @@ test.describe('editing a note', () => {
     const note = await openNote(electronApp, window, notePath);
     await expect(note.locator('.md-viewer__scroll')).toContainText('Closing paragraph.');
 
-    await window.getByRole('group', { name: 'View or edit' }).getByRole('button', { name: 'Edit' }).click();
+    await window.getByRole('button', { name: 'Switch to editing' }).click();
     const editor = note.locator('.cm-content');
     await expect(editor).toBeVisible();
     await editor.click();

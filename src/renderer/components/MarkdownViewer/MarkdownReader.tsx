@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -127,7 +127,7 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
       if (cached !== undefined) {
         show(cached);
       } else {
-        void window.northstarMarkdown.readImage(src).then((url) => {
+        void window.portalogiaMarkdown.readImage(src).then((url) => {
           if (url) {
             imageCache.set(key, url);
           }
@@ -144,7 +144,7 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
     }
     const names = collectWikiLinks(root);
     if (names.length > 0) {
-      void window.northstarMarkdown.resolveLinks(names).then((resolved) => {
+      void window.portalogiaMarkdown.resolveLinks(names).then((resolved) => {
         if (current && root.isConnected) {
           markMissingWikiLinks(root, resolved);
         }
@@ -173,7 +173,7 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
 
   const run = useCallback((index: number) => {
     setRuns((previous) => ({ ...previous, [index]: { status: 'running' } }));
-    void window.northstarMarkdown.runCode(index).then((result) => {
+    void window.portalogiaMarkdown.runCode(index).then((result) => {
       setRuns((previous) => ({ ...previous, [index]: { status: 'done', result } }));
     });
   }, []);
@@ -186,7 +186,7 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
   const loadRemoteImage = (image: HTMLImageElement): void => {
     const url = image.getAttribute(REMOTE_SRC_ATTRIBUTE) ?? '';
     image.classList.add('md-image--loading');
-    void window.northstarMarkdown.readRemoteImage(url).then((dataUrl) => {
+    void window.portalogiaMarkdown.readRemoteImage(url).then((dataUrl) => {
       if (!image.isConnected) {
         return;
       }
@@ -235,7 +235,7 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
         findHeading(rootRef.current, wiki.slice(1))?.scrollIntoView({ block: 'start' });
         return;
       }
-      void window.northstarMarkdown.openLink('wiki', wiki, inNewTab);
+      void window.portalogiaMarkdown.openLink('wiki', wiki, inNewTab);
       return;
     }
     const href = link.getAttribute('href') ?? '';
@@ -244,7 +244,7 @@ export function MarkdownReader({ source, noteKey, scrollRef, anchor, toolActive,
         findHeading(rootRef.current, decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'start' });
       }
     } else if (href !== '') {
-      void window.northstarMarkdown.openLink('link', href, inNewTab);
+      void window.portalogiaMarkdown.openLink('link', href, inNewTab);
     }
   };
 

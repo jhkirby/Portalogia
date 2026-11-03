@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-27
@@ -36,10 +36,10 @@ interface PenRecord {
   readonly color: RgbColor;
 }
 
-const STROKE_CLASS = 'northstar-pen-stroke';
-const STROKE_HOVER_CLASS = 'northstar-pen-stroke--hovered';
+const STROKE_CLASS = 'portalogia-pen-stroke';
+const STROKE_HOVER_CLASS = 'portalogia-pen-stroke--hovered';
 /** The invisible companion path drawn on top of every visible stroke, wider than it so a stroke is easy to hover/click without needing pixel-perfect aim — see `beginStroke`. */
-const HIT_CLASS = 'northstar-pen-hit';
+const HIT_CLASS = 'portalogia-pen-hit';
 const ID_ATTR = 'data-nsp-id';
 
 /** A finished stroke's own line width and opacity — solid-looking, unlike a highlighter's translucent wash. */
@@ -112,7 +112,7 @@ function ensureOverlay(): SVGSVGElement {
     return overlay;
   }
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('data-northstar', 'pen-overlay');
+  svg.setAttribute('data-portalogia', 'pen-overlay');
   svg.style.position = 'absolute';
   svg.style.top = '0';
   svg.style.left = '0';
@@ -150,7 +150,7 @@ function setActive(nextActive: boolean, color: RgbColor): void {
   }
   if (!cursorStyleEl) {
     cursorStyleEl = document.createElement('style');
-    cursorStyleEl.setAttribute('data-northstar', 'pen-cursor');
+    cursorStyleEl.setAttribute('data-portalogia', 'pen-cursor');
   }
   cursorStyleEl.textContent = buildStyleRuleText();
   if (active) {

@@ -1,0 +1,4 @@
+# Portalogia's own security queries (everything under queries/).
+- description: Portalogia project-specific security queries
+- queries: queries
+  from: portalogia/security-queries

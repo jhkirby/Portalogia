@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { NorthstarSecretPromptApi, SecretPromptOffer } from '@shared/ipc-contract';
+import type { PortalogiaSecretPromptApi, SecretPromptOffer } from '@shared/ipc-contract';
 
 // Channel names inlined as literals — see `terminal.ts` for why. `SecretPromptOverlay` (main) uses the same strings.
 const SecretPromptShow = 'secret-prompt:show';
@@ -19,7 +19,7 @@ ipcRenderer.on(SecretPromptShow, (_event, offer: SecretPromptOffer | null) => {
   listeners.forEach((listener) => listener(offer));
 });
 
-const api: NorthstarSecretPromptApi = {
+const api: PortalogiaSecretPromptApi = {
   onOffer: (listener) => {
     listeners.add(listener);
     if (latest !== null) {
@@ -37,4 +37,4 @@ const api: NorthstarSecretPromptApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarSecretPrompt', api satisfies NorthstarSecretPromptApi);
+contextBridge.exposeInMainWorld('portalogiaSecretPrompt', api satisfies PortalogiaSecretPromptApi);

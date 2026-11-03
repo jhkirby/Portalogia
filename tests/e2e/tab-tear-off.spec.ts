@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -112,7 +112,7 @@ async function captureMainErrors(app: ElectronApplication): Promise<() => Promis
 
 test.describe('dragging a tab out of the tab strip', () => {
   test('a tab over the sidebar column can be pulled straight down and out', async ({ electronApp, window }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), {
       timeout: 15_000,
     }).toBeGreaterThanOrEqual(2);
@@ -138,7 +138,7 @@ test.describe('dragging a tab out of the tab strip', () => {
     await window.getByRole('button', { name: 'New workspace' }).click();
     await expect(workspaces).toHaveCount(2);
     await workspaces.first().click();
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     await expect(tabs).toHaveCount(2);
     await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), {
@@ -147,7 +147,7 @@ test.describe('dragging a tab out of the tab strip', () => {
     const windowsBefore = await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
 
     // 1. Pull the last tab out into its own window.
-    const state = await window.evaluate(() => window.northstar.getState());
+    const state = await window.evaluate(() => window.portalogia.getState());
     const draggedTabId = ((state as { data?: { activeTabId: string } }).data ?? (state as { activeTabId: string })).activeTabId;
     const geo = await geometry(window);
     const outX = geo.tabX + 300;
@@ -193,11 +193,11 @@ test.describe('dragging a tab out of the tab strip', () => {
     const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     const getState = async (): Promise<{ tabs: { id: string; workspaceId: string }[]; workspaces: { id: string }[]; activeTabId: string }> => {
-      const result = await window.evaluate(() => window.northstar.getState());
+      const result = await window.evaluate(() => window.portalogia.getState());
       return ((result as { data?: unknown }).data ?? result) as never;
     };
 
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(tabs).toHaveCount(2);
     await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), {
       timeout: 15_000,
@@ -258,14 +258,14 @@ test.describe('dragging a tab out of the tab strip', () => {
       return pages;
     };
     const stateOf = async (page: Page): Promise<{ activeTabId: string }> => {
-      const result = await page.evaluate(() => window.northstar.getState());
+      const result = await page.evaluate(() => window.portalogia.getState());
       return ((result as { data?: unknown }).data ?? result) as never;
     };
 
     // Window 1: Home with two tabs. Window 2: a twin window, switched to its own new workspace (one tab).
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(tabsOf(window)).toHaveCount(2);
-    await window.evaluate(() => window.northstar.openWorkspaceInNewWindow());
+    await window.evaluate(() => window.portalogia.openWorkspaceInNewWindow());
     await expect.poll(async () => (await chromePages()).length, { timeout: 15_000 }).toBe(2);
     const second = (await chromePages()).find((page) => page !== window)!;
     await second.getByRole('button', { name: 'New workspace' }).click();
@@ -322,7 +322,7 @@ test.describe('dragging a tab out of the tab strip', () => {
   });
 
   test('opens the new window right away, not after a delay', async ({ electronApp, window }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab')).toHaveCount(2);
 
     // The hidden spare window is prepared a few seconds after launch.
@@ -345,7 +345,7 @@ test.describe('dragging a tab out of the tab strip', () => {
   });
 
   test('does not tear off while the cursor stays within the tab strip', async ({ electronApp, window }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     const geo = await geometry(window);
     await pinCursor(electronApp, geo.originX + geo.tabX, geo.originY + geo.tabY);
 
@@ -356,7 +356,7 @@ test.describe('dragging a tab out of the tab strip', () => {
   });
 
   test('releasing over empty space leaves the new window open with the tab in it', async ({ electronApp, window }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     const geo = await geometry(window);
     const clientX = geo.tabX + 300;
     const clientY = geo.stripBottom + 200;

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -10,7 +10,7 @@ test.describe('tabs', () => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     await expect(tabs).toHaveCount(1);
 
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
 
     await expect(tabs).toHaveCount(2);
     await expect(window.getByLabel('Search the internet...')).toBeFocused();
@@ -18,7 +18,7 @@ test.describe('tabs', () => {
 
   test('closing a tab removes it and leaves the other active', async ({ window }) => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(tabs).toHaveCount(2);
 
     await tabs.last().getByRole('button', { name: /Close/ }).click();
@@ -99,7 +99,7 @@ test.describe('jumping to a tab by number', () => {
   }) => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     for (let count = 2; count <= 3; count += 1) {
-      await window.evaluate(() => window.northstar.createTab());
+      await window.evaluate(() => window.portalogia.createTab());
       await expect(tabs).toHaveCount(count);
     }
     const selected = (): Promise<number> =>
@@ -107,7 +107,7 @@ test.describe('jumping to a tab by number', () => {
     await expect.poll(selected).toBe(2);
 
     // From a tab's own page (every tab here is the home page).
-    await pressInTab(electronApp, 'northstar://home', 'Control+1');
+    await pressInTab(electronApp, 'portalogia://home', 'Control+1');
     await expect.poll(selected).toBe(0);
 
     // From the chrome, through its own input pipeline as a physical key press would arrive.

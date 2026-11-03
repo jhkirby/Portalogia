@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-17
@@ -49,7 +49,7 @@ export function ColorPicker() {
   // overlay's own view mounts/unmounts and repositions itself in response.
   useEffect(() => {
     if (!isOpen) {
-      window.northstar.syncColorPicker({ open: false, rect: null, accent, recentColors });
+      window.portalogia.syncColorPicker({ open: false, rect: null, accent, recentColors });
       return;
     }
     const updateSync = (): void => {
@@ -57,7 +57,7 @@ export function ColorPicker() {
       if (!rect) {
         return;
       }
-      window.northstar.syncColorPicker({
+      window.portalogia.syncColorPicker({
         open: true,
         rect: {
           top: rect.bottom + DROPDOWN_GAP_PX,
@@ -78,7 +78,7 @@ export function ColorPicker() {
   // other way (e.g. a hot reload) skipping straight past that.
   useEffect(
     () => () => {
-      window.northstar.syncColorPicker({ open: false, rect: null, accent, recentColors: [] });
+      window.portalogia.syncColorPicker({ open: false, rect: null, accent, recentColors: [] });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately only the unmount cleanup, not re-run on every `accent`/`recentColors` change — this is a closed sync either way, so their exact value at unmount time doesn't matter.
     [],
@@ -86,7 +86,7 @@ export function ColorPicker() {
 
   useEffect(
     () =>
-      window.northstar.onColorPickerColorChanged(({ rgb, commit }) => {
+      window.portalogia.onColorPickerColorChanged(({ rgb, commit }) => {
         setAccent(rgb);
         if (commit) {
           commitRecent(rgb);
@@ -101,7 +101,7 @@ export function ColorPicker() {
   // `ColorPickerOverlay`'s own doc comment), since that's a third,
   // entirely separate process chrome's own DOM never sees any event from
   // either.
-  useEffect(() => window.northstar.onColorPickerCloseRequested(closePicker), []);
+  useEffect(() => window.portalogia.onColorPickerCloseRequested(closePicker), []);
 
   // Escape while focus is still in chrome (e.g. right after opening, before
   // the user has clicked into the overlay's own fields at all — once they

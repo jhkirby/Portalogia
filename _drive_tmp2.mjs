@@ -1,8 +1,8 @@
 import { _electron as electron } from 'playwright-core';
 import * as fs from 'node:fs';
 
-const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Northstar';
-const SHOT_DIR = 'C:\\Users\\joshu\\AppData\\Local\\Temp\\claude\\C--Users-joshu-OneDrive-Desktop-Software-Projects-Northstar\\cf081228-a0fe-4875-a0ea-5b591f1f51bc\\scratchpad\\shots';
+const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Portalogia';
+const SHOT_DIR = 'C:\\Users\\joshu\\AppData\\Local\\Temp\\claude\\C--Users-joshu-OneDrive-Desktop-Software-Projects-Portalogia\\cf081228-a0fe-4875-a0ea-5b591f1f51bc\\scratchpad\\shots';
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
 const app = await electron.launch({
@@ -29,12 +29,12 @@ await new Promise((r) => setTimeout(r, 400));
 const directResult = await page.evaluate(() => {
   const el = document.querySelector('.sidebar__toggle');
   const r = el.getBoundingClientRect();
-  window.northstar.syncTooltip({
+  window.portalogia.syncTooltip({
     visible: true,
     text: 'Show sidebar (L)',
     rect: { top: r.top - 6 - 24, left: r.left, width: 140, height: 24 },
   });
-  return { hasNorthstar: typeof window.northstar, hasSyncTooltip: typeof window.northstar?.syncTooltip, rect: r };
+  return { hasPortalogia: typeof window.portalogia, hasSyncTooltip: typeof window.portalogia?.syncTooltip, rect: r };
 });
 console.log('direct call result:', directResult);
 

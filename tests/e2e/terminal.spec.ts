@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -24,7 +24,7 @@ test.describe('terminal', () => {
     // it appears rather than guessing a fixed delay.
     const [terminalPage] = await Promise.all([
       electronApp.waitForEvent('window', { predicate: (page) => page.url().includes('terminal.html') }),
-      window.evaluate(() => window.northstar.createTerminalTab()),
+      window.evaluate(() => window.portalogia.createTerminalTab()),
     ]);
     await terminalPage.waitForLoadState('domcontentloaded');
 

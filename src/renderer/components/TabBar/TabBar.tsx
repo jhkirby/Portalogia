@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -87,7 +87,7 @@ interface TabBarProps {
   readonly onDragOutOfWindow: (id: string, screenX: number, screenY: number) => void;
   /** Called when a drag that already tore off (`onDragOutOfWindow`) is released, so main stops moving the new window. */
   readonly onTearOffEnd: (id: string, accepted: boolean) => void;
-  /** Called when a tab drag starts, with the window's other drop targets (workspace pills, "+ New workspace") — see `NorthstarApi.reportDropRegions`. */
+  /** Called when a tab drag starts, with the window's other drop targets (workspace pills, "+ New workspace") — see `PortalogiaApi.reportDropRegions`. */
   readonly onReportDropRegions: (rects: readonly { x: number; y: number; width: number; height: number }[]) => void;
   /**
    * Which side of a split screen each of two tabs is on, by tab id: shown as "L" or "R" just left of its close button

@@ -1,4 +1,4 @@
-# Northstar Security Review
+# Portalogia Security Review
 
 - **Date:** 2026-10-06
 - **Branch / commit:** `dev` @ `d2a9aa3`
@@ -7,7 +7,7 @@
 
 ## Summary
 
-Overall, Northstar's Electron hardening is better than most apps of its kind. Every `BrowserWindow` and `WebContentsView` sets `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` and `webSecurity: true`. Web pages get no `contextBridge` API at all. Every IPC payload is checked against a zod schema. Navigation is limited to an allowlist of schemes, both at the IPC boundary and in `will-navigate`. Untrusted Markdown passes through DOMPurify (with KaTeX `trust: false`) and is shown under a strict CSP. Markdown and PDF file access is limited to paths the main process already knows, and renames reject path separators. So an ordinary malicious web page, PDF or note cannot reach the file system or the shell directly. I found no injection, path-traversal or secrets-in-repo issues.
+Overall, Portalogia's Electron hardening is better than most apps of its kind. Every `BrowserWindow` and `WebContentsView` sets `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` and `webSecurity: true`. Web pages get no `contextBridge` API at all. Every IPC payload is checked against a zod schema. Navigation is limited to an allowlist of schemes, both at the IPC boundary and in `will-navigate`. Untrusted Markdown passes through DOMPurify (with KaTeX `trust: false`) and is shown under a strict CSP. Markdown and PDF file access is limited to paths the main process already knows, and renames reject path separators. So an ordinary malicious web page, PDF or note cannot reach the file system or the shell directly. I found no injection, path-traversal or secrets-in-repo issues.
 
 The two findings that matter most work together. **SEC-001:** the app ships on Electron 33.4.11. Electron 33 is end-of-life, so its Chromium (about M130) has gone more than a year without security fixes, and this app's whole purpose is to render arbitrary websites. A public Chromium renderer exploit is therefore a realistic threat, not a theoretical one. **SEC-002:** that kind of exploit is exactly the threat the sandbox and IPC checks are meant to contain, and here the containment is weaker than the code comments say. Many comments state that `resolveTabManager` "only resolves for a chrome window's own sender, so a tab's page can't send it". I tested this on Electron 33, and it is not true: `BrowserWindow.fromWebContents()` returns the owning window for a mounted tab's `WebContentsView` too. As a result, a compromised web-tab renderer can call every chrome channel. It can create a terminal tab (`tabs:create-terminal`), read its id from `tabs:get-state`, and type commands into the shell through `terminal:input`, which has no sender check at all. Together these turn a sandboxed renderer bug into code execution as the user.
 
@@ -70,7 +70,7 @@ Count by severity: **0 Critical, 2 High, 2 Medium, 5 Low.**
 
 ## Checked and found sound
 - **Window and view hardening:** `contextIsolation`, `sandbox` and `nodeIntegration: false` are set on every window and view. App-owned views deny `will-navigate` and `window.open`.
-- **Navigation:** `isNavigableUrl` allows only `http`, `https`, `about` and `northstar` schemes, checked in `navigate`, `will-navigate` and `setWindowOpenHandler`. `file:` and `javascript:` are refused.
+- **Navigation:** `isNavigableUrl` allows only `http`, `https`, `about` and `portalogia` schemes, checked in `navigate`, `will-navigate` and `setWindowOpenHandler`. `file:` and `javascript:` are refused.
 - **Permissions:** everything is denied except `fullscreen` (web pages) and `pointerLock` (own PDF page). There is no `certificate-error` override.
 - **Markdown rendering:** DOMPurify with forbidden tags and attributes, KaTeX `trust: false`, heading-id prefixing against DOM clobbering, a strict CSP, and `connect-src 'none'`.
 - **File access:** `openMarkdownFromHistory` and `openPdfFromHistory` only accept known paths. Renames reject separators and reserved names. Image reads are limited by extension and size, and UNC paths are blocked to prevent NTLM credential leaks.

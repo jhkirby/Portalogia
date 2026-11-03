@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -71,7 +71,7 @@ export class ColorPickerOverlay {
    *   list).
    * @param onCloseRequested Called whenever something asks this dropdown to
    *   close on its own — the overlay's own page reporting an Escape
-   *   keypress (see `NorthstarColorPickerApi.requestClose`'s own doc
+   *   keypress (see `PortalogiaColorPickerApi.requestClose`'s own doc
    *   comment for why the chrome can't just listen for that itself), or
    *   the active tab's view reporting a click (see this class's own doc
    *   comment). Either way, this class doesn't close itself — it just

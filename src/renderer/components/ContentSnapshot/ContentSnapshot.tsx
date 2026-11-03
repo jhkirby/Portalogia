@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-26
@@ -84,7 +84,7 @@ export function ContentSnapshot() {
       return undefined;
     }
     let currentId = 0;
-    return window.northstar.onContentSnapshot((message) => {
+    return window.portalogia.onContentSnapshot((message) => {
       if (message.kind === 'clear') {
         // Only the one it names: a newer snapshot may already be up.
         if (message.id === currentId) {
@@ -105,7 +105,7 @@ export function ContentSnapshot() {
       requestAnimationFrame(() =>
         setTimeout(() => {
           if (currentId === message.id) {
-            window.northstar.reportContentSnapshotShown(message.id);
+            window.portalogia.reportContentSnapshotShown(message.id);
           }
         }, 0),
       );

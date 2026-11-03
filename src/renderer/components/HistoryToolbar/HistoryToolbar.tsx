@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -65,7 +65,7 @@ export function HistoryToolbar({ tab, onRequestClear }: HistoryToolbarProps) {
 
   // The tab's page may have loaded after the text was last typed: tell it what this box holds.
   useEffect(() => {
-    window.northstar.setHistoryQuery(tab.id, query);
+    window.portalogia.setHistoryQuery(tab.id, query);
   }, [tab.id, query]);
 
   const limit = unit === 'all' ? 0 : HISTORY_UNIT_LIMITS[unit];
@@ -75,13 +75,13 @@ export function HistoryToolbar({ tab, onRequestClear }: HistoryToolbarProps) {
 
   // The same number and unit also pick which visits the table shows (a half-typed number shows everything).
   useEffect(() => {
-    window.northstar.setHistoryRange(tab.id, range);
+    window.portalogia.setHistoryRange(tab.id, range);
     // `range` is rebuilt every render; its parts are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id, range.unit, 'amount' in range ? range.amount : 0]);
 
   // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps here, as it does to the address bar on a browser tab.
-  useEffect(() => window.northstar.onFocusAddressBar(() => searchRef.current?.focus()), []);
+  useEffect(() => window.portalogia.onFocusAddressBar(() => searchRef.current?.focus()), []);
 
   const changeUnit = (next: ClearUnit): void => {
     setUnit(next);
@@ -97,14 +97,14 @@ export function HistoryToolbar({ tab, onRequestClear }: HistoryToolbarProps) {
   useEffect(() => {
     let isStale = false;
     const recount = (): void => {
-      void window.northstar.countHistory(JSON.parse(rangeKey) as HistoryClearRange).then((result) => {
+      void window.portalogia.countHistory(JSON.parse(rangeKey) as HistoryClearRange).then((result) => {
         if (!isStale && result.ok) {
           setRangeCount(result.data);
         }
       });
     };
     recount();
-    const unsubscribe = window.northstar.onHistoryChanged(recount);
+    const unsubscribe = window.portalogia.onHistoryChanged(recount);
     return () => {
       isStale = true;
       unsubscribe();

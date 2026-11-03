@@ -1,10 +1,11 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { useState } from 'react';
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
+import { FocusHint, PAGE_UNFOCUS_KEYS, usePageHasFocus } from '../FocusHint';
 
 /** The document's text and links, counted once it has loaded; `null` while still counting. */
 export interface PdfDocumentStats {
@@ -38,6 +39,7 @@ export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToP
   const [draft, setDraft] = useState<string | null>(null);
   // Measured in the framed document, as a web page's is in its own view: blank over the background around it.
   const pointer = usePointerPosition('.pdf-viewer__body');
+  const pageFocused = usePageHasFocus();
   const count = (value: number): string => value.toLocaleString();
   const counted = (value: number | undefined, one: string, many: string): string =>
     value === undefined ? `… ${many}` : `${count(value)} ${value === 1 ? one : many}`;
@@ -91,6 +93,7 @@ export function PdfStatusBar({ page, pageCount, stats, bytes, selection, onGoToP
           <span className="pdf-status__item">{counted(selection.characters, 'character', 'characters')}</span>
         </span>
       )}
+      <FocusHint focused={pageFocused} unfocusKeys={PAGE_UNFOCUS_KEYS} />
     </footer>
   );
 }

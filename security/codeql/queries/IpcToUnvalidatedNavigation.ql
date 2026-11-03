@@ -1,21 +1,21 @@
 /**
  * @name Renderer-controlled URL loaded without the scheme allowlist
  * @description Every URL a tab loads must pass `isNavigableUrl` (http, https,
- *              about, northstar). A URL from an IPC payload that reaches
+ *              about, portalogia). A URL from an IPC payload that reaches
  *              `loadURL`, `createTab` or `shell.openExternal` without that check
  *              could open `file:`, `javascript:` or an OS protocol handler.
  * @kind path-problem
  * @problem.severity error
  * @security-severity 7.0
  * @precision high
- * @id northstar/ipc-to-unvalidated-navigation
+ * @id portalogia/ipc-to-unvalidated-navigation
  * @tags security
  *       external/cwe/cwe-601
  *       external/cwe/cwe-939
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
 /** A URL argument that a page, window or the OS will open. */
 class NavigationSink extends DataFlow::Node {
@@ -37,7 +37,7 @@ class NavigableUrlGuard extends DataFlow::CallNode {
 }
 
 module Config implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node node) { node instanceof NorthstarIpc::IpcPayloadSource }
+  predicate isSource(DataFlow::Node node) { node instanceof PortalogiaIpc::IpcPayloadSource }
 
   predicate isSink(DataFlow::Node node) { node instanceof NavigationSink }
 
@@ -46,7 +46,7 @@ module Config implements DataFlow::ConfigSig {
   }
 
   predicate isAdditionalFlowStep(DataFlow::Node pred, DataFlow::Node succ) {
-    NorthstarIpc::ipcTaintStep(pred, succ)
+    PortalogiaIpc::ipcTaintStep(pred, succ)
   }
 }
 
@@ -54,7 +54,7 @@ module Flow = TaintTracking::Global<Config>;
 
 import Flow::PathGraph
 
-from Flow::PathNode source, Flow::PathNode sink, NorthstarIpc::IpcPayloadSource src
+from Flow::PathNode source, Flow::PathNode sink, PortalogiaIpc::IpcPayloadSource src
 where Flow::flowPath(source, sink) and src = source.getNode()
 select sink.getNode(), source, sink,
   "URL from $@ (IPC channel '" + src.getChannelName() +

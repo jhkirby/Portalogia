@@ -1,6 +1,6 @@
 /**
  * @name Page preload UI reachable by the visited site
- * @description The `tab*` preloads draw Northstar UI (comments, text boxes,
+ * @description The `tab*` preloads draw Portalogia UI (comments, text boxes,
  *              highlights) into an arbitrary website's DOM. That UI, and the
  *              user's private text in it, must sit in a `closed` shadow root
  *              the preload created itself. An `open` shadow root is readable
@@ -10,7 +10,7 @@
  * @problem.severity warning
  * @security-severity 5.0
  * @precision high
- * @id northstar/page-preload-ui-exposed
+ * @id portalogia/page-preload-ui-exposed
  * @tags security
  *       external/cwe/cwe-668
  */

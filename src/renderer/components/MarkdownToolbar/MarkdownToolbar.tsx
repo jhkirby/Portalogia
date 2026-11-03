@@ -1,11 +1,11 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { useState } from 'react';
-import type { BookmarkState, MarkdownDisplay, MarkdownTabState } from '@shared/tab-state';
-import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
+import type { BookmarkState, MarkdownTabState } from '@shared/tab-state';
+import { formatAltShortcut } from '../../lib/shortcuts';
 import { FileBar } from '../FileBar';
 import { PdfSearchBox } from '../PdfToolbar/PdfSearchBox';
 
@@ -23,9 +23,6 @@ interface MarkdownToolbarProps {
   readonly onOpenBookmark: (id: string, bookmarkId: string) => void;
   /** Opens a note from the history, by path, in the tab. */
   readonly onOpenPath: (id: string, path: string) => void;
-  readonly onSetMode: (id: string, mode: 'view' | 'edit') => void;
-  /** Switches between the formatted note and its raw text. */
-  readonly onSetDisplay: (id: string, display: MarkdownDisplay) => void;
   /** Steps back (`-1`) or forward (`1`) through the notes reached by links. */
   readonly onNavigate: (id: string, direction: 1 | -1) => void;
   /** Renames the file on disk; resolves to an error message, or `null` on success. */
@@ -34,13 +31,12 @@ interface MarkdownToolbarProps {
 
 /**
  * The Markdown tab's controls, shown in the main toolbar where a browser tab
- * has its address bar: Back/Forward through followed links, the View/Edit
- * switch (read-only or editable), the
- * Raw/Formatted switch (exact characters or the drawn note), and the file bar
+ * has its address bar: Back/Forward through followed links and the file bar
  * (`FileBar`): the bookmark star and the file name (an editable text box — or,
  * while no note is open, a search over the bookmarked and recent notes), with
- * the note's progress while it opens. New, Open, Close, Delete and Export are
- * in the Tools sidebar (`ToolsBar`); the page itself only draws the note.
+ * the note's progress while it opens. View/Edit, Formatted/Raw, the formatting
+ * buttons, New, Open, Close, Delete and Export are in the Tools sidebar
+ * (`ToolsBar`); the page itself only draws the note.
  * Remount per tab (via `key`) so a draft name never leaks between tabs.
  */
 export function MarkdownToolbar({
@@ -50,15 +46,13 @@ export function MarkdownToolbar({
   markdownBookmarks,
   onOpenBookmark,
   onOpenPath,
-  onSetMode,
-  onSetDisplay,
   onNavigate,
   onRename,
 }: MarkdownToolbarProps) {
   /** Uncommitted text while the name input is being edited; null when not editing. */
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { fileName, mode, display } = tab;
+  const { fileName } = tab;
 
   const commitName = (): void => {
     const trimmed = nameDraft?.trim();
@@ -97,45 +91,6 @@ export function MarkdownToolbar({
           ›
         </button>
       </div>
-      {/* One switch with both sides showing; the side in use is filled. */}
-      <div
-        className="markdown-toolbar__modes chrome-tooltip"
-        role="group"
-        aria-label="View or edit"
-        data-tooltip={`Switch between viewing and editing (${formatShortcut('Shift+G')})`}
-      >
-        {(['view', 'edit'] as const).map((side) => (
-          <button
-            key={side}
-            type="button"
-            className={`markdown-toolbar__mode hover-grow${mode === side ? ' markdown-toolbar__mode--active' : ''}`}
-            onClick={() => onSetMode(tab.id, side)}
-            disabled={fileName === null}
-            aria-pressed={mode === side}
-          >
-            <ModeLabel text={side === 'view' ? 'View' : 'Edit'} />
-          </button>
-        ))}
-      </div>
-      <div
-        className="markdown-toolbar__modes chrome-tooltip"
-        role="group"
-        aria-label="Raw or formatted"
-        data-tooltip="Switch between the raw text and the formatted note"
-      >
-        {(['formatted', 'raw'] as const).map((side) => (
-          <button
-            key={side}
-            type="button"
-            className={`markdown-toolbar__mode hover-grow${display === side ? ' markdown-toolbar__mode--active' : ''}`}
-            onClick={() => onSetDisplay(tab.id, side)}
-            disabled={fileName === null}
-            aria-pressed={display === side}
-          >
-            <ModeLabel text={side === 'raw' ? 'Raw' : 'Formatted'} />
-          </button>
-        ))}
-      </div>
       <FileBar
         isBookmarked={isBookmarked}
         canBookmark={fileName !== null}
@@ -172,25 +127,5 @@ export function MarkdownToolbar({
       </FileBar>
       {error && <span className="markdown-toolbar__error">{error}</span>}
     </div>
-  );
-}
-
-/** The longest label on either switch: every side of both is made this wide, so the two switches match. */
-const WIDEST_MODE_LABEL = 'Formatted';
-
-/**
- * A switch side's label, laid over an unseen copy of the longest label so the
- * button is that wide whatever its own word: View/Edit then lines up with
- * Raw/Formatted, in any font.
- * @param text The label.
- */
-function ModeLabel({ text }: { readonly text: string }) {
-  return (
-    <span className="markdown-toolbar__mode-label">
-      <span>{text}</span>
-      <span className="markdown-toolbar__mode-sizer" aria-hidden="true">
-        {WIDEST_MODE_LABEL}
-      </span>
-    </span>
   );
 }

@@ -1,4 +1,4 @@
-/* Project: Northstar
+/* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
    Last Modified: 2026-10-29 */
@@ -17,6 +17,11 @@
    light theme's original accent blue, Google's Material "blue 600". */
 :root {
   --color-accent-rgb: 26, 115, 232;
+  /* A focused search field's border glows in the accent, in either theme: two shadows, a tight bright one over a
+     wide soft one, so the glow hugs the border rather than haze around it. */
+  --shadow-focus-glow:
+    0 0 3px rgba(var(--color-accent-rgb), 0.75),
+    0 0 10px rgba(var(--color-accent-rgb), 0.45);
 }
 
 /* The browser's own native text-selection highlight (dragging over a

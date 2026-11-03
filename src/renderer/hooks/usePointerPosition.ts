@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -55,14 +55,14 @@ export function usePointerPosition(frameSelector?: string): PointerPosition | nu
     document.documentElement.addEventListener('pointerleave', onLeave);
     // While the laser pointer's overlay covers the page, the page sees no pointer; its preload passes the position on
     // as these instead (see `tab:pointer-position`).
-    window.addEventListener('northstar-pointer', onMove as EventListener);
-    window.addEventListener('northstar-pointer-leave', onLeave);
+    window.addEventListener('portalogia-pointer', onMove as EventListener);
+    window.addEventListener('portalogia-pointer-leave', onLeave);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('pointermove', onMove, { capture: true });
       document.documentElement.removeEventListener('pointerleave', onLeave);
-      window.removeEventListener('northstar-pointer', onMove as EventListener);
-      window.removeEventListener('northstar-pointer-leave', onLeave);
+      window.removeEventListener('portalogia-pointer', onMove as EventListener);
+      window.removeEventListener('portalogia-pointer-leave', onLeave);
     };
   }, [frameSelector]);
 

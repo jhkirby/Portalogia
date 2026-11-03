@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -90,7 +90,7 @@ interface DragState {
   moved: boolean;
 }
 
-const ROOT_ID = 'northstar-textboxes-root';
+const ROOT_ID = 'portalogia-textboxes-root';
 const BOX_CLASS = 'ns-tb';
 const INPUT_CLASS = 'ns-tb-input';
 const BAR_CLASS = 'ns-tb-bar';
@@ -191,7 +191,7 @@ function buildBaseStyleText(): string {
 function updateCursorStyle(): void {
   if (!cursorStyleEl) {
     cursorStyleEl = document.createElement('style');
-    cursorStyleEl.setAttribute('data-northstar', 'text-tool-cursor');
+    cursorStyleEl.setAttribute('data-portalogia', 'text-tool-cursor');
   }
   cursorStyleEl.textContent = `html, html * { cursor: ${textCursorCss(currentColor)} !important; user-select: none !important; }`;
   if (active) {

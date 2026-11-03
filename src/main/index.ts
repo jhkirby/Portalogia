@@ -1,11 +1,12 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
+import { existsSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, protocol, safeStorage, screen, session } from 'electron';
-import { NORTHSTAR_SCHEME } from '@shared/constants';
+import { PORTALOGIA_SCHEME } from '@shared/constants';
 import { IpcChannel } from '@shared/ipc-contract';
 import { dropRegionsRequestSchema, tearOffTabEndRequestSchema, tearOffTabRequestSchema } from '@shared/ipc-schemas';
 import { AdBlocker } from './adblock/AdBlocker';
@@ -47,7 +48,7 @@ import { createMainWindow } from './windows/MainWindow';
 import { watchTitlebarHover } from './windows/titlebarHover';
 
 // Electron requires this to be set before `app.whenReady()`.
-app.setName('Northstar');
+app.setName('Portalogia');
 
 // Dev runs get their own profile so they never open the installed app's
 // data — bookmarks, history, cookies, and above all saved secrets. It also
@@ -57,7 +58,25 @@ app.setName('Northstar');
 // to run before anything reads `userData`, which the stores below do as
 // soon as this module loads.
 if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
-  app.setPath('userData', join(app.getPath('appData'), 'Northstar-Dev'));
+  app.setPath('userData', join(app.getPath('appData'), 'Portalogia-Dev'));
+}
+
+// The app was called Northstar before, so a profile may still sit under the
+// old folder name. Move it over once, the first time the renamed app starts,
+// so bookmarks, history, sessions and secrets (whose key lives in the
+// profile's `Local State`) carry across. A profile already under the new
+// name is never touched, and an explicit `--user-data-dir` is left alone.
+if (!app.commandLine.hasSwitch('user-data-dir')) {
+  const legacyName = app.isPackaged ? 'Northstar' : 'Northstar-Dev';
+  const legacyDir = join(app.getPath('appData'), legacyName);
+  const userDataDir = app.getPath('userData');
+  if (existsSync(legacyDir) && !existsSync(userDataDir)) {
+    try {
+      renameSync(legacyDir, userDataDir);
+    } catch (error) {
+      console.error(`Could not move the old ${legacyName} profile to ${userDataDir}:`, error);
+    }
+  }
 }
 
 // Custom schemes must be registered as privileged before the app is ready.
@@ -66,7 +85,7 @@ if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
 // since the home page is pure server-rendered markup, so fetch/CORS stay off.
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: NORTHSTAR_SCHEME,
+    scheme: PORTALOGIA_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false },
   },
 ]);
@@ -87,7 +106,7 @@ let activeTabManager: TabManager | null = null;
 const tabManagersByWindowId = new Map<number, TabManager>();
 
 // Bookmarks aren't scoped to a window — one store, shared by every
-// `TabManager` and by the `northstar://home` page each of them can show.
+// `TabManager` and by the `portalogia://home` page each of them can show.
 const bookmarkStore = new BookmarkStore(join(app.getPath('userData'), 'bookmarks.json'));
 
 // Same reasoning as `bookmarkStore` — not scoped to a window. In the
@@ -230,7 +249,7 @@ void app.whenReady().then(() => {
     callback(permission === 'fullscreen' && isWebPage);
   });
 
-  protocol.handle(NORTHSTAR_SCHEME, (request) => {
+  protocol.handle(PORTALOGIA_SCHEME, (request) => {
     const url = new URL(request.url);
     if (url.hostname !== 'home') {
       return new Response('Not found', { status: 404 });
@@ -654,7 +673,7 @@ function finishLiveTearOff(tabId: string): void {
 
 /**
  * Registers the tab-bar's drag-out-of-the-window gesture (`tearOffTab` in
- * `NorthstarApi`): fire-and-forget, like `terminal:input`, since the only
+ * `PortalogiaApi`): fire-and-forget, like `terminal:input`, since the only
  * meaningful result is a brand new window appearing, not a reply to the
  * window the drag started in. Lives here rather than in `registerTabIpc`
  * because it doesn't act on "whichever `TabManager` is active" like every
@@ -741,7 +760,7 @@ function registerTearOffIpc(): void {
 
 /**
  * Opens a brand-new window onto a window's active tab — the actual work
- * behind `NorthstarApi.openWorkspaceInNewWindow` (via
+ * behind `PortalogiaApi.openWorkspaceInNewWindow` (via
  * `registerOpenWorkspaceInNewWindowIpc`, below) and the "Open Workspace in
  * New Window" menu accelerator (`buildMenu`'s own callback), which need the
  * same thing done from two different starting points: a specific window

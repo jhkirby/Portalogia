@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-17
@@ -55,11 +55,11 @@ function formatEntry(id, info) {
 
 const packages = await promisify(checkLicenses)({ start: root, production: true, excludePrivatePackages: true });
 
-const header = `Northstar - Third-Party Notices
+const header = `Portalogia - Third-Party Notices
 
-Northstar includes the open-source software listed below. Each component is
+Portalogia includes the open-source software listed below. Each component is
 the property of its respective authors and is used under the license shown.
-Northstar's own license (see LICENSE) does not apply to these components.
+Portalogia's own license (see LICENSE) does not apply to these components.
 
 Components licensed under the Mozilla Public License 2.0 (MPL-2.0) are
 included unmodified. Their source code is available from the "Source"
@@ -67,7 +67,7 @@ repository listed with each one, and from the npm registry
 (https://www.npmjs.com/) under the same name and version.
 
 Electron and Chromium notices are in LICENSE.electron.txt and
-LICENSES.chromium.html, distributed alongside the Northstar executable.
+LICENSES.chromium.html, distributed alongside the Portalogia executable.
 
 `;
 

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-24
@@ -15,7 +15,7 @@ import { isChromeSender } from './senderGuards';
  * as `terminal:input`, since there's nothing meaningful to reply with.
  * `nativeTheme` is process-wide, so this in turn drives
  * `prefers-color-scheme` for any native-rendered content that follows it,
- * like the `northstar://home` page (see homePage.ts) — without this, that
+ * like the `portalogia://home` page (see homePage.ts) — without this, that
  * page would keep following the OS's own preference regardless of what
  * the chrome's toggle button or Ctrl+D chose.
  *

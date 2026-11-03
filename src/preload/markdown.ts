@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -13,7 +13,7 @@ import type {
   MarkdownFileData,
   MarkdownRunResult,
   MarkdownToolState,
-  NorthstarMarkdownApi,
+  PortalogiaMarkdownApi,
 } from '@shared/ipc-contract';
 import type { RGB } from '@shared/color';
 import type { MarkdownDisplay, PointerMode } from '@shared/tab-state';
@@ -173,7 +173,7 @@ const RUN_FAILED: MarkdownRunResult = {
 // numbers in a DOM event cross into the page, where a preload object wouldn't.
 ipcRenderer.on('tab:pointer-position', (_event, point: { x: number; y: number } | null) => {
   window.dispatchEvent(
-    point ? new MouseEvent('northstar-pointer', { clientX: point.x, clientY: point.y }) : new Event('northstar-pointer-leave'),
+    point ? new MouseEvent('portalogia-pointer', { clientX: point.x, clientY: point.y }) : new Event('portalogia-pointer-leave'),
   );
 });
 
@@ -191,7 +191,7 @@ const TabToggleSidePanel = 'tab:toggle-side-panel';
 const sidePanelListeners = new Set<() => void>();
 ipcRenderer.on(TabToggleSidePanel, () => sidePanelListeners.forEach((listener) => listener()));
 
-const api: NorthstarMarkdownApi = {
+const api: PortalogiaMarkdownApi = {
   onToggleSidePanel: (listener) => {
     sidePanelListeners.add(listener);
     return () => {
@@ -285,7 +285,7 @@ const api: NorthstarMarkdownApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarMarkdown', api satisfies NorthstarMarkdownApi);
+contextBridge.exposeInMainWorld('portalogiaMarkdown', api satisfies PortalogiaMarkdownApi);
 
 // Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
 // (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. A `contenteditable`

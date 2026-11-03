@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { BookmarkUpdateResult, NorthstarBookmarksApi } from '@shared/ipc-contract';
+import type { BookmarkUpdateResult, PortalogiaBookmarksApi } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
@@ -52,7 +52,7 @@ function latestFrom<T>(channel: string): (listener: (value: T) => void) => () =>
   };
 }
 
-const api: NorthstarBookmarksApi = {
+const api: PortalogiaBookmarksApi = {
   onBookmarks: latestFrom<readonly BookmarkState[]>(BookmarksPageList),
   onQuery: latestFrom<string>(BookmarksPageQuery),
   onMode: latestFrom<'view' | 'edit'>(BookmarksPageMode),
@@ -69,4 +69,4 @@ const api: NorthstarBookmarksApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarBookmarks', api satisfies NorthstarBookmarksApi);
+contextBridge.exposeInMainWorld('portalogiaBookmarks', api satisfies PortalogiaBookmarksApi);

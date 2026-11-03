@@ -1,6 +1,6 @@
 import { _electron as electron } from 'playwright-core';
 
-const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Northstar';
+const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Portalogia';
 
 const app = await electron.launch({
   executablePath: APP_DIR + '\\node_modules\\electron\\dist\\electron.exe',
@@ -17,7 +17,7 @@ page.on('pageerror', (err) => console.log('[chrome pageerror]', String(err)));
 await page.evaluate(() => {
   const el = document.querySelector('.sidebar__toggle');
   const r = el.getBoundingClientRect();
-  window.northstar.syncTooltip({
+  window.portalogia.syncTooltip({
     visible: true,
     text: 'Show sidebar (L)',
     rect: { top: 200, left: 200, width: 140, height: 24 },

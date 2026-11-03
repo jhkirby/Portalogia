@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -11,7 +11,7 @@ import { startWindFog } from '@shared/dom/windFog';
 const TabAccent = 'tab:accent';
 const TabAccentChanged = 'tab:accent-changed';
 /** The new-tab page (`HOME_URL`), which has no script of its own to run the fluid with. */
-const HOME_URL = 'northstar://home/';
+const HOME_URL = 'portalogia://home/';
 
 /** The app's default accent, each channel 0–1: what the fluid shows if main can't say. */
 const DEFAULT_ACCENT: FluidColor = [26 / 255, 115 / 255, 232 / 255];

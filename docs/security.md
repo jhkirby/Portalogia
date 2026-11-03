@@ -1,10 +1,10 @@
 # Security
 
-Northstar's job is to load untrusted content: websites, PDFs and Markdown
+Portalogia's job is to load untrusted content: websites, PDFs and Markdown
 notes from anywhere. Its security model starts from that fact. This document
 covers:
 
-- what Northstar protects,
+- what Portalogia protects,
 - who might attack it,
 - the boundaries between trusted and untrusted code,
 - the controls at each boundary, and
@@ -60,7 +60,7 @@ The most recent is
 | B1 | Chrome page to main | Main | Chrome renderer (our own code, but a renderer process all the same) | zod schemas on every request. `chromeWindowOf` accepts only a window's own chrome page. |
 | B2 | App tab page to main | Main | PDF, Markdown, terminal and history pages, two of which parse untrusted files | Each page has its own narrow preload, plus ownership checks (`ownsPdfContents`, `ownsMarkdownContents`, `ownsTerminalContents`) so a page acts only on its own tab |
 | B3 | Web tab to main | Main | Any website, possibly with a compromised renderer | No `contextBridge` API for the page. Every chrome channel refuses tab senders. Tab-originated messages are tied to the sending tab. |
-| B4 | Page scripts to Northstar preload | Preload's isolated world | The site's own JavaScript | `contextIsolation`. Annotation UI lives in a closed shadow root. |
+| B4 | Page scripts to Portalogia preload | Preload's isolated world | The site's own JavaScript | `contextIsolation`. Annotation UI lives in a closed shadow root. |
 | B5 | App to network | App | Websites, filter-list host | Scheme allowlist, Chromium TLS, ad and tracker blocking, no telemetry |
 | B6 | App to disk | Main | Profile files, user-chosen PDFs and notes | zod validation on every read. Paths restricted to known files. Name sanitization. |
 | B7 | App to code execution | User consent | Code in notes, terminal input | Per-block consent prompt, 30 s timeout. The terminal accepts input only from its own view. |
@@ -75,7 +75,7 @@ that remains. The adversary IDs are from the table above.
 | T1 | A web page reaches Node or Electron APIs | A1 | Code execution as the user | `nodeIntegration: false`, `contextIsolation: true` and `sandbox: true` on every window and view. The web-tab preload calls no `contextBridge`. | Low |
 | T2 | A compromised renderer sends privileged IPC (for example, opens a terminal and types into it) | A2 | Code execution as the user | `chromeWindowOf` rejects tab senders on chrome channels. Terminal, PDF and Markdown channels check that the sender owns the tab. Every payload is checked by zod. Fixes SEC-002. | Medium. Any IPC handler added without a guard reopens this. |
 | T3 | An unpatched Chromium bug is exploited | A2 | Renderer compromise, then T2 | Electron upgraded to 44 (SEC-001). The sandbox is on everywhere. | Medium. Needs continued upgrades. |
-| T4 | Navigation to a dangerous scheme (`file:`, `javascript:`) | A1, A4 | Local file read, script injection | `isNavigableUrl` allows only `http`, `https`, `about` and `northstar`. It is checked at the IPC boundary, in `will-navigate` and in `setWindowOpenHandler`. The chrome page can't navigate or open windows. | Low |
+| T4 | Navigation to a dangerous scheme (`file:`, `javascript:`) | A1, A4 | Local file read, script injection | `isNavigableUrl` allows only `http`, `https`, `about` and `portalogia`. It is checked at the IPC boundary, in `will-navigate` and in `setWindowOpenHandler`. The chrome page can't navigate or open windows. | Low |
 | T5 | Script injection through a Markdown note | A4 | Script runs with the Markdown preload's API | DOMPurify with forbidden tags and attributes. KaTeX with `trust: false`. Heading ids prefixed to prevent DOM clobbering. Strict CSP (`default-src 'none'`, `script-src 'self'`, `connect-src 'none'`). | Low |
 | T6 | A note tracks the reader through remote images | A4 | IP address and open time leaked | CSP `img-src 'self' data:`. Web images load only when clicked, through main, over https only, without cookies, size-capped, and refused after a redirect off https (SEC-006). | Low |
 | T7 | Harmful code block in a note | A4 | Code execution as the user | Consent prompt showing the block, keyed by a SHA-256 of path, language and code, so other blocks and changed code ask again (SEC-003). Runs time out after 30 s and the whole process tree is killed. Unknown languages are refused. | Medium. Running code is the feature, so the user's judgment is the final control. |

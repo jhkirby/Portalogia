@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -12,7 +12,7 @@ import {
   type ColorPickerColorChangedPayload,
   type ContentSnapshotMessage,
   type IpcResult,
-  type NorthstarApi,
+  type PortalogiaApi,
   type PageStats,
   type WeatherState,
   type WifiStatus,
@@ -31,7 +31,7 @@ function invoke<T>(channel: string, payload?: unknown): Promise<IpcResult<T>> {
   return ipcRenderer.invoke(channel, payload) as Promise<IpcResult<T>>;
 }
 
-const api: NorthstarApi = {
+const api: PortalogiaApi = {
   createTab: (url) => invoke(IpcChannel.TabsCreate, { url }),
   closeTab: (id) => invoke(IpcChannel.TabsClose, { id }),
   activateTab: (id) => invoke(IpcChannel.TabsActivate, { id }),
@@ -95,6 +95,7 @@ const api: NorthstarApi = {
   setMarkdownMode: (id, mode) => invoke(IpcChannel.MarkdownSetMode, { id, mode }),
   setMarkdownDisplay: (id, display) => invoke(IpcChannel.MarkdownSetDisplay, { id, display }),
   navigateMarkdownHistory: (id, direction) => invoke(IpcChannel.MarkdownNavigateHistory, { id, direction }),
+  formatMarkdown: (id, action) => invoke(IpcChannel.MarkdownApplyFormat, { id, action }),
   exportMarkdown: (id, format) => invoke(IpcChannel.MarkdownExport, { id, format }),
   openMarkdownBookmark: (id, bookmarkId) => ipcRenderer.send(IpcChannel.MarkdownOpenBookmark, { id, bookmarkId }),
   openMarkdownPath: (id, path) => ipcRenderer.send(IpcChannel.MarkdownOpenPath, { id, path }),
@@ -309,7 +310,7 @@ const api: NorthstarApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstar', api satisfies NorthstarApi);
+contextBridge.exposeInMainWorld('portalogia', api satisfies PortalogiaApi);
 
 // Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
 // (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. A `contenteditable`

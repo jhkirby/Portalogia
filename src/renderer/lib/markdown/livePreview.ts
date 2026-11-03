@@ -1,16 +1,19 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-24
 
 import { syntaxTree } from '@codemirror/language';
 import { renderedBlocks } from './livePreviewBlocks';
-import type { EditorState, Extension, Range } from '@codemirror/state';
+import { Prec, type EditorState, type Extension, type Range } from '@codemirror/state';
 import {
+  BlockType,
   Decoration,
   EditorView,
+  RectangleMarker,
   ViewPlugin,
   WidgetType,
+  layer,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
@@ -379,13 +382,77 @@ const livePreviewPlugin = ViewPlugin.fromClass(
   { decorations: (plugin) => plugin.decorations },
 );
 
+// ── CODE BLOCK BACKGROUNDS ──────────────────────────────────────────────
+
+/**
+ * Each code block's background, one rounded box per block, drawn in a layer of its own under the text rather than as
+ * its lines' backgrounds. A line's background is part of the text layer, so it hid the selection, which the editor
+ * draws in a layer under the text: selected lines in a code block showed only where the selection stuck out past the
+ * block. This layer sits under the selection's (`Prec.lowest` puts it last in the layer order, and a later layer is
+ * drawn lower), so a selection shows over the block.
+ */
+const codeBlockBackgrounds = Prec.lowest(
+  layer({
+    above: false,
+    class: 'cm-lp-codeblock-layer',
+    markers(view) {
+      const markers: RectangleMarker[] = [];
+      const { state } = view;
+      const scroller = view.scrollDOM.getBoundingClientRect();
+      // Where the layer's own origin is on screen (what `RectangleMarker`s are placed against), scrolled with the text.
+      const baseLeft = scroller.left - view.scrollDOM.scrollLeft * view.scaleX;
+      const baseTop = scroller.top - view.scrollDOM.scrollTop * view.scaleY;
+      // The lines' box: the content's, inside its padding. A block's box spans it, as its lines do.
+      const content = view.contentDOM.getBoundingClientRect();
+      const contentStyle = getComputedStyle(view.contentDOM);
+      const left = content.left + parseFloat(contentStyle.paddingLeft);
+      const right = content.right - parseFloat(contentStyle.paddingRight);
+      const seen = new Set<number>();
+      for (const { from, to } of view.visibleRanges) {
+        syntaxTree(state).iterate({
+          from,
+          to,
+          enter: (node) => {
+            if (node.name !== 'FencedCode' && node.name !== 'CodeBlock') {
+              return undefined;
+            }
+            // Only a block being edited is lines of text; one off the caret is drawn by the reader, its own box and all
+            // (`livePreviewBlocks`).
+            if (!seen.has(node.from) && view.lineBlockAt(node.from).type === BlockType.Text) {
+              seen.add(node.from);
+              const top = view.documentTop + view.lineBlockAt(node.from).top;
+              const bottom = view.documentTop + view.lineBlockAt(node.to).bottom;
+              markers.push(
+                new RectangleMarker('cm-lp-codeblock-bg', left - baseLeft, top - baseTop, Math.max(0, right - left), bottom - top),
+              );
+            }
+            // Nothing inside a code block is another one.
+            return false;
+          },
+        });
+      }
+      return markers;
+    },
+    update: (update) => update.docChanged || update.selectionSet || update.viewportChanged || update.geometryChanged,
+  }),
+);
+
 // ── THEME ───────────────────────────────────────────────────────────────
 
 /** The formatted look: the reader's body font and heading sizes (markdown-viewer.css), code kept monospace. */
 const livePreviewTheme = EditorView.theme({
   // The reader's size, not the source editor's, so the formatted note is the same size being edited as being read.
   '&.cm-live-preview': { fontSize: '1rem' },
-  '&.cm-live-preview .cm-scroller': { fontFamily: 'var(--md-font-body)', lineHeight: '1.7' },
+  // The page's side margins are the scroller's, not the content's: the editor draws a selection of whole lines out to
+  // the content's edges, padding and all, so with the margins there it ran past the text column — and past a code
+  // block's box — by the margin on each side.
+  '&.cm-live-preview .cm-scroller': {
+    fontFamily: 'var(--md-font-body)',
+    lineHeight: '1.7',
+    paddingLeft: '1.5rem',
+    paddingRight: '1.5rem',
+  },
+  '&.cm-live-preview .cm-content': { paddingLeft: '0', paddingRight: '0' },
   // A block drawn by the reader's renderer (see `livePreviewBlocks`): its margins stay inside it (so the editor
   // measures its full height, with the overlap between neighbours taken back by `blockSpacing`), and the HTML's own
   // line breaks aren't the editor's preserved whitespace.
@@ -400,12 +467,16 @@ const livePreviewTheme = EditorView.theme({
   '.cm-lp-strong': { fontWeight: '700' },
   '.cm-lp-em': { fontStyle: 'italic' },
   '.cm-lp-strike': { textDecoration: 'line-through' },
+  // Code is the characters as typed: no font ligatures (a monospace font draws `//` or `->` as one joined shape, a
+  // slash looking heavier than the one before it).
   '.cm-lp-code': {
     padding: '0.12em 0.35em',
     backgroundColor: 'var(--md-code-bg)',
     borderRadius: '4px',
     fontFamily: 'var(--md-font-mono)',
     fontSize: '0.9em',
+    fontVariantLigatures: 'none',
+    fontFeatureSettings: '"liga" 0, "calt" 0',
   },
   '.cm-lp-link': { color: 'var(--color-accent-text)', textDecoration: 'underline' },
   '.cm-lp-quote': {
@@ -413,12 +484,19 @@ const livePreviewTheme = EditorView.theme({
     borderLeft: '3px solid var(--md-quote-border)',
     color: 'var(--color-tab-text)',
   },
+  // A code block's lines; its background is `codeBlockBackgrounds`'s box behind them. Its text is the note's own text
+  // colour, not inline code's: a block with a language has that language's colours over it (`editorHighlight`), and
+  // one without reads as plain text (`--md-monospace-color` overrides the colour the highlighter gives code).
   '.cm-lp-codeblock': {
-    backgroundColor: 'var(--md-code-bg)',
+    '--md-monospace-color': 'var(--color-tab-text-active)',
     fontFamily: 'var(--md-font-mono)',
     fontSize: '0.9em',
     paddingLeft: '0.8em',
+    paddingRight: '0.8em',
+    fontVariantLigatures: 'none',
+    fontFeatureSettings: '"liga" 0, "calt" 0',
   },
+  '.cm-lp-codeblock-bg': { backgroundColor: 'var(--md-code-bg)', borderRadius: '4px' },
   // A list line: indented 1.7em a level, as the reader indents an item (its `ul` padding). No room added above or
   // below, so it's as tall as any other line and indenting it (Tab) never changes its height.
   '.cm-line.cm-lp-li': { paddingLeft: 'calc(var(--lp-depth) * 1.7em)' },
@@ -458,6 +536,7 @@ export function livePreview(): Extension {
   return [
     renderedBlocks(),
     livePreviewPlugin,
+    codeBlockBackgrounds,
     livePreviewTheme,
     EditorView.editorAttributes.of({ class: 'cm-live-preview' }),
   ];

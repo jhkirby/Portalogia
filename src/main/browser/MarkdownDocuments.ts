@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -186,7 +186,7 @@ export class MarkdownDocuments {
     const path = note.path;
     const write = note.writes.then(async () => {
       const text = applyLineEnding(source, note.ending);
-      const temporary = `${path}.northstar-${randomUUID().slice(0, 8)}.tmp`;
+      const temporary = `${path}.portalogia-${randomUUID().slice(0, 8)}.tmp`;
       try {
         // Written beside the note and moved over it, so a crash mid-write can't leave half a note.
         await writeFile(temporary, text, 'utf-8');

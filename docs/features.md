@@ -1,6 +1,6 @@
 # Features
 
-This is Northstar's feature list. Features are grouped into areas (`F1`,
+This is Portalogia's feature list. Features are grouped into areas (`F1`,
 `F2`, ...), and each area holds its individual features (`F1.1`, `F1.2`, ...).
 Every feature lists the tests that cover it. The test IDs are defined in
 [testing_log.md](testing_log.md), and the reasoning behind the IDs is in
@@ -50,11 +50,11 @@ Those rows are the coverage gaps.
 
 | ID | Feature | Tests |
 | --- | --- | --- |
-| F2.1 | **Address or search.** Text that looks like an address (a dotted domain, `localhost`, `northstar:`) is opened, with `https://` added if needed. Anything else becomes a Google search. | UT-URL-01, UT-URL-02, UT-URL-03, UT-URL-04, UT-URL-05, UT-URL-06, UT-URL-07, UT-URL-08, UT-URL-09, UT-URL-10 |
+| F2.1 | **Address or search.** Text that looks like an address (a dotted domain, `localhost`, `portalogia:`) is opened, with `https://` added if needed. Anything else becomes a Google search. | UT-URL-01, UT-URL-02, UT-URL-03, UT-URL-04, UT-URL-05, UT-URL-06, UT-URL-07, UT-URL-08, UT-URL-09, UT-URL-10 |
 | F2.2 | **Back, forward, reload, stop.** The tab title, address bar and back/forward buttons follow the page. | E2E-TAB-06 |
 | F2.3 | **Page label.** When the address bar isn't focused, a bubble shows the bookmark name or the site's domain. The tab shows the same text. | UT-URL-14, UT-URL-15, UT-URL-16, E2E-BKM-03 |
 | F2.4 | **Address suggestions.** Matching bookmarks and history appear in a dropdown while you type. | No automated test |
-| F2.5 | **Home page** (`northstar://home`). A blank new-tab page served by the app with no script. | E2E-LCH-01 |
+| F2.5 | **Home page** (`portalogia://home`). A blank new-tab page served by the app with no script. | E2E-LCH-01 |
 | F2.6 | **Page zoom** (25%–200%) with Ctrl+=, Ctrl+-, Ctrl+0, Ctrl+wheel, or by typing a percentage. | No automated test |
 
 ## F3 Workspaces
@@ -188,7 +188,7 @@ These are features in their own right, not just implementation details.
 
 | ID | Feature | Tests |
 | --- | --- | --- |
-| F14.1 | **Scheme allowlist.** Only `http`, `https`, `about` and `northstar` URLs can be opened. `file:` and `javascript:` are refused. | UT-URL-11, UT-URL-12, UT-URL-13 |
+| F14.1 | **Scheme allowlist.** Only `http`, `https`, `about` and `portalogia` URLs can be opened. `file:` and `javascript:` are refused. | UT-URL-11, UT-URL-12, UT-URL-13 |
 | F14.2 | **Site permissions denied.** Camera, microphone, location, notifications and the rest are refused. Only full-screen is granted, to web pages. | No automated test |
 | F14.3 | **Code-run consent.** Each code block asks before it first runs, and trust lasts until the app restarts. Changing the code asks again. | No automated test |
 | F14.4 | **Untrusted files are validated.** Every settings and data file is checked on read, and a corrupt one is ignored rather than crashing. | UT-ADB-09, UT-WSI-05 |

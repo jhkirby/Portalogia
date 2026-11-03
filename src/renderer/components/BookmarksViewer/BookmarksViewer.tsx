@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -151,9 +151,9 @@ export function BookmarksViewer() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLTableSectionElement>(null);
 
-  useEffect(() => window.northstarBookmarks.onBookmarks(setBookmarks), []);
-  useEffect(() => window.northstarBookmarks.onQuery(setQuery), []);
-  useEffect(() => window.northstarBookmarks.onMode(setMode), []);
+  useEffect(() => window.portalogiaBookmarks.onBookmarks(setBookmarks), []);
+  useEffect(() => window.portalogiaBookmarks.onQuery(setQuery), []);
+  useEffect(() => window.portalogiaBookmarks.onMode(setMode), []);
   useEffect(
     () => () => {
       if (copiedTimer.current !== null) {
@@ -262,7 +262,7 @@ export function BookmarksViewer() {
     if (problems.has(bookmark.id)) {
       return;
     }
-    void window.northstarBookmarks.update(bookmark.id, title, reference).then((result) => {
+    void window.portalogiaBookmarks.update(bookmark.id, title, reference).then((result) => {
       if (result.ok) {
         // The kept values arrive with the next list; the boxes show those from here.
         setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== bookmark.id)));
@@ -274,7 +274,7 @@ export function BookmarksViewer() {
 
   const copy = (bookmark: BookmarkState): void => {
     // Main copies what it has stored for this id, not text from here.
-    window.northstarBookmarks.copy(bookmark.id);
+    window.portalogiaBookmarks.copy(bookmark.id);
     setCopiedId(bookmark.id);
     if (copiedTimer.current !== null) {
       window.clearTimeout(copiedTimer.current);
@@ -367,7 +367,7 @@ export function BookmarksViewer() {
                             className="history__action-button hover-grow history__delete"
                             aria-label={`Delete the bookmark ${bookmark.title}`}
                             title="Delete bookmark"
-                            onClick={() => window.northstarBookmarks.remove(bookmark.id)}
+                            onClick={() => window.portalogiaBookmarks.remove(bookmark.id)}
                           >
                             ×
                           </button>
@@ -389,7 +389,7 @@ export function BookmarksViewer() {
                               className="history__action-button hover-grow history__open"
                               aria-label={`Open ${bookmark.title} in a new tab`}
                               title="Open in new tab"
-                              onClick={() => window.northstarBookmarks.open(bookmark.id)}
+                              onClick={() => window.portalogiaBookmarks.open(bookmark.id)}
                             >
                               <OpenInNewTabIcon />
                             </button>

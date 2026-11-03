@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -89,7 +89,7 @@ export function PdfSidePanel({
     }
     let current = true;
     setBacklinks(null);
-    void window.northstarPdf.getBacklinks().then((found) => {
+    void window.portalogiaPdf.getBacklinks().then((found) => {
       if (current) {
         setBacklinks(found);
       }
@@ -255,7 +255,7 @@ export function PdfSidePanel({
                 type="button"
                 className="side-panel__item"
                 title={link.target}
-                onClick={() => window.northstarPdf.openBacklink(link.target)}
+                onClick={() => window.portalogiaPdf.openBacklink(link.target)}
               >
                 {link.name}
               </button>

@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { HistoryClearRange, PageStats } from '@shared/ipc-contract';
+import type { HistoryClearRange, MarkdownFormatAction, PageStats } from '@shared/ipc-contract';
 import { HOME_URL, ZOOM_PERCENT_STEP } from '@shared/constants';
 import type { TabState } from '@shared/tab-state';
 import { AddressBar } from './components/AddressBar';
@@ -13,7 +13,23 @@ import { ClearHistoryPopup } from './components/ClearHistoryPopup';
 import { ConfirmWordPopup } from './components/ConfirmWordPopup';
 import { Mist } from './components/Mist';
 import { ToolsBar, type ToolsBarAction } from './components/ToolsBar';
-import { ExportIcon, FileCloseIcon, FileNewIcon, FileOpenIcon, TrashIcon } from './components/icons';
+import {
+  BoldIcon,
+  CodeBlockIcon,
+  ExportIcon,
+  EyeIcon,
+  FileCloseIcon,
+  FileNewIcon,
+  FileOpenIcon,
+  FormattedIcon,
+  ItalicIcon,
+  LatexIcon,
+  LinkIcon,
+  NoteEditIcon,
+  RawIcon,
+  TableIcon,
+  TrashIcon,
+} from './components/icons';
 import { formatShortcut } from './lib/shortcuts';
 import { ContentSnapshot } from './components/ContentSnapshot';
 import { NavControls } from './components/NavControls';
@@ -32,6 +48,7 @@ import { WorkspaceEditPopup } from './components/WorkspaceEditPopup';
 import { WindowControls } from './components/WindowControls';
 import { WorkspaceBar } from './components/WorkspaceBar';
 import { ItemsStatusBar, WebStatusBar } from './components/WebStatusBar';
+import { PAGE_UNFOCUS_KEYS, TERMINAL_UNFOCUS_KEYS } from './components/FocusHint';
 import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
@@ -129,6 +146,7 @@ export function App() {
     setMarkdownMode,
     setMarkdownDisplay,
     navigateMarkdownHistory,
+    formatMarkdown,
     addMarkdownBookmark,
     openMarkdownPath,
     openMarkdownBookmark,
@@ -185,7 +203,7 @@ export function App() {
    * window's drag region, where the page never sees the pointer, so `:hover` alone can't show the controls there.
    */
   const [pointerOnTitlebar, setPointerOnTitlebar] = useState(false);
-  useEffect(() => window.northstar.onTitlebarPointer(setPointerOnTitlebar), []);
+  useEffect(() => window.portalogia.onTitlebarPointer(setPointerOnTitlebar), []);
   const titlebarRef = useRef<HTMLDivElement>(null);
   usePointerGlow(titlebarRef, true);
   /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
@@ -194,7 +212,7 @@ export function App() {
     readonly stats: PageStats | null;
     readonly items: readonly string[] | null;
   } | null>(null);
-  useEffect(() => window.northstar.onPageStats((tabId, stats, items) => setPageStats({ tabId, stats, items })), []);
+  useEffect(() => window.portalogia.onPageStats((tabId, stats, items) => setPageStats({ tabId, stats, items })), []);
   /** Popups playing their closing motion; each one's real close waits in `popupFinishers` until it ends. */
   const [closingPopups, setClosingPopups] = useState<ReadonlySet<PopupName>>(() => new Set());
   const popupFinishers = useRef(new Map<PopupName, () => void>());
@@ -279,7 +297,7 @@ export function App() {
       ) {
         return;
       }
-      void window.northstar.focusContent();
+      void window.portalogia.focusContent();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -465,7 +483,7 @@ export function App() {
       return;
     }
     setClearHistoryPopup({ tabId, range, count: null, previewImage: null });
-    void window.northstar.countHistory(range).then((result) => {
+    void window.portalogia.countHistory(range).then((result) => {
       setClearHistoryPopup((current) => (current ? { ...current, count: result.ok ? result.data : 0 } : current));
     });
     void beginTabPreview(tabId).then((previewImage) => {
@@ -483,7 +501,7 @@ export function App() {
       setClearHistoryPopup(null);
       // Deleted once the History page is back in view, so its rows can be seen fading out.
       if (confirmed) {
-        void window.northstar.clearHistory(range);
+        void window.portalogia.clearHistory(range);
       }
     });
   };
@@ -518,8 +536,6 @@ export function App() {
           markdownBookmarks={markdownBookmarks}
           onOpenBookmark={openMarkdownBookmark}
           onOpenPath={openMarkdownPath}
-          onSetMode={setMarkdownMode}
-          onSetDisplay={setMarkdownDisplay}
           onNavigate={navigateMarkdownHistory}
           onRename={renameMarkdownFile}
         />
@@ -592,7 +608,7 @@ export function App() {
         adBlockGloballyOff={!adBlock.enabled}
         adBlockBlockedCount={tab ? (adBlock.blockedByTab[tab.id] ?? 0) : 0}
         adBlockSite={site ?? ''}
-        onToggleAdBlock={() => site && window.northstar.setAdBlockSiteAllowed(site, !siteAllowed)}
+        onToggleAdBlock={() => site && window.portalogia.setAdBlockSiteAllowed(site, !siteAllowed)}
         showZoom={!tablePage}
         canZoom={tab !== undefined}
         zoomPercent={zoom.percent}
@@ -689,6 +705,57 @@ export function App() {
     return actions;
   })();
 
+  // A note's own sections in the Tools sidebar, between the tools and its file actions: first its View/Edit and
+  // Formatted/Raw buttons, each named and drawn for the state the note is in and flipping it on a click; then its
+  // formatting buttons, which work while it's being edited.
+  const noteSections = ((): readonly (readonly ToolsBarAction[])[] => {
+    if (activeTab?.kind !== 'markdown') {
+      return [];
+    }
+    const { id, mode, display } = activeTab;
+    const noFile = activeTab.fileName === null;
+    const editing = mode === 'edit';
+    const raw = display === 'raw';
+    const modes: ToolsBarAction[] = [
+      {
+        id: 'note-mode',
+        name: editing ? 'Editing' : 'Viewing',
+        label: editing ? 'Switch to viewing' : 'Switch to editing',
+        icon: editing ? <NoteEditIcon /> : <EyeIcon />,
+        disabled: noFile,
+        tooltip: `${editing ? 'Editing: switch to viewing, read-only' : 'Viewing: switch to editing'} (${formatShortcut('Shift+G')})`,
+        onClick: () => setMarkdownMode(id, editing ? 'view' : 'edit'),
+      },
+      {
+        id: 'note-display',
+        name: raw ? 'Raw' : 'Formatted',
+        label: raw ? 'Show the formatted note' : 'Show the raw text',
+        icon: raw ? <RawIcon /> : <FormattedIcon />,
+        disabled: noFile,
+        tooltip: raw ? 'Raw text: switch to the formatted note' : 'Formatted note: switch to the raw text',
+        onClick: () => setMarkdownDisplay(id, raw ? 'formatted' : 'raw'),
+      },
+    ];
+    const format = (action: MarkdownFormatAction, name: string, icon: ReactNode, tooltip: string): ToolsBarAction => ({
+      id: `format-${action}`,
+      name,
+      icon,
+      // Formatting edits the note, so only while it's open for editing.
+      disabled: noFile || !editing,
+      tooltip: editing ? tooltip : `${tooltip}: switch to editing first`,
+      onClick: () => formatMarkdown(id, action),
+    });
+    const formatting: ToolsBarAction[] = [
+      format('bold', 'Bold', <BoldIcon />, `Bold (${formatShortcut('B')})`),
+      format('italic', 'Italic', <ItalicIcon />, `Italic (${formatShortcut('I')})`),
+      format('link', 'Link', <LinkIcon />, `Make a link (${formatShortcut('Shift+U')})`),
+      format('latex', 'LaTeX block', <LatexIcon />, `Wrap in a LaTeX block (${formatShortcut('Shift+L')})`),
+      format('code', 'Code block', <CodeBlockIcon />, `Wrap in a code block (${formatShortcut('Shift+K')})`),
+      format('table', 'Table', <TableIcon />, 'Insert a table at the caret'),
+    ];
+    return [modes, formatting];
+  })();
+
   // Split screen: while its button is hovered with two tabs selected, the tab row marks them "L" and "R" (the first
   // selected goes on the left); while split, the two sides stay marked.
   const [splitHover, setSplitHover] = useState(false);
@@ -753,7 +820,7 @@ export function App() {
   // The latest `openRevert` for the shortcut's listener, which subscribes once.
   const openRevertRef = useRef(openRevert);
   openRevertRef.current = openRevert;
-  useEffect(() => window.northstar.onRevertRequested(() => openRevertRef.current()), []);
+  useEffect(() => window.portalogia.onRevertRequested(() => openRevertRef.current()), []);
 
   const closeDeleteNote = (confirmed: boolean): void => {
     if (!deleteNotePopup) {
@@ -764,7 +831,7 @@ export function App() {
       endTabPreview(tabId);
       setDeleteNotePopup(null);
       if (confirmed) {
-        void (kind === 'pdf' ? window.northstar.deletePdfFile(tabId) : window.northstar.deleteMarkdownFile(tabId));
+        void (kind === 'pdf' ? window.portalogia.deletePdfFile(tabId) : window.portalogia.deleteMarkdownFile(tabId));
       }
     });
   };
@@ -840,7 +907,7 @@ export function App() {
     });
   };
 
-  useEffect(() => window.northstar.onOpenWorkspaceImages(openWorkspaceImages));
+  useEffect(() => window.portalogia.onOpenWorkspaceImages(openWorkspaceImages));
 
   // Like the bookmark popup, the editor covers whichever kind of tab is showing, so that tab's native view comes off
   // the window first and a still of its last frame stands in behind the popup.
@@ -880,14 +947,14 @@ export function App() {
 
   // The keyboard command (Ctrl+Shift+E) is an Electron menu accelerator for the same reason Search Tabs is: a focused
   // tab would swallow a renderer-level keydown. It always means the active workspace.
-  useEffect(() => window.northstar.onEditWorkspace(() => openWorkspaceEditor(activeWorkspaceId)));
+  useEffect(() => window.portalogia.onEditWorkspace(() => openWorkspaceEditor(activeWorkspaceId)));
 
   // The chrome window can lose OS focus to whatever tab's WebContentsView
   // the user last clicked into, so the "Search Tabs" keyboard shortcut is
   // an Electron menu accelerator (see buildMenu.ts) that reaches here via
   // this push instead of a renderer-level keydown listener, which a
   // focused tab would simply swallow.
-  useEffect(() => window.northstar.onOpenTabSearch(openTabSearch));
+  useEffect(() => window.portalogia.onOpenTabSearch(openTabSearch));
 
   return (
     <div className="app-shell">
@@ -1046,11 +1113,13 @@ export function App() {
               screen, where this one bar runs the whole way across with the stats of the side used last. Focus Mode
               shows none. */}
           {activeTab?.kind === 'browser' && !focusMode && (
-            <WebStatusBar stats={pageStats?.tabId === activeTab.id ? pageStats.stats : null} />
+            <WebStatusBar stats={pageStats?.tabId === activeTab.id ? pageStats.stats : null} contentFocused={contentFocused} />
           )}
           {activeTab && activeTab.kind !== 'browser' && splitView && !focusMode && (
             <ItemsStatusBar
               items={pageStats?.tabId === activeTab.id ? pageStats.items : null}
+              contentFocused={contentFocused}
+              unfocusKeys={activeTab.kind === 'terminal' ? TERMINAL_UNFOCUS_KEYS : PAGE_UNFOCUS_KEYS}
               label={
                 activeTab.kind === 'pdf'
                   ? 'PDF statistics'
@@ -1207,6 +1276,7 @@ export function App() {
           canExportDocuments={browserTab !== null && !isHome}
           exportMarkdown={activeTab?.kind === 'markdown'}
           fileActions={fileActions}
+          actionSections={noteSections}
           onRevertPage={openRevert}
         />
       </div>

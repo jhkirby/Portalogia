@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -17,7 +17,7 @@ async function selectedTabIndex(window: Page): Promise<number> {
 test.describe('Ctrl+Left/Right in a web page text box', () => {
   // Two tabs, the editor page active and last, so a tab switch would be plain to see.
   test.beforeEach(async ({ window }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab')).toHaveCount(2);
   });
 

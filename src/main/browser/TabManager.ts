@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -1456,6 +1456,23 @@ export class TabManager {
     return true;
   }
 
+  /**
+   * Runs a formatting command from the Tools sidebar on a Markdown tab's editor. Unlike `formatMarkdown` (a shortcut
+   * pressed in the page), the click left the keyboard in the chrome, so the page is given it first; the editor kept
+   * its selection, which the command then acts on.
+   * @param id The Markdown tab. A no-op unless its note is open and being edited.
+   * @param action What to do.
+   */
+  public applyMarkdownFormat(id: string, action: MarkdownFormatAction): void {
+    const state = this.states.get(id);
+    const view = this.views.get(id);
+    if (state?.kind !== 'markdown' || state.mode !== 'edit' || state.fileName === null || !view || view.webContents.isDestroyed()) {
+      return;
+    }
+    view.webContents.focus();
+    view.webContents.send(IpcChannel.MarkdownFormat, action);
+  }
+
   /** Flips a Markdown tab between its rendered view and its source editor (Ctrl+Shift+G). A no-op on any other kind of tab, or with no note open. */
   public toggleMarkdownMode(id: string): void {
     const current = this.states.get(id);
@@ -1609,7 +1626,7 @@ export class TabManager {
         message: `Run code from “${basename(path)}”?`,
         detail:
           `Code blocks run on your computer with your permissions: they can read and change your files and use the network. ` +
-          `Only run code from notes you trust. This block won't ask again until Northstar restarts, unless its code changes.` +
+          `Only run code from notes you trust. This block won't ask again until Portalogia restarts, unless its code changes.` +
           `\n\n${codePreview(block.code)}`,
         buttons: ['Run', 'Cancel'],
         defaultId: 1,
@@ -3769,9 +3786,9 @@ export class TabManager {
     const color = nativeTheme.shouldUseDarkColors ? TAB_FADE_COLOR.dark : TAB_FADE_COLOR.light;
     // Held opaque while the tab being left is still over it, then faded out, and taken off the page once gone.
     wc.insertCSS(
-      `@keyframes northstar-tab-fade { from { opacity: 1; } to { opacity: 0; } } ` +
+      `@keyframes portalogia-tab-fade { from { opacity: 1; } to { opacity: 0; } } ` +
         `html::before { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
-        `background: ${color}; animation: northstar-tab-fade ${TAB_FADE_MS}ms ease-out ${TAB_FADE_COVER_MS}ms both; }`,
+        `background: ${color}; animation: portalogia-tab-fade ${TAB_FADE_MS}ms ease-out ${TAB_FADE_COVER_MS}ms both; }`,
     )
       .then((key) => {
         setTimeout(() => {
@@ -3823,9 +3840,9 @@ export class TabManager {
       }
     };
     wc.insertCSS(
-      `@keyframes northstar-fade-home { from { opacity: 0; } to { opacity: 1; } } ` +
+      `@keyframes portalogia-fade-home { from { opacity: 0; } to { opacity: 1; } } ` +
         `html::after { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
-        `background: ${color}; animation: northstar-fade-home ${HOME_FADE_MS}ms ease-in forwards; }`,
+        `background: ${color}; animation: portalogia-fade-home ${HOME_FADE_MS}ms ease-in forwards; }`,
     )
       .then(() => setTimeout(go, HOME_FADE_MS))
       // A page that can't take it (it's mid-navigation) just goes home at once.
@@ -5247,9 +5264,9 @@ export class TabManager {
     this.splitSwapping = true;
     const color = nativeTheme.shouldUseDarkColors ? TAB_FADE_COLOR.dark : TAB_FADE_COLOR.light;
     const cover = (from: number, to: number, easing: string): string =>
-      `@keyframes northstar-split-swap-${from} { from { opacity: ${from}; } to { opacity: ${to}; } } ` +
+      `@keyframes portalogia-split-swap-${from} { from { opacity: ${from}; } to { opacity: ${to}; } } ` +
       `html::after { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
-      `background: ${color}; animation: northstar-split-swap-${from} ${SPLIT_SWAP_FADE_MS}ms ${easing} forwards; }`;
+      `background: ${color}; animation: portalogia-split-swap-${from} ${SPLIT_SWAP_FADE_MS}ms ${easing} forwards; }`;
     const contents = [split.primaryTabId, split.secondaryTabId]
       .map((tabId) => this.views.get(tabId)?.webContents)
       .filter((wc): wc is WebContents => wc !== undefined && !wc.isDestroyed());
@@ -7169,7 +7186,7 @@ export class TabManager {
    * Focuses the address bar now, and again the next time `tabId`'s own
    * `WebContentsView` grabs native OS focus for itself — which a freshly
    * created tab does on its own once it's attached and showing content
-   * (even the near-instant local `northstar://home` page), stealing focus
+   * (even the near-instant local `portalogia://home` page), stealing focus
    * back from the address bar a tick after we set it. The reassertion is
    * deferred a tick past that `focus` event rather than made from directly
    * inside its callback: Electron silently drops a same-tick re-entrant

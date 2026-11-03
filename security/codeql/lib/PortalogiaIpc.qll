@@ -1,8 +1,8 @@
 /**
- * Models Northstar's Electron IPC conventions so the queries in `queries/`
+ * Models Portalogia's Electron IPC conventions so the queries in `queries/`
  * can reason about them.
  *
- * Northstar registers handlers in two shapes:
+ * Portalogia registers handlers in two shapes:
  *
  *  1. Directly: `ipcMain.on|handle(channel, (event, rawRequest) => ...)`.
  *  2. Through a local wrapper (`handle(channel, schema, action)` in
@@ -18,7 +18,7 @@
 
 import javascript
 
-module NorthstarIpc {
+module PortalogiaIpc {
   /** The `ipcMain` object imported from `electron`. */
   DataFlow::SourceNode ipcMain() { result = DataFlow::moduleMember("electron", "ipcMain") }
 
@@ -241,7 +241,7 @@ module NorthstarIpc {
   module PayloadValidationFlow = DataFlow::Global<PayloadValidationConfig>;
 
   /**
-   * Names of Northstar's sender-authorisation helpers. Each of these either
+   * Names of Portalogia's sender-authorisation helpers. Each of these either
    * returns nothing for a sender that isn't allowed (chrome page vs. tab
    * page) or throws.
    */

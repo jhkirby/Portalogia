@@ -1,4 +1,4 @@
-/* Project: Northstar
+/* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
    Last Modified: 2026-10-29 */
@@ -744,10 +744,10 @@ body {
    Highlight API (see `usePdfFind`). Both are translucent: the page's own text
    is drawn on the canvas beneath this layer, and a solid highlight would hide
    it. The current match is just a stronger tint than the rest. */
-::highlight(northstar-pdf-find) {
+::highlight(portalogia-pdf-find) {
   background-color: rgba(var(--color-accent-rgb), 0.35);
 }
 
-::highlight(northstar-pdf-find-current) {
+::highlight(portalogia-pdf-find-current) {
   background-color: rgba(var(--color-accent-rgb), 0.75);
 }

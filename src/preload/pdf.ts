@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -9,7 +9,7 @@ import type {
   FindCommand,
   FindResult,
   MarkdownBacklink,
-  NorthstarPdfApi,
+  PortalogiaPdfApi,
   PdfOpenResult,
   PdfToolState,
 } from '@shared/ipc-contract';
@@ -171,7 +171,7 @@ ipcRenderer.on(PdfClosed, () => closeListeners.forEach((listener) => listener())
 // numbers in a DOM event cross into the page, where a preload object wouldn't.
 ipcRenderer.on('tab:pointer-position', (_event, point: { x: number; y: number } | null) => {
   window.dispatchEvent(
-    point ? new MouseEvent('northstar-pointer', { clientX: point.x, clientY: point.y }) : new Event('northstar-pointer-leave'),
+    point ? new MouseEvent('portalogia-pointer', { clientX: point.x, clientY: point.y }) : new Event('portalogia-pointer-leave'),
   );
 });
 
@@ -193,7 +193,7 @@ const PdfToggleSectionEditing = 'pdf:toggle-section-editing';
 const sectionEditingListeners = new Set<() => void>();
 ipcRenderer.on(PdfToggleSectionEditing, () => sectionEditingListeners.forEach((listener) => listener()));
 
-const api: NorthstarPdfApi = {
+const api: PortalogiaPdfApi = {
   onToggleSectionEditing: (listener) => {
     sectionEditingListeners.add(listener);
     return () => {
@@ -319,7 +319,7 @@ const api: NorthstarPdfApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarPdf', api satisfies NorthstarPdfApi);
+contextBridge.exposeInMainWorld('portalogiaPdf', api satisfies PortalogiaPdfApi);
 
 // Tells main whether the keyboard is in something you type into, so a shortcut that is also an editing key
 // (Ctrl+Left/Right jumping a word) can leave the caret alone instead of switching tabs. A `contenteditable`

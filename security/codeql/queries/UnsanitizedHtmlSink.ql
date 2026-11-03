@@ -11,7 +11,7 @@
  * @problem.severity warning
  * @security-severity 6.1
  * @precision low
- * @id northstar/unsanitized-html-sink
+ * @id portalogia/unsanitized-html-sink
  * @tags security
  *       external/cwe/cwe-79
  */

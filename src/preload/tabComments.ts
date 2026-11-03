@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -65,7 +65,7 @@ interface CommentPin {
   committed: boolean;
 }
 
-const ROOT_ID = 'northstar-comments-root';
+const ROOT_ID = 'portalogia-comments-root';
 const DOT_CLASS = 'ns-comment-dot';
 const BOX_CLASS = 'ns-comment-box';
 const INPUT_CLASS = 'ns-comment-input';
@@ -146,7 +146,7 @@ function commentCursorCss(color: RgbColor): string {
  *
  * `pointer-events: auto` on the dot/box is load-bearing, not decorative:
  * `pointer-events` is an inherited CSS property, so without overriding it
- * here, both would silently inherit `none` from `#northstar-comments-root`
+ * here, both would silently inherit `none` from `#portalogia-comments-root`
  * (deliberately `none` on the root itself, so its own zero-size box never
  * blocks clicks meant for the page beneath it — see `ensureRoot`). Inherited
  * onto the dot, that made a click on it hit-test straight through to
@@ -177,7 +177,7 @@ function buildUiStyleText(): string {
 export function ensureBaseStyle(): void {
   if (!baseStyleEl) {
     baseStyleEl = document.createElement('style');
-    baseStyleEl.setAttribute('data-northstar', 'comment-tool-base');
+    baseStyleEl.setAttribute('data-portalogia', 'comment-tool-base');
     baseStyleEl.textContent = `.${ANCHOR_CLASS} { display: inline-block; width: 0; height: 0; overflow: hidden; line-height: 0; }`;
   }
   if (!baseStyleEl.isConnected) {
@@ -189,7 +189,7 @@ export function ensureBaseStyle(): void {
 function updateCursorStyle(): void {
   if (!cursorStyleEl) {
     cursorStyleEl = document.createElement('style');
-    cursorStyleEl.setAttribute('data-northstar', 'comment-tool-cursor');
+    cursorStyleEl.setAttribute('data-portalogia', 'comment-tool-cursor');
   }
   cursorStyleEl.textContent = `html, html * { cursor: ${commentCursorCss(currentColor)} !important; user-select: none !important; }`;
   if (active) {

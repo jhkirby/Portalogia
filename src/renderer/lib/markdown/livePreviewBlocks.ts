@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-17
@@ -128,7 +128,7 @@ class RenderedBlockWidget extends WidgetType {
     this.loadPictures(block, view);
     const names = collectWikiLinks(block);
     if (names.length > 0) {
-      void window.northstarMarkdown.resolveLinks(names).then((resolved) => {
+      void window.portalogiaMarkdown.resolveLinks(names).then((resolved) => {
         if (block.isConnected) {
           markMissingWikiLinks(block, resolved);
         }
@@ -167,7 +167,7 @@ class RenderedBlockWidget extends WidgetType {
         show(cached);
         continue;
       }
-      void window.northstarMarkdown.readImage(src).then((url) => {
+      void window.portalogiaMarkdown.readImage(src).then((url) => {
         if (url) {
           imageCache.set(src, url);
         }
@@ -206,9 +206,9 @@ class RenderedBlockWidget extends WidgetType {
       const wiki = link.dataset['wikilink'];
       const href = link.getAttribute('href') ?? '';
       if (wiki !== undefined && !wiki.startsWith('#')) {
-        void window.northstarMarkdown.openLink('wiki', wiki, true);
+        void window.portalogiaMarkdown.openLink('wiki', wiki, true);
       } else if (href !== '' && !href.startsWith('#')) {
-        void window.northstarMarkdown.openLink('link', href, true);
+        void window.portalogiaMarkdown.openLink('link', href, true);
       }
       return;
     }

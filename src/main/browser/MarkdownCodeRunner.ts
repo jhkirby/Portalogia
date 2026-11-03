@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -234,7 +234,7 @@ export async function runCodeBlock(
   if (language.launchers.length === 0) {
     return notRun(`${language.names[0]} code can't be run on this system.`);
   }
-  const directory = join(tmpdir(), `northstar-run-${randomUUID()}`);
+  const directory = join(tmpdir(), `portalogia-run-${randomUUID()}`);
   try {
     // Owner-only, so on a shared POSIX /tmp no other user can read or swap the script before it runs.
     await mkdir(directory, { recursive: true, mode: 0o700 });

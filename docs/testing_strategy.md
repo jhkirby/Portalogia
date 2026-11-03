@@ -1,6 +1,6 @@
 # Testing Strategy
 
-This document describes how Northstar is tested: what each kind of test is
+This document describes how Portalogia is tested: what each kind of test is
 for, how to write one, and how tests trace back to features. The full list
 of tests is in [testing_log.md](testing_log.md), and the features they cover
 are in [features.md](features.md).

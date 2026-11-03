@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-19
@@ -43,7 +43,7 @@ export function useMarkdownPan({ enabled, bodyRef, scrollerOf }: UseMarkdownPanP
           const rect = scrollerOf()?.getBoundingClientRect();
           return rect ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
         },
-        warpPointer: (x, y) => window.northstarMarkdown.warpPointer(x, y),
+        warpPointer: (x, y) => window.portalogiaMarkdown.warpPointer(x, y),
         now: () => performance.now(),
       }),
     [scrollerOf],

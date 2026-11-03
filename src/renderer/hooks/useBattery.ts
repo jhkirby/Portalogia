@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -142,7 +142,7 @@ export function useBattery(): BatteryStatus | null {
         hasBattery ? { percent: Math.round(battery.level * 100), charging: battery.charging, secondsLeft } : null,
       );
     };
-    void window.northstar.getBatteryPresent().then((answer) => {
+    void window.portalogia.getBatteryPresent().then((answer) => {
       if (!cancelled && answer !== null) {
         present = answer;
         update();

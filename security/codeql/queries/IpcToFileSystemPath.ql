@@ -9,14 +9,14 @@
  * @problem.severity warning
  * @security-severity 6.5
  * @precision medium
- * @id northstar/ipc-to-filesystem-path
+ * @id portalogia/ipc-to-filesystem-path
  * @tags security
  *       external/cwe/cwe-22
  *       external/cwe/cwe-73
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
 /**
  * `history.hasMarkdownAccess(path)` / `hasPdfAccess(path)`: true means main
@@ -31,7 +31,7 @@ class KnownPathGuard extends DataFlow::MethodCallNode {
 }
 
 module Config implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node node) { node instanceof NorthstarIpc::IpcPayloadSource }
+  predicate isSource(DataFlow::Node node) { node instanceof PortalogiaIpc::IpcPayloadSource }
 
   predicate isSink(DataFlow::Node node) { node = any(FileSystemAccess fs).getAPathArgument() }
 
@@ -45,7 +45,7 @@ module Config implements DataFlow::ConfigSig {
   }
 
   predicate isAdditionalFlowStep(DataFlow::Node pred, DataFlow::Node succ) {
-    NorthstarIpc::ipcTaintStep(pred, succ)
+    PortalogiaIpc::ipcTaintStep(pred, succ)
   }
 }
 
@@ -53,7 +53,7 @@ module Flow = TaintTracking::Global<Config>;
 
 import Flow::PathGraph
 
-from Flow::PathNode source, Flow::PathNode sink, NorthstarIpc::IpcPayloadSource src
+from Flow::PathNode source, Flow::PathNode sink, PortalogiaIpc::IpcPayloadSource src
 where Flow::flowPath(source, sink) and src = source.getNode()
 select sink.getNode(), source, sink,
   "File path depends on $@ (IPC channel '" + src.getChannelName() + "').", src,

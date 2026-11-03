@@ -1,8 +1,8 @@
-name: northstar/security-queries
+name: portalogia/security-queries
 version: 0.1.0
-description: Project-specific CodeQL security queries for the Northstar Electron browser.
+description: Project-specific CodeQL security queries for the Portalogia Electron browser.
 library: false
 dependencies:
   codeql/javascript-all: "*"
 extractor: javascript
-defaultSuiteFile: suites/northstar-security.qls
+defaultSuiteFile: suites/portalogia-security.qls

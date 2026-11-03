@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -24,7 +24,7 @@ import {
   type NoteHeading,
   type NoteLink,
 } from '@shared/markdown/structure';
-import { applyLink, toggleWrap, wrapInBlock } from '../../lib/markdown/editorFormat';
+import { applyLink, insertTable, toggleWrap, wrapInBlock } from '../../lib/markdown/editorFormat';
 import { collectRenderedText, offsetOfPoint, rangeForOffsets, reanchorHighlight } from '../../lib/markdown/textOffsets';
 import { commentCursor, highlighterCursor, penCursor } from '../../lib/toolCursors';
 import {
@@ -34,7 +34,7 @@ import {
   type NoteStroke,
 } from './MarkdownAnnotationLayer';
 import { MarkdownEditor } from './MarkdownEditor';
-import { EditorContextMenu, LinkPopup } from './MarkdownEditorMenus';
+import { EditorContextMenu, LinkPopup, TablePopup } from './MarkdownEditorMenus';
 import { MarkdownReader } from './MarkdownReader';
 import { MarkdownSidePanel } from './MarkdownSidePanel';
 import { MarkdownStatusBar } from './MarkdownStatusBar';
@@ -45,7 +45,7 @@ import { FluidBackground } from '../FluidBackground';
 import { SidePanelToggle } from '../SidePanel';
 
 /** Name registered with `CSS.highlights` for the user's highlights, painted by `markdown-viewer.css`. */
-const HIGHLIGHT_NAME = 'northstar-md-highlight';
+const HIGHLIGHT_NAME = 'portalogia-md-highlight';
 
 /** How long typing must pause before the note is written to disk. */
 const SAVE_DEBOUNCE_MS = 250;
@@ -126,7 +126,7 @@ export function MarkdownViewer() {
   const [lineEnding, setLineEnding] = useState<'\n' | '\r\n'>('\n');
   const [panelOpen, setPanelOpen] = useState(false);
   // Ctrl+Alt+B (main's accelerator) shows or hides the panel too.
-  useEffect(() => window.northstarMarkdown.onToggleSidePanel(() => setPanelOpen((open) => !open)), []);
+  useEffect(() => window.portalogiaMarkdown.onToggleSidePanel(() => setPanelOpen((open) => !open)), []);
   const [strokes, setStrokes] = useState<readonly NoteStroke[]>(NO_STROKES);
   const [comments, setComments] = useState<readonly NoteComment[]>([]);
   const [highlights, setHighlights] = useState<readonly NoteHighlight[]>(NO_HIGHLIGHTS);
@@ -139,6 +139,8 @@ export function MarkdownViewer() {
   /** The editor's right-click menu while open, and the link box while open (with the range it will turn into a link). */
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [linkBox, setLinkBox] = useState<{ x: number; y: number; from: number; to: number; label: string } | null>(null);
+  /** The Table button's size box while open: where it sits, and where the caret was, for the table to go. */
+  const [tableBox, setTableBox] = useState<{ x: number; y: number; at: number } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -174,7 +176,7 @@ export function MarkdownViewer() {
     const pending = pendingSaveRef.current;
     if (pending !== null) {
       pendingSaveRef.current = null;
-      window.northstarMarkdown.save(pending, generationRef.current);
+      window.portalogiaMarkdown.save(pending, generationRef.current);
     }
   }, []);
 
@@ -210,7 +212,7 @@ export function MarkdownViewer() {
 
   useEffect(
     () =>
-      window.northstarMarkdown.onZoom((percent) => {
+      window.portalogiaMarkdown.onZoom((percent) => {
         document.documentElement.style.fontSize = `${(BASE_FONT_PX * percent) / 100}px`;
         setEmPx((BASE_FONT_PX * percent) / 100);
       }),
@@ -291,11 +293,11 @@ export function MarkdownViewer() {
     },
     [flushSave, startLoadBlur],
   );
-  useEffect(() => window.northstarMarkdown.onFile(loadNote), [loadNote]);
+  useEffect(() => window.portalogiaMarkdown.onFile(loadNote), [loadNote]);
 
   useEffect(
     () =>
-      window.northstarMarkdown.onClose(() => {
+      window.portalogiaMarkdown.onClose(() => {
         flushSave();
         // The note fades away first, then the empty page takes its place.
         window.clearTimeout(closeTimerRef.current);
@@ -332,7 +334,7 @@ export function MarkdownViewer() {
 
   useEffect(
     () =>
-      window.northstarMarkdown.onMode((next) => {
+      window.portalogiaMarkdown.onMode((next) => {
         beforeSwitch();
         setMode(next);
       }),
@@ -340,7 +342,7 @@ export function MarkdownViewer() {
   );
   useEffect(
     () =>
-      window.northstarMarkdown.onDisplay((next) => {
+      window.portalogiaMarkdown.onDisplay((next) => {
         beforeSwitch();
         setDisplay(next);
       }),
@@ -354,10 +356,10 @@ export function MarkdownViewer() {
     }
   }, [showReader]);
 
-  useEffect(() => window.northstarMarkdown.onTool(setTool), []);
+  useEffect(() => window.portalogiaMarkdown.onTool(setTool), []);
 
   const [pointerMode, setPointerMode] = useState<PointerMode>('select');
-  useEffect(() => window.northstarMarkdown.onPointerMode(setPointerMode), []);
+  useEffect(() => window.portalogiaMarkdown.onPointerMode(setPointerMode), []);
   // The reader's selection, for the status bar's counts: whatever is selected inside the drawn note.
   useEffect(() => {
     const onSelectionChange = (): void => {
@@ -373,7 +375,7 @@ export function MarkdownViewer() {
 
   /** The window's Focus Mode: the stat bar hides with the chrome. */
   const [focusMode, setFocusMode] = useState(false);
-  useEffect(() => window.northstarMarkdown.onFocusMode(setFocusMode), []);
+  useEffect(() => window.portalogiaMarkdown.onFocusMode(setFocusMode), []);
   const bodyRef = useRef<HTMLDivElement>(null);
   const pannerScroller = useCallback(
     (): HTMLElement | null => (showReader ? scrollRef.current : (editorViewRef.current?.scrollDOM ?? null)),
@@ -440,7 +442,7 @@ export function MarkdownViewer() {
     [queueSave],
   );
 
-  const listNotes = useCallback(() => window.northstarMarkdown.listNotes(), []);
+  const listNotes = useCallback(() => window.portalogiaMarkdown.listNotes(), []);
 
   /** Runs a formatting command on the editor — from a shortcut (via main) or the right-click menu. */
   const runFormat = useCallback((action: MarkdownFormatAction, at?: { x: number; y: number }): void => {
@@ -457,6 +459,12 @@ export function MarkdownViewer() {
       wrapInBlock(view, '$$');
     } else if (action === 'code') {
       wrapInBlock(view, '```');
+    } else if (action === 'table') {
+      // The size box opens under the caret, and remembers where the table goes.
+      const { head } = view.state.selection.main;
+      const coords = view.coordsAtPos(head);
+      setLinkBox(null);
+      setTableBox({ x: at?.x ?? coords?.left ?? 80, y: at ? at.y : (coords?.bottom ?? 80) + 6, at: head });
     } else {
       // The link box opens under the selection's end (or where the menu was), and remembers what to link.
       const { from, to, head } = view.state.selection.main;
@@ -470,12 +478,13 @@ export function MarkdownViewer() {
       });
     }
   }, []);
-  useEffect(() => window.northstarMarkdown.onFormat((action) => runFormat(action)), [runFormat]);
+  useEffect(() => window.portalogiaMarkdown.onFormat((action) => runFormat(action)), [runFormat]);
   // Leaving the editor closes whatever it opened.
   useEffect(() => {
     if (mode !== 'edit') {
       setMenu(null);
       setLinkBox(null);
+      setTableBox(null);
     }
   }, [mode]);
 
@@ -486,7 +495,7 @@ export function MarkdownViewer() {
     if (marksLoadedFor === 0 || marksLoadedFor !== generationRef.current) {
       return;
     }
-    window.northstarMarkdown.saveAnnotations(
+    window.portalogiaMarkdown.saveAnnotations(
       {
         strokes: strokes.map(({ id, points }) => ({ id, points: points.map(({ x, y }) => ({ x, y })) })),
         comments: comments.filter((c) => c.committed).map(({ id, x, y, text }) => ({ id, x, y, text })),
@@ -524,7 +533,7 @@ export function MarkdownViewer() {
 
   useEffect(
     () =>
-      window.northstarMarkdown.onUndo(() => {
+      window.portalogiaMarkdown.onUndo(() => {
         const previous = undoRef.current.pop();
         if (previous) {
           redoRef.current.push(baselineRef.current);
@@ -535,7 +544,7 @@ export function MarkdownViewer() {
   );
   useEffect(
     () =>
-      window.northstarMarkdown.onRedo(() => {
+      window.portalogiaMarkdown.onRedo(() => {
         const next = redoRef.current.pop();
         if (next) {
           undoRef.current.push(baselineRef.current);
@@ -548,7 +557,7 @@ export function MarkdownViewer() {
   // Revert Annotations.
   useEffect(
     () =>
-      window.northstarMarkdown.onClear(() => {
+      window.portalogiaMarkdown.onClear(() => {
         setStrokes(NO_STROKES);
         setComments([]);
         setHighlights(NO_HIGHLIGHTS);
@@ -808,7 +817,7 @@ export function MarkdownViewer() {
         }
         return;
       }
-      void window.northstarMarkdown.openLink(link.kind, link.target, newTab);
+      void window.portalogiaMarkdown.openLink(link.kind, link.target, newTab);
     },
     [goToHeading, structure],
   );
@@ -971,6 +980,23 @@ export function MarkdownViewer() {
                 }}
                 onCancel={() => {
                   setLinkBox(null);
+                  editorViewRef.current?.focus();
+                }}
+              />
+            )}
+            {tableBox && mode === 'edit' && (
+              <TablePopup
+                x={tableBox.x}
+                y={tableBox.y}
+                onSubmit={(rows, columns) => {
+                  const view = editorViewRef.current;
+                  if (view) {
+                    insertTable(view, tableBox.at, rows, columns);
+                  }
+                  setTableBox(null);
+                }}
+                onCancel={() => {
+                  setTableBox(null);
                   editorViewRef.current?.focus();
                 }}
               />

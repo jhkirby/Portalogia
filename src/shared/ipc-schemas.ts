@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -466,6 +466,12 @@ export const markdownRunCodeRequestSchema = z.object({
 export const markdownExportRequestSchema = z.object({
   id: z.string().min(1),
   format: z.enum(['pdf', 'md', 'txt']),
+});
+
+/** A formatting button pressed in the Tools sidebar for a Markdown tab: one of `MarkdownFormatAction`. */
+export const markdownApplyFormatRequestSchema = z.object({
+  id: z.string().min(1),
+  action: z.enum(['bold', 'italic', 'link', 'latex', 'code', 'table']),
 });
 
 export const markdownNavigateHistoryRequestSchema = z.object({

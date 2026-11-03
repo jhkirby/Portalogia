@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-24
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AddressSuggestionsSyncPayload, NorthstarAddressSuggestionsApi } from '@shared/ipc-contract';
+import type { AddressSuggestionsSyncPayload, PortalogiaAddressSuggestionsApi } from '@shared/ipc-contract';
 
 // Channel names copied as literals rather than imported from the `IpcChannel`
 // runtime object — see `src/preload/terminal.ts`'s own comment on this same
@@ -13,7 +13,7 @@ import type { AddressSuggestionsSyncPayload, NorthstarAddressSuggestionsApi } fr
 const AddressSuggestionsSync = 'address-suggestions:sync';
 const AddressSuggestionsSelect = 'address-suggestions:select';
 
-const api: NorthstarAddressSuggestionsApi = {
+const api: PortalogiaAddressSuggestionsApi = {
   onSync: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: AddressSuggestionsSyncPayload): void => {
       listener(payload);
@@ -24,4 +24,4 @@ const api: NorthstarAddressSuggestionsApi = {
   select: (index) => ipcRenderer.send(AddressSuggestionsSelect, index),
 };
 
-contextBridge.exposeInMainWorld('northstarSuggestions', api satisfies NorthstarAddressSuggestionsApi);
+contextBridge.exposeInMainWorld('portalogiaSuggestions', api satisfies PortalogiaAddressSuggestionsApi);

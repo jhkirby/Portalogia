@@ -1,11 +1,11 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
-import type { DropRegionRect, IpcResult } from '@shared/ipc-contract';
+import type { DropRegionRect, IpcResult, MarkdownFormatAction } from '@shared/ipc-contract';
 import type { BrowserState, MarkdownDisplay, PointerMode } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
@@ -41,7 +41,7 @@ const EMPTY_STATE: BrowserState = {
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
 function logIfFailed(result: IpcResult<unknown>): void {
   if (!result.ok) {
-    console.error(`[northstar] ${result.code}: ${result.message}`);
+    console.error(`[portalogia] ${result.code}: ${result.message}`);
   }
 }
 
@@ -60,7 +60,7 @@ export function useTabs() {
   useEffect(() => {
     let cancelled = false;
 
-    void window.northstar.getState().then((result) => {
+    void window.portalogia.getState().then((result) => {
       if (cancelled) {
         return;
       }
@@ -71,7 +71,7 @@ export function useTabs() {
       }
     });
 
-    return window.northstar.onStateChanged((next) => {
+    return window.portalogia.onStateChanged((next) => {
       if (!cancelled) {
         setState(next);
       }
@@ -97,278 +97,281 @@ export function useTabs() {
   );
 
   const createTab = useCallback((url?: string) => {
-    void window.northstar.createTab(url).then(logIfFailed);
+    void window.portalogia.createTab(url).then(logIfFailed);
   }, []);
   const closeTab = useCallback((id: string) => {
-    void window.northstar.closeTab(id).then(logIfFailed);
+    void window.portalogia.closeTab(id).then(logIfFailed);
   }, []);
   const toggleTabSelection = useCallback((id: string) => {
-    void window.northstar.toggleTabSelection(id).then(logIfFailed);
+    void window.portalogia.toggleTabSelection(id).then(logIfFailed);
   }, []);
   const selectTabRange = useCallback((id: string) => {
-    void window.northstar.selectTabRange(id).then(logIfFailed);
+    void window.portalogia.selectTabRange(id).then(logIfFailed);
   }, []);
   const toggleWorkspaceSelection = useCallback((id: string) => {
-    void window.northstar.toggleWorkspaceSelection(id).then(logIfFailed);
+    void window.portalogia.toggleWorkspaceSelection(id).then(logIfFailed);
   }, []);
   const selectWorkspaceRange = useCallback((id: string) => {
-    void window.northstar.selectWorkspaceRange(id).then(logIfFailed);
+    void window.portalogia.selectWorkspaceRange(id).then(logIfFailed);
   }, []);
   const activateTab = useCallback((id: string) => {
-    void window.northstar.activateTab(id).then(logIfFailed);
+    void window.portalogia.activateTab(id).then(logIfFailed);
   }, []);
   const moveTab = useCallback((id: string, beforeId: string | null) => {
-    void window.northstar.moveTab(id, beforeId).then(logIfFailed);
+    void window.portalogia.moveTab(id, beforeId).then(logIfFailed);
   }, []);
   const moveTabToWorkspace = useCallback((id: string, workspaceId: string) => {
-    void window.northstar.moveTabToWorkspace(id, workspaceId).then(logIfFailed);
+    void window.portalogia.moveTabToWorkspace(id, workspaceId).then(logIfFailed);
   }, []);
   const tearOffTab = useCallback((id: string, screenX: number, screenY: number, live?: boolean) => {
-    window.northstar.tearOffTab(id, screenX, screenY, live);
+    window.portalogia.tearOffTab(id, screenX, screenY, live);
   }, []);
   const reportDropRegions = useCallback((rects: readonly DropRegionRect[]) => {
-    window.northstar.reportDropRegions(rects);
+    window.portalogia.reportDropRegions(rects);
   }, []);
   const tearOffTabEnd = useCallback((id: string, accepted: boolean) => {
-    window.northstar.tearOffTabEnd(id, accepted);
+    window.portalogia.tearOffTabEnd(id, accepted);
   }, []);
   const navigate = useCallback((id: string, url: string) => {
-    void window.northstar.navigate(id, url).then(logIfFailed);
+    void window.portalogia.navigate(id, url).then(logIfFailed);
   }, []);
   const goBack = useCallback((id: string) => {
-    void window.northstar.goBack(id).then(logIfFailed);
+    void window.portalogia.goBack(id).then(logIfFailed);
   }, []);
   const goForward = useCallback((id: string) => {
-    void window.northstar.goForward(id).then(logIfFailed);
+    void window.portalogia.goForward(id).then(logIfFailed);
   }, []);
   const reload = useCallback((id: string) => {
-    void window.northstar.reload(id).then(logIfFailed);
+    void window.portalogia.reload(id).then(logIfFailed);
   }, []);
   const stop = useCallback((id: string) => {
-    void window.northstar.stop(id).then(logIfFailed);
+    void window.portalogia.stop(id).then(logIfFailed);
   }, []);
 
   const exportToPdf = useCallback((id: string) => {
-    void window.northstar.exportToPdf(id).then(logIfFailed);
+    void window.portalogia.exportToPdf(id).then(logIfFailed);
   }, []);
 
   const createPdfTab = useCallback(() => {
-    void window.northstar.createPdfTab().then(logIfFailed);
+    void window.portalogia.createPdfTab().then(logIfFailed);
   }, []);
 
   const createHistoryTab = useCallback(() => {
-    void window.northstar.createHistoryTab().then(logIfFailed);
+    void window.portalogia.createHistoryTab().then(logIfFailed);
   }, []);
 
   const createBookmarksTab = useCallback(() => {
-    void window.northstar.createBookmarksTab().then(logIfFailed);
+    void window.portalogia.createBookmarksTab().then(logIfFailed);
   }, []);
 
   const createSecretsTab = useCallback(() => {
-    void window.northstar.createSecretsTab().then(logIfFailed);
+    void window.portalogia.createSecretsTab().then(logIfFailed);
   }, []);
 
   const openPdfFile = useCallback((id: string) => {
-    void window.northstar.openPdfFile(id).then(logIfFailed);
+    void window.portalogia.openPdfFile(id).then(logIfFailed);
   }, []);
 
   const goToPdfPage = useCallback((id: string, page: number) => {
-    void window.northstar.goToPdfPage(id, page).then(logIfFailed);
+    void window.portalogia.goToPdfPage(id, page).then(logIfFailed);
   }, []);
 
   const setPointerMode = useCallback((id: string, mode: PointerMode) => {
-    void window.northstar.setPointerMode(id, mode).then(logIfFailed);
+    void window.portalogia.setPointerMode(id, mode).then(logIfFailed);
   }, []);
 
   const toggleEditMode = useCallback((id: string) => {
-    void window.northstar.toggleEditMode(id).then(logIfFailed);
+    void window.portalogia.toggleEditMode(id).then(logIfFailed);
   }, []);
 
   /** Resolves to an error message to show the user, or `null` on success. */
   const renamePdfFile = useCallback(async (id: string, name: string): Promise<string | null> => {
-    const result = await window.northstar.renamePdfFile(id, name);
+    const result = await window.portalogia.renamePdfFile(id, name);
     return result.ok ? null : result.message;
   }, []);
 
   const createMarkdownTab = useCallback(() => {
-    void window.northstar.createMarkdownTab().then(logIfFailed);
+    void window.portalogia.createMarkdownTab().then(logIfFailed);
   }, []);
   const openMarkdownFile = useCallback((id: string) => {
-    void window.northstar.openMarkdownFile(id).then(logIfFailed);
+    void window.portalogia.openMarkdownFile(id).then(logIfFailed);
   }, []);
   const newMarkdownFile = useCallback((id: string) => {
-    void window.northstar.newMarkdownFile(id).then(logIfFailed);
+    void window.portalogia.newMarkdownFile(id).then(logIfFailed);
   }, []);
   const closeMarkdownFile = useCallback((id: string) => {
-    void window.northstar.closeMarkdownFile(id).then(logIfFailed);
+    void window.portalogia.closeMarkdownFile(id).then(logIfFailed);
   }, []);
   /** Resolves to an error message to show the user, or `null` on success. */
   const renameMarkdownFile = useCallback(async (id: string, name: string): Promise<string | null> => {
-    const result = await window.northstar.renameMarkdownFile(id, name);
+    const result = await window.portalogia.renameMarkdownFile(id, name);
     return result.ok ? null : result.message;
   }, []);
   const setMarkdownMode = useCallback((id: string, mode: 'view' | 'edit') => {
-    void window.northstar.setMarkdownMode(id, mode).then(logIfFailed);
+    void window.portalogia.setMarkdownMode(id, mode).then(logIfFailed);
   }, []);
 
   const setMarkdownDisplay = useCallback((id: string, display: MarkdownDisplay) => {
-    void window.northstar.setMarkdownDisplay(id, display).then(logIfFailed);
+    void window.portalogia.setMarkdownDisplay(id, display).then(logIfFailed);
   }, []);
   const navigateMarkdownHistory = useCallback((id: string, direction: 1 | -1) => {
-    void window.northstar.navigateMarkdownHistory(id, direction).then(logIfFailed);
+    void window.portalogia.navigateMarkdownHistory(id, direction).then(logIfFailed);
+  }, []);
+  const formatMarkdown = useCallback((id: string, action: MarkdownFormatAction) => {
+    void window.portalogia.formatMarkdown(id, action).then(logIfFailed);
   }, []);
   const addMarkdownBookmark = useCallback((id: string, name: string) => {
-    void window.northstar.addMarkdownBookmark(id, name).then(logIfFailed);
+    void window.portalogia.addMarkdownBookmark(id, name).then(logIfFailed);
   }, []);
   const openMarkdownPath = useCallback((id: string, path: string) => {
-    window.northstar.openMarkdownPath(id, path);
+    window.portalogia.openMarkdownPath(id, path);
   }, []);
   const openMarkdownBookmark = useCallback((id: string, bookmarkId: string) => {
-    window.northstar.openMarkdownBookmark(id, bookmarkId);
+    window.portalogia.openMarkdownBookmark(id, bookmarkId);
   }, []);
 
   const createTerminalTab = useCallback(() => {
-    void window.northstar.createTerminalTab().then(logIfFailed);
+    void window.portalogia.createTerminalTab().then(logIfFailed);
   }, []);
 
   const revertPage = useCallback((id: string) => {
-    void window.northstar.revertPage(id).then(logIfFailed);
+    void window.portalogia.revertPage(id).then(logIfFailed);
   }, []);
 
   const createWorkspace = useCallback((name?: string) => {
-    void window.northstar.createWorkspace(name).then(logIfFailed);
+    void window.portalogia.createWorkspace(name).then(logIfFailed);
   }, []);
   const createWorkspaceWithTab = useCallback((tabId: string) => {
-    void window.northstar.createWorkspaceWithTab(tabId).then(logIfFailed);
+    void window.portalogia.createWorkspaceWithTab(tabId).then(logIfFailed);
   }, []);
   const switchWorkspace = useCallback((id: string) => {
-    void window.northstar.switchWorkspace(id).then(logIfFailed);
+    void window.portalogia.switchWorkspace(id).then(logIfFailed);
   }, []);
   const moveWorkspace = useCallback((id: string, beforeId: string | null) => {
-    void window.northstar.moveWorkspace(id, beforeId).then(logIfFailed);
+    void window.portalogia.moveWorkspace(id, beforeId).then(logIfFailed);
   }, []);
 
   const renameWorkspace = useCallback((id: string, name: string) => {
-    void window.northstar.renameWorkspace(id, name).then(logIfFailed);
+    void window.portalogia.renameWorkspace(id, name).then(logIfFailed);
   }, []);
   const updateWorkspace = useCallback((id: string, update: { name: string; color: string; icon: string }) => {
-    void window.northstar.updateWorkspace(id, update).then(logIfFailed);
+    void window.portalogia.updateWorkspace(id, update).then(logIfFailed);
   }, []);
   const saveWorkspaceImage = useCallback((workspaceId: string) => {
-    void window.northstar.saveWorkspaceImage(workspaceId).then(logIfFailed);
+    void window.portalogia.saveWorkspaceImage(workspaceId).then(logIfFailed);
   }, []);
   const openWorkspaceImage = useCallback((id: string) => {
-    void window.northstar.openWorkspaceImage(id).then(logIfFailed);
+    void window.portalogia.openWorkspaceImage(id).then(logIfFailed);
   }, []);
   const removeWorkspaceImage = useCallback((id: string) => {
-    void window.northstar.removeWorkspaceImage(id).then(logIfFailed);
+    void window.portalogia.removeWorkspaceImage(id).then(logIfFailed);
   }, []);
   const renameWorkspaceImage = useCallback((id: string, name: string) => {
-    void window.northstar.renameWorkspaceImage(id, name).then(logIfFailed);
+    void window.portalogia.renameWorkspaceImage(id, name).then(logIfFailed);
   }, []);
   const removeWorkspace = useCallback((id: string) => {
-    void window.northstar.removeWorkspace(id).then(logIfFailed);
+    void window.portalogia.removeWorkspace(id).then(logIfFailed);
   }, []);
   const openWorkspaceInNewWindow = useCallback(() => {
-    window.northstar.openWorkspaceInNewWindow();
+    window.portalogia.openWorkspaceInNewWindow();
   }, []);
 
   const addBookmark = useCallback((title: string, url: string) => {
-    void window.northstar.addBookmark(title, url).then(logIfFailed);
+    void window.portalogia.addBookmark(title, url).then(logIfFailed);
   }, []);
   const addPdfBookmark = useCallback((id: string, name: string) => {
-    void window.northstar.addPdfBookmark(id, name).then(logIfFailed);
+    void window.portalogia.addPdfBookmark(id, name).then(logIfFailed);
   }, []);
   const openPdfPath = useCallback((id: string, path: string) => {
-    window.northstar.openPdfPath(id, path);
+    window.portalogia.openPdfPath(id, path);
   }, []);
   const openPdfBookmark = useCallback((id: string, bookmarkId: string) => {
-    window.northstar.openPdfBookmark(id, bookmarkId);
+    window.portalogia.openPdfBookmark(id, bookmarkId);
   }, []);
   const toggleBookmark = useCallback((id: string) => {
-    void window.northstar.toggleBookmark(id).then(logIfFailed);
+    void window.portalogia.toggleBookmark(id).then(logIfFailed);
   }, []);
   const removeBookmark = useCallback((id: string) => {
-    void window.northstar.removeBookmark(id).then(logIfFailed);
+    void window.portalogia.removeBookmark(id).then(logIfFailed);
   }, []);
 
   const beginTabPreview = useCallback(async (id: string): Promise<string | null> => {
-    const result = await window.northstar.beginTabPreview(id);
+    const result = await window.portalogia.beginTabPreview(id);
     logIfFailed(result);
     return result.ok ? result.data : null;
   }, []);
   const endTabPreview = useCallback((id: string) => {
-    void window.northstar.endTabPreview(id).then(logIfFailed);
+    void window.portalogia.endTabPreview(id).then(logIfFailed);
   }, []);
 
   const enterSplitView = useCallback((secondaryId: string) => {
-    void window.northstar.enterSplitView(secondaryId).then(logIfFailed);
+    void window.portalogia.enterSplitView(secondaryId).then(logIfFailed);
   }, []);
   const exitSplitView = useCallback(() => {
-    void window.northstar.exitSplitView().then(logIfFailed);
+    void window.portalogia.exitSplitView().then(logIfFailed);
   }, []);
 
   const toggleSplitScreen = useCallback(() => {
-    void window.northstar.toggleSplitScreen().then(logIfFailed);
+    void window.portalogia.toggleSplitScreen().then(logIfFailed);
   }, []);
   const swapSplitSides = useCallback(() => {
-    void window.northstar.swapSplitSides().then(logIfFailed);
+    void window.portalogia.swapSplitSides().then(logIfFailed);
   }, []);
   const toggleToolsSidebar = useCallback(() => {
-    void window.northstar.toggleToolsSidebar().then(logIfFailed);
+    void window.portalogia.toggleToolsSidebar().then(logIfFailed);
   }, []);
   const toggleSidebar = useCallback(() => {
-    void window.northstar.toggleSidebar().then(logIfFailed);
+    void window.portalogia.toggleSidebar().then(logIfFailed);
   }, []);
 
   const setFocusMode = useCallback((enabled: boolean) => {
-    void window.northstar.setFocusMode(enabled).then(logIfFailed);
+    void window.portalogia.setFocusMode(enabled).then(logIfFailed);
   }, []);
 
   const setLaserPointer = useCallback((enabled: boolean) => {
-    void window.northstar.setLaserPointer(enabled).then(logIfFailed);
+    void window.portalogia.setLaserPointer(enabled).then(logIfFailed);
   }, []);
 
   const setHighlighter = useCallback((enabled: boolean) => {
-    void window.northstar.setHighlighter(enabled).then(logIfFailed);
+    void window.portalogia.setHighlighter(enabled).then(logIfFailed);
   }, []);
 
   const setCommentTool = useCallback((enabled: boolean) => {
-    void window.northstar.setCommentTool(enabled).then(logIfFailed);
+    void window.portalogia.setCommentTool(enabled).then(logIfFailed);
   }, []);
 
   const setTextTool = useCallback((enabled: boolean) => {
-    void window.northstar.setTextTool(enabled).then(logIfFailed);
+    void window.portalogia.setTextTool(enabled).then(logIfFailed);
   }, []);
 
   const setFind = useCallback((enabled: boolean) => {
-    void window.northstar.setFind(enabled).then(logIfFailed);
+    void window.portalogia.setFind(enabled).then(logIfFailed);
   }, []);
 
   const setCrop = useCallback((enabled: boolean) => {
-    void window.northstar.setCrop(enabled).then(logIfFailed);
+    void window.portalogia.setCrop(enabled).then(logIfFailed);
   }, []);
 
   const closePdfFile = useCallback((id: string) => {
-    void window.northstar.closePdfFile(id).then(logIfFailed);
+    void window.portalogia.closePdfFile(id).then(logIfFailed);
   }, []);
 
   const exportPdfFile = useCallback((id: string) => {
-    void window.northstar.exportPdfFile(id).then(logIfFailed);
+    void window.portalogia.exportPdfFile(id).then(logIfFailed);
   }, []);
 
   const setPen = useCallback((enabled: boolean) => {
-    void window.northstar.setPen(enabled).then(logIfFailed);
+    void window.portalogia.setPen(enabled).then(logIfFailed);
   }, []);
 
   const zoomIn = useCallback(() => {
-    void window.northstar.zoomIn().then(logIfFailed);
+    void window.portalogia.zoomIn().then(logIfFailed);
   }, []);
   const zoomOut = useCallback(() => {
-    void window.northstar.zoomOut().then(logIfFailed);
+    void window.portalogia.zoomOut().then(logIfFailed);
   }, []);
   const setZoom = useCallback((percent: number, tabId?: string) => {
-    void window.northstar.setZoom(percent, tabId).then(logIfFailed);
+    void window.portalogia.setZoom(percent, tabId).then(logIfFailed);
   }, []);
 
   return {
@@ -430,6 +433,7 @@ export function useTabs() {
     setMarkdownMode,
     setMarkdownDisplay,
     navigateMarkdownHistory,
+    formatMarkdown,
     addMarkdownBookmark,
     openMarkdownPath,
     openMarkdownBookmark,

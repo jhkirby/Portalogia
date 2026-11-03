@@ -1,4 +1,0 @@
-# Northstar's own security queries (everything under queries/).
-- description: Northstar project-specific security queries
-- queries: queries
-  from: northstar/security-queries

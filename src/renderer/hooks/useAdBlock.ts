@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -26,12 +26,12 @@ export function useAdBlock(): AdBlockState {
 
   useEffect(() => {
     let cancelled = false;
-    void window.northstar.getAdBlockState().then((initial) => {
+    void window.portalogia.getAdBlockState().then((initial) => {
       if (!cancelled && initial) {
         setState(initial);
       }
     });
-    const unsubscribe = window.northstar.onAdBlockState(setState);
+    const unsubscribe = window.portalogia.onAdBlockState(setState);
     return () => {
       cancelled = true;
       unsubscribe();

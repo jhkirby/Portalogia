@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -39,10 +39,10 @@ interface HighlightRecord {
 /** How many characters of surrounding context a quote captures on each side — enough to disambiguate most repeated phrases without the prefix/suffix search itself becoming expensive. */
 const QUOTE_CONTEXT_CHARS = 32;
 
-const MARK_CLASS = 'northstar-highlight';
+const MARK_CLASS = 'portalogia-highlight';
 const MARK_ID_ATTR = 'data-nsh-id';
 /** Applied to every mark sharing the currently-hovered highlight's id, lightening it — the visual cue that hovering it (and pressing D/Delete) would remove it. */
-const MARK_HOVER_CLASS = 'northstar-highlight--hovered';
+const MARK_HOVER_CLASS = 'portalogia-highlight--hovered';
 
 /** A finished highlight's own background alpha. */
 const MARK_ALPHA = 0.55;
@@ -50,7 +50,7 @@ const MARK_ALPHA = 0.55;
 const HOVER_OPACITY = 0.5;
 
 /** Name registered with `CSS.highlights` for the live drag preview — see `updateSelectionPreview`. */
-const PREVIEW_HIGHLIGHT_NAME = 'northstar-highlighter-preview';
+const PREVIEW_HIGHLIGHT_NAME = 'portalogia-highlighter-preview';
 
 let active = false;
 let currentColor: RgbColor = { r: 26, g: 115, b: 232 };
@@ -132,7 +132,7 @@ function setActive(nextActive: boolean, color: RgbColor): void {
   }
   if (!cursorStyleEl) {
     cursorStyleEl = document.createElement('style');
-    cursorStyleEl.setAttribute('data-northstar', 'highlighter-cursor');
+    cursorStyleEl.setAttribute('data-portalogia', 'highlighter-cursor');
   }
   cursorStyleEl.textContent = buildStyleRuleText(color);
   if (active) {
@@ -148,7 +148,7 @@ function setActive(nextActive: boolean, color: RgbColor): void {
   }
 }
 
-/** The registered `Highlight` object backing `::highlight(northstar-highlighter-preview)`, created on first use. */
+/** The registered `Highlight` object backing `::highlight(portalogia-highlighter-preview)`, created on first use. */
 function ensurePreviewHighlight(): Highlight {
   if (!previewHighlight) {
     previewHighlight = new Highlight();

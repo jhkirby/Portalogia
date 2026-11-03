@@ -10,7 +10,7 @@
  * @problem.severity recommendation
  * @security-severity 4.0
  * @precision high
- * @id northstar/weak-content-security-policy
+ * @id portalogia/weak-content-security-policy
  * @tags security
  *       external/cwe/cwe-693
  */

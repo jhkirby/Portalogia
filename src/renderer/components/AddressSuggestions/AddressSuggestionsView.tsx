@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -42,7 +42,7 @@ export function AddressSuggestionsView() {
   // Fades out as it closes (main keeps the view up meanwhile), as it fades in opening.
   const { shown: payload, closing } = useMenuFade(synced, (sync) => sync.open && sync.suggestions.length > 0);
 
-  useEffect(() => window.northstarSuggestions.onSync(setPayload), []);
+  useEffect(() => window.portalogiaSuggestions.onSync(setPayload), []);
 
   // The keyboard's row is kept in view: Up and Down walk the whole list, past what the view shows at once.
   const listRef = useRef<HTMLUListElement>(null);
@@ -78,7 +78,7 @@ export function AddressSuggestionsView() {
             // happens, same idiom the row's own hover-to-select already
             // relies on not fighting focus either.
             event.preventDefault();
-            window.northstarSuggestions.select(index);
+            window.portalogiaSuggestions.select(index);
           }}
         >
           {!isMenu && (item.kind === 'history' ? <HistoryIcon size={13} /> : <BookmarkStarIcon filled size={13} />)}

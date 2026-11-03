@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -51,7 +51,7 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
 
   // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps to the address bar on a browser tab; here it
   // lands in this box instead, since an empty PDF tab shows this where a browser tab shows that.
-  useEffect(() => window.northstar.onFocusAddressBar(() => inputRef.current?.focus()), []);
+  useEffect(() => window.portalogia.onFocusAddressBar(() => inputRef.current?.focus()), []);
 
   const query = draft.trim().toLowerCase();
   // Open as soon as the box is focused, like the address bar's once typing starts: with nothing typed yet, it lists
@@ -107,10 +107,10 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
   // Pushes the dropdown's current state to its overlay on every change. A row shows the file's path where a page shows its URL.
   useEffect(() => {
     if (!isDropdownOpen || !dropdownRect) {
-      window.northstar.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
+      window.portalogia.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
       return;
     }
-    window.northstar.syncAddressSuggestions({
+    window.portalogia.syncAddressSuggestions({
       open: true,
       rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
       suggestions,
@@ -121,7 +121,7 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
   // A tab switch while the dropdown is open skips straight to unmount, so close it here too.
   useEffect(
     () => () => {
-      window.northstar.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
+      window.portalogia.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
     },
     [],
   );
@@ -143,7 +143,7 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
 
   // A row clicked in the overlay's own view reports back by index; re-subscribed as the matches change so it resolves against the list actually shown.
   useEffect(() => {
-    return window.northstar.onAddressSuggestionSelected((index) => {
+    return window.portalogia.onAddressSuggestionSelected((index) => {
       const target = suggestions[index];
       if (target) {
         openSuggestion(target);

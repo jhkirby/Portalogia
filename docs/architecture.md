@@ -1,6 +1,6 @@
 # Architecture
 
-Northstar is a desktop web browser built on Electron, with a React interface
+Portalogia is a desktop web browser built on Electron, with a React interface
 written in TypeScript. This document covers how the code is put together:
 the processes, how the window is assembled, how the parts talk to each other,
 where state lives, and how the app is built. For the reasons behind the
@@ -25,7 +25,7 @@ interface, see [design.md](design.md). For the security model, see
 ## Process model
 
 Electron runs one **main process** (Node.js, full system access) and many
-**renderer processes** (Chromium pages, sandboxed). Northstar adds a firm
+**renderer processes** (Chromium pages, sandboxed). Portalogia adds a firm
 rule: **the main process owns all state and all privileged work.** Each
 renderer is a view that shows state and asks main to change it.
 
@@ -57,7 +57,7 @@ page's preload gives the page's own scripts no API at all.
 
 ## How a window is assembled
 
-A Northstar window is not one web page. It is a stack of native views.
+A Portalogia window is not one web page. It is a stack of native views.
 
 1. **The chrome page.** The `BrowserWindow`'s own `webContents` loads
    `src/renderer/index.html`. This is the React interface: tab
@@ -99,7 +99,7 @@ loads its own page with its own preload:
 
 | Kind | Page | Preload | What it is |
 | --- | --- | --- | --- |
-| `browser` | any http(s) site or `northstar://home` | `tabZoom` (also loads `tabHighlighter`, `tabComments`, `tabTextBoxes`, `tabPen`, `tabFind`) | A web page |
+| `browser` | any http(s) site or `portalogia://home` | `tabZoom` (also loads `tabHighlighter`, `tabComments`, `tabTextBoxes`, `tabPen`, `tabFind`) | A web page |
 | `terminal` | `terminal.html` | `terminal` | xterm.js connected to a node-pty shell |
 | `pdf` | `pdf.html` | `pdf` | pdf.js viewer with annotation layers |
 | `markdown` | `markdown.html` | `markdown` | Note reader and CodeMirror editor |
@@ -109,7 +109,7 @@ loads its own page with its own preload:
 
 | Path | Responsibility |
 | --- | --- |
-| `src/main/index.ts` | Composition root. Builds every shared store and controller, registers the `northstar:` protocol, the permission handler and all IPC, and creates windows. Also owns cross-window flows: tear-off, the hidden spare window, and opening a tab in a new window. |
+| `src/main/index.ts` | Composition root. Builds every shared store and controller, registers the `portalogia:` protocol, the permission handler and all IPC, and creates windows. Also owns cross-window flows: tear-off, the hidden spare window, and opening a tab in a new window. |
 | `src/main/windows/` | `MainWindow` creates a hardened `BrowserWindow`. The frameless window is moved by the OS, through the chrome's title-bar drag region. |
 | `src/main/browser/TabManager.ts` | One per window. The only code that calls Electron's tab-content APIs. Creates and mounts tab views, lays them out, runs navigation, wires per-tab events, routes keyboard shortcuts, and owns the window's overlays. |
 | `src/main/browser/SharedTabRegistry.ts` | The single set of tabs, workspaces and views shared by every window. `mountOwners` records which window is showing each tab, and `notifyAll()` asks every window to push fresh state. |
@@ -121,7 +121,7 @@ loads its own page with its own preload:
 | `src/main/terminal/` | `TerminalManager` owns node-pty processes. `shell.ts` picks the shell. |
 | `src/main/ipc/` | One `register*Ipc` module per area. `senderGuards.ts` checks who sent a message. |
 | `src/main/menu/buildMenu.ts` | The application menu and every keyboard shortcut. |
-| `src/main/protocol/homePage.ts` | The `northstar://home` page. |
+| `src/main/protocol/homePage.ts` | The `portalogia://home` page. |
 
 ## Shared code
 
@@ -129,7 +129,7 @@ loads its own page with its own preload:
 alias. It holds only code that is safe on both sides of the process boundary:
 
 - **`ipc-contract.ts`**: the `IpcChannel` names, every payload type, and the
-  `NorthstarApi` interface that the chrome's preload implements.
+  `PortalogiaApi` interface that the chrome's preload implements.
 - **`ipc-schemas.ts`**: a zod schema for every request main accepts.
 - **`tab-state.ts`**: `BrowserState`, the state main pushes to the chrome.
 - **`constants.ts`**: layout sizes, limits (8 tabs per workspace, 20
@@ -174,7 +174,7 @@ from `event.sender`:
 ## State flow
 
 ```
-user action ─► React handler ─► window.northstar.x() ─► IPC ─► TabManager
+user action ─► React handler ─► window.portalogia.x() ─► IPC ─► TabManager
                                                                    │
 React re-renders ◄─ useTabs ◄─ onStateChanged ◄─ TabsStateChanged ◄┘
 ```
@@ -210,7 +210,7 @@ shared: tabs, workspaces, bookmarks, history and annotations.
 
 ## Persistence
 
-All data lives as files in Electron's `userData` folder (`%APPDATA%\Northstar`
+All data lives as files in Electron's `userData` folder (`%APPDATA%\Portalogia`
 on Windows):
 
 | File | Store |
@@ -259,8 +259,8 @@ Windows packaging uses PowerShell scripts, not electron-builder:
 
 - `scripts/windows/build.ps1` typechecks, regenerates
   `license/THIRD_PARTY_NOTICES.txt`, builds, and assembles
-  `release/Northstar-win32-x64`. That folder holds Electron's runtime with
-  `electron.exe` renamed to `Northstar.exe`, the app in `resources/app`, and
+  `release/Portalogia-win32-x64`. That folder holds Electron's runtime with
+  `electron.exe` renamed to `Portalogia.exe`, the app in `resources/app`, and
   the license, privacy policy and notices next to the executable.
 - `install.ps1` and `uninstall.ps1` install for the current user, with no
   administrator rights needed.

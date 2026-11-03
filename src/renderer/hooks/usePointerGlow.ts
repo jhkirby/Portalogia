@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-24
@@ -40,7 +40,7 @@ export function usePointerGlow(areaRef: RefObject<HTMLElement | null>, fromMain 
     };
     const onPointerMove = (event: PointerEvent): void => moveTo(event.clientX, event.clientY);
     area.addEventListener('pointermove', onPointerMove);
-    const stopMain = fromMain ? window.northstar.onTitlebarPointerPosition(({ x, y }) => moveTo(x, y)) : () => {};
+    const stopMain = fromMain ? window.portalogia.onTitlebarPointerPosition(({ x, y }) => moveTo(x, y)) : () => {};
     return () => {
       cancelAnimationFrame(frame);
       area.removeEventListener('pointermove', onPointerMove);

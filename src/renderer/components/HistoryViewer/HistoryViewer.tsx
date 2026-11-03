@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -103,10 +103,10 @@ export function HistoryViewer() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLTableSectionElement>(null);
 
-  useEffect(() => window.northstarHistory.onEntries(setEntries), []);
-  useEffect(() => window.northstarHistory.onBookmarks(setBookmarks), []);
-  useEffect(() => window.northstarHistory.onQuery(setQuery), []);
-  useEffect(() => window.northstarHistory.onRange(setRange), []);
+  useEffect(() => window.portalogiaHistory.onEntries(setEntries), []);
+  useEffect(() => window.portalogiaHistory.onBookmarks(setBookmarks), []);
+  useEffect(() => window.portalogiaHistory.onQuery(setQuery), []);
+  useEffect(() => window.portalogiaHistory.onRange(setRange), []);
   useEffect(
     () => () => {
       if (copiedTimer.current !== null) {
@@ -212,7 +212,7 @@ export function HistoryViewer() {
 
   const copy = (entry: HistoryEntry): void => {
     // Main copies what it has stored for this id, not text from here.
-    window.northstarHistory.copyEntry(entry.id);
+    window.portalogiaHistory.copyEntry(entry.id);
     setCopiedId(entry.id);
     if (copiedTimer.current !== null) {
       window.clearTimeout(copiedTimer.current);
@@ -297,7 +297,7 @@ export function HistoryViewer() {
                           className="history__action-button hover-grow history__open"
                           aria-label={`Open ${entry.url} in a new tab`}
                           title="Open in new tab"
-                          onClick={() => window.northstarHistory.openEntryInNewTab(entry.id)}
+                          onClick={() => window.portalogiaHistory.openEntryInNewTab(entry.id)}
                         >
                           <OpenInNewTabIcon />
                         </button>
@@ -315,7 +315,7 @@ export function HistoryViewer() {
                           className="history__action-button hover-grow history__delete"
                           aria-label={`Delete ${entry.url} from history`}
                           title="Delete from history"
-                          onClick={() => window.northstarHistory.deleteEntry(entry.id)}
+                          onClick={() => window.portalogiaHistory.deleteEntry(entry.id)}
                         >
                           ×
                         </button>

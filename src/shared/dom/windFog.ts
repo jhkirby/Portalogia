@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 /** The id of the stylesheet `startWindFog` adds to a page once, however many fogs it starts there. */
-const STYLE_ID = 'northstar-wind-fog';
+const STYLE_ID = 'portalogia-wind-fog';
 
 /** How many wisps cross at once: enough that there's always one under way, few enough to stay faint. */
 const WISP_COUNT = 4;

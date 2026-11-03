@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -21,7 +21,7 @@ import { historyDeleteRequestSchema } from '@shared/ipc-schemas';
 import type { HistoryStore } from './HistoryStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 
-/** Only these are pages a person reached; the app's own `northstar://` and `file:` pages aren't history. */
+/** Only these are pages a person reached; the app's own `portalogia://` and `file:` pages aren't history. */
 const RECORDED_URLS = ['http://*/*', 'https://*/*'];
 
 /** Longest route kept: a URL can be arbitrarily long, and the table only has so much room. */

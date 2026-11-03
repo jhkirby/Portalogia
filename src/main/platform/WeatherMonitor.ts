@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -12,7 +12,7 @@ import type { WeatherState } from '@shared/ipc-contract';
  */
 const LOCATION_URLS = ['https://ipapi.co/json/', 'https://ipwho.is/'];
 /** Sent with every request: ipapi.co turns away Node's own default User-Agent more readily than a browser's. */
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Northstar';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Portalogia';
 /** Open-Meteo's current conditions. No key needed. */
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 
@@ -79,7 +79,7 @@ function numberField(value: unknown, key: string): number | null {
 
 /**
  * The outside temperature where the computer is, in whole degrees Fahrenheit,
- * for the titlebar (Northstar may cover the whole screen, taskbar included).
+ * for the titlebar (Portalogia may cover the whole screen, taskbar included).
  * The place comes from the public IP address (ipapi.co, or ipwho.is), which is close enough
  * for weather, and the temperature from Open-Meteo.
  */

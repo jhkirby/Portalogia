@@ -1,8 +1,8 @@
 import { _electron as electron } from 'playwright-core';
 import * as fs from 'node:fs';
 
-const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Northstar';
-const SHOT_DIR = 'C:\\Users\\joshu\\AppData\\Local\\Temp\\claude\\C--Users-joshu-OneDrive-Desktop-Software-Projects-Northstar\\cf081228-a0fe-4875-a0ea-5b591f1f51bc\\scratchpad\\shots';
+const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Portalogia';
+const SHOT_DIR = 'C:\\Users\\joshu\\AppData\\Local\\Temp\\claude\\C--Users-joshu-OneDrive-Desktop-Software-Projects-Portalogia\\cf081228-a0fe-4875-a0ea-5b591f1f51bc\\scratchpad\\shots';
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
 const app = await electron.launch({

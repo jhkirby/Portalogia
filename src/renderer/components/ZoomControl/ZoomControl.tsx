@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -52,7 +52,7 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
     }
   }, [percent]);
 
-  useEffect(() => window.northstar.onFocusZoom(() => inputRef.current?.focus()), []);
+  useEffect(() => window.portalogia.onFocusZoom(() => inputRef.current?.focus()), []);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>): void => {
     // Digits only, and capped at 3 of them — `ZOOM_PERCENT_MAX` (200) is

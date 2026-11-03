@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -32,11 +32,11 @@ export function BookmarksToolbar({ tab }: BookmarksToolbarProps) {
   useEffect(() => {
     queryByTab.set(tab.id, query);
     // The tab's page may have loaded after the text was last typed: tell it what this box holds.
-    window.northstar.setBookmarksQuery(tab.id, query);
+    window.portalogia.setBookmarksQuery(tab.id, query);
   }, [tab.id, query]);
 
   // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps here, as it does to the address bar on a browser tab.
-  useEffect(() => window.northstar.onFocusAddressBar(() => searchRef.current?.focus()), []);
+  useEffect(() => window.portalogia.onFocusAddressBar(() => searchRef.current?.focus()), []);
 
   // Types itself in once, then its trailing dots loop — the same animation as the address bar's.
   const placeholder = useAnimatedPlaceholder(query === '', 'Search bookmarks');
@@ -73,7 +73,7 @@ export function BookmarksToolbar({ tab }: BookmarksToolbarProps) {
             key={side}
             type="button"
             className={`bookmarks-toolbar__mode hover-grow${tab.mode === side ? ' bookmarks-toolbar__mode--active' : ''}`}
-            onClick={() => window.northstar.setBookmarksMode(tab.id, side)}
+            onClick={() => window.portalogia.setBookmarksMode(tab.id, side)}
             aria-pressed={tab.mode === side}
           >
             {side === 'view' ? 'View' : 'Edit'}

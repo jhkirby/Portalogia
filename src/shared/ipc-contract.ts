@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -229,6 +229,8 @@ export const IpcChannel = {
   MarkdownSetDisplay: 'markdown:set-display',
   /** Chrome → main: step the tab back or forward through the notes it followed links through. */
   MarkdownNavigateHistory: 'markdown:navigate-history',
+  /** Chrome → main: a formatting button in the Tools sidebar (bold, italic, link, LaTeX, code block, table). */
+  MarkdownApplyFormat: 'markdown:apply-format',
   /** Chrome → main: save a copy of the tab's note as a PDF, `.md` or `.txt`. */
   MarkdownExport: 'markdown:export',
   /** Chrome → main: open a bookmarked note in this tab (picked from the toolbar's Markdown search). */
@@ -333,7 +335,7 @@ export const IpcChannel = {
   ZoomSet: 'zoom:set',
   // Pushed from main straight to a tab's own `WebContentsView` (its
   // `tabZoom`/`terminal` preload, not the chrome) — not part of
-  // `NorthstarApi` since the chrome renderer never sends or receives it.
+  // `PortalogiaApi` since the chrome renderer never sends or receives it.
   // See `TabManager.applyZoom` for why this exists instead of just setting
   // `contents.zoomLevel` from main.
   ZoomApply: 'zoom:apply',
@@ -638,7 +640,7 @@ export interface ColorPickerColorChangedPayload {
  * Light/dark theme choice reported to main via `setNativeTheme`, kept in
  * sync with the renderer's own `useTheme` state (the source of truth) so
  * Electron's `nativeTheme.themeSource` — and anything that follows it,
- * like the `northstar://home` page's `prefers-color-scheme` styling —
+ * like the `portalogia://home` page's `prefers-color-scheme` styling —
  * matches the chrome instead of drifting to whatever the OS prefers.
  */
 export type ThemePreference = 'light' | 'dark';
@@ -655,11 +657,11 @@ export interface AdBlockState {
 
 /**
  * The API surface exposed to the renderer via `contextBridge`. Preload
- * implements this exactly (`satisfies NorthstarApi`); the renderer declares
- * `window.northstar` as this type. Keeping the interface here means both sides
+ * implements this exactly (`satisfies PortalogiaApi`); the renderer declares
+ * `window.portalogia` as this type. Keeping the interface here means both sides
  * of the bridge are checked against one definition.
  */
-export interface NorthstarApi {
+export interface PortalogiaApi {
   createTab(url?: string): Promise<IpcResult<BrowserState>>;
   closeTab(id: string): Promise<IpcResult<BrowserState>>;
   activateTab(id: string): Promise<IpcResult<BrowserState>>;
@@ -780,6 +782,8 @@ export interface NorthstarApi {
   setMarkdownDisplay(id: string, display: MarkdownDisplay): Promise<IpcResult<null>>;
   /** Steps a Markdown tab back (`-1`) or forward (`1`) through the notes it followed links through. */
   navigateMarkdownHistory(id: string, direction: 1 | -1): Promise<IpcResult<null>>;
+  /** Runs a formatting command on a Markdown tab's editor (the Tools sidebar's buttons), handing it the keyboard. */
+  formatMarkdown(id: string, action: MarkdownFormatAction): Promise<IpcResult<null>>;
   /** Saves a copy of the tab's note as a PDF, a `.md` file or a `.txt` file (asks where in a native dialog). */
   exportMarkdown(id: string, format: 'pdf' | 'md' | 'txt'): Promise<IpcResult<null>>;
   /** Opens a bookmarked note in a Markdown tab (picked from the toolbar's Markdown search). Fire-and-forget. */
@@ -1127,13 +1131,13 @@ export interface NorthstarApi {
 /**
  * The narrower API surface exposed to a terminal tab's own `WebContentsView`
  * (`src/preload/terminal.ts`, `terminal.html`) — deliberately separate from
- * `NorthstarApi`: this view renders a single tab's `xterm.js` instance and
+ * `PortalogiaApi`: this view renders a single tab's `xterm.js` instance and
  * nothing else, so its preload has no business seeing tab/workspace/bookmark
  * management at all, only the byte-level pty channels for the one terminal
  * it's dedicated to (its id comes from its own URL's `?id=` query, not this
  * API). See `TabManager.createTerminalTab` for how this view is created.
  */
-export interface NorthstarTerminalApi {
+export interface PortalogiaTerminalApi {
   /** Whether the window is in Focus Mode, now and whenever it changes: the stat bar hides then. */
   /** The tab's zoom level (Chromium's: 0 is 100%), for the terminal to size its text by; the page itself never zooms. */
   onZoom(listener: (level: number) => void): () => void;
@@ -1166,13 +1170,13 @@ export interface NorthstarTerminalApi {
 /**
  * The narrower API surface exposed to the address bar's own suggestions
  * overlay `WebContentsView` (`src/preload/suggestions.ts`,
- * `suggestions.html`) — like `NorthstarTerminalApi`, deliberately separate
- * from `NorthstarApi`: this view renders nothing but the dropdown's own
+ * `suggestions.html`) — like `PortalogiaTerminalApi`, deliberately separate
+ * from `PortalogiaApi`: this view renders nothing but the dropdown's own
  * row list, so its preload only needs the two channels that cross that
  * boundary. See `SuggestionsOverlay` for how this view is created and
  * positioned.
  */
-export interface NorthstarAddressSuggestionsApi {
+export interface PortalogiaAddressSuggestionsApi {
   /** Subscribes to the chrome's latest `syncAddressSuggestions` push. */
   onSync(listener: (payload: AddressSuggestionsSyncPayload) => void): () => void;
   /** Reports a row click back to the chrome's address bar, by index into the list it last synced. Fire-and-forget, same as `sendTerminalInput`. */
@@ -1182,13 +1186,13 @@ export interface NorthstarAddressSuggestionsApi {
 /**
  * The narrower API surface exposed to `TooltipOverlay`'s own
  * `WebContentsView` (`src/preload/tooltip.ts`, `tooltip.html`) — like
- * `NorthstarAddressSuggestionsApi`, this view renders nothing but the
+ * `PortalogiaAddressSuggestionsApi`, this view renders nothing but the
  * tooltip's own text, and unlike it, nothing ever needs to travel back the
  * other way (no clicks land on a tooltip), so this is just the one
  * channel. See `TooltipOverlay` for how this view is created and
  * positioned.
  */
-export interface NorthstarTooltipApi {
+export interface PortalogiaTooltipApi {
   /** Subscribes to the chrome's latest `syncTooltip` push. */
   onSync(listener: (payload: TooltipSyncPayload) => void): () => void;
 }
@@ -1196,18 +1200,18 @@ export interface NorthstarTooltipApi {
 /**
  * The narrower API surface exposed to `ColorPicker`'s own overlay
  * `WebContentsView` (`src/preload/colorPicker.ts`, `color-picker.html`) —
- * unlike `NorthstarTooltipApi` (nothing ever travels back) but like
- * `NorthstarAddressSuggestionsApi` (a click reports back by index), this
+ * unlike `PortalogiaTooltipApi` (nothing ever travels back) but like
+ * `PortalogiaAddressSuggestionsApi` (a click reports back by index), this
  * view owns real interaction of its own — dragging the ring/square,
  * typing a channel or hex value — so `changeColor` carries a full color
  * on every change rather than an index into a list the chrome already
  * has. See `ColorPickerOverlay` for how this view is created and
  * positioned.
  */
-export interface NorthstarColorPickerApi {
+export interface PortalogiaColorPickerApi {
   /** Subscribes to the chrome's latest `syncColorPicker` push. */
   onSync(listener: (payload: ColorPickerSyncPayload) => void): () => void;
-  /** Reports a new color back to the chrome's `ColorPicker` — see `ColorPickerColorChangedPayload`. Fire-and-forget, same as `select` on `NorthstarAddressSuggestionsApi`. */
+  /** Reports a new color back to the chrome's `ColorPicker` — see `ColorPickerColorChangedPayload`. Fire-and-forget, same as `select` on `PortalogiaAddressSuggestionsApi`. */
   changeColor(rgb: RGB, commit: boolean): void;
   /** Reports the overlay's own Escape keypress back to the chrome, which owns actually closing the dropdown. Fire-and-forget, same as `changeColor`. */
   requestClose(): void;
@@ -1219,7 +1223,7 @@ export interface NorthstarColorPickerApi {
  * Choosing a row is handled entirely in main, which runs the export and
  * tells the chrome to close the menu.
  */
-export interface NorthstarExportMenuApi {
+export interface PortalogiaExportMenuApi {
   /** Subscribes to the chrome's latest `syncExportMenu` push. */
   onSync(listener: (payload: ExportMenuSyncPayload) => void): () => void;
   /** Reports the chosen row. Fire-and-forget. */
@@ -1251,7 +1255,7 @@ export interface PdfToolState {
  * The narrower API surface exposed to a PDF tab's own `WebContentsView`
  * (`src/preload/pdf.ts`, `pdf.html`). See `TabManager.createPdfTab`.
  */
-export interface NorthstarPdfApi {
+export interface PortalogiaPdfApi {
   /** Subscribes to find-bar commands for this tab's document. */
   onFind(listener: (command: FindCommand) => void): () => void;
   /** Reports the result of the latest find command. Fire-and-forget. */
@@ -1334,8 +1338,11 @@ export interface MarkdownFileData {
   readonly reason: 'open' | 'reload' | 'created';
 }
 
-/** A formatting command for the editor: what the keyboard shortcuts and the right-click menu both ask for. */
-export type MarkdownFormatAction = 'bold' | 'italic' | 'link' | 'latex' | 'code';
+/**
+ * A formatting command for the editor: what the keyboard shortcuts, the right-click menu and the Tools sidebar's
+ * formatting buttons ask for. `'table'` opens a box for the table's size, then puts the table at the caret.
+ */
+export type MarkdownFormatAction = 'bold' | 'italic' | 'link' | 'latex' | 'code' | 'table';
 
 /** Which annotation tool the window has on for a Markdown tab. The tools are mutually exclusive in main. */
 export type MarkdownTool = 'none' | 'pen' | 'comment' | 'highlighter';
@@ -1373,7 +1380,7 @@ export interface MarkdownRunResult {
  * Every request a page makes is about its own tab only: main knows which
  * file that is, so the page never names a path to read, write or run.
  */
-export interface NorthstarMarkdownApi {
+export interface PortalogiaMarkdownApi {
   /** Subscribes to find-bar commands for this tab's note. */
   onFind(listener: (command: FindCommand) => void): () => void;
   /** Reports the result of the latest find command. Fire-and-forget. */
@@ -1479,7 +1486,7 @@ export type HistoryClearRange =
  * The narrower API surface exposed to a History tab's own `WebContentsView`
  * (`src/preload/history.ts`, `history.html`). See `TabManager.createHistoryTab`.
  */
-export interface NorthstarHistoryApi {
+export interface PortalogiaHistoryApi {
   /** Subscribes to the recorded visits (newest first); called immediately with the latest list if one already arrived. */
   onEntries(listener: (entries: readonly HistoryEntry[]) => void): () => void;
   /** Deletes one visit. Fire-and-forget. */
@@ -1508,7 +1515,7 @@ export type BookmarkUpdateResult =
  * The narrower API surface exposed to a Bookmarks tab's own `WebContentsView`
  * (`src/preload/bookmarks.ts`, `bookmarks.html`). See `TabManager.createBookmarksTab`.
  */
-export interface NorthstarBookmarksApi {
+export interface PortalogiaBookmarksApi {
   /** Subscribes to the saved bookmarks (in the order added); called immediately with the latest list if one already arrived. */
   onBookmarks(listener: (bookmarks: readonly BookmarkState[]) => void): () => void;
   /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
@@ -1557,7 +1564,7 @@ export type SecretUpdateResult =
  * The narrower API surface exposed to a Secrets tab's own `WebContentsView`
  * (`src/preload/secrets.ts`, `secrets.html`). See `TabManager.createSecretsTab`.
  */
-export interface NorthstarSecretsApi {
+export interface PortalogiaSecretsApi {
   /** Subscribes to the saved secrets (in the order saved); called immediately with the latest list if one already arrived. */
   onSecrets(listener: (secrets: readonly SecretState[]) => void): () => void;
   /** Subscribes to the search text the table filters by (typed in the chrome's toolbar); called immediately with the latest if one already arrived. */
@@ -1625,7 +1632,7 @@ export type SecretPromptAnswer =
   | { readonly id: string; readonly accept: false };
 
 /** The API exposed to the save prompt's own `WebContentsView` (`src/preload/secretPrompt.ts`, `secret-prompt.html`). */
-export interface NorthstarSecretPromptApi {
+export interface PortalogiaSecretPromptApi {
   /** Subscribes to the offer to show (`null` to clear); called immediately with the latest if one already arrived. */
   onOffer(listener: (offer: SecretPromptOffer | null) => void): () => void;
   /** Answers the offer. Fire-and-forget. */
@@ -1669,7 +1676,7 @@ export interface FindBarState {
  * The narrower API surface exposed to the find bar's own overlay view
  * (`src/preload/find.ts`, `find.html`). See `FindOverlay`.
  */
-export interface NorthstarFindApi {
+export interface PortalogiaFindApi {
   /** Subscribes to what the bar should show; called immediately with the latest if one already arrived. */
   onState(listener: (state: FindBarState) => void): () => void;
   /** Subscribes to "take the keyboard and select the query". */

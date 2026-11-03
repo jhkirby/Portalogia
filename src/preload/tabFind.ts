@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-05
@@ -41,8 +41,8 @@ interface Searched {
   readonly segments: readonly Segment[];
 }
 
-const ALL_NAME = 'northstar-find';
-const CURRENT_NAME = 'northstar-find-current';
+const ALL_NAME = 'portalogia-find';
+const CURRENT_NAME = 'portalogia-find-current';
 const STYLE_MARK = 'find-highlight';
 
 /** Elements whose text is never visible page content. */
@@ -67,7 +67,7 @@ function rgb(color: RgbColor, alpha = 1): string {
 function paintStyle(color: RgbColor): void {
   if (!styleEl) {
     styleEl = document.createElement('style');
-    styleEl.setAttribute('data-northstar', STYLE_MARK);
+    styleEl.setAttribute('data-portalogia', STYLE_MARK);
   }
   styleEl.textContent =
     `::highlight(${ALL_NAME}) { background-color: ${rgb(color, 0.4)}; color: inherit; } ` +
@@ -126,7 +126,7 @@ function collapseWhitespace(data: string): { readonly text: string; readonly map
  * order. Whitespace collapses the way the page renders it (so "hello
  * world" matches text the source breaks across lines), and a line break is
  * put between blocks (so a match can't run from one paragraph's end into the
- * next's start). The tool overlays this app adds to pages (`#northstar-…`)
+ * next's start). The tool overlays this app adds to pages (`#portalogia-…`)
  * are left out.
  */
 function indexPage(): Searched {
@@ -139,7 +139,7 @@ function indexPage(): Searched {
   const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       const parent = node.parentElement;
-      if (!parent || NON_CONTENT_TAGS.has(parent.tagName) || parent.closest('[id^="northstar-"]')) {
+      if (!parent || NON_CONTENT_TAGS.has(parent.tagName) || parent.closest('[id^="portalogia-"]')) {
         return NodeFilter.FILTER_REJECT;
       }
       return isVisible(parent, visibility) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;

@@ -1,6 +1,6 @@
-# Northstar User Guide
+# Portalogia User Guide
 
-Welcome to Northstar. Northstar is a web browser that also opens PDFs, keeps
+Welcome to Portalogia. Portalogia is a web browser that also opens PDFs, keeps
 notes and runs a terminal, all in one window. You can highlight, draw and
 comment on any of them, and organize everything into **workspaces**, one for
 each project.
@@ -11,7 +11,7 @@ the second. On a Mac, use **Cmd** instead of **Ctrl**.
 
 **Contents**
 
-1. [Installing Northstar](#1-installing-northstar)
+1. [Installing Portalogia](#1-installing-portalogia)
 2. [A tour of the window](#2-a-tour-of-the-window)
 3. [Browsing the web](#3-browsing-the-web)
 4. [Working with tabs](#4-working-with-tabs)
@@ -24,7 +24,7 @@ the second. On a Mac, use **Cmd** instead of **Ctrl**.
 11. [Highlighting, drawing and commenting](#11-highlighting-drawing-and-commenting)
 12. [Saving and exporting](#12-saving-and-exporting)
 13. [Blocking ads](#13-blocking-ads)
-14. [Making Northstar your own](#14-making-northstar-your-own)
+14. [Making Portalogia your own](#14-making-portalogia-your-own)
 15. [Using more than one window](#15-using-more-than-one-window)
 16. [The terminal (for advanced users)](#16-the-terminal-for-advanced-users)
 17. [Your privacy](#17-your-privacy)
@@ -33,20 +33,20 @@ the second. On a Mac, use **Cmd** instead of **Ctrl**.
 
 ---
 
-## 1. Installing Northstar
+## 1. Installing Portalogia
 
-Northstar currently comes as a Windows app. Whoever gave you Northstar will
-usually give you a folder named **Northstar-win32-x64**.
+Portalogia currently comes as a Windows app. Whoever gave you Portalogia will
+usually give you a folder named **Portalogia-win32-x64**.
 
 - **To run it without installing**, open that folder and double-click
-  **Northstar.exe**.
+  **Portalogia.exe**.
 - **To install it**, follow the installation steps in the project's
   [README](../README.md#building-and-installing-on-windows). Installing adds
-  Northstar to your Start Menu and to **Settings > Apps**, so you can
+  Portalogia to your Start Menu and to **Settings > Apps**, so you can
   uninstall it there later.
 
 The first time you open it, Windows may say *"Windows protected your PC"*.
-This appears because Northstar isn't signed by a registered publisher. If
+This appears because Portalogia isn't signed by a registered publisher. If
 you trust where your copy came from, click **More info**, then **Run
 anyway**.
 
@@ -91,10 +91,10 @@ anyway**.
    for (like `banana bread recipe`).
 3. Press **Enter**.
 
-Northstar works out whether you typed an address or a search. Searches go to
+Portalogia works out whether you typed an address or a search. Searches go to
 Google.
 
-As you type, Northstar suggests pages from your bookmarks and history. Click
+As you type, Portalogia suggests pages from your bookmarks and history. Click
 one, or use the arrow keys and press **Enter**.
 
 | To... | Click | Or press |
@@ -224,7 +224,7 @@ It's a list of the pages, PDFs and notes you've opened, newest first.
 ## 8. Finding words on a page
 
 Press **Ctrl+F**, or click the find button. Type the word you're looking for.
-Northstar shows how many times it appears and highlights each one.
+Portalogia shows how many times it appears and highlights each one.
 
 - Press **Enter** to go to the next match, or **Shift+Enter** for the
   previous one.
@@ -249,7 +249,7 @@ In a PDF tab you can:
   clicked.
 - **Mark it up.** Use the highlighter, pen, comments and text boxes (see
   [section 11](#11-highlighting-drawing-and-commenting)). Your marks are
-  saved by Northstar and never change the original file.
+  saved by Portalogia and never change the original file.
 - **Crop pages.** Press **Ctrl+Shift+X** and draw a box around the part you
   want to keep.
 - **Export a copy.** Click the export button to save a new PDF with your
@@ -267,7 +267,7 @@ In a PDF tab you can:
 
 ## 10. Writing notes
 
-Northstar can open and write **Markdown notes**. These are plain text files
+Portalogia can open and write **Markdown notes**. These are plain text files
 (ending in `.md`) with simple formatting. They work with other note apps
 such as Obsidian.
 
@@ -293,7 +293,7 @@ toolbar, or press **Ctrl+Shift+G**. Your changes are saved automatically.
 | `$x^2$` | a math formula |
 
 **Linking notes together.** Type `[[` and the name of another note to link to
-it. Northstar suggests note names as you type. Clicking a link opens that
+it. Portalogia suggests note names as you type. Clicking a link opens that
 note, and the **◀ ▶** buttons step back and forward through the notes you've
 followed. The side panel shows the note's outline and every other note that
 links to it.
@@ -303,7 +303,7 @@ Pictures from the internet appear as a placeholder until you click them.
 This stops a note from telling a website that you opened it.
 
 **Running code (advanced).** If a note contains a block of program code,
-Northstar can run it and show the result. It always asks you first and shows
+Portalogia can run it and show the result. It always asks you first and shows
 you the code. **Only run code from notes you trust**, because it runs on your
 computer.
 
@@ -358,7 +358,7 @@ Click the **export** button in the toolbar to save what you're looking at:
 
 ## 13. Blocking ads
 
-Northstar blocks ads and trackers automatically. The **shield** button in
+Portalogia blocks ads and trackers automatically. The **shield** button in
 the toolbar shows how many ads it has blocked on the current page.
 
 - **If a site doesn't work properly**, or you want to support it, click the
@@ -367,10 +367,10 @@ the toolbar shows how many ads it has blocked on the current page.
 - **To turn blocking off everywhere**, open the **View** menu and choose
   **Ad Blocker**.
 
-Northstar also removes common tracking codes (such as `utm_source=...`) from
+Portalogia also removes common tracking codes (such as `utm_source=...`) from
 web addresses.
 
-## 14. Making Northstar your own
+## 14. Making Portalogia your own
 
 | To... | Do this |
 | --- | --- |
@@ -403,16 +403,16 @@ the top to fill the whole screen.
 
 Press **Ctrl+>** (Ctrl+Shift+.), or click the terminal button, to open a
 command-line terminal in a tab. It's a normal terminal on your own computer,
-the same as one opened outside Northstar. If you don't already use a
+the same as one opened outside Portalogia. If you don't already use a
 terminal, you can ignore this feature.
 
 ## 17. Your privacy
 
-- Northstar has **no accounts, no tracking and no data collection**.
+- Portalogia has **no accounts, no tracking and no data collection**.
   Nothing is sent to the people who make it.
 - Your history, bookmarks, tabs and marks are stored **only on your
   computer**.
-- Websites can't use your camera, microphone or location. Northstar turns
+- Websites can't use your camera, microphone or location. Portalogia turns
   all those requests down.
 
 The full details are in the [privacy policy](privacy.md).
@@ -505,7 +505,7 @@ On a Mac, use **Cmd** in place of **Ctrl**.
 ## 19. Troubleshooting
 
 **Windows says "Windows protected your PC".**
-Northstar isn't signed by a registered publisher yet. Click **More info**,
+Portalogia isn't signed by a registered publisher yet. Click **More info**,
 then **Run anyway**, but only if you trust where your copy came from.
 
 **A website looks broken or won't load something.**
@@ -513,7 +513,7 @@ The ad blocker may be blocking part of it. Click the shield button to allow
 ads on that site, then reload with **Ctrl+R**.
 
 **A website asks for my camera or location, and nothing happens.**
-Northstar doesn't allow websites to use your camera, microphone or location.
+Portalogia doesn't allow websites to use your camera, microphone or location.
 
 **I can't open another tab.**
 The workspace has reached its limit of 8 tabs. Close one, or start a new
@@ -525,7 +525,7 @@ You're probably in Focus Mode. Press **Escape** or **Ctrl+Shift+F**.
 **A keyboard shortcut does nothing.**
 You may be typing in a text box. Press **Escape** (or **Shift+Escape**) first, then try again.
 
-**I want to erase everything Northstar has saved.**
-Close Northstar, then delete the folder `%APPDATA%\Northstar`. Paste that
+**I want to erase everything Portalogia has saved.**
+Close Portalogia, then delete the folder `%APPDATA%\Portalogia`. Paste that
 into the File Explorer address bar to find it. Your own notes and PDFs are
 kept wherever you saved them, and aren't deleted.

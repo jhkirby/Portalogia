@@ -6,15 +6,15 @@
  * @kind problem
  * @problem.severity recommendation
  * @precision high
- * @id northstar/ipc-attack-surface
+ * @id portalogia/ipc-attack-surface
  * @tags security
  *       inventory
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
-from NorthstarIpc::IpcHandler handler, string shape, string auth
+from PortalogiaIpc::IpcHandler handler, string shape, string auth
 where
   not handler.isForwarder() and
   (

@@ -2,23 +2,23 @@
  * @name IPC handler does not authorise its sender
  * @description An `ipcMain` handler that never checks `event.sender` accepts the
  *              message from any renderer, including a compromised web tab. In
- *              Northstar every web page is a renderer on the same `ipcMain`, so
+ *              Portalogia every web page is a renderer on the same `ipcMain`, so
  *              a handler must call a sender guard (`chromeWindowOf`,
  *              `isChromeSender`, `owns*Contents`, ...) before acting.
  * @kind problem
  * @problem.severity warning
  * @security-severity 7.5
  * @precision medium
- * @id northstar/ipc-handler-missing-sender-check
+ * @id portalogia/ipc-handler-missing-sender-check
  * @tags security
  *       external/cwe/cwe-284
  *       external/cwe/cwe-863
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
-from NorthstarIpc::IpcHandler handler, string channel, string problem
+from PortalogiaIpc::IpcHandler handler, string channel, string problem
 where
   channel = handler.getChannelName() and
   not handler.isForwarder() and

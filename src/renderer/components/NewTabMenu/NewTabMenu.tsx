@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -33,7 +33,7 @@ export function NewTabMenu({ style }: NewTabMenuProps) {
 
   useEffect(() => {
     if (!isOpen) {
-      window.northstar.syncNewTabMenu({ kind: 'new-tab', open: false, rect: null, canExportDocuments: false, markdown: false });
+      window.portalogia.syncNewTabMenu({ kind: 'new-tab', open: false, rect: null, canExportDocuments: false, markdown: false });
       return undefined;
     }
     const updateSync = (): void => {
@@ -43,7 +43,7 @@ export function NewTabMenu({ style }: NewTabMenuProps) {
       }
       // Below the button, its left edge with the button's, moved in from the window's right edge if it would cross it.
       const left = Math.max(EDGE_MARGIN_PX, Math.min(rect.left, window.innerWidth - NEW_TAB_MENU_WIDTH_PX - EDGE_MARGIN_PX));
-      window.northstar.syncNewTabMenu({
+      window.portalogia.syncNewTabMenu({
         kind: 'new-tab',
         open: true,
         rect: { top: rect.bottom + DROPDOWN_GAP_PX, left },
@@ -59,12 +59,12 @@ export function NewTabMenu({ style }: NewTabMenuProps) {
   // Closed on unmount too (the "+" goes at the tab limit), so the menu isn't left over the page.
   useEffect(
     () => () =>
-      window.northstar.syncNewTabMenu({ kind: 'new-tab', open: false, rect: null, canExportDocuments: false, markdown: false }),
+      window.portalogia.syncNewTabMenu({ kind: 'new-tab', open: false, rect: null, canExportDocuments: false, markdown: false }),
     [],
   );
 
   // A row picked, Escape in the menu, or a click on the page.
-  useEffect(() => window.northstar.onNewTabMenuCloseRequested(() => setIsOpen(false)), []);
+  useEffect(() => window.portalogia.onNewTabMenuCloseRequested(() => setIsOpen(false)), []);
 
   // Escape and clicks elsewhere while the keyboard is still in the chrome.
   useEffect(() => {

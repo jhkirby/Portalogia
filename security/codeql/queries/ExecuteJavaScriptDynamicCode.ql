@@ -9,7 +9,7 @@
  * @problem.severity warning
  * @security-severity 6.0
  * @precision medium
- * @id northstar/execute-javascript-dynamic-code
+ * @id portalogia/execute-javascript-dynamic-code
  * @tags security
  *       external/cwe/cwe-94
  *       external/cwe/cwe-95

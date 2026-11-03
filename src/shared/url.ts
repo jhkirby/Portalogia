@@ -1,12 +1,12 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-12
 
-import { NORTHSTAR_SCHEME, SEARCH_URL_TEMPLATE } from '@shared/constants';
+import { PORTALOGIA_SCHEME, SEARCH_URL_TEMPLATE } from '@shared/constants';
 
 /** Schemes a tab is ever allowed to navigate to. Everything else is refused. */
-const ALLOWED_NAVIGATION_SCHEMES = new Set(['http:', 'https:', 'about:', `${NORTHSTAR_SCHEME}:`]);
+const ALLOWED_NAVIGATION_SCHEMES = new Set(['http:', 'https:', 'about:', `${PORTALOGIA_SCHEME}:`]);
 
 /**
  * Builds the candidate URL `normalizeUrlOrSearch`/`looksLikeUrl` would
@@ -21,7 +21,7 @@ function buildCandidateUrl(trimmed: string): string {
 
 /**
  * Decides whether free-text input should be treated as a URL to navigate to
- * (true) or a search query (false). Northstar's own `northstar:` pages always count
+ * (true) or a search query (false). Portalogia's own `portalogia:` pages always count
  * as a URL; anything else must parse and have a host that looks real
  * (a dot-separated domain, or `localhost`).
  * @param input Raw text typed into the address bar.
@@ -34,7 +34,7 @@ export function looksLikeUrl(input: string): boolean {
 
   try {
     const url = new URL(buildCandidateUrl(trimmed));
-    if (url.protocol === `${NORTHSTAR_SCHEME}:`) {
+    if (url.protocol === `${PORTALOGIA_SCHEME}:`) {
       return true;
     }
     return url.hostname === 'localhost' || /\.[a-z]{2,}$/i.test(url.hostname);

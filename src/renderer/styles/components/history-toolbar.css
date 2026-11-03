@@ -1,4 +1,4 @@
-/* Project: Northstar
+/* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
    Last Modified: 2026-10-29 */
@@ -38,7 +38,9 @@
 .history-toolbar__search,
 .history-toolbar__unit {
   /* Its hover and focus borders fade in and out rather than switching at once. */
-  transition: border-color 180ms ease-out;
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 180ms ease-out;
 }
 
 .history-toolbar__search {
@@ -111,6 +113,11 @@
 .history-toolbar__unit[aria-expanded='true'] {
   outline: none;
   border-color: var(--color-address-border-focus);
+}
+
+/* The search box's border glows while it has the caret, as every search field's does. */
+.history-toolbar__search:focus {
+  box-shadow: var(--shadow-focus-glow);
 }
 
 /* A number the unit doesn't allow (empty, or past its limit). */

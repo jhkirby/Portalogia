@@ -1,5 +1,5 @@
 {
-  "name": "northstar-browser",
+  "name": "portalogia-browser",
   "version": "0.1.0",
   "description": "A Chromium-based desktop browser built with Electron, React, and TypeScript.",
   "author": "Joshua H. Kirby",

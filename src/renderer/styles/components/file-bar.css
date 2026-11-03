@@ -1,4 +1,4 @@
-/* Project: Northstar
+/* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
    Last Modified: 2026-10-29 */
@@ -52,4 +52,6 @@
 .file-bar .pdf-search__input:hover,
 .file-bar .pdf-search__input:focus {
   border: none;
+  /* The pill around it glows instead (`.address-bar:focus-within`). */
+  box-shadow: none;
 }

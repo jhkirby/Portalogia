@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -60,7 +60,7 @@ export function parseWlanInterfaces(output: string): WifiStatus {
 
 /**
  * Follows the computer's Wi-Fi connection, for the titlebar's status icon
- * (Northstar may cover the whole screen, taskbar included). Windows offers no
+ * (Portalogia may cover the whole screen, taskbar included). Windows offers no
  * change event to Node, so it reads `netsh` every `POLL_MS` and reports only
  * when what it read differs from last time.
  */

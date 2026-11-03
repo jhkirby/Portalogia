@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -12,7 +12,7 @@ import { test, expect, findTabPage, openInActiveTab, openNote } from './fixtures
 let dir = '';
 
 test.beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'northstar-stat-bars-'));
+  dir = mkdtempSync(join(tmpdir(), 'portalogia-stat-bars-'));
 });
 
 test.afterEach(() => {
@@ -70,7 +70,7 @@ test.describe('the note stat bar', () => {
     await expect(bar).not.toContainText('bytes');
     await expect(bar.locator('.md-status__selection')).toHaveCount(0);
 
-    await window.getByRole('group', { name: 'View or edit' }).getByRole('button', { name: 'Edit' }).click();
+    await window.getByRole('button', { name: 'Switch to editing' }).click();
     await note.locator('.cm-content').click();
     await note.keyboard.press('Control+a');
     const selection = bar.locator('.md-status__selection');
@@ -102,7 +102,7 @@ test.describe('the PDF stat bar', () => {
     await electronApp.evaluate(({ dialog }, path) => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog;
     }, pdfPath);
-    await window.evaluate(() => window.northstar.createPdfTab());
+    await window.evaluate(() => window.portalogia.createPdfTab());
     await window.locator('.pdf-toolbar').getByRole('button', { name: /^Open/ }).first().click();
 
     const pdf = await findTabPage(electronApp, 'pdf.html');

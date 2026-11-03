@@ -1,26 +1,26 @@
-# Project: Northstar
+# Project: Portalogia
 # Owner: Joshua H. Kirby
 # Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 # Last Modified: 2026-10-06
 
 <#
 .SYNOPSIS
-    Removes a Northstar install made by install.ps1.
+    Removes a Portalogia install made by install.ps1.
 
 .DESCRIPTION
     install.ps1 copies this script into the install folder, and Settings >
     Apps > Installed apps runs it from there. It removes the program files,
     the shortcuts, and the Installed apps entry.
 
-    Browsing data (history, bookmarks, sessions, notes) in %APPDATA%\Northstar
+    Browsing data (history, bookmarks, sessions, notes) in %APPDATA%\Portalogia
     is kept unless -RemoveUserData is passed.
 
 .PARAMETER InstallDir
     The install to remove. Defaults to the folder this script runs from when
-    that is an install, else %LOCALAPPDATA%\Programs\Northstar.
+    that is an install, else %LOCALAPPDATA%\Programs\Portalogia.
 
 .PARAMETER RemoveUserData
-    Also delete %APPDATA%\Northstar.
+    Also delete %APPDATA%\Portalogia.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\windows\uninstall.ps1
@@ -34,7 +34,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$appName = 'Northstar'
+$appName = 'Portalogia'
 $exeName = "$appName.exe"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appName"
 $userDataDir = Join-Path $env:APPDATA $appName
@@ -57,7 +57,7 @@ if ($running) {
 
 if (Test-Path $InstallDir) {
     # Same guard as the installer: never recursively delete a folder that
-    # isn't a Northstar install.
+    # isn't a Portalogia install.
     if (-not (Test-Path (Join-Path $InstallDir $exeName))) {
         throw "$InstallDir is not a $appName install."
     }

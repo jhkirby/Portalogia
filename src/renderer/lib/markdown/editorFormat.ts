@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -114,5 +114,55 @@ export function linkMarkdown(target: string, label: string): string {
 export function applyLink(view: EditorView, from: number, to: number, target: string): void {
   const insert = linkMarkdown(target, view.state.doc.sliceString(from, to));
   view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length } });
+  view.focus();
+}
+
+/** The most rows and columns the table box takes: bigger is a spreadsheet's job, and the Markdown gets unreadable. */
+export const TABLE_MAX_ROWS = 50;
+export const TABLE_MAX_COLUMNS = 20;
+
+/**
+ * The Markdown for an empty table: a header row of "Column 1", "Column 2"…, the `---` row under it, then empty rows.
+ * @param rows How many rows, the header row included (at least 1).
+ * @param columns How many columns (at least 1).
+ */
+export function tableMarkdown(rows: number, columns: number): string {
+  const row = (cells: readonly string[]): string => `| ${cells.join(' | ')} |`;
+  const header = Array.from({ length: columns }, (_, index) => `Column ${index + 1}`);
+  const lines = [row(header), row(header.map(() => '---'))];
+  for (let index = 1; index < rows; index += 1) {
+    lines.push(row(header.map(() => ' ')));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Puts an empty table at the caret: on the caret's line if it's blank, otherwise on a new line after it. A blank line
+ * sets it off from the text before and after, which Markdown needs to read it as a table rather than as part of a
+ * paragraph. The first header cell's name is left selected, ready to type over.
+ * @param at Where the caret was when the table box opened.
+ * @param rows How many rows, the header row included.
+ * @param columns How many columns.
+ */
+export function insertTable(view: EditorView, at: number, rows: number, columns: number): void {
+  const doc = view.state.doc;
+  const line = doc.lineAt(Math.min(at, doc.length));
+  const blank = line.text.trim() === '';
+  // A blank line is replaced by the table; any other is kept, and the table goes after it.
+  const from = blank ? line.from : line.to;
+  const to = line.to;
+  const previous = blank ? (line.number > 1 ? doc.line(line.number - 1).text : '') : line.text;
+  const next = line.number < doc.lines ? doc.line(line.number + 1).text : null;
+  // A blank line before, unless the table starts the note or already follows one; one after, unless one follows.
+  const before = blank ? (previous.trim() === '' ? '' : '\n') : '\n\n';
+  const after = next === null ? '\n' : next.trim() === '' ? '' : '\n';
+  const table = tableMarkdown(Math.max(1, rows), Math.max(1, columns));
+  const insert = `${before}${table}${after}`;
+  const firstCell = from + before.length + 2;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: firstCell, head: firstCell + 'Column 1'.length },
+    scrollIntoView: true,
+  });
   view.focus();
 }

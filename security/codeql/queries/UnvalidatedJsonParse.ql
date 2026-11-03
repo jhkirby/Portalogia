@@ -10,14 +10,14 @@
  * @problem.severity recommendation
  * @security-severity 3.5
  * @precision medium
- * @id northstar/unvalidated-json-parse
+ * @id portalogia/unvalidated-json-parse
  * @tags security
  *       external/cwe/cwe-502
  *       external/cwe/cwe-20
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
 DataFlow::CallNode jsonParse() { result = DataFlow::globalVarRef("JSON").getAMemberCall("parse") }
 
@@ -26,7 +26,7 @@ module Config implements DataFlow::ConfigSig {
 
   predicate isSink(DataFlow::Node node) {
     exists(DataFlow::MethodCallNode call |
-      NorthstarIpc::isSchemaValidation(call) and node = call.getArgument(0)
+      PortalogiaIpc::isSchemaValidation(call) and node = call.getArgument(0)
     )
   }
 }

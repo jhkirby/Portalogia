@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -112,8 +112,8 @@ export const SIDEBAR_TOGGLE_DURATION_MS = 220;
  */
 export const SPLIT_ANIMATION_MS = 320;
 
-/** Internal scheme serving Northstar's own pages (currently just the home page). */
-export const NORTHSTAR_SCHEME = 'northstar';
+/** Internal scheme serving Portalogia's own pages (currently just the home page). */
+export const PORTALOGIA_SCHEME = 'portalogia';
 
 /**
  * The browser's home page and every new tab's starting page — a local page
@@ -124,7 +124,7 @@ export const NORTHSTAR_SCHEME = 'northstar';
  * a navigated tab's reported URL (e.g. "is this tab on the home page?")
  * don't have to special-case the slash.
  */
-export const HOME_URL = 'northstar://home/';
+export const HOME_URL = 'portalogia://home/';
 
 /** Default page loaded into a freshly created tab. */
 export const DEFAULT_TAB_URL = HOME_URL;
@@ -287,7 +287,7 @@ export const MENU_FADE_MS = 150;
  * with `false` it goes back to the screen layout — same idea as
  * `TERMINAL_PREPARE_PRINT_GLOBAL`.
  */
-export const MARKDOWN_PRINT_GLOBAL = '__northstarMarkdownPrint';
+export const MARKDOWN_PRINT_GLOBAL = '__portalogiaMarkdownPrint';
 export const COLOR_PICKER_PANEL_HEIGHT_PX = 330;
 
 /**
@@ -299,7 +299,7 @@ export const COLOR_PICKER_PANEL_HEIGHT_PX = 330;
  * the name is what keeps them from silently drifting apart if either one
  * is ever renamed.
  */
-export const TERMINAL_PREPARE_PRINT_GLOBAL = '__northstarPrepareTerminalPrint';
+export const TERMINAL_PREPARE_PRINT_GLOBAL = '__portalogiaPrepareTerminalPrint';
 
 /** Accent colors cycled through, in order, as new workspaces are created. */
 export const WORKSPACE_COLORS = [

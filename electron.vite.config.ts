@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -37,7 +37,7 @@ export default defineConfig({
         // `src/preload/terminal.ts`, `src/preload/suggestions.ts`,
         // `src/preload/tooltip.ts`, `src/preload/colorPicker.ts`, and
         // `src/preload/tabZoom.ts`) — separate bundles so neither
-        // sandboxed renderer ever has the full chrome-facing `NorthstarApi`
+        // sandboxed renderer ever has the full chrome-facing `PortalogiaApi`
         // in its preload, only the handful of channels each one needs.
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),

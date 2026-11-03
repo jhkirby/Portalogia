@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -95,7 +95,9 @@ export const editorHighlight = syntaxHighlighting(
     { tag: tags.strikethrough, textDecoration: 'line-through' },
     { tag: tags.link, color: 'var(--color-accent-text)' },
     { tag: tags.url, color: 'var(--color-accent-text)' },
-    { tag: tags.monospace, color: 'var(--md-code-color)' },
+    // Code's colour, unless what it's in says otherwise: a code block's lines set `--md-monospace-color` to the text
+    // colour (`livePreview`), so only inline code is drawn in the code colour there.
+    { tag: tags.monospace, color: 'var(--md-monospace-color, var(--md-code-color))' },
     { tag: tags.quote, color: 'var(--color-tab-text)', fontStyle: 'italic' },
     { tag: tags.processingInstruction, color: 'var(--color-address-placeholder)' },
     { tag: tags.contentSeparator, color: 'var(--color-address-placeholder)' },

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -12,7 +12,7 @@ import { test, expect, findTabPage, openNote } from './fixtures';
 let dir = '';
 
 test.beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'northstar-file-tabs-'));
+  dir = mkdtempSync(join(tmpdir(), 'portalogia-file-tabs-'));
 });
 
 test.afterEach(() => {
@@ -31,7 +31,7 @@ test.describe('a PDF tab', () => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog;
     }, pdfPath);
 
-    await window.evaluate(() => window.northstar.createPdfTab());
+    await window.evaluate(() => window.portalogia.createPdfTab());
     const toolbar = window.locator('.pdf-toolbar');
     await toolbar.getByRole('button', { name: /^Open/ }).first().click();
     // The page box is in the PDF page's own stat bar.

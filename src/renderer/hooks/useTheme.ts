@@ -1,15 +1,18 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-26
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ThemePreference } from '@shared/ipc-contract';
+import { migrateLegacyKey } from '../lib/legacyStorage';
 import { applyTheme } from '../lib/themeFade';
 
 export type Theme = ThemePreference;
 
-const STORAGE_KEY = 'northstar-theme';
+const STORAGE_KEY = 'portalogia-theme';
+
+migrateLegacyKey(STORAGE_KEY);
 
 /**
  * Reads back a theme the user previously toggled to, or — on first ever
@@ -34,7 +37,7 @@ function getInitialTheme(): Theme {
  * onto `<html data-theme>` for `colors.css`'s
  * `[data-theme="dark"]`/`[data-theme="light"]` rules to pick up, and
  * reported to main (`setNativeTheme`) so `nativeTheme.themeSource` — and
- * native-rendered content that follows it, like the `northstar://home`
+ * native-rendered content that follows it, like the `portalogia://home`
  * page — stays in sync too. Toggleable from the toolbar's theme button and
  * from Ctrl+D (a menu accelerator, not a renderer `keydown` listener —
  * same reasoning as `onOpenTabSearch`/`onFocusAddressBar`: the chrome
@@ -55,7 +58,7 @@ export function useTheme(): { theme: Theme; toggleTheme: () => void } {
       return;
     }
     switchingRef.current = true;
-    void window.northstar
+    void window.portalogia
       .prepareThemeFade()
       .catch(() => {})
       .finally(() => {
@@ -76,10 +79,10 @@ export function useTheme(): { theme: Theme; toggleTheme: () => void } {
       // Best-effort persistence — a locked-down environment just means
       // the choice doesn't survive a relaunch, not a functional break.
     }
-    window.northstar.setNativeTheme(theme);
+    window.portalogia.setNativeTheme(theme);
   }, [theme]);
 
-  useEffect(() => window.northstar.onToggleTheme(toggleTheme), [toggleTheme]);
+  useEffect(() => window.portalogia.onToggleTheme(toggleTheme), [toggleTheme]);
 
   return { theme, toggleTheme };
 }

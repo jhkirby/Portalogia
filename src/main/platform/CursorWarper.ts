@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-18
@@ -14,14 +14,14 @@ import { join } from 'node:path';
  */
 const HELPER_SCRIPT = `
 $ErrorActionPreference = 'Stop'
-Add-Type -Namespace Northstar -Name Cursor -MemberDefinition @'
+Add-Type -Namespace Portalogia -Name Cursor -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(System.IntPtr value);
 '@
-[void][Northstar.Cursor]::SetProcessDpiAwarenessContext([System.IntPtr]::new(-4))
+[void][Portalogia.Cursor]::SetProcessDpiAwarenessContext([System.IntPtr]::new(-4))
 while ($null -ne ($line = [Console]::In.ReadLine())) {
   $parts = $line.Split(' ')
-  if ($parts.Length -eq 2) { [void][Northstar.Cursor]::SetCursorPos([int]$parts[0], [int]$parts[1]) }
+  if ($parts.Length -eq 2) { [void][Portalogia.Cursor]::SetCursorPos([int]$parts[0], [int]$parts[1]) }
 }
 `;
 

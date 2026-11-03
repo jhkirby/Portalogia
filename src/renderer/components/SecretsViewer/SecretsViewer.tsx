@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -124,13 +124,13 @@ export function SecretsViewer() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLTableSectionElement>(null);
 
-  useEffect(() => window.northstarSecrets.onSecrets(setSecrets), []);
-  useEffect(() => window.northstarSecrets.onQuery(setQuery), []);
-  useEffect(() => window.northstarSecrets.onMode(setMode), []);
+  useEffect(() => window.portalogiaSecrets.onSecrets(setSecrets), []);
+  useEffect(() => window.portalogiaSecrets.onQuery(setQuery), []);
+  useEffect(() => window.portalogiaSecrets.onMode(setMode), []);
   // Add pressed again while a row's already being typed in keeps that one: what's in it isn't thrown away.
   useEffect(
     () =>
-      window.northstarSecrets.onAddRow(() => {
+      window.portalogiaSecrets.onAddRow(() => {
         setNewSecret((current) => current ?? EMPTY_SECRET);
       }),
     [],
@@ -242,7 +242,7 @@ export function SecretsViewer() {
     if (Object.values(rowProblems(name, source, value)).some((problem) => problem !== null)) {
       return;
     }
-    void window.northstarSecrets.update(secret.id, name, source, value).then((result) => {
+    void window.portalogiaSecrets.update(secret.id, name, source, value).then((result) => {
       if (result.ok) {
         // The kept values arrive with the next list; the boxes show those from here.
         forgetDraft(secret.id);
@@ -275,7 +275,7 @@ export function SecretsViewer() {
     if (Object.values(rowProblems(name, source, secret, element)).some((problem) => problem !== null)) {
       return;
     }
-    void window.northstarSecrets.add(name, source, element, secret).then((result) => {
+    void window.portalogiaSecrets.add(name, source, element, secret).then((result) => {
       if (result.ok) {
         // The kept secret arrives with the next list, as a row of its own.
         cancelNewSecret();
@@ -287,7 +287,7 @@ export function SecretsViewer() {
 
   const copy = (secret: SecretState): void => {
     // Main copies what it has stored for this id, not text from here.
-    window.northstarSecrets.copy(secret.id);
+    window.portalogiaSecrets.copy(secret.id);
     setCopiedId(secret.id);
     if (copiedTimer.current !== null) {
       window.clearTimeout(copiedTimer.current);
@@ -426,7 +426,7 @@ export function SecretsViewer() {
                             className="history__action-button hover-grow history__delete"
                             aria-label={`Delete the secret ${secret.name}`}
                             title="Delete secret"
-                            onClick={() => window.northstarSecrets.remove(secret.id)}
+                            onClick={() => window.portalogiaSecrets.remove(secret.id)}
                           >
                             ×
                           </button>

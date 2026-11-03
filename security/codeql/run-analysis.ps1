@@ -1,11 +1,11 @@
 ﻿<#
 .SYNOPSIS
-  Builds the CodeQL database for Northstar and runs both the project's own
+  Builds the CodeQL database for Portalogia and runs both the project's own
   security queries and GitHub's standard javascript-security-extended suite.
 
 .DESCRIPTION
   Outputs land in security/codeql/results/ (git-ignored):
-    northstar-custom.sarif / .csv          - queries/ in this pack
+    portalogia-custom.sarif / .csv          - queries/ in this pack
     standard-security-extended.sarif / .csv - codeql/javascript-queries
   Summarize them into security/reports/security-report-<datetime>.md.
 
@@ -31,7 +31,7 @@ function Invoke-CodeQL {
 }
 $here = $PSScriptRoot
 $repo = Resolve-Path (Join-Path $here '..\..')
-$db = Join-Path $here 'databases\northstar-js'
+$db = Join-Path $here 'databases\portalogia-js'
 $out = Join-Path $here 'results'
 
 if (-not $CodeQL) {
@@ -55,7 +55,7 @@ if (-not $SkipDatabase) {
 }
 
 foreach ($run in @(
-    @{ Name = 'northstar-custom'; Suite = (Join-Path $here 'suites\northstar-security.qls') },
+    @{ Name = 'portalogia-custom'; Suite = (Join-Path $here 'suites\portalogia-security.qls') },
     @{ Name = 'standard-security-extended'; Suite = 'codeql/javascript-queries:codeql-suites/javascript-security-extended.qls' }
   )) {
   foreach ($format in @('sarif-latest', 'csv')) {

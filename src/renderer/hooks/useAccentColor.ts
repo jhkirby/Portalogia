@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-25
@@ -77,7 +77,7 @@ export function useAccentColor(): {
   // style a tab's own page content to match (`pageSelectionAccent`),
   // which `colors.css`'s own `::selection` rule can never reach.
   useEffect(() => {
-    window.northstar.setAccentColor(accent);
+    window.portalogia.setAccentColor(accent);
   }, [accent]);
 
   const setAccent = useCallback((next: RGB) => {

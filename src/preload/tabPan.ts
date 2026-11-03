@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -16,7 +16,7 @@ import { HAND_CLOSED_CURSOR, HAND_OPEN_CURSOR } from '../shared/handCursors';
 const TabPointerMode = 'tab:pointer-mode';
 const TabWarpPointer = 'tab:warp-pointer';
 
-const STYLE_ATTR = 'data-northstar';
+const STYLE_ATTR = 'data-portalogia';
 
 let mode: 'pan' | 'select' = 'select';
 let toolActive = false;

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-24
@@ -34,7 +34,7 @@ interface Piece {
 }
 
 /** The new-tab page: it fades itself (its own stylesheet, `homePage.ts`), so it keeps its fluid moving. */
-const HOME_PAGE_PREFIX = 'northstar://home';
+const HOME_PAGE_PREFIX = 'portalogia://home';
 
 /** Where this app's own pages are served from while developing; built, they're `file:` pages. */
 const DEV_PAGE_ORIGIN = (() => {
@@ -142,7 +142,7 @@ export class ThemeCrossfade {
     view.setBounds({ x: 0, y: 0, width, height });
     window.contentView.addChildView(view);
     // On disk rather than in a `data:` URL, which can't carry a window's worth of pictures (Chromium caps URLs at 2 MB).
-    const file = join(tmpdir(), `northstar-theme-fade-${randomUUID()}.html`);
+    const file = join(tmpdir(), `portalogia-theme-fade-${randomUUID()}.html`);
     const fade: Fade = { view, file, timer: null };
     this.fades.set(window, fade);
     // Fades by itself if the theme never comes.

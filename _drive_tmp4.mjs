@@ -1,8 +1,8 @@
 import { _electron as electron } from 'playwright-core';
 import * as fs from 'node:fs';
 
-const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Northstar';
-const SHOT_DIR = 'C:\\Users\\joshu\\AppData\\Local\\Temp\\claude\\C--Users-joshu-OneDrive-Desktop-Software-Projects-Northstar\\cf081228-a0fe-4875-a0ea-5b591f1f51bc\\scratchpad\\shots';
+const APP_DIR = 'C:\\Users\\joshu\\OneDrive\\Desktop\\Software\\Projects\\Portalogia';
+const SHOT_DIR = 'C:\\Users\\joshu\\AppData\\Local\\Temp\\claude\\C--Users-joshu-OneDrive-Desktop-Software-Projects-Portalogia\\cf081228-a0fe-4875-a0ea-5b591f1f51bc\\scratchpad\\shots';
 
 const app = await electron.launch({
   executablePath: APP_DIR + '\\node_modules\\electron\\dist\\electron.exe',
@@ -15,7 +15,7 @@ await new Promise((r) => setTimeout(r, 3000));
 const page = app.windows().find((w) => w.url().includes('/index.html')) ?? (await app.firstWindow());
 
 await page.evaluate(() => {
-  window.northstar.syncTooltip({
+  window.portalogia.syncTooltip({
     visible: true,
     text: 'Show sidebar (L)',
     rect: { top: 200, left: 200, width: 140, height: 24 },

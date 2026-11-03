@@ -11,13 +11,13 @@
  * @problem.severity error
  * @security-severity 8.0
  * @precision high
- * @id northstar/preload-exposes-raw-ipc
+ * @id portalogia/preload-exposes-raw-ipc
  * @tags security
  *       external/cwe/cwe-749
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
 /** The object passed to `contextBridge.exposeInMainWorld(name, api)`. */
 DataFlow::SourceNode exposedApi() {
@@ -39,8 +39,8 @@ from DataFlow::Node culprit, string problem
 where
   exists(DataFlow::FunctionNode f, DataFlow::MethodCallNode ipc |
     f = exposedFunction() and
-    ipc = NorthstarIpc::ipcRenderer().getAMethodCall() and
-    NorthstarIpc::nestedIn(ipc.getContainer(), f.getFunction())
+    ipc = PortalogiaIpc::ipcRenderer().getAMethodCall() and
+    PortalogiaIpc::nestedIn(ipc.getContainer(), f.getFunction())
   |
     ipc.getMethodName() = ["send", "invoke", "sendSync", "postMessage", "sendToHost"] and
     not exists(ipc.getArgument(0).getStringValue()) and
@@ -61,6 +61,6 @@ where
   )
   or
   culprit = exposedApi().getAPropertyWrite().getRhs() and
-  culprit.getALocalSource() = NorthstarIpc::ipcRenderer() and
+  culprit.getALocalSource() = PortalogiaIpc::ipcRenderer() and
   problem = "exposes ipcRenderer itself"
 select culprit, "Preload API " + problem + "."

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -40,7 +40,7 @@ export function useExportMenu({ canExport, canExportDocuments, markdown }: Expor
 
   useEffect(() => {
     if (!isOpen) {
-      window.northstar.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments, markdown });
+      window.portalogia.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments, markdown });
       return undefined;
     }
     const updateSync = (): void => {
@@ -49,7 +49,7 @@ export function useExportMenu({ canExport, canExportDocuments, markdown }: Expor
         return;
       }
       const height = markdown ? EXPORT_MENU_MARKDOWN_HEIGHT_PX : EXPORT_MENU_HEIGHT_PX;
-      window.northstar.syncExportMenu({
+      window.portalogia.syncExportMenu({
         kind: 'export',
         open: true,
         rect: {
@@ -68,12 +68,12 @@ export function useExportMenu({ canExport, canExportDocuments, markdown }: Expor
   // Closed on unmount too, so the menu isn't left over the page.
   useEffect(
     () => () =>
-      window.northstar.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments: false, markdown: false }),
+      window.portalogia.syncExportMenu({ kind: 'export', open: false, rect: null, canExportDocuments: false, markdown: false }),
     [],
   );
 
   // Escape in the overlay, a click on the live page, or a row being chosen.
-  useEffect(() => window.northstar.onExportMenuCloseRequested(() => setIsOpen(false)), []);
+  useEffect(() => window.portalogia.onExportMenuCloseRequested(() => setIsOpen(false)), []);
 
   // Don't leave an open menu acting on nothing when the last tab closes.
   useEffect(() => {

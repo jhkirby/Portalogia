@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -35,7 +35,7 @@ test.describe('pointer modes on a web page', () => {
     await page.evaluate(() => window.scrollTo(500, 500));
     await panButton(window).click();
     await expect(panButton(window)).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(1);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(1);
 
     await drag(page, { x: 400, y: 300 }, { x: 300, y: 220 });
     // About 100px across and 80px down, the way the hand went (a short glide after letting go may add a few pixels).
@@ -50,7 +50,7 @@ test.describe('pointer modes on a web page', () => {
   test('in Pan mode a click on a link does not follow it', async ({ electronApp, window, server }) => {
     const page = await openInActiveTab(electronApp, window, server.url('/tall'));
     await panButton(window).click();
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(1);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(1);
     await page.locator('#link').click();
     await page.waitForTimeout(300);
     expect(page.url()).toContain('/tall');
@@ -60,7 +60,7 @@ test.describe('pointer modes on a web page', () => {
     const page = await openInActiveTab(electronApp, window, server.url('/tall'));
     await panButton(window).click();
     await selectButton(window).click();
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(0);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(0);
     await drag(page, { x: 400, y: 300 }, { x: 300, y: 220 });
     expect(await page.evaluate(() => [window.scrollX, window.scrollY])).toEqual([0, 0]);
     await page.locator('#link').click();
@@ -86,11 +86,11 @@ test.describe('pointer modes on a web page', () => {
     await window.getByRole('button', { name: 'Turn on pen' }).click();
     // Neither mode is shown pressed while a tool has the pointer, and the hand is gone from the page.
     await expect(panButton(window)).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(0);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(0);
 
     await panButton(window).click();
     await expect(window.getByRole('button', { name: 'Turn on pen' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(1);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(1);
   });
 
   test('in Pan mode nothing on the page reacts to a click, not even inside frames; Select mode gives it all back', async ({
@@ -120,7 +120,7 @@ test.describe('pointer modes on a web page', () => {
     const hits = (): Promise<string[]> => page.evaluate(() => (window as unknown as { hits: string[] }).hits);
 
     await panButton(window).click();
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(1);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(1);
     await clickEverything();
     await clickOn('#link');
     await page.waitForTimeout(300);
@@ -128,7 +128,7 @@ test.describe('pointer modes on a web page', () => {
     expect(page.url()).toContain('/controls');
 
     await selectButton(window).click();
-    await expect(page.locator('style[data-northstar="pan-cursor"]')).toHaveCount(0);
+    await expect(page.locator('style[data-portalogia="pan-cursor"]')).toHaveCount(0);
     await clickEverything();
     await expect
       .poll(hits)
@@ -145,7 +145,7 @@ test.describe('pointer modes on a note', () => {
   let noteDir = '';
 
   test.beforeEach(() => {
-    noteDir = mkdtempSync(join(tmpdir(), 'northstar-pan-note-'));
+    noteDir = mkdtempSync(join(tmpdir(), 'portalogia-pan-note-'));
   });
 
   test.afterEach(() => {
@@ -177,7 +177,7 @@ test.describe('pointer modes on a note', () => {
   });
 
   test('the modes are locked on a note tab with no note open', async ({ window }) => {
-    await window.evaluate(() => window.northstar.createMarkdownTab());
+    await window.evaluate(() => window.portalogia.createMarkdownTab());
     await expect(panButton(window)).toBeDisabled();
   });
 });

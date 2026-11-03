@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-24
@@ -16,7 +16,7 @@ const PAGE_STYLE = `
 `;
 
 /**
- * Builds Northstar's home page / new-tab page. Served by the `northstar://home`
+ * Builds Portalogia's home page / new-tab page. Served by the `portalogia://home`
  * protocol handler in `main/index.ts` — a plain server-rendered page with
  * no script.
  * @returns A complete HTML document.

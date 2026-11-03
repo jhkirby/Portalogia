@@ -9,14 +9,14 @@
  * @problem.severity error
  * @security-severity 9.0
  * @precision medium
- * @id northstar/ipc-to-command-execution
+ * @id portalogia/ipc-to-command-execution
  * @tags security
  *       external/cwe/cwe-78
  *       external/cwe/cwe-94
  */
 
 import javascript
-import lib.NorthstarIpc
+import lib.PortalogiaIpc
 
 /** An argument that ends up as (part of) a command line or shell input. */
 class CommandSink extends DataFlow::Node {
@@ -39,12 +39,12 @@ class CommandSink extends DataFlow::Node {
 }
 
 module Config implements DataFlow::ConfigSig {
-  predicate isSource(DataFlow::Node node) { node instanceof NorthstarIpc::IpcPayloadSource }
+  predicate isSource(DataFlow::Node node) { node instanceof PortalogiaIpc::IpcPayloadSource }
 
   predicate isSink(DataFlow::Node node) { node instanceof CommandSink }
 
   predicate isAdditionalFlowStep(DataFlow::Node pred, DataFlow::Node succ) {
-    NorthstarIpc::ipcTaintStep(pred, succ)
+    PortalogiaIpc::ipcTaintStep(pred, succ)
   }
 }
 
@@ -52,7 +52,7 @@ module Flow = TaintTracking::Global<Config>;
 
 import Flow::PathGraph
 
-from Flow::PathNode source, Flow::PathNode sink, NorthstarIpc::IpcPayloadSource src, string guard
+from Flow::PathNode source, Flow::PathNode sink, PortalogiaIpc::IpcPayloadSource src, string guard
 where
   Flow::flowPath(source, sink) and
   src = source.getNode() and

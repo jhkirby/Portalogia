@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -24,7 +24,7 @@ test.describe('tab search', () => {
   });
 
   test('lists every tab with its workspace, and filters as you type', async ({ window, server }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
@@ -47,7 +47,7 @@ test.describe('tab search', () => {
   });
 
   test('Up/Down move the highlight and Enter jumps to that tab', async ({ window, server }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
@@ -73,7 +73,7 @@ test.describe('tab search', () => {
   });
 
   test('clicking a row jumps to that tab', async ({ window, server }) => {
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     const addressBar = window.getByLabel('Search the internet...');
     await addressBar.fill(server.url('/widgets'));
     await addressBar.press('Enter');
@@ -91,20 +91,20 @@ test.describe('tab search', () => {
   test('reaches tabs in other workspaces and switches to their workspace', async ({ window }) => {
     // A second workspace, with a tab of its own, made active.
     const research = await window.evaluate(async () => {
-      const created = await window.northstar.createWorkspace('Research');
+      const created = await window.portalogia.createWorkspace('Research');
       if (!created.ok) {
         throw new Error('could not create a workspace');
       }
       return created.data.activeWorkspaceId;
     });
-    await window.evaluate(() => window.northstar.createTerminalTab());
+    await window.evaluate(() => window.portalogia.createTerminalTab());
     // Back to the first workspace, so the terminal tab is out of sight.
     await window.evaluate(async () => {
-      const state = await window.northstar.getState();
+      const state = await window.portalogia.getState();
       if (state.ok) {
         const first = state.data.workspaces[0];
         if (first) {
-          await window.northstar.switchWorkspace(first.id);
+          await window.portalogia.switchWorkspace(first.id);
         }
       }
     });
@@ -119,7 +119,7 @@ test.describe('tab search', () => {
     await expect
       .poll(() =>
         window.evaluate(async () => {
-          const state = await window.northstar.getState();
+          const state = await window.portalogia.getState();
           return state.ok ? state.data.activeWorkspaceId : null;
         }),
       )

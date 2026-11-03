@@ -1,14 +1,17 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import type { PageStats } from '@shared/ipc-contract';
 import { formatPointerPosition } from '../../hooks/usePointerPosition';
+import { FocusHint, PAGE_UNFOCUS_KEYS } from '../FocusHint';
 
 interface WebStatusBarProps {
   /** The page's stats, or `null` before it has counted (a page still loading). */
   readonly stats: PageStats | null;
+  /** Whether the page has the keyboard (`BrowserState.contentFocused`), for the focus hint at the bar's far right. */
+  readonly contentFocused: boolean;
 }
 
 /**
@@ -18,7 +21,7 @@ interface WebStatusBarProps {
  * chrome in the strip main keeps free below the page (`STATUS_BAR_HEIGHT_PX`),
  * from what the page itself counted (`tabStats.ts`).
  */
-export function WebStatusBar({ stats }: WebStatusBarProps) {
+export function WebStatusBar({ stats, contentFocused }: WebStatusBarProps) {
   const count = (value: number | undefined, one: string, many: string): string =>
     value === undefined ? `… ${many}` : `${value.toLocaleString()} ${value === 1 ? one : many}`;
 
@@ -56,6 +59,7 @@ export function WebStatusBar({ stats }: WebStatusBarProps) {
           )}
         </span>
       )}
+      <FocusHint focused={contentFocused} unfocusKeys={PAGE_UNFOCUS_KEYS} />
     </footer>
   );
 }

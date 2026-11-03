@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -86,12 +86,19 @@ interface ToolsBarProps {
    * the tools — Export's menu, where shown, right after them. Empty for any other tab.
    */
   readonly fileActions: readonly ToolsBarAction[];
+  /**
+   * Sections of their own between the tools and the file's actions, each set off by a rule: a note's View/Edit and
+   * Formatted/Raw buttons, then its formatting buttons. Empty sections are skipped.
+   */
+  readonly actionSections: readonly (readonly ToolsBarAction[])[];
 }
 
 /** One of a file's actions in the Tools sidebar: a row like a tool's, never "on". */
 export interface ToolsBarAction {
   readonly id: string;
   readonly name: string;
+  /** What a click does, for assistive technology, where the row's name says what it is now; defaults to `name`. */
+  readonly label?: string;
   readonly icon: ReactNode;
   readonly disabled: boolean;
   /** Its tooltip: what a click does, with its shortcut. */
@@ -135,6 +142,10 @@ export function ToolsBar(props: ToolsBarProps) {
   const ripples = useClickRipples();
   const tools = toolsFor(props);
   const { fileActions } = props;
+  // Every section after the tools, in order, each set off from what's above it by a rule: the note's own sections,
+  // then the file's actions (Export's menu follows those, in the same section).
+  const sections = [...props.actionSections, fileActions].filter((section) => section.length > 0);
+  const hasExportSection = fileActions.length === 0 && props.showExport;
   // Export opens its menu (its own overlay, beside the sidebar) rather than turning on.
   const exportMenu = useExportMenu({
     canExport: props.canExport,
@@ -222,30 +233,37 @@ export function ToolsBar(props: ToolsBarProps) {
               )}
             </Fragment>
           ))}
-          {/* The file's own actions, then Export: a section of their own, as they act on the file rather than mark it. */}
-          {tools.length > 0 && (fileActions.length > 0 || props.showExport) && (
+          {/* A note's modes and formatting, then the file's own actions and Export: sections of their own, as they act on
+              the note or the file rather than mark it. */}
+          {sections.map((section, sectionIndex) => (
+            <Fragment key={section[0]!.id}>
+              {(tools.length > 0 || sectionIndex > 0) && <span className="tools-sidebar__divider" role="separator" aria-hidden="true" />}
+              {section.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="tools-sidebar__tool hover-glow chrome-tooltip"
+                  onClick={(event) => {
+                    ripples.add(action.id, event);
+                    action.onClick();
+                  }}
+                  disabled={action.disabled}
+                  aria-label={action.label ?? action.name}
+                  data-tooltip={action.tooltip}
+                >
+                  {rippleLayer(action.id)}
+                  <span className="tools-sidebar__name">{action.name}</span>
+                  <span className="tools-sidebar__icon" aria-hidden="true">
+                    {action.icon}
+                  </span>
+                </button>
+              ))}
+            </Fragment>
+          ))}
+          {/* Export with no file actions above it (a web page's): a section of its own. */}
+          {hasExportSection && (tools.length > 0 || sections.length > 0) && (
             <span className="tools-sidebar__divider" role="separator" aria-hidden="true" />
           )}
-          {fileActions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              className="tools-sidebar__tool hover-glow chrome-tooltip"
-              onClick={(event) => {
-                ripples.add(action.id, event);
-                action.onClick();
-              }}
-              disabled={action.disabled}
-              aria-label={action.name}
-              data-tooltip={action.tooltip}
-            >
-              {rippleLayer(action.id)}
-              <span className="tools-sidebar__name">{action.name}</span>
-              <span className="tools-sidebar__icon" aria-hidden="true">
-                {action.icon}
-              </span>
-            </button>
-          ))}
           {props.showExport && (
             <>
               <button

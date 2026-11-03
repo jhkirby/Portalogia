@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -12,7 +12,7 @@ test.describe('tabs per workspace limit', () => {
     const newTab = window.getByRole('button', { name: 'New tab', exact: true });
 
     while ((await tabs.count()) < MAX_TABS_PER_WORKSPACE) {
-      await window.evaluate(() => window.northstar.createTab());
+      await window.evaluate(() => window.portalogia.createTab());
     }
     await expect(tabs).toHaveCount(MAX_TABS_PER_WORKSPACE);
     await expect(newTab).toHaveCount(0);
@@ -25,12 +25,12 @@ test.describe('tabs per workspace limit', () => {
   test('the main process refuses a ninth tab even when the button is bypassed', async ({ window }) => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     while ((await tabs.count()) < MAX_TABS_PER_WORKSPACE) {
-      await window.evaluate(() => window.northstar.createTab());
+      await window.evaluate(() => window.portalogia.createTab());
     }
 
     // A terminal tab, a duplicate, and a direct create all go through other paths than the button.
-    await window.evaluate(() => window.northstar.createTab({}));
-    await window.evaluate(() => window.northstar.createTerminalTab());
+    await window.evaluate(() => window.portalogia.createTab({}));
+    await window.evaluate(() => window.portalogia.createTerminalTab());
     await window.waitForTimeout(500);
     await expect(tabs).toHaveCount(MAX_TABS_PER_WORKSPACE);
   });
@@ -40,7 +40,7 @@ test.describe('tabs per workspace limit', () => {
     const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
     const newTab = window.getByRole('button', { name: 'New tab', exact: true });
     while ((await tabs.count()) < MAX_TABS_PER_WORKSPACE) {
-      await window.evaluate(() => window.northstar.createTab());
+      await window.evaluate(() => window.portalogia.createTab());
     }
 
     await window.getByRole('button', { name: 'New workspace' }).click();
@@ -49,10 +49,10 @@ test.describe('tabs per workspace limit', () => {
     await expect(newTab).toBeVisible();
 
     // Move the new workspace's only tab into the full Home workspace: refused.
-    const state = (await window.evaluate(() => window.northstar.getState())) as { data?: { activeTabId: string; workspaces: { id: string }[] } };
+    const state = (await window.evaluate(() => window.portalogia.getState())) as { data?: { activeTabId: string; workspaces: { id: string }[] } };
     const movingId = state.data!.activeTabId;
     const homeId = state.data!.workspaces[0]!.id;
-    await window.evaluate(([id, ws]) => window.northstar.moveTabToWorkspace(id!, ws!), [movingId, homeId]);
+    await window.evaluate(([id, ws]) => window.portalogia.moveTabToWorkspace(id!, ws!), [movingId, homeId]);
     await window.waitForTimeout(300);
     await expect(tabs).toHaveCount(1);
     await workspaces.first().click();
@@ -65,13 +65,13 @@ test.describe('tabs per workspace limit', () => {
 
     // Created over IPC: it's the same main-process path as the button, minus 19 slow clicks.
     for (let i = 1; i < MAX_WORKSPACES; i += 1) {
-      await window.evaluate(() => window.northstar.createWorkspace());
+      await window.evaluate(() => window.portalogia.createWorkspace());
     }
     await expect(workspaces).toHaveCount(MAX_WORKSPACES);
     await expect(newWorkspace).toHaveCount(0);
 
     // The main process refuses a 21st even with the button bypassed.
-    await window.evaluate(() => window.northstar.createWorkspace());
+    await window.evaluate(() => window.portalogia.createWorkspace());
     await window.waitForTimeout(400);
     await expect(workspaces).toHaveCount(MAX_WORKSPACES);
 

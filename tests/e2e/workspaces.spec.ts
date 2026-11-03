@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -22,7 +22,7 @@ test.describe('workspaces', () => {
     const tabs = window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab');
     const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
 
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(tabs).toHaveCount(2);
 
     await window.getByRole('button', { name: 'New workspace' }).click();

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -8,6 +8,7 @@ import type { ZodType } from 'zod';
 import { IpcChannel, type IpcResult } from '@shared/ipc-contract';
 import {
   addPdfBookmarkRequestSchema,
+  markdownApplyFormatRequestSchema,
   markdownDisplayRequestSchema,
   markdownExportRequestSchema,
   markdownModeRequestSchema,
@@ -71,6 +72,9 @@ export function registerMarkdownIpc(
   );
   invokeForTab(IpcChannel.MarkdownNavigateHistory, markdownNavigateHistoryRequestSchema, (manager, request) =>
     manager.navigateMarkdownHistory(request.id, request.direction),
+  );
+  invokeForTab(IpcChannel.MarkdownApplyFormat, markdownApplyFormatRequestSchema, (manager, request) =>
+    manager.applyMarkdownFormat(request.id, request.action),
   );
   invokeForTab(IpcChannel.MarkdownExport, markdownExportRequestSchema, async (manager, request) => {
     await manager.exportMarkdown(request.id, request.format);

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
@@ -11,8 +11,8 @@ import { setEditorFind } from '../../lib/markdown/editorFind';
 import { collectRenderedText, rangeForOffsets } from '../../lib/markdown/textOffsets';
 
 /** Names registered with `CSS.highlights` for the matches in the rendered note, painted by `markdown-viewer.css`. */
-const ALL_NAME = 'northstar-md-find';
-const CURRENT_NAME = 'northstar-md-find-current';
+const ALL_NAME = 'portalogia-md-find';
+const CURRENT_NAME = 'portalogia-md-find-current';
 
 /** How long typing in the editor must pause before the find bar's matches are recounted. */
 const EDIT_RECOUNT_MS = 150;
@@ -35,7 +35,7 @@ interface UseMarkdownFindParams {
 /**
  * Answers the find bar (Ctrl+F — the same bar every tab uses) for a note, in
  * whichever view is showing. The bar lives in its own view; this answers its
- * commands (`window.northstarMarkdown.onFind`).
+ * commands (`window.portalogiaMarkdown.onFind`).
  *
  * In the rendered view it searches the note's visible text (not the page's
  * own buttons) and paints the matches with `CSS.highlights`. In the editor
@@ -55,7 +55,7 @@ export function useMarkdownFind({ mode, hasNote, readerHostRef, editorViewRef, s
   runRef.current = (reveal: boolean, restart: boolean): void => {
     const search = searchRef.current;
     const report = (invalid: boolean): void => {
-      window.northstarMarkdown.reportFind({
+      window.portalogiaMarkdown.reportFind({
         index: matchesRef.current.length === 0 ? 0 : currentRef.current + 1,
         total: matchesRef.current.length,
         capped: cappedRef.current,
@@ -148,7 +148,7 @@ export function useMarkdownFind({ mode, hasNote, readerHostRef, editorViewRef, s
 
   useEffect(
     () =>
-      window.northstarMarkdown.onFind((command: FindCommand) => {
+      window.portalogiaMarkdown.onFind((command: FindCommand) => {
         switch (command.action) {
           case 'search':
             searchRef.current = { query: command.query, options: command.options };

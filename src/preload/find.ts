@@ -1,11 +1,11 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-05
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { FindOptions } from '@shared/find';
-import type { FindBarState, NorthstarFindApi } from '@shared/ipc-contract';
+import type { FindBarState, PortalogiaFindApi } from '@shared/ipc-contract';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object. `FindOverlay` and
@@ -27,7 +27,7 @@ ipcRenderer.on(FindState, (_event, state: FindBarState) => {
 const focusListeners = new Set<() => void>();
 ipcRenderer.on(FindFocus, () => focusListeners.forEach((listener) => listener()));
 
-const api: NorthstarFindApi = {
+const api: PortalogiaFindApi = {
   onState: (listener) => {
     stateListeners.add(listener);
     if (latestState !== null) {
@@ -57,4 +57,4 @@ const api: NorthstarFindApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarFind', api satisfies NorthstarFindApi);
+contextBridge.exposeInMainWorld('portalogiaFind', api satisfies PortalogiaFindApi);

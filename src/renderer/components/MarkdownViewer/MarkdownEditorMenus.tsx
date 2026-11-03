@@ -1,10 +1,11 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-06
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { MarkdownFormatAction } from '@shared/ipc-contract';
+import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from '../../lib/markdown/editorFormat';
 import { formatShortcut } from '../../lib/shortcuts';
 
 /** The right-click menu's entries, in order: what each does and the keys that do the same from the keyboard. */
@@ -90,6 +91,120 @@ export function EditorContextMenu({ x, y, onPick, onClose }: EditorContextMenuPr
           {item.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+interface TablePopupProps {
+  /** Where to open it, in page pixels (under the caret). */
+  readonly x: number;
+  readonly y: number;
+  readonly onSubmit: (rows: number, columns: number) => void;
+  readonly onCancel: () => void;
+}
+
+/** The size the table box starts at: a header row and two more, three columns. */
+const DEFAULT_TABLE_ROWS = 3;
+const DEFAULT_TABLE_COLUMNS = 3;
+
+/**
+ * The box the Table button opens: how many rows (the header row included) and columns, in two number boxes. Enter
+ * makes the table at the caret; Escape, or leaving the box, cancels. Each box only takes digits, clamped to
+ * `TABLE_MAX_ROWS` × `TABLE_MAX_COLUMNS`.
+ */
+export function TablePopup({ x, y, onSubmit, onCancel }: TablePopupProps) {
+  const [rows, setRows] = useState(String(DEFAULT_TABLE_ROWS));
+  const [columns, setColumns] = useState(String(DEFAULT_TABLE_COLUMNS));
+  const boxRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    rowsRef.current?.focus();
+    rowsRef.current?.select();
+  }, []);
+
+  /** A box's number, or `null` while it holds nothing usable. */
+  const parse = (text: string, max: number): number | null => {
+    const value = Number.parseInt(text, 10);
+    return Number.isFinite(value) && value >= 1 ? Math.min(value, max) : null;
+  };
+  const rowCount = parse(rows, TABLE_MAX_ROWS);
+  const columnCount = parse(columns, TABLE_MAX_COLUMNS);
+
+  const commit = (): void => {
+    if (rowCount !== null && columnCount !== null) {
+      onSubmit(rowCount, columnCount);
+    }
+  };
+
+  const field = (
+    label: string,
+    value: string,
+    setValue: (next: string) => void,
+    max: number,
+    ref?: Ref<HTMLInputElement>,
+  ) => (
+    <label className="md-table-box__field">
+      <span className="md-table-box__name">{label}</span>
+      <input
+        ref={ref}
+        className="md-link__input md-table-box__input"
+        type="text"
+        inputMode="numeric"
+        aria-label={`${label} (1 to ${max})`}
+        value={value}
+        spellCheck={false}
+        onFocus={(event) => event.currentTarget.select()}
+        onChange={(event) => setValue(event.target.value.replace(/\D/g, '').slice(0, 3))}
+      />
+    </label>
+  );
+
+  return (
+    <div
+      ref={boxRef}
+      className="md-link md-table-box"
+      style={{ left: Math.min(x, window.innerWidth - 240), top: y }}
+      role="dialog"
+      aria-label="Insert a table"
+      onKeyDown={(event) => {
+        // Keeps the viewer's own shortcuts out of typing.
+        event.stopPropagation();
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onCancel();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          commit();
+        }
+      }}
+      // Leaving the box (not just moving between its two fields) cancels it.
+      onBlur={(event) => {
+        if (!boxRef.current?.contains(event.relatedTarget as Node | null)) {
+          onCancel();
+        }
+      }}
+    >
+      <div className="md-link__label">Insert a table</div>
+      <div className="md-table-box__fields">
+        {field('Rows', rows, setRows, TABLE_MAX_ROWS, rowsRef)}
+        <span className="md-table-box__by" aria-hidden="true">
+          ×
+        </span>
+        {field('Columns', columns, setColumns, TABLE_MAX_COLUMNS)}
+      </div>
+      <button
+        type="button"
+        className="md-table-box__create"
+        disabled={rowCount === null || columnCount === null}
+        // Chosen on press, before the inputs' blur can close the box.
+        onMouseDown={(event) => {
+          event.preventDefault();
+          commit();
+        }}
+      >
+        Create
+      </button>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -34,7 +34,7 @@ export function installChromeTooltips(): void {
     timer = 0;
     if (shown) {
       shown = false;
-      window.northstar.syncTooltip({ visible: false, text: '', rect: null });
+      window.portalogia.syncTooltip({ visible: false, text: '', rect: null });
     }
   };
 
@@ -49,7 +49,7 @@ export function installChromeTooltips(): void {
       height: window.innerHeight,
     });
     shown = true;
-    window.northstar.syncTooltip({ visible: true, text, rect });
+    window.portalogia.syncTooltip({ visible: true, text, rect });
   };
 
   // The innermost element with a tooltip under the pointer; a move within it changes nothing.

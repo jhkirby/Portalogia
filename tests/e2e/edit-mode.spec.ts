@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -34,7 +34,7 @@ test.describe('edit mode', () => {
   test('is kept per tab: another tab still has its tool shortcuts', async ({ electronApp, window, server }) => {
     await openInActiveTab(electronApp, window, server.url('/editor'));
     await window.getByRole('button', { name: 'Turn on edit mode' }).click();
-    await window.evaluate(() => window.northstar.createTab());
+    await window.evaluate(() => window.portalogia.createTab());
     await expect(window.getByRole('button', { name: 'Turn on edit mode' })).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -83,7 +83,7 @@ test.describe('edit mode', () => {
   });
 
   test('is not offered on a note, which has no web page to hand keys to', async ({ window }) => {
-    await window.evaluate(() => window.northstar.createMarkdownTab());
+    await window.evaluate(() => window.portalogia.createMarkdownTab());
     await expect(window.getByRole('button', { name: /edit mode/ })).toHaveCount(0);
   });
 });

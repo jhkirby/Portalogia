@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-05
@@ -9,8 +9,8 @@ import type { FindCommand } from '@shared/ipc-contract';
 import { buildFindPattern, clampOccurrence, findMatches, MAX_FIND_MATCHES, stepIndex, type FindOptions } from '@shared/find';
 
 /** Names registered with `CSS.highlights` for the matches, painted by `pdf-viewer.css`. */
-const ALL_NAME = 'northstar-pdf-find';
-const CURRENT_NAME = 'northstar-pdf-find-current';
+const ALL_NAME = 'portalogia-pdf-find';
+const CURRENT_NAME = 'portalogia-pdf-find-current';
 
 /** A page's searchable text, with where each text-layer item's own text sits in it. Only non-empty items count: an empty item has no text node on the page. */
 interface PageText {
@@ -104,7 +104,7 @@ function rangeFor(nodes: readonly Text[], pageText: PageText, match: PageMatch):
 
 /**
  * Find-bar search for the open PDF. The bar lives in its own view; this
- * answers its commands (`window.northstarPdf.onFind`) for this page's document.
+ * answers its commands (`window.portalogiaPdf.onFind`) for this page's document.
  *
  * pdf.js only draws a page's text layer once the page is near the viewport,
  * so the search can't read the DOM for pages not shown yet. It reads each
@@ -134,7 +134,7 @@ export function usePdfFind(doc: PDFDocumentProxy | null, scrollRef: RefObject<HT
     };
 
     const report = (invalid: boolean): void => {
-      window.northstarPdf.reportFind({
+      window.portalogiaPdf.reportFind({
         index: matches.length === 0 ? 0 : current + 1,
         total: matches.length,
         capped,
@@ -287,7 +287,7 @@ export function usePdfFind(doc: PDFDocumentProxy | null, scrollRef: RefObject<HT
       report(false);
     };
 
-    const stop = window.northstarPdf.onFind((command: FindCommand) => {
+    const stop = window.portalogiaPdf.onFind((command: FindCommand) => {
       switch (command.action) {
         case 'search':
           void search(command.query, command.options);

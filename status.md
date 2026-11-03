@@ -103,7 +103,7 @@ standalone workspace, not a second "Home".
 
 1. Restart dev app with `--remoteDebuggingPort=9222` (see this
    conversation's earlier two-window testing pattern: tear off a tab via
-   `window.northstar.tearOffTab(id, farOffX, farOffY)` through
+   `window.portalogia.tearOffTab(id, farOffX, farOffY)` through
    `page.evaluate`, find the new window's Page by listening for `ctx.on('page', ...)`
    and filtering by URL — NOT by `ctx.pages()` re-enumeration, which
    proved unreliable for disambiguating same-URL Electron windows in this
@@ -130,7 +130,7 @@ standalone workspace, not a second "Home".
 ### Useful context for a fresh session
 
 - This is a long-running feature-building session on an Electron/React
-  browser app called Northstar. Prior work this session (all committed?
+  browser app called Portalogia. Prior work this session (all committed?
   — **check `git log`**, most of it may still be uncommitted alongside the
   above): app icon, session persistence across restarts
   (`SessionStore`), drag tab out → new window (`tearOffTab`), drag tab

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -21,7 +21,7 @@ function fakeCipher(available = true): SecretCipher {
 
 /** A fresh directory for one test's secrets file, removed afterwards. */
 function scratchFile(): { readonly path: string; readonly cleanup: () => void } {
-  const directory = mkdtempSync(join(tmpdir(), 'northstar-secrets-'));
+  const directory = mkdtempSync(join(tmpdir(), 'portalogia-secrets-'));
   return { path: join(directory, 'secrets.json'), cleanup: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
@@ -31,7 +31,7 @@ test.describe('secret helpers', () => {
   test('a source is the page without its query or fragment; only web pages have one', () => {
     expect(secretSourceOf(LOGIN)).toBe('https://accounts.example.com/login');
     expect(secretSourceOf('file:///C:/notes.md')).toBeNull();
-    expect(secretSourceOf('northstar://home')).toBeNull();
+    expect(secretSourceOf('portalogia://home')).toBeNull();
     expect(secretSourceOf('not a url')).toBeNull();
     expect(secretOriginOf('https://accounts.example.com/login')).toBe('https://accounts.example.com');
   });

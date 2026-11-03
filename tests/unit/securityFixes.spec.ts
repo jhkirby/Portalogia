@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -16,7 +16,7 @@ let root: string;
 //   <root>/outside/secret.png, <root>/outside/secret.md
 //   <root>/home/vault/.obsidian/, <root>/home/vault/notes/note.md, <root>/home/vault/pics/ok.png
 test.beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), 'northstar-sec-'));
+  root = await mkdtemp(join(tmpdir(), 'portalogia-sec-'));
   await mkdir(join(root, 'outside'), { recursive: true });
   await mkdir(join(root, 'home', 'vault', '.obsidian'), { recursive: true });
   await mkdir(join(root, 'home', 'vault', 'notes'), { recursive: true });

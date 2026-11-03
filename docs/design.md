@@ -1,13 +1,13 @@
 # Design
 
-This document describes what Northstar is for, how it is meant to feel, and
+This document describes what Portalogia is for, how it is meant to feel, and
 the design decisions behind its interface. For how the code is built, see
 [architecture.md](architecture.md). For how to use the app, see
 [user_guide.md](user_guide.md).
 
 ## Purpose
 
-Northstar is a browser for people who research, study and build. It puts
+Portalogia is a browser for people who research, study and build. It puts
 four things in one window:
 
 - the web,
@@ -40,7 +40,7 @@ you want.
    [privacy.md](privacy.md).
 6. **Limits that keep things tidy.** A workspace holds at most 8 tabs, and
    there can be at most 20 workspaces. Instead of an endless strip of tiny
-   tabs, Northstar nudges you to split work into workspaces or save it as a
+   tabs, Portalogia nudges you to split work into workspaces or save it as a
    workspace image.
 
 ## Window layout

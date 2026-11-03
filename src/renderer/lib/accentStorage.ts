@@ -1,15 +1,19 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-25
 
 import type { RGB } from '@shared/color';
+import { migrateLegacyKey } from './legacyStorage';
 
-export const ACCENT_STORAGE_KEY = 'northstar-accent-color';
-export const RECENTS_STORAGE_KEY = 'northstar-accent-recent-colors';
+export const ACCENT_STORAGE_KEY = 'portalogia-accent-color';
+export const RECENTS_STORAGE_KEY = 'portalogia-accent-recent-colors';
 export const RECENTS_MAX = 10;
 
-/** Northstar's original brand blue (Material "Blue 600") — `colors.css`'s light-theme `--color-accent-text` before `ColorPicker` made it user-editable, and still the fallback for a first-ever launch with nothing in storage yet. */
+migrateLegacyKey(ACCENT_STORAGE_KEY);
+migrateLegacyKey(RECENTS_STORAGE_KEY);
+
+/** Portalogia's original brand blue (Material "Blue 600") — `colors.css`'s light-theme `--color-accent-text` before `ColorPicker` made it user-editable, and still the fallback for a first-ever launch with nothing in storage yet. */
 export const DEFAULT_ACCENT: RGB = { r: 26, g: 115, b: 232 };
 
 function isRgb(value: unknown): value is RGB {

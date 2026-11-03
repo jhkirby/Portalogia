@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -31,12 +31,12 @@ export function ExportMenuOverlayView() {
   const fade = closing ? ' menu-fade menu-fade--out' : ' menu-fade';
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => window.northstarExportMenu.onSync(setPayload), []);
+  useEffect(() => window.portalogiaExportMenu.onSync(setPayload), []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
-        window.northstarExportMenu.requestClose();
+        window.portalogiaExportMenu.requestClose();
         return;
       }
       if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
@@ -72,7 +72,7 @@ export function ExportMenuOverlayView() {
             type="button"
             role="menuitem"
             className="export-menu__item new-tab-menu__item"
-            onClick={() => window.northstarExportMenu.select(row.action)}
+            onClick={() => window.portalogiaExportMenu.select(row.action)}
           >
             <span className="new-tab-menu__icon" aria-hidden="true">
               {row.icon}
@@ -90,7 +90,7 @@ export function ExportMenuOverlayView() {
         type="button"
         role="menuitem"
         className="export-menu__item"
-        onClick={() => window.northstarExportMenu.select('pdf')}
+        onClick={() => window.portalogiaExportMenu.select('pdf')}
       >
         PDF
       </button>
@@ -100,7 +100,7 @@ export function ExportMenuOverlayView() {
             type="button"
             role="menuitem"
             className="export-menu__item"
-            onClick={() => window.northstarExportMenu.select('markdown')}
+            onClick={() => window.portalogiaExportMenu.select('markdown')}
           >
             Markdown
           </button>
@@ -108,7 +108,7 @@ export function ExportMenuOverlayView() {
             type="button"
             role="menuitem"
             className="export-menu__item"
-            onClick={() => window.northstarExportMenu.select('text')}
+            onClick={() => window.portalogiaExportMenu.select('text')}
           >
             Text
           </button>
@@ -119,7 +119,7 @@ export function ExportMenuOverlayView() {
           role="menuitem"
           className="export-menu__item"
           disabled={!payload.canExportDocuments}
-          onClick={() => window.northstarExportMenu.select('documents')}
+          onClick={() => window.portalogiaExportMenu.select('documents')}
         >
           HTML/CSS/JS
         </button>

@@ -1,9 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
 import { formatPointerPosition, usePointerPosition } from '../../hooks/usePointerPosition';
+import { FocusHint, TERMINAL_UNFOCUS_KEYS, usePageHasFocus } from '../FocusHint';
 
 /** What the terminal's stat bar shows, counted by `Terminal` from xterm's buffer. */
 export interface TerminalStats {
@@ -32,6 +33,7 @@ interface TerminalStatusBarProps {
 export function TerminalStatusBar({ stats }: TerminalStatusBarProps) {
   // Measured in the framed terminal, as a web page's is in its own view: blank over the background around it.
   const pointer = usePointerPosition('.terminal__surface');
+  const pageFocused = usePageHasFocus();
   const count = (value: number, one: string, many: string): string =>
     `${value.toLocaleString()} ${value === 1 ? one : many}`;
 
@@ -51,6 +53,7 @@ export function TerminalStatusBar({ stats }: TerminalStatusBarProps) {
           <span className="terminal-status__item">{count(stats.selection.characters, 'character', 'characters')}</span>
         </span>
       )}
+      <FocusHint focused={pageFocused} unfocusKeys={TERMINAL_UNFOCUS_KEYS} />
     </footer>
   );
 }

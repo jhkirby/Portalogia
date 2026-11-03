@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-24
@@ -47,7 +47,7 @@ export function MarkdownSidePanel({ headings, links, noteKey, onGoToHeading, onO
     }
     let current = true;
     setBacklinks(null);
-    void window.northstarMarkdown.getBacklinks().then((found) => {
+    void window.portalogiaMarkdown.getBacklinks().then((found) => {
       if (current) {
         setBacklinks(found);
       }
@@ -95,7 +95,7 @@ export function MarkdownSidePanel({ headings, links, noteKey, onGoToHeading, onO
                 type="button"
                 className="side-panel__item"
                 title={link.target}
-                onClick={(event) => void window.northstarMarkdown.openLink('link', link.target, event.ctrlKey || event.metaKey)}
+                onClick={(event) => void window.portalogiaMarkdown.openLink('link', link.target, event.ctrlKey || event.metaKey)}
               >
                 {link.name}
               </button>

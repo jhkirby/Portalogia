@@ -203,7 +203,7 @@ stay valid.
 | --- | --- | --- | --- | --- |
 | UT-URL-01 | Unit | looksLikeUrl | accepts a dot-domain host, with or without a scheme | [F2.1](features.md#f2-navigation-and-the-address-bar) |
 | UT-URL-02 | Unit | looksLikeUrl | accepts localhost, bare or with a port | [F2.1](features.md#f2-navigation-and-the-address-bar) |
-| UT-URL-03 | Unit | looksLikeUrl | accepts the app's own northstar: scheme | [F2.1](features.md#f2-navigation-and-the-address-bar) |
+| UT-URL-03 | Unit | looksLikeUrl | accepts the app's own portalogia: scheme | [F2.1](features.md#f2-navigation-and-the-address-bar) |
 | UT-URL-04 | Unit | looksLikeUrl | rejects blank input | [F2.1](features.md#f2-navigation-and-the-address-bar) |
 | UT-URL-05 | Unit | looksLikeUrl | rejects free text that looks like a search query | [F2.1](features.md#f2-navigation-and-the-address-bar) |
 | UT-URL-06 | Unit | looksLikeUrl | rejects a bare word with no dot, since it cannot be a real host | [F2.1](features.md#f2-navigation-and-the-address-bar) |
@@ -211,7 +211,7 @@ stay valid.
 | UT-URL-08 | Unit | normalizeUrlOrSearch | leaves an explicit scheme alone | [F2.1](features.md#f2-navigation-and-the-address-bar) |
 | UT-URL-09 | Unit | normalizeUrlOrSearch | falls back to a Google search URL for non-URL text | [F2.1](features.md#f2-navigation-and-the-address-bar) |
 | UT-URL-10 | Unit | normalizeUrlOrSearch | blank input goes to about:blank | [F2.1](features.md#f2-navigation-and-the-address-bar) |
-| UT-URL-11 | Unit | isNavigableUrl | allows http, https, about, and northstar | [F14.1](features.md#f14-security-and-privacy-controls) |
+| UT-URL-11 | Unit | isNavigableUrl | allows http, https, about, and portalogia | [F14.1](features.md#f14-security-and-privacy-controls) |
 | UT-URL-12 | Unit | isNavigableUrl | refuses file: and javascript: URLs | [F14.1](features.md#f14-security-and-privacy-controls) |
 | UT-URL-13 | Unit | isNavigableUrl | refuses unparseable input instead of throwing | [F14.1](features.md#f14-security-and-privacy-controls) |
 | UT-URL-14 | Unit | domainOfUrl | returns the hostname, without a leading www. | [F2.3](features.md#f2-navigation-and-the-address-bar) |
@@ -253,7 +253,7 @@ fresh, throwaway profile folder, and drives it through Playwright.
 
 | ID | Type | Group | Test | Features |
 | --- | --- | --- | --- | --- |
-| E2E-LCH-01 | E2E | app launch | opens the Northstar chrome with one home tab and one workspace | [F12.6](features.md#f12-window-and-chrome), [F2.5](features.md#f2-navigation-and-the-address-bar) |
+| E2E-LCH-01 | E2E | app launch | opens the Portalogia chrome with one home tab and one workspace | [F12.6](features.md#f12-window-and-chrome), [F2.5](features.md#f2-navigation-and-the-address-bar) |
 
 ### `multi-select.spec.ts`: selecting several tabs or workspaces
 

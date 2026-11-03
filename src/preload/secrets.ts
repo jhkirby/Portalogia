@@ -1,10 +1,10 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { NorthstarSecretsApi, SecretState, SecretUpdateResult } from '@shared/ipc-contract';
+import type { PortalogiaSecretsApi, SecretState, SecretUpdateResult } from '@shared/ipc-contract';
 
 // Channel names inlined as literals — see `terminal.ts` for why a sandboxed
 // preload can't share the `IpcChannel` runtime object. `SecretsController`
@@ -53,7 +53,7 @@ function latestFrom<T>(channel: string): (listener: (value: T) => void) => () =>
   };
 }
 
-const api: NorthstarSecretsApi = {
+const api: PortalogiaSecretsApi = {
   onSecrets: latestFrom<readonly SecretState[]>(SecretsPageList),
   onQuery: latestFrom<string>(SecretsPageQuery),
   onMode: latestFrom<'view' | 'edit'>(SecretsPageMode),
@@ -77,4 +77,4 @@ const api: NorthstarSecretsApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('northstarSecrets', api satisfies NorthstarSecretsApi);
+contextBridge.exposeInMainWorld('portalogiaSecrets', api satisfies PortalogiaSecretsApi);

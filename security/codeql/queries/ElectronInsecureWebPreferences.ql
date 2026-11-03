@@ -6,12 +6,12 @@
  *              settings that weaken the renderer (webSecurity off, insecure
  *              content, Node in workers/subframes, `<webview>`, Blink flags).
  *              The built-in Electron model doesn't know `WebContentsView`,
- *              which Northstar uses for every tab and overlay.
+ *              which Portalogia uses for every tab and overlay.
  * @kind problem
  * @problem.severity warning
  * @security-severity 7.0
  * @precision high
- * @id northstar/electron-insecure-webpreferences
+ * @id portalogia/electron-insecure-webpreferences
  * @tags security
  *       external/cwe/cwe-693
  *       external/cwe/cwe-1188

@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -34,7 +34,7 @@ function selectionCss(rgb: RGB): string {
  * content is a separate document `colors.css`'s own `::selection` rule
  * (which covers every one of this app's *own* renderer documents) can
  * never reach, so this is the other half of keeping the browser's native
- * text-selection highlight on-brand everywhere — see `NorthstarApi.setAccentColor`'s
+ * text-selection highlight on-brand everywhere — see `PortalogiaApi.setAccentColor`'s
  * own doc comment for why main has to be told this at all rather than
  * reading it off a renderer's DOM directly.
  * @param rgb The chrome's current accent — whichever window last reported

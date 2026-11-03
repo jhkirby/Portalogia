@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-09-15
@@ -18,8 +18,8 @@ test.describe('looksLikeUrl', () => {
     expect(looksLikeUrl('http://localhost:3000')).toBe(true);
   });
 
-  test("accepts the app's own northstar: scheme", () => {
-    expect(looksLikeUrl('northstar://home')).toBe(true);
+  test("accepts the app's own portalogia: scheme", () => {
+    expect(looksLikeUrl('portalogia://home')).toBe(true);
   });
 
   test('rejects blank input', () => {
@@ -57,11 +57,11 @@ test.describe('normalizeUrlOrSearch', () => {
 });
 
 test.describe('isNavigableUrl', () => {
-  test('allows http, https, about, and northstar', () => {
+  test('allows http, https, about, and portalogia', () => {
     expect(isNavigableUrl('https://example.com/')).toBe(true);
     expect(isNavigableUrl('http://example.com/')).toBe(true);
     expect(isNavigableUrl('about:blank')).toBe(true);
-    expect(isNavigableUrl('northstar://home/')).toBe(true);
+    expect(isNavigableUrl('portalogia://home/')).toBe(true);
   });
 
   test('refuses file: and javascript: URLs', () => {
@@ -87,7 +87,7 @@ test.describe('domainOfUrl', () => {
   });
 
   test('is null for non-web pages, blank input, and garbage', () => {
-    expect(domainOfUrl('northstar://home/')).toBeNull();
+    expect(domainOfUrl('portalogia://home/')).toBeNull();
     expect(domainOfUrl('file:///C:/a.html')).toBeNull();
     expect(domainOfUrl('')).toBeNull();
     expect(domainOfUrl('not a url')).toBeNull();

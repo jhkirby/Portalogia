@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
@@ -16,8 +16,10 @@ import {
   wifiBars,
 } from '../../hooks/useSystemStatus';
 
-/** How long each Bluetooth device's name, and each unit of the temperature, shows before the next takes its turn. */
+/** How long each Bluetooth device's name shows before the next takes its turn. */
 const TURN_MS = 10_000;
+/** How many of those turns each unit of the temperature lasts: two, so 20 seconds. */
+const TURNS_PER_UNIT = 2;
 import { formatClockDate, formatClockTime, formatClockTimeZone, msUntilNextSecond } from '../../lib/clockFormat';
 
 /**
@@ -25,8 +27,8 @@ import { formatClockDate, formatClockTime, formatClockTimeZone, msUntilNextSecon
  * controls are: the date ("Monday, October 19th") over the 24-hour time with seconds, in
  * the computer's own time zone, with the outside temperature before the time. To its left, in sections split by thin
  * rules: the sound (the playback device and its volume), then Bluetooth (with a connected device's name) and the
- * Wi-Fi network, then the battery, since Northstar may cover the whole screen, taskbar included. The device names
- * take turns, as do the temperature's units (°F, °C, then kelvin), each every 10 seconds. Shown while the pointer is away from the tab
+ * Wi-Fi network, then the battery, since Portalogia may cover the whole screen, taskbar included. The device names
+ * take turns every 10 seconds, and the temperature's units (°F, °C, then kelvin) every 20. Shown while the pointer is away from the tab
  * row; hovering the row swaps it for the window controls and the new-tab
  * button (see titlebar-clock.css and app.css's `.titlebar`).
  */
@@ -35,14 +37,15 @@ export function TitlebarClock() {
   const { audio, wifi, bluetooth, weather } = useSystemStatus();
   const battery = useBattery();
   const batteryTimeLeft = battery ? formatBatteryTimeLeft(battery.secondsLeft) : null;
-  // Counts the turns: the next connected device's name, and the next unit of the temperature, every TURN_MS.
+  // Counts the turns: the next connected device's name every TURN_MS, the next unit of the temperature every
+  // TURNS_PER_UNIT of them.
   const [turn, setTurn] = useState(0);
   useEffect(() => {
     const timer = window.setInterval(() => setTurn((current) => current + 1), TURN_MS);
     return () => window.clearInterval(timer);
   }, []);
   const deviceName = bluetooth.names[turn % Math.max(1, bluetooth.names.length)] ?? null;
-  const unit = TEMPERATURE_UNITS[turn % TEMPERATURE_UNITS.length] ?? 'F';
+  const unit = TEMPERATURE_UNITS[Math.floor(turn / TURNS_PER_UNIT) % TEMPERATURE_UNITS.length] ?? 'F';
 
   // Wakes at the start of each second, when the shown time changes, rather than polling. A computer back from sleep
   // fires the waiting timer late, and the window regaining focus catches up at once.

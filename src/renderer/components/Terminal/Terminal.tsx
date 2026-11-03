@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-22
@@ -194,7 +194,7 @@ export function Terminal({ id }: TerminalProps) {
   const [stats, setStats] = useState<TerminalStats>({ line: 1, words: 0, characters: 0, commands: 0, selection: null });
   /** The window's Focus Mode: the stat bar hides with the chrome. */
   const [focusMode, setFocusMode] = useState(false);
-  useEffect(() => window.northstarTerminal.onFocusMode(setFocusMode), []);
+  useEffect(() => window.portalogiaTerminal.onFocusMode(setFocusMode), []);
   /** Blurs the terminal from the start until its shell first writes (its prompt). */
   const { blurred: loadBlurred, finish: finishLoadBlur } = useLoadBlur(true);
   const finishLoadBlurRef = useRef(finishLoadBlur);
@@ -314,7 +314,7 @@ export function Terminal({ id }: TerminalProps) {
     // The refit waits for xterm's next draw, which comes after it has measured the new font's cell size: a fit before
     // that still used the old size and left rows running past the bottom, under the stat bar. Fitted once more a
     // moment later in case that draw came before the measurement settled.
-    const unsubscribeZoom = window.northstarTerminal.onZoom((level) => {
+    const unsubscribeZoom = window.portalogiaTerminal.onZoom((level) => {
       // Whole pixels: a fractional size gives fractional rows, which xterm rounds up as it draws but not as it fits,
       // so over a screen of rows the text ran several pixels past the bottom.
       term.options.fontSize = Math.round(TERMINAL_FONT_SIZE * Math.pow(1.2, level));
@@ -336,10 +336,10 @@ export function Terminal({ id }: TerminalProps) {
     const dataDisposable = term.onData((data) => {
       countCommands(data);
       updateStats();
-      window.northstarTerminal.sendTerminalInput(id, data);
+      window.portalogiaTerminal.sendTerminalInput(id, data);
     });
-    const resizeDisposable = term.onResize(({ cols, rows }) => window.northstarTerminal.resizeTerminal(id, cols, rows));
-    const unsubscribeData = window.northstarTerminal.onTerminalData((dataId, data) => {
+    const resizeDisposable = term.onResize(({ cols, rows }) => window.portalogiaTerminal.resizeTerminal(id, cols, rows));
+    const unsubscribeData = window.portalogiaTerminal.onTerminalData((dataId, data) => {
       if (dataId === id) {
         // Cheap belt-and-suspenders alongside the `IntersectionObserver`
         // stand-in above: forces the just-written rows to actually paint
@@ -351,7 +351,7 @@ export function Terminal({ id }: TerminalProps) {
         });
       }
     });
-    const unsubscribeExited = window.northstarTerminal.onTerminalExited((exitedId) => {
+    const unsubscribeExited = window.portalogiaTerminal.onTerminalExited((exitedId) => {
       if (exitedId === id) {
         setExited(true);
       }
@@ -451,7 +451,7 @@ export function Terminal({ id }: TerminalProps) {
       }
     };
 
-    const unsubscribeHighlighterState = window.northstarTerminal.onHighlighterState((active, color) => {
+    const unsubscribeHighlighterState = window.portalogiaTerminal.onHighlighterState((active, color) => {
       highlighterActive = active;
       highlighterColor = color;
       container.classList.toggle('terminal__surface--highlighter-active', active);
@@ -463,8 +463,8 @@ export function Terminal({ id }: TerminalProps) {
     });
 
     // The find bar's search of this terminal's buffer (see `terminalFind.ts`).
-    const find = createTerminalFind(term, (result) => window.northstarTerminal.reportFind(result));
-    const unsubscribeFind = window.northstarTerminal.onFind((command) => find.handle(command));
+    const find = createTerminalFind(term, (result) => window.portalogiaTerminal.reportFind(result));
+    const unsubscribeFind = window.portalogiaTerminal.onFind((command) => find.handle(command));
 
     const handleHighlighterMouseUp = (): void => {
       if (!highlighterActive || !term.hasSelection()) {
@@ -609,7 +609,7 @@ export function Terminal({ id }: TerminalProps) {
     // back than the terminal's last clear, without needing to track that
     // separately.
     //
-    // A plain `window` global, not a proper `NorthstarTerminalApi` IPC
+    // A plain `window` global, not a proper `PortalogiaTerminalApi` IPC
     // channel, is the right tool for main to reach this: `executeJavaScript`
     // (what `exportToPdf` actually calls) runs in this page's own main
     // world regardless of `contextIsolation`/`sandbox`, so main can call

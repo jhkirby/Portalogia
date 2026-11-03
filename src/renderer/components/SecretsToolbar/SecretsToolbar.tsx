@@ -1,4 +1,4 @@
-// Project: Northstar
+// Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-27
@@ -32,11 +32,11 @@ export function SecretsToolbar({ tab }: SecretsToolbarProps) {
   useEffect(() => {
     queryByTab.set(tab.id, query);
     // The tab's page may have loaded after the text was last typed: tell it what this box holds.
-    window.northstar.setSecretsQuery(tab.id, query);
+    window.portalogia.setSecretsQuery(tab.id, query);
   }, [tab.id, query]);
 
   // Ctrl+/ (menu accelerator, see buildMenu.ts) jumps here, as it does to the address bar on a browser tab.
-  useEffect(() => window.northstar.onFocusAddressBar(() => searchRef.current?.focus()), []);
+  useEffect(() => window.portalogia.onFocusAddressBar(() => searchRef.current?.focus()), []);
 
   const placeholder = useAnimatedPlaceholder(query === '', 'Search secrets');
 
@@ -72,7 +72,7 @@ export function SecretsToolbar({ tab }: SecretsToolbarProps) {
             key={side}
             type="button"
             className={`bookmarks-toolbar__mode hover-grow${tab.mode === side ? ' bookmarks-toolbar__mode--active' : ''}`}
-            onClick={() => window.northstar.setSecretsMode(tab.id, side)}
+            onClick={() => window.portalogia.setSecretsMode(tab.id, side)}
             aria-pressed={tab.mode === side}
           >
             {side === 'view' ? 'View' : 'Edit'}
@@ -83,7 +83,7 @@ export function SecretsToolbar({ tab }: SecretsToolbarProps) {
       <button
         type="button"
         className="secrets-toolbar__add hover-grow chrome-tooltip"
-        onClick={() => window.northstar.addSecretRow(tab.id)}
+        onClick={() => window.portalogia.addSecretRow(tab.id)}
         aria-label="Add a secret"
         data-tooltip="Add a secret by hand"
       >
