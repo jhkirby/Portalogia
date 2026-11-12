@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
@@ -38,6 +38,19 @@ const EMPTY_STATE: BrowserState = {
   cropActive: false,
 };
 
+/**
+ * Lets the chrome animate again once the first real state has painted. Until then `index.html`'s `state-pending`
+ * class holds transitions off, so sidebars remembered closed start closed rather than sliding shut from
+ * `EMPTY_STATE`'s open ones as the window appears.
+ */
+function endStatePending(): void {
+  const root = document.documentElement;
+  if (!root.classList.contains('state-pending')) {
+    return;
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('state-pending')));
+}
+
 /** Reported to the console when a main-process request fails; the UI itself never blocks on it. */
 function logIfFailed(result: IpcResult<unknown>): void {
   if (!result.ok) {
@@ -66,6 +79,7 @@ export function useTabs() {
       }
       if (result.ok) {
         setState(result.data);
+        endStatePending();
       } else {
         logIfFailed(result);
       }
@@ -74,6 +88,7 @@ export function useTabs() {
     return window.portalogia.onStateChanged((next) => {
       if (!cancelled) {
         setState(next);
+        endStatePending();
       }
     });
   }, []);

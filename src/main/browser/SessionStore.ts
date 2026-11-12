@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-11-12
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -32,13 +32,26 @@ const sessionWorkspaceSchema = z.object({
   icon: z.string().default('dot'),
 });
 
+/** Whether each sidebar was shown in full (rather than as its rail) in the last window closed. */
+const sidebarLayoutSchema = z.object({
+  workspaces: z.boolean(),
+  tools: z.boolean(),
+});
+
+export type SidebarLayout = z.infer<typeof sidebarLayoutSchema>;
+
 const sessionFileSchema = z.object({
   workspaces: z.array(sessionWorkspaceSchema),
   tabs: z.array(sessionTabSchema),
   activeWorkspaceId: z.string().min(1),
+  // Absent in files written before the sidebars were remembered: both start open, as they used to.
+  sidebars: sidebarLayoutSchema.optional(),
 });
 
 export type SessionSnapshot = z.infer<typeof sessionFileSchema>;
+
+/** The tabs and workspaces part of a session: what a window's `TabManager` builds. The sidebars are kept apart. */
+export type SessionContents = Omit<SessionSnapshot, 'sidebars'>;
 
 /**
  * How long to let rapid-fire state changes settle before actually writing
@@ -62,12 +75,35 @@ const SAVE_DEBOUNCE_MS = 400;
  */
 export class SessionStore {
   private readonly initial: SessionSnapshot | null;
-  private pending: SessionSnapshot | null = null;
+  private pending: SessionContents | null = null;
+  /** The contents last scheduled or loaded, so a sidebar change alone can still be written with them. */
+  private latest: SessionContents | null;
+  /**
+   * The sidebars as the last window to close left them. Kept apart from the contents, which every visible window
+   * writes as its tabs change: only a window closing sets this, so the last one closed is the one remembered.
+   */
+  private sidebars: SidebarLayout | undefined;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   /** @param filePath Where to read/write the session JSON file. */
   public constructor(private readonly filePath: string) {
     this.initial = this.load();
+    this.latest = this.initial;
+    this.sidebars = this.initial?.sidebars;
+  }
+
+  /** @returns The sidebars as they were when the app last closed, or `undefined` when none were saved yet. */
+  public getSidebars(): SidebarLayout | undefined {
+    return this.sidebars;
+  }
+
+  /**
+   * Records the sidebars of a window that's closing, to be written with the session on the next flush.
+   * @param sidebars Whether each sidebar was open in that window.
+   */
+  public recordSidebars(sidebars: SidebarLayout): void {
+    this.sidebars = sidebars;
+    this.pending ??= this.latest;
   }
 
   /**
@@ -85,8 +121,9 @@ export class SessionStore {
    * after they settle rather than one per change.
    * @param snapshot The full session to persist once the debounce settles.
    */
-  public scheduleSave(snapshot: SessionSnapshot): void {
+  public scheduleSave(snapshot: SessionContents): void {
     this.pending = snapshot;
+    this.latest = snapshot;
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }
@@ -106,7 +143,8 @@ export class SessionStore {
     if (this.pending === null) {
       return;
     }
-    writeFileSync(this.filePath, JSON.stringify(this.pending, null, 2), 'utf-8');
+    const file: SessionSnapshot = { ...this.pending, sidebars: this.sidebars };
+    writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
     this.pending = null;
   }
 

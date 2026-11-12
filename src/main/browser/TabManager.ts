@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -133,7 +133,7 @@ import { LaserPointerOverlay } from './LaserPointerOverlay';
 import { PageDocumentExporter } from './PageDocumentExporter';
 import type { PenController } from './PenController';
 import { getCurrentAccent, trackPageSelectionAccent } from './pageSelectionAccent';
-import type { SessionSnapshot, SessionStore } from './SessionStore';
+import type { SessionContents, SessionStore, SidebarLayout } from './SessionStore';
 import type { SharedTabRegistry } from './SharedTabRegistry';
 import { SuggestionsOverlay } from './SuggestionsOverlay';
 import { ContentSnapshot } from './ContentSnapshot';
@@ -517,6 +517,14 @@ export class TabManager {
     // `activateTab` callback) always immediately sets this to the
     // correct value before the window is ever shown.
     this.activeWorkspaceId = DEFAULT_WORKSPACE_ID;
+
+    // Every window opens with the sidebars as the last one closed left them.
+    const sidebars = sessionStore.getSidebars();
+    if (sidebars) {
+      this.sidebarVisible = sidebars.workspaces;
+      this.toolsSidebarVisible = sidebars.tools;
+      this.rightInsetNow = this.targetRightInset();
+    }
 
     nativeTheme.on('updated', this.keepPagesSeeThrough);
 
@@ -6502,6 +6510,11 @@ export class TabManager {
    * is gone whichever way it's set, so only the setting changes.
    * @returns The full browser state after the change; the slide itself goes on after.
    */
+  /** @returns Whether each sidebar is open in this window, for the session to remember when it closes. */
+  public getSidebarLayout(): SidebarLayout {
+    return { workspaces: this.sidebarVisible, tools: this.toolsSidebarVisible };
+  }
+
   public toggleToolsSidebar(): BrowserState {
     this.toolsSidebarVisible = !this.toolsSidebarVisible;
     this.emitState();
@@ -7607,7 +7620,7 @@ export class TabManager {
   }
 
   /** @returns The current tabs/workspaces reduced to `SessionStore`'s minimal recreatable shape — see `restoreSession` for why it's not the full `TabState`. */
-  private buildSessionSnapshot(): SessionSnapshot {
+  private buildSessionSnapshot(): SessionContents {
     return {
       workspaces: Array.from(this.workspaces.values()),
       // Twins are per-window views of a tab that's already saved via its
@@ -7858,7 +7871,14 @@ export class TabManager {
         const owner = owningManager();
         // Still the tab showing, in a window that still has the focus, and the page hasn't got the keyboard back: it
         // was left. Switching tabs, or the window losing focus, leaves the page as it was.
-        if (!wc.isDestroyed() && owner.activeTabId === id && owner.window.isFocused() && !wc.isFocused()) {
+        // The window can be gone by now (the page blurs as it closes), and asking a closed one throws.
+        if (
+          !wc.isDestroyed() &&
+          !owner.window.isDestroyed() &&
+          owner.activeTabId === id &&
+          owner.window.isFocused() &&
+          !wc.isFocused()
+        ) {
           pageHadKeyboard.set(id, false);
         }
       }, PAGE_FOCUS_SETTLE_MS);

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { existsSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
@@ -197,7 +197,7 @@ const adBlocker = new AdBlocker(
   () => {
     const state = adBlocker.getState();
     for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
         window.webContents.send(IpcChannel.AdBlockState, state);
       }
     }
@@ -216,13 +216,21 @@ const sharedTerminalManager = new TerminalManager(
   // actually listening for it, and it's reachable through
   // `sharedRegistry.views` regardless of which window currently has that
   // view mounted.
-  (id, data) => sharedRegistry.views.get(id)?.webContents.send(IpcChannel.TerminalData, { id, data }),
+  (id, data) => {
+    const contents = sharedRegistry.views.get(id)?.webContents;
+    if (contents && !contents.isDestroyed()) {
+      contents.send(IpcChannel.TerminalData, { id, data });
+    }
+  },
   (id) => {
     const state = sharedRegistry.states.get(id);
     if (state?.kind === 'terminal') {
       sharedRegistry.states.set(id, { ...state, exited: true });
     }
-    sharedRegistry.views.get(id)?.webContents.send(IpcChannel.TerminalExited, { id });
+    const contents = sharedRegistry.views.get(id)?.webContents;
+    if (contents && !contents.isDestroyed()) {
+      contents.send(IpcChannel.TerminalExited, { id });
+    }
     sharedRegistry.notifyAll();
   },
 );
@@ -397,7 +405,8 @@ function launchWindow(
   const tabManager = new TabManager(
     window,
     (state) => {
-      if (!window.isDestroyed()) {
+      // The page goes before its window does while closing, and a tab's focus/blur still fires in between.
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
         window.webContents.send(IpcChannel.TabsStateChanged, state);
       }
     },
@@ -430,6 +439,13 @@ function launchWindow(
   }
 
   window.on('resize', () => tabManager.updateBounds());
+  // Before it's gone, while a hidden one (the spare, a tear-off mid-drag) can still be told apart: only a window the
+  // user could see leaves its sidebars for the next launch. Last one closed wins.
+  window.on('close', () => {
+    if (window.isVisible()) {
+      sessionStore.recordSidebars(tabManager.getSidebarLayout());
+    }
+  });
   window.on('closed', () => {
     tabManager.dispose();
     tabManagersByWindowId.delete(window.id);
@@ -443,8 +459,13 @@ function launchWindow(
 
   // Drives WindowControls' maximize/restore icon — the frameless window has
   // no native titlebar to show that state itself (see MainWindow.ts).
-  window.on('maximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: true }));
-  window.on('unmaximize', () => window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized: false }));
+  const sendMaximized = (isMaximized: boolean): void => {
+    if (!window.webContents.isDestroyed()) {
+      window.webContents.send(IpcChannel.WindowStateChanged, { isMaximized });
+    }
+  };
+  window.on('maximize', () => sendMaximized(true));
+  window.on('unmaximize', () => sendMaximized(false));
   return window;
 }
 

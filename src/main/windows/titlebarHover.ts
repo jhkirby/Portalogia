@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-11-12
 
 import { screen, type BrowserWindow } from 'electron';
 import { TAB_STRIP_HEIGHT_PX } from '@shared/constants';
@@ -28,7 +28,8 @@ export function watchTitlebarHover(window: BrowserWindow): void {
   let last: { x: number; y: number } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const check = (): void => {
-    if (window.isDestroyed()) {
+    // The page is torn down before the window while it closes; a send to it then throws.
+    if (window.isDestroyed() || window.webContents.isDestroyed()) {
       return;
     }
     let next = false;

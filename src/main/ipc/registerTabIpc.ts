@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -105,6 +105,19 @@ export function registerTabIpc(
   /** The manager owning `tabId`, but only for a message from a chrome page — `undefined` for a tab's page. */
   const chromeManagerForTab = (event: { sender: Electron.WebContents }, tabId: string): TabManager | undefined =>
     isChromeSender(event) ? resolveTabManagerForTab(tabId) : undefined;
+
+  /**
+   * The sending chrome window's manager, or `undefined` when there is none — for the fire-and-forget (`ipcMain.on`)
+   * channels, which have no reply to carry a failure back in: a throw there is an uncaught exception, and a closing
+   * window's chrome can still send one last sync (a tooltip hiding, a menu closing) after its manager is gone.
+   */
+  const chromeManagerOrNone = (event: { sender: Electron.WebContents }): TabManager | undefined => {
+    try {
+      return resolveTabManager(event);
+    } catch {
+      return undefined;
+    }
+  };
 
   handle(IpcChannel.TabsCreate, createTabRequestSchema, (request, event) =>
     resolveTabManager(event).createTabAndFocusAddressBar(request.url),
@@ -802,7 +815,7 @@ export function registerTabIpc(
   ipcMain.on(IpcChannel.AddressSuggestionsSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = addressSuggestionsSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabManager(event).syncAddressSuggestions(parsed.data);
+      chromeManagerOrNone(event)?.syncAddressSuggestions(parsed.data);
     }
   });
 
@@ -812,7 +825,7 @@ export function registerTabIpc(
   ipcMain.on(IpcChannel.TooltipSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = tooltipSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabManager(event).syncTooltip(parsed.data);
+      chromeManagerOrNone(event)?.syncTooltip(parsed.data);
     }
   });
 
@@ -822,20 +835,20 @@ export function registerTabIpc(
   ipcMain.on(IpcChannel.ExportMenuSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = exportMenuSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabManager(event).syncExportMenu(parsed.data);
+      chromeManagerOrNone(event)?.syncExportMenu(parsed.data);
     }
   });
   // The tab row's "+" menu, drawn by a second menu overlay of its own (`TabManager.syncNewTabMenu`).
   ipcMain.on(IpcChannel.NewTabMenuSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = exportMenuSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabManager(event).syncNewTabMenu(parsed.data);
+      chromeManagerOrNone(event)?.syncNewTabMenu(parsed.data);
     }
   });
   ipcMain.on(IpcChannel.ColorPickerSync, (event: IpcMainEvent, rawRequest: unknown) => {
     const parsed = colorPickerSyncRequestSchema.safeParse(rawRequest);
     if (parsed.success) {
-      resolveTabManager(event).syncColorPicker(parsed.data);
+      chromeManagerOrNone(event)?.syncColorPicker(parsed.data);
     }
   });
 }
