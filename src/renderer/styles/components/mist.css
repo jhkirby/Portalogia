@@ -20,6 +20,12 @@
   overflow: hidden;
 
   pointer-events: none;
+
+  /* Out of the window's drag region altogether. On the tab row (an OS drag region, `.titlebar`) the wisps would
+     inherit it, and the drag region is taken from each element's whole box, never its clipped one: the row's wisps
+     run well past the row, so they made drifting strips of the toolbar below it drag the window and swallow clicks.
+     `none`, not `no-drag`, which would punch holes in the row's own drag region instead. */
+  -webkit-app-region: none;
 }
 
 .mist__wisp {
