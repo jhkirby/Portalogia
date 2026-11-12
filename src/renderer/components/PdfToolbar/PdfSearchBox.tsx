@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -9,6 +9,7 @@ import type { AddressSuggestionItem } from '@shared/ipc-contract';
 import type { BookmarkState } from '@shared/tab-state';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
+import { rankSuggestions } from '../../lib/suggestionRanking';
 
 interface PdfSearchBoxProps {
   /** Which files it searches: PDFs (the default) or Markdown notes — the same box, with its own history and wording. */
@@ -44,7 +45,8 @@ const DROPDOWN_GAP_PX = 6;
 export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: PdfSearchBoxProps) {
   const [draft, setDraft] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // -1: no row highlighted until Down moves into the list, so Enter never opens the first one unasked.
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLFormElement>(null);
@@ -57,33 +59,25 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
   // Open as soon as the box is focused, like the address bar's once typing starts: with nothing typed yet, it lists
   // every bookmarked and recently opened file, for an empty tab is here to pick one.
   const recentPdfs = useHistorySuggestions(kind, draft, isFocused, true);
-  // The bookmarked PDFs that match come first, newest bookmark first; then the PDFs most recently opened that
-  // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`. Nothing typed matches all.
-  const suggestions = useMemo((): readonly AddressSuggestionItem[] => {
-    const bookmarkRows = [...bookmarks]
-      .reverse()
-      .filter(
-        (bookmark) =>
-          bookmark.title.toLowerCase().includes(query) || (bookmark.path ?? '').toLowerCase().includes(query),
-      )
-      .map(
-        (bookmark): AddressSuggestionItem => ({
-          id: bookmark.id,
-          title: bookmark.title,
-          url: bookmark.path ?? bookmark.url,
-          kind: 'bookmark',
-        }),
-      );
-    // Paths compare without regard to case, as on Windows.
-    const bookmarkedPaths = new Set(bookmarkRows.map((row) => row.url.toLowerCase()));
-    const recentRows = recentPdfs
-      .filter((pdf) => !bookmarkedPaths.has(pdf.url.toLowerCase()))
-      .map((pdf): AddressSuggestionItem => ({ id: `history:${pdf.url}`, title: pdf.title, url: pdf.url, kind: 'history' }));
-    return [...bookmarkRows, ...recentRows].slice(0, MAX_SUGGESTIONS);
-  }, [bookmarks, query, recentPdfs]);
+  // The bookmarked files whose name matches come first, then those matching only by path, then the files most
+  // recently opened the same way (`rankSuggestions`) — all capped at `MAX_SUGGESTIONS`. Nothing typed lists all.
+  const suggestions = useMemo(
+    (): readonly AddressSuggestionItem[] =>
+      rankSuggestions(
+        [...bookmarks].reverse().map((bookmark) => ({ id: bookmark.id, title: bookmark.title, url: bookmark.path ?? bookmark.url })),
+        recentPdfs.map((file) => ({ id: `history:${file.url}`, title: file.title, url: file.url })),
+        query,
+        MAX_SUGGESTIONS,
+        // Paths compare without regard to case, as on Windows.
+        (path) => path.toLowerCase(),
+      ),
+    [bookmarks, query, recentPdfs],
+  );
 
   const isDropdownOpen = isFocused && suggestions.length > 0;
-  const clampedIndex = suggestions.length === 0 ? 0 : Math.min(selectedIndex, suggestions.length - 1);
+  const clampedIndex = Math.min(selectedIndex, suggestions.length - 1);
+  // The list the overlay was last given, which a click's index refers into.
+  const shownRef = useRef<readonly AddressSuggestionItem[]>([]);
 
   // Measured fresh each time the dropdown opens, and on window resize while it's open.
   useLayoutEffect(() => {
@@ -110,6 +104,7 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
       window.portalogia.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
       return;
     }
+    shownRef.current = suggestions;
     window.portalogia.syncAddressSuggestions({
       open: true,
       rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
@@ -141,16 +136,21 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
     closeDropdown();
   };
 
-  // A row clicked in the overlay's own view reports back by index; re-subscribed as the matches change so it resolves against the list actually shown.
-  useEffect(() => {
-    return window.portalogia.onAddressSuggestionSelected((index) => {
-      const target = suggestions[index];
-      if (target) {
-        openSuggestion(target);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `openSuggestion` closes over stable setters and a callback fixed per mounted tab; re-subscribing on every render would buy nothing.
-  }, [suggestions]);
+  // A row clicked in the overlay's own view reports back by index. Pressing it moves the keyboard to the overlay,
+  // blurring this box, and the blur clears the history's matches — so by the time the index arrives the list here can
+  // have changed. It's resolved against the list the overlay was last given (`shownRef`), never the current one.
+  const openRef = useRef(openSuggestion);
+  openRef.current = openSuggestion;
+  useEffect(
+    () =>
+      window.portalogia.onAddressSuggestionSelected((index) => {
+        const target = shownRef.current[index];
+        if (target) {
+          openRef.current(target);
+        }
+      }),
+    [],
+  );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'Escape') {
@@ -166,7 +166,8 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
       setSelectedIndex((index) => Math.min(index + 1, suggestions.length - 1));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setSelectedIndex((index) => Math.max(index - 1, 0));
+      // Up from the first row goes back to the box itself.
+      setSelectedIndex((index) => Math.max(index - 1, -1));
     } else if (event.key === 'Enter') {
       event.preventDefault();
       const target = suggestions[clampedIndex];
@@ -194,9 +195,12 @@ export function PdfSearchBox({ kind = 'pdf', bookmarks, onOpen, onOpenPath }: Pd
         value={draft}
         onChange={(event) => {
           setDraft(event.target.value);
-          setSelectedIndex(0);
+          setSelectedIndex(-1);
         }}
-        onFocus={() => setIsFocused(true)}
+        onFocus={() => {
+          setIsFocused(true);
+          setSelectedIndex(-1);
+        }}
         onBlur={() => setIsFocused(false)}
         onKeyDown={handleKeyDown}
         aria-label={`Search ${label}...`}

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -655,7 +655,8 @@ export const addressSuggestionsSyncRequestSchema = z.object({
       kind: z.enum(['bookmark', 'history']).optional(),
     }),
   ),
-  selectedIndex: z.number().int().nonnegative(),
+  // -1 when no row is highlighted (a search bar's list before Down is pressed).
+  selectedIndex: z.number().int().min(-1),
 });
 export type AddressSuggestionsSyncRequest = z.infer<typeof addressSuggestionsSyncRequestSchema>;
 

@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-26 */
+   Last Modified: 2026-11-12 */
 
 /* ── SIDEBAR SLIDE SNAPSHOT ───────────────────────────────────────────── */
 /* The picture of the tab's pages that stands in for them while the sidebar
@@ -39,6 +39,16 @@
 
 .content-snapshot__body {
   left: 0;
+}
+
+/* Holds the body to the left of the edge (its `right` is the edge's width, set inline), so a pane narrowing past the
+   body's own width never shows the body through the edge's see-through margin. */
+.content-snapshot__body-clip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
 }
 
 .content-snapshot__edge {

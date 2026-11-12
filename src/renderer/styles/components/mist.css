@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-29 */
+   Last Modified: 2026-11-12 */
 
 /* ── MIST ─────────────────────────────────────────────────────────────── */
 /* Mist drifting across the tab row's and the sidebar's backgrounds (`Mist`). Like the pointer's glow
@@ -99,10 +99,18 @@
 
 /* ── The sidebar: tall wisps drifting up and down it ── */
 
-.mist--rail .mist__wisp,
+/* Sized from the sidebar's full width, not its current one, so a wisp keeps its shape through the slide: the
+   narrowing sidebar only shows less of it (each held to the sidebar's outer edge, where its rail stays). Sized in
+   percent, they were squeezed to a sliver and stretched back every slide. */
+.mist--rail .mist__wisp {
+  left: calc(var(--size-sidebar-width) * -0.45);
+  width: calc(var(--size-sidebar-width) * 1.9);
+  height: 34%;
+}
+
 .mist--tools .mist__wisp {
-  left: -45%;
-  width: 190%;
+  right: calc(var(--size-tools-sidebar-width) * -0.45);
+  width: calc(var(--size-tools-sidebar-width) * 1.9);
   height: 34%;
 }
 

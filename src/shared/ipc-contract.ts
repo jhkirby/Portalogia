@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
@@ -558,6 +558,7 @@ export interface AddressSuggestionsSyncPayload {
   readonly open: boolean;
   readonly rect: { readonly top: number; readonly left: number; readonly width: number } | null;
   readonly suggestions: readonly AddressSuggestionItem[];
+  /** The keyboard's row, or -1 for none (a search bar's list before Down is pressed, so Enter submits the text). */
   readonly selectedIndex: number;
 }
 

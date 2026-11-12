@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-26
+// Last Modified: 2026-11-12
 
 import { useEffect, useRef } from 'react';
 import type { ContentSnapshotPiece } from '@shared/ipc-contract';
@@ -49,13 +49,20 @@ function buildPiece(piece: ContentSnapshotPiece, radius: number): HTMLElement {
   const bodyPx = piece.pixelWidth - edgePx;
   const bodyCss = bodyPx / scale;
 
+  const edgeWidthCss = edgePx / scale;
   const body = strip(image, 0, bodyPx, 'content-snapshot__body');
   body.style.width = `${bodyCss}px`;
+  // The body ends where the edge begins. As the pane narrows, the body (which keeps its width) would otherwise run on
+  // under the edge, and show through the edge's see-through margin as a dark strip past the frame's border.
+  const bodyClip = document.createElement('div');
+  bodyClip.className = 'content-snapshot__body-clip';
+  bodyClip.style.right = `${edgeWidthCss}px`;
+  bodyClip.append(body);
   const seam = strip(image, bodyPx - 1, 1, 'content-snapshot__seam');
   seam.style.left = `${bodyCss}px`;
   seam.style.width = `max(0px, calc(100% - ${piece.width}px))`;
   const edge = strip(image, bodyPx, edgePx, 'content-snapshot__edge');
-  edge.style.width = `${edgePx / scale}px`;
+  edge.style.width = `${edgeWidthCss}px`;
 
   const box = document.createElement('div');
   box.className = 'content-snapshot__piece';
@@ -64,7 +71,7 @@ function buildPiece(piece: ContentSnapshotPiece, radius: number): HTMLElement {
   box.style.width = `${piece.fractionWidth * 100}%`;
   box.style.height = `${piece.fractionHeight * 100}%`;
   box.style.borderRadius = `${radius}px`;
-  box.append(body, seam, edge);
+  box.append(bodyClip, seam, edge);
   return box;
 }
 

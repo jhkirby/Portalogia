@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-29 */
+   Last Modified: 2026-11-12 */
 
 /* ── SIDEBAR ──────────────────────────────────────────────────────────── */
 /* Rail on the left edge of the window, beneath the top bar (see app.css's
@@ -108,11 +108,19 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 
-  transition: padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
 }
 
 .sidebar--hidden .sidebar__title {
   padding-left: 0;
+
+  opacity: 0;
+  text-overflow: clip;
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    opacity var(--size-sidebar-label-fade-out) ease-in;
 }
 
 /* Collapsed, the rail is narrower than this button's 28px, so it shrinks to fill it, its icon centred over the
@@ -339,6 +347,8 @@
 
   white-space: nowrap;
   text-overflow: ellipsis;
+
+  transition: opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
 }
 
 .workspace-bar__name-input {
@@ -475,18 +485,52 @@
 
 .workspace-bar__new-label {
   overflow: hidden;
+  min-width: 0;
   white-space: nowrap;
   text-overflow: ellipsis;
+
+  transition: opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
 }
 
-/* Collapsed, there's no room left for the label text at all (the icon
-   alone already uses most of `--size-sidebar-collapsed-width`) — hidden
-   outright rather than left to `.sidebar__inner`'s `overflow: hidden` to
-   quietly clip, which (lacking any width/wrap constraint of its own, the
-   way `.workspace-bar__name`'s ellipsis gives a pill's name one) let it
-   render as raw, unbounded overflow instead. */
-.sidebar--hidden .workspace-bar__new-label {
-  display: none;
+/* ── Through the slide ──
+   Nothing in the sidebar snaps when it starts to collapse or expand. The labels fade (out at once, in once there's
+   room) and clip rather than ellipsize, which would rewrite each one every frame as the edge passed over it. The
+   pills and "New workspace" ease their padding into the rail's, so the icons glide onto its centre line instead of
+   jumping there. The selector's extra class outranks `.hover-glow`'s own transition, which is kept. */
+.sidebar--hidden :is(.workspace-bar__name, .workspace-bar__new-label) {
+  opacity: 0;
+  text-overflow: clip;
+  transition: opacity var(--size-sidebar-label-fade-out) ease-in;
+}
+
+.sidebar :is(.workspace-bar__pill, .workspace-bar__new) {
+  transition:
+    color 160ms ease-out,
+    text-shadow 160ms ease-out,
+    padding var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* "New workspace" and the images button stack once collapsed (and sit side by side again once open): a change of
+   layout that can't glide, so the pair fades back in across it instead of jumping. Two names for one fade, so the
+   change of class each way starts it over. */
+.sidebar .workspace-bar__actions {
+  animation: sidebar-actions-in-open var(--size-sidebar-toggle-duration) ease-out;
+}
+
+.sidebar--hidden .workspace-bar__actions {
+  animation-name: sidebar-actions-in-collapsed;
+}
+
+@keyframes sidebar-actions-in-open {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sidebar-actions-in-collapsed {
+  from {
+    opacity: 0;
+  }
 }
 
 /* ── WORKSPACE IMAGES ─────────────────────────────────────────────────── */

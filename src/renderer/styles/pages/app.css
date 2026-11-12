@@ -84,6 +84,8 @@ body {
    TabManager.computeMainBounds(). `BookmarkPopup` is the one thing that
    does render inside `.tab-content` (see App.tsx). */
 .main-row {
+  /* Holds the metal, which lies under all three of its columns. */
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -96,8 +98,10 @@ body {
   min-width: 0;
 }
 
-/* The flowing metal behind every tab (`MetalBackground`): the whole tab area, under the frame's border and the stat
-   bar, and never in the pointer's way. Drawn small and stretched to fit (see `metalFluid.ts`'s `RENDER_SCALE`). */
+/* The flowing metal behind every tab (`MetalBackground`): the whole row, under the sidebars (opaque, so it shows only
+   in the tab area between them), the frame's border and the stat bar, and never in the pointer's way. Its size
+   doesn't change as a sidebar slides, so neither does the pattern. Drawn small and stretched to fit (see
+   `metalFluid.ts`'s `RENDER_SCALE`). The columns after it, positioned, paint over it. */
 .metal-background {
   position: absolute;
   inset: 0;
@@ -111,7 +115,7 @@ body {
 /* The metal's cover through a light/dark switch (`MetalBackground`): the new theme's toolbar colour, faded in over
    the metal and out again by opacity alone. Its colour changes at once, never with the rest of the page's colours
    (`.theme-fading` in colors.css, which this outranks), so it never shows the old theme's. */
-.tab-content .metal-background__cover {
+.main-row .metal-background__cover {
   position: absolute;
   inset: 0;
 

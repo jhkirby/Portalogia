@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-29 */
+   Last Modified: 2026-11-12 */
 
 /* ── TOOLS SIDEBAR ────────────────────────────────────────────────────── */
 /* The page tools on the window's right edge (`ToolsBar`): the workspace sidebar (workspace-bar.css) mirrored, its
@@ -66,11 +66,19 @@
 
   text-align: right;
 
-  transition: padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+  transition:
+    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
 }
 
 .tools-sidebar--hidden .tools-sidebar__header .sidebar__title {
   padding-right: 0;
+
+  opacity: 0;
+  text-overflow: clip;
+  transition:
+    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    opacity var(--size-sidebar-label-fade-out) ease-in;
 }
 
 /* ── The tools ── */
@@ -128,6 +136,8 @@
 
   white-space: nowrap;
   text-overflow: ellipsis;
+
+  transition: opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
 }
 
 /* A fixed square, so the icons line up down the right edge whatever their shape. */
@@ -146,16 +156,27 @@
 }
 
 /* Hidden, a row is just its icon, centred in the row (and so in its "on" fill), every icon on one line down the rail
-   with the show/hide button's above them. The name and the gap before the icon both go, or they'd push the icon off
-   centre. */
+   with the show/hide button's above them. The name narrows to nothing (it takes only the room left over), and the
+   gap and padding ease to an even margin either side of the icon, so the icons glide onto the rail's centre line
+   rather than jumping there; the name fades rather than vanishing. The padding's percent is of the list's width. */
 .tools-sidebar--hidden .tools-sidebar__tool {
-  justify-content: center;
   gap: 0;
-  padding: 0;
+  padding: 0 max(0px, calc((100% - 16px) / 2));
 }
 
 .tools-sidebar--hidden .tools-sidebar__name {
-  display: none;
+  opacity: 0;
+  text-overflow: clip;
+  transition: opacity var(--size-sidebar-label-fade-out) ease-in;
+}
+
+/* The extra class outranks `.hover-glow`'s own transition, which is kept. */
+.tools-sidebar .tools-sidebar__tool {
+  transition:
+    color 160ms ease-out,
+    text-shadow 160ms ease-out,
+    gap var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    padding var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 /* Between Pan and Select, which only move the pointer, and the tools after them, which mark the page. */
@@ -165,6 +186,8 @@
   margin: var(--size-spacing-xs) var(--size-spacing-sm);
 
   background: var(--color-chrome-border);
+
+  transition: margin var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .tools-sidebar--hidden .tools-sidebar__divider {

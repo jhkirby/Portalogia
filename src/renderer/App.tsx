@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { HistoryClearRange, MarkdownFormatAction, PageStats } from '@shared/ipc-contract';
@@ -1051,6 +1051,10 @@ export function App() {
         </div>
       </div>
       <div className="main-row">
+        {/* The metal flowing behind every tab, seen in the margin around its frame (and behind the stat bar's strip).
+            It spans the whole row, under both sidebars, rather than just the tab area: a sidebar's slide then only
+            uncovers or covers more of it, where sizing it to the tab area redrew and rescaled it every frame. */}
+        <MetalBackground />
         {/* Stays mounted (same reasoning as `.app__bar` above) so Focus
             Mode's slide-away reuses the sidebar's existing Ctrl+L
             transition (see `.sidebar--hidden` in workspace-bar.css)
@@ -1088,8 +1092,6 @@ export function App() {
             same area the hidden `WebContentsView` it's standing in for
             would otherwise occupy. */}
         <div className="tab-content">
-          {/* The metal flowing behind every tab, seen in the margin around its frame (and behind the stat bar's strip). */}
-          <MetalBackground />
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
               terminal or History page draws its own frame, and Focus Mode shows none. */}
           {!focusMode &&

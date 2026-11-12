@@ -172,6 +172,15 @@ const TAB_FADE_MS = 400;
  */
 const TAB_FADE_COVER_MS = 50;
 
+/**
+ * What's inside an app page's frame, the only part of it that fades in when its tab is shown (`fadeInTab`): the
+ * children of a PDF's frame, a note's, the History, Bookmarks and Secrets table's, and a terminal's. A PDF or note
+ * with nothing open shows its empty frame instead (`--empty`, `.md-viewer__empty`), which matches none of these.
+ */
+const APP_PAGE_CONTENT =
+  ':is(.pdf-viewer__body:not(.pdf-viewer__body--empty), .md-viewer > .md-viewer__body, .history__table-wrap, ' +
+  '.terminal__surface) > *';
+
 /** The colour a newly shown tab fades in from: the chrome's own (`--color-chrome-bg`), by theme. */
 const TAB_FADE_COLOR = { light: '#f1f3f4', dark: '#202124' } as const;
 
@@ -236,9 +245,10 @@ const LOAD_PROGRESS_HOLD_MS = 1000;
 const retiredViews = new WeakSet<WebContentsView>();
 
 /**
- * Whether each tab's page had the keyboard when it was last the active tab, so coming back to it gives the page the
- * keyboard again only if it had it then — clicking a tab never puts the cursor in its page by itself. Set when a page
- * gets the keyboard; cleared when the keyboard goes to the chrome on purpose (`focusChrome`), or when the page loses it
+ * Whether each tab's page had the keyboard when it was last the active tab, so coming back to it after a preview gives
+ * the page the keyboard again only if it had it then (`giveKeyboardAsLeft`) — selecting a tab never puts the cursor in
+ * its page (`showWithoutKeyboard`), and lets this go. Set when a page gets the keyboard; cleared when the keyboard goes
+ * to the chrome on purpose (`focusChrome`), or when the page loses it
  * while its tab is still the one showing (`PAGE_FOCUS_SETTLE_MS` later — a click on another tab takes the keyboard
  * first, and must not count). A tab not in here — a new one — starts without it. Module-level, like `pdfFilePaths`.
  */
@@ -3613,11 +3623,9 @@ export class TabManager {
     }
 
     if (this.splitView && !this.splitClosing && (id === this.splitView.primaryTabId || id === this.splitView.secondaryTabId)) {
-      // Either side of a split: it stays split, with this side the active one, and its page takes the keyboard.
-      const sideView = this.views.get(id);
-      if (sideView && !sideView.webContents.isDestroyed()) {
-        sideView.webContents.focus();
-      }
+      // Either side of a split: it stays split, with this side the active one, shown without the keyboard like any
+      // tab just selected.
+      this.showWithoutKeyboard(id);
       return this.focusSplitSide(id);
     }
     if (this.splitView) {
@@ -3665,13 +3673,14 @@ export class TabManager {
       this.window.contentView.addChildView(view, 0);
       this.pushFocusModeTo(id);
       view.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
-      this.giveKeyboardAsLeft(id, view);
+      this.showWithoutKeyboard(id);
       this.registry.mountOwners.set(id, this);
     }
     const previousTabId = this.activeTabId;
     this.activeTabId = id;
     if (leaving && view) {
-      this.fadeInTab(view, leaving);
+      // An app page's view is see-through around its frame (`makePageSeeThrough`), showing the metal there.
+      this.fadeInTab(view, leaving, this.states.get(id)?.kind !== 'browser');
     } else if (leaving) {
       releaseView(leaving.view, this.window);
     }
@@ -3819,13 +3828,19 @@ export class TabManager {
   private leavingTab: { id: string; view: WebContentsView; timer: ReturnType<typeof setTimeout> } | null = null;
 
   /**
-   * Fades a newly shown tab in from the chrome's colour, rather than switching at once. A cover over its page starts
-   * opaque and fades away; the tab being left stays mounted on top of it until the cover has painted, then comes
-   * down. A view's own opacity can't be animated, so the page itself carries the cover (like `fadeToHome`'s).
+   * Fades a newly shown tab in, rather than switching at once; the tab being left stays mounted on top of it until
+   * the new one has painted the fade's first frame, then comes down. A view's own opacity can't be animated, so the
+   * page itself carries the fade (like `fadeToHome`'s).
+   *
+   * A web page fades in from the chrome's colour, under a cover that starts opaque and fades away: its view sits
+   * inside the chrome's frame, so the cover never reaches past it. An app page's view is see-through around its own
+   * frame, where the flowing metal shows: there only what's inside the frame fades in (`APP_PAGE_CONTENT`), from
+   * clear, so the metal, the frame and its panel stay as they are, and a page with nothing open doesn't fade at all.
    * @param view The tab being shown, already mounted under the one being left.
    * @param leaving The tab being left.
+   * @param seeThrough Whether the tab's view is see-through (an app page), not a web page.
    */
-  private fadeInTab(view: WebContentsView, leaving: { id: string; view: WebContentsView }): void {
+  private fadeInTab(view: WebContentsView, leaving: { id: string; view: WebContentsView }, seeThrough: boolean): void {
     // One left before it, still on its way out, goes now.
     if (this.leavingTab) {
       clearTimeout(this.leavingTab.timer);
@@ -3843,12 +3858,15 @@ export class TabManager {
       return;
     }
     const color = nativeTheme.shouldUseDarkColors ? TAB_FADE_COLOR.dark : TAB_FADE_COLOR.light;
-    // Held opaque while the tab being left is still over it, then faded out, and taken off the page once gone.
-    wc.insertCSS(
-      `@keyframes portalogia-tab-fade { from { opacity: 1; } to { opacity: 0; } } ` +
+    // Held at its start while the tab being left is still over it, then faded, and taken off the page once done.
+    const timing = `${TAB_FADE_MS}ms ease-out ${TAB_FADE_COVER_MS}ms both`;
+    const css = seeThrough
+      ? `@keyframes portalogia-tab-fade-in { from { opacity: 0; } to { opacity: 1; } } ` +
+        `${APP_PAGE_CONTENT} { animation: portalogia-tab-fade-in ${timing}; }`
+      : `@keyframes portalogia-tab-fade { from { opacity: 1; } to { opacity: 0; } } ` +
         `html::before { content: ''; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none; ` +
-        `background: ${color}; animation: portalogia-tab-fade ${TAB_FADE_MS}ms ease-out ${TAB_FADE_COVER_MS}ms both; }`,
-    )
+        `background: ${color}; animation: portalogia-tab-fade ${timing}; }`;
+    wc.insertCSS(css)
       .then((key) => {
         setTimeout(() => {
           if (!wc.isDestroyed()) {
@@ -6494,20 +6512,32 @@ export class TabManager {
    *   itself keeps running past this point; bounds settle asynchronously).
    */
   public toggleSidebar(): BrowserState {
+    return this.startSidebarSlide(() => {
+      this.sidebarVisible = !this.sidebarVisible;
+    });
+  }
+
+  /**
+   * Starts a sidebar's slide (`slideSidebar`), unless one is already under way: a press mid-slide is dropped rather
+   * than fighting it for the views' bounds.
+   * @param flip Shows or hides the sidebar, at the moment the slide begins.
+   * @returns The full browser state; the slide itself goes on after.
+   */
+  private startSidebarSlide(flip: () => void): BrowserState {
     if (this.sidebarSliding) {
       return this.getState();
     }
     this.sidebarSliding = true;
-    void this.slideSidebar().finally(() => {
+    void this.slideSidebar(flip).finally(() => {
       this.sidebarSliding = false;
     });
     return this.getState();
   }
 
   /**
-   * Shows the Tools sidebar in full or hides it to its rail of icons, sliding the tab views' right edge in step with
-   * the sidebar's own CSS transition (`animateBoundsInset` carries the right inset along). In Focus Mode the sidebar
-   * is gone whichever way it's set, so only the setting changes.
+   * Shows the Tools sidebar in full or hides it to its rail of icons, the same slide as the workspace sidebar's
+   * (`slideSidebar`): a picture of the pages moves with the chrome while the live views settle out of sight. In Focus
+   * Mode the sidebar is gone whichever way it's set, so only the setting changes.
    * @returns The full browser state after the change; the slide itself goes on after.
    */
   /** @returns Whether each sidebar is open in this window, for the session to remember when it closes. */
@@ -6516,12 +6546,9 @@ export class TabManager {
   }
 
   public toggleToolsSidebar(): BrowserState {
-    this.toolsSidebarVisible = !this.toolsSidebarVisible;
-    this.emitState();
-    const left = this.targetLeftInset();
-    const top = this.targetTopInset();
-    this.animateBoundsInset(left, left, top, top);
-    return this.getState();
+    return this.startSidebarSlide(() => {
+      this.toolsSidebarVisible = !this.toolsSidebarVisible;
+    });
   }
 
   /**
@@ -6540,9 +6567,10 @@ export class TabManager {
    * their new size out of sight; once the slide is done they come back,
    * already painted, over the picture. Without a picture (nothing on show,
    * or the capture failed), the views are resized frame by frame instead
-   * (`animateBoundsInset`).
+   * (`animateBoundsInset`). Serves both sidebars: the left one moves the views' left edge, the Tools one their right.
+   * @param flip Shows or hides the sidebar, once the picture is up.
    */
-  private async slideSidebar(): Promise<void> {
+  private async slideSidebar(flip: () => void): Promise<void> {
     // Captured before flipping the flag below, same reasoning as
     // `setFocusMode`'s own `fromLeft` — whatever the sidebar is actually
     // showing right now (which, mid-Focus-Mode, is 0 regardless of
@@ -6561,7 +6589,14 @@ export class TabManager {
         ? await this.contentSnapshot.cover(
             panes,
             area,
-            { left: area.x - fromLeft, top: area.y - top, right: width - area.x - area.width, bottom: height - area.y - area.height },
+            // Measured from the tab area's own edges, which the snapshot is pinned to: its right edge is the Tools
+            // sidebar's left one, not the window's.
+            {
+              left: area.x - fromLeft,
+              top: area.y - top,
+              right: width - this.rightInsetNow - area.x - area.width,
+              bottom: height - area.y - area.height,
+            },
             this.framesActiveView() ? CONTENT_FRAME_RADIUS_PX - CONTENT_FRAME_BORDER_PX : 0,
           )
         : null;
@@ -6572,7 +6607,7 @@ export class TabManager {
       }
       return;
     }
-    this.sidebarVisible = !this.sidebarVisible;
+    flip();
     this.emitState();
     const toLeft = this.targetLeftInset();
     if (snapshotId === null) {
@@ -6580,6 +6615,7 @@ export class TabManager {
       return;
     }
     // Out of sight but still drawn (a hidden page wouldn't paint), at the size the slide ends on.
+    this.rightInsetNow = this.targetRightInset();
     this.applyBounds(toLeft, top);
     for (const { view } of panes) {
       const bounds = view.getBounds();
@@ -7146,8 +7182,21 @@ export class TabManager {
   }
 
   /**
-   * Gives the keyboard to a tab just shown, as it was when the tab was last left (`pageHadKeyboard`): its page if it
-   * had it, otherwise the chrome — so the page shows unfocused, and a click or Escape in the chrome hands it over.
+   * Leaves a tab just selected without the keyboard, whatever it had when it was last left: the chrome keeps it, so the
+   * page shows unfocused until a click in it, or Escape in the chrome, hands it over. Its remembered focus
+   * (`pageHadKeyboard`) is let go with it, so nothing later gives the page the keyboard back unasked.
+   * @param id The tab selected.
+   */
+  private showWithoutKeyboard(id: string): void {
+    pageHadKeyboard.set(id, false);
+    if (!this.window.isDestroyed()) {
+      this.window.webContents.focus();
+    }
+  }
+
+  /**
+   * Gives the keyboard back to a tab shown again after a preview of it (`restoreTabPreview`), as it was before: its
+   * page if it had it, otherwise the chrome. Selecting a tab never does this (`showWithoutKeyboard`).
    * @param id The tab.
    * @param view Its view, just mounted.
    */

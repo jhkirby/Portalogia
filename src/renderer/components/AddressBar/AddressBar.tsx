@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
@@ -12,6 +12,7 @@ import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import { useFadingProgress } from '../../hooks/useFadingProgress';
 import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 import { pageLabel } from '../../lib/pageLabel';
+import { rankSuggestions } from '../../lib/suggestionRanking';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
 
@@ -82,7 +83,8 @@ export function AddressBar({
   // When the load's progress goes (a second after 100%), it fades out rather than vanishing.
   const shownProgress = useFadingProgress(loadProgress);
   const [isFocused, setIsFocused] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // -1: no row highlighted, so Enter submits what's typed. Down moves into the list.
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLFormElement>(null);
@@ -110,25 +112,24 @@ export function AddressBar({
 
   const query = draft.trim().toLowerCase();
   const recentPages = useHistorySuggestions('url', draft, isFocused);
-  // The bookmarks that match come first, newest bookmark first; then the pages most recently reached that
-  // match and aren't already listed as a bookmark — all capped at `MAX_SUGGESTIONS`.
+  // The bookmarks whose name matches come first, then those matching only by URL, then the pages most recently
+  // reached the same way (`rankSuggestions`) — all capped at `MAX_SUGGESTIONS`.
   const suggestions = useMemo((): readonly AddressSuggestionItem[] => {
     if (!query) {
       return [];
     }
-    const bookmarkRows = [...bookmarks]
-      .reverse()
-      .filter((bookmark) => bookmark.title.toLowerCase().includes(query) || bookmark.url.toLowerCase().includes(query))
-      .map((bookmark): AddressSuggestionItem => ({ id: bookmark.id, title: bookmark.title, url: bookmark.url, kind: 'bookmark' }));
-    const bookmarkedUrls = new Set(bookmarkRows.map((row) => row.url));
-    const recentRows = recentPages
-      .filter((page) => !bookmarkedUrls.has(page.url))
-      .map((page): AddressSuggestionItem => ({ id: `history:${page.url}`, title: page.title, url: page.url, kind: 'history' }));
-    return [...bookmarkRows, ...recentRows].slice(0, MAX_SUGGESTIONS);
+    return rankSuggestions(
+      [...bookmarks].reverse().map((bookmark) => ({ id: bookmark.id, title: bookmark.title, url: bookmark.url })),
+      recentPages.map((page) => ({ id: `history:${page.url}`, title: page.title, url: page.url })),
+      query,
+      MAX_SUGGESTIONS,
+    );
   }, [bookmarks, query, recentPages]);
 
   const isDropdownOpen = isFocused && suggestions.length > 0;
-  const clampedIndex = suggestions.length === 0 ? 0 : Math.min(selectedIndex, suggestions.length - 1);
+  const clampedIndex = Math.min(selectedIndex, suggestions.length - 1);
+  // The list the overlay was last given, which a click's index refers into.
+  const shownRef = useRef<readonly AddressSuggestionItem[]>([]);
 
   // Measured fresh each time the dropdown opens (and on window resize while
   // it's open) — this is the position the main process sizes and mounts
@@ -159,6 +160,7 @@ export function AddressBar({
       window.portalogia.syncAddressSuggestions({ open: false, rect: null, suggestions: [], selectedIndex: 0 });
       return;
     }
+    shownRef.current = suggestions;
     window.portalogia.syncAddressSuggestions({
       open: true,
       rect: { top: dropdownRect.top + DROPDOWN_GAP_PX, left: dropdownRect.left, width: dropdownRect.width },
@@ -189,20 +191,21 @@ export function AddressBar({
     closeDropdown();
   };
 
-  // A row clicked in the overlay's own separate view can't dispatch a
-  // normal DOM click here — it reports back over IPC by index instead
-  // (see `SuggestionsOverlay`). Re-subscribed whenever `suggestions`
-  // changes so the index always resolves against the list the overlay was
-  // actually showing when the click happened, rather than a stale closure.
-  useEffect(() => {
-    return window.portalogia.onAddressSuggestionSelected((index) => {
-      const target = suggestions[index];
-      if (target) {
-        selectSuggestion(target);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `selectSuggestion` closes over stable setters (`onNavigate` is effectively fixed per mounted tab — see this component's own `key` in App.tsx) and would otherwise force a re-subscribe on every render for no benefit.
-  }, [suggestions]);
+  // A row clicked in the overlay's own view reports back by index. Pressing it moves the keyboard to the overlay,
+  // blurring this box, and the blur clears the history's matches — so by the time the index arrives the list here can
+  // have changed. It's resolved against the list the overlay was last given (`shownRef`), never the current one.
+  const selectRef = useRef(selectSuggestion);
+  selectRef.current = selectSuggestion;
+  useEffect(
+    () =>
+      window.portalogia.onAddressSuggestionSelected((index) => {
+        const target = shownRef.current[index];
+        if (target) {
+          selectRef.current(target);
+        }
+      }),
+    [],
+  );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -224,11 +227,13 @@ export function AddressBar({
       setSelectedIndex((index) => Math.min(index + 1, suggestions.length - 1));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      setSelectedIndex((index) => Math.max(index - 1, 0));
+      // Up from the first row goes back to the field itself.
+      setSelectedIndex((index) => Math.max(index - 1, -1));
     } else if (event.key === 'Enter') {
-      event.preventDefault();
+      // Nothing highlighted: the form submits what's typed.
       const target = suggestions[clampedIndex];
       if (target) {
+        event.preventDefault();
         selectSuggestion(target);
       }
     }
@@ -280,11 +285,14 @@ export function AddressBar({
           value={draft}
           onChange={(event) => {
             setDraft(event.target.value);
-            setSelectedIndex(0);
+            setSelectedIndex(-1);
           }}
           // Deliberately no select-all on focus: the URL stays unhighlighted
           // when the bar is clicked into (it's only ever selected by the user).
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            setSelectedIndex(-1);
+          }}
           onBlur={(event) => {
             // Clicking elsewhere clears any selection the user made, or its
             // highlight lingers (visibly, behind the bookmark bubble).

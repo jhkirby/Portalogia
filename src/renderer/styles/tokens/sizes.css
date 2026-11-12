@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-29 */
+   Last Modified: 2026-11-12 */
 
 :root {
   /* Also the titlebar's own height now that the tab strip and
@@ -48,6 +48,11 @@
      moves in step with these transitions instead of snapping ahead of or
      behind them. */
   --size-sidebar-toggle-duration: 220ms;
+  /* A sidebar's labels through its slide: collapsing, they're gone in the first stretch, before the narrowing edge
+     reaches them; expanding, they wait until the slide (ease-out, so most of the way open by then) has room for them. */
+  --size-sidebar-label-fade-out: 90ms;
+  --size-sidebar-label-fade-in: 130ms;
+  --size-sidebar-label-fade-in-delay: 80ms;
   /* How fast the titlebar's corner swaps the clock for the window controls (and back) as the pointer comes onto the
      tab row, and the new-tab button fades in with them. */
   --size-titlebar-reveal-duration: 140ms;
