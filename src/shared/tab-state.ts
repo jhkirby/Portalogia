@@ -1,9 +1,15 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 /** A page loaded in a `WebContentsView`, same as every tab before terminal tabs existed. */
+/** A load's bytes: received so far, over the bytes it's known to be loading (see `BrowserTabState.loadBytes`). */
+export interface LoadBytes {
+  readonly loaded: number;
+  readonly total: number;
+}
+
 export interface BrowserTabState {
   readonly kind: 'browser';
   readonly id: string;
@@ -15,17 +21,17 @@ export interface BrowserTabState {
    * line. 100 for a second after it finishes, then `null` until the next load.
    */
   readonly loadProgress: number | null;
+  /**
+   * The page's load in bytes, beside its percentage in the address bar: received so far, over the bytes of every
+   * response it's known to be loading. A page finds what it loads as it goes, so the total grows with it; at the end
+   * it's what the page loaded. `null` whenever `loadProgress` is.
+   */
+  readonly loadBytes: LoadBytes | null;
   readonly canGoBack: boolean;
   readonly canGoForward: boolean;
   readonly favicon: string | null;
   /** What a drag on the page does — see `PointerMode`. `'select'` (the page's own behavior) by default. */
   readonly pointerMode: PointerMode;
-  /**
-   * Edit mode: the toolbar tools' keyboard shortcuts are left to the page (see
-   * `isToolShortcut`), for a web app that binds the same keys. The tools'
-   * buttons still work.
-   */
-  readonly editMode: boolean;
   /** The workspace this tab belongs to; only its own workspace's tab row shows it. */
   readonly workspaceId: string;
 }
@@ -69,6 +75,8 @@ export interface PdfTabState {
    * progress, or `null` when there's none to show (see `FileLoadProgress`).
    */
   readonly loadProgress: number | null;
+  /** The file's load in bytes, read from disk over its size, beside the percentage; `null` whenever `loadProgress` is. */
+  readonly loadBytes: LoadBytes | null;
   /** Whether a jump in the document (a followed link, the page box) has left an earlier place to step back to. */
   readonly canGoBack: boolean;
   /** Whether stepping back has left a later place to step forward to. */
@@ -158,6 +166,8 @@ export interface MarkdownTabState {
   readonly contentWidthMin: number;
   /** How far the note being opened has got, 0-100, or `null` when there's none to show — see `PdfTabState.loadProgress`. */
   readonly loadProgress: number | null;
+  /** The file's load in bytes, read from disk over its size, beside the percentage; `null` whenever `loadProgress` is. */
+  readonly loadBytes: LoadBytes | null;
   /** Whether following a link has left an earlier note this tab can step back to. */
   readonly canGoBack: boolean;
   /** Whether stepping back has left a later note this tab can step forward to. */
@@ -246,6 +256,12 @@ export interface BrowserState {
    */
   readonly savedWorkspaceImages: Readonly<Record<string, string>>;
   readonly splitView: SplitViewState | null;
+  /**
+   * The active workspace's split pair: the two tabs last shown side by side there, left then right — whether they're on
+   * screen now (`splitView`) or put away while another tab is shown, until either is chosen again. The tab row draws
+   * them next to each other as one joint tab. `null` when the workspace has none.
+   */
+  readonly splitPair: SplitViewState | null;
   readonly focusMode: boolean;
   /**
    * Whether the active tab's own page has the keyboard (rather than the chrome): the frame around a web page lights up

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useState } from 'react';
 import type { BookmarkState, MarkdownTabState } from '@shared/tab-state';
@@ -97,6 +97,7 @@ export function MarkdownToolbar({
         bookmarkLabel="Bookmark this note"
         onToggleBookmark={() => onToggleBookmark(tab.id)}
         loadProgress={tab.loadProgress}
+        loadBytes={tab.loadBytes}
       >
         {/* Before a note is open there's nothing to rename, so the bar is a search over the bookmarked and recent notes instead. */}
         {fileName === null ? (

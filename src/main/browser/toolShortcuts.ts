@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-11-12
 
 import type { KeyChord } from './textEditingChords';
 
@@ -28,9 +28,9 @@ const TAB_JUMP_CODES = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7'];
 const SHIFTED_TOOL_KEYS = new Set(['x', 'r']);
 
 /**
- * Whether a key is one of the toolbar tools' shortcuts — the keys a browser
- * tab in edit mode leaves to its page, since a web app (Google Docs: italic,
- * print, justify, comment, center) binds the same ones.
+ * Whether a key is one of the toolbar tools' shortcuts — pressed in the
+ * chrome only: a page with the keyboard keeps them, since a web app (Google
+ * Docs: italic, print, justify, comment, center) binds the same ones.
  * @param input The key event.
  * @returns `true` for a tool's shortcut.
  */
@@ -45,7 +45,7 @@ export function isToolShortcut(input: KeyChord): boolean {
 /**
  * The pointer mode a key picks: Alt+1 Pan, Alt+2 Select. Matched by physical
  * key, so the shifted row of another layout still works. Like the tools'
- * keys, edit mode leaves these to the page.
+ * keys, a page with the keyboard keeps these.
  * @param input The key event.
  * @returns The mode, or `null` for any other key.
  */
@@ -69,16 +69,4 @@ export function tabJumpIndex(input: PhysicalKeyChord): number | null {
   }
   const at = TAB_JUMP_CODES.indexOf(input.code);
   return at === -1 ? null : at;
-}
-
-/**
- * Whether a key is edit mode's own on/off switch, Ctrl+Alt+Shift+E: three
- * modifiers, so no web page has a use for it, and E for edit. Matched by
- * physical key, since on Windows Ctrl+Alt is AltGr and can turn `key` into
- * another character (€ on many layouts).
- * @param input The key event.
- * @returns `true` for the switch.
- */
-export function isEditModeToggle(input: PhysicalKeyChord): boolean {
-  return (input.control || input.meta) && input.alt && input.shift && input.code === 'KeyE';
 }

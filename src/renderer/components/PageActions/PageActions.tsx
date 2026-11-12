@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { Theme } from '../../hooks/useTheme';
@@ -18,8 +18,6 @@ interface PageActionsProps {
   readonly onToggleSplit: () => void;
   /** While split, the two sides trade places. */
   readonly onSwapSplit: () => void;
-  /** The pointer came onto the split button (`true`) or left it: the tab row marks the two tabs "L" and "R" meanwhile. */
-  readonly onSplitHover: (hovering: boolean) => void;
   /**
    * The active tab's own tools (`TabActions`: the ad blocker, zoom), after Find — or `null` in split screen, where
    * each half of the toolbar has its side's instead.
@@ -56,7 +54,6 @@ export function PageActions({
   canSplit,
   onToggleSplit,
   onSwapSplit,
-  onSplitHover,
   onOpenTabSearch,
   findOpen,
   canFind,
@@ -107,8 +104,6 @@ export function PageActions({
         type="button"
         className="page-actions__button hover-grow chrome-tooltip"
         onClick={onToggleSplit}
-        onMouseEnter={() => onSplitHover(true)}
-        onMouseLeave={() => onSplitHover(false)}
         disabled={!splitActive && !canSplit}
         aria-pressed={splitActive}
         aria-label={splitActive ? 'Back to one screen' : 'Split screen'}

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
@@ -90,10 +90,10 @@ interface TabBarProps {
   /** Called when a tab drag starts, with the window's other drop targets (workspace pills, "+ New workspace") — see `PortalogiaApi.reportDropRegions`. */
   readonly onReportDropRegions: (rects: readonly { x: number; y: number; width: number; height: number }[]) => void;
   /**
-   * Which side of a split screen each of two tabs is on, by tab id: shown as "L" or "R" just left of its close button
-   * — while the split-screen button is hovered with two tabs selected, and all the while it's split.
+   * The workspace's split pair, left then right (`BrowserState.splitPair`): side by side in the row, drawn as one joint
+   * tab with no line between its two — shown or put away. `null` with none.
    */
-  readonly splitSides: Readonly<Record<string, 'L' | 'R'>>;
+  readonly pairTabIds: readonly [string, string] | null;
   /** While split, the two tabs on screen: both look active, as both are being shown. */
   readonly splitTabIds: readonly string[];
 }
@@ -123,7 +123,7 @@ export function TabBar({
   onDragOutOfWindow,
   onTearOffEnd,
   onReportDropRegions,
-  splitSides,
+  pairTabIds,
   splitTabIds,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -162,6 +162,26 @@ export function TabBar({
     setDropTarget(null);
   };
 
+  /**
+   * A drop place moved off the gap inside the split pair, which nothing may go into: before its right tab is before
+   * the pair, and after its left tab is after it.
+   * @param target Where a release would put the dragged tab(s), or `null`.
+   * @returns The same place, or the nearest one outside the pair.
+   */
+  const keepPairWhole = (target: { id: string; position: 'before' | 'after' } | null): typeof target => {
+    if (!target || !pairTabIds) {
+      return target;
+    }
+    const [left, right] = pairTabIds;
+    if (target.id === right && target.position === 'before') {
+      return { id: left, position: 'before' };
+    }
+    if (target.id === left && target.position === 'after') {
+      return { id: right, position: 'after' };
+    }
+    return target;
+  };
+
   // Reads the dragged tab's id from `dataTransfer`, not the local
   // `draggedId` state — `draggedId` is only ever set by this *same*
   // window's own `Tab.onDragStart` (see below), so it stays `null` for a
@@ -172,9 +192,10 @@ export function TabBar({
   // `WorkspaceBar`'s own drop handlers already use.
   const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
     const draggedTabId = event.dataTransfer.getData('text/plain');
-    if (draggedTabId && dropTarget) {
-      const targetIndex = tabs.findIndex((tab) => tab.id === dropTarget.id);
-      const insertIndex = dropTarget.position === 'before' ? targetIndex : targetIndex + 1;
+    const target = keepPairWhole(dropTarget);
+    if (draggedTabId && target) {
+      const targetIndex = tabs.findIndex((tab) => tab.id === target.id);
+      const insertIndex = target.position === 'before' ? targetIndex : targetIndex + 1;
       onReorder(draggedTabId, tabs[insertIndex]?.id ?? null);
     }
     endDrag();
@@ -241,13 +262,21 @@ export function TabBar({
   // make room. Done with CSS `order`, not by reordering the elements, because
   // moving the dragged element in the DOM mid-drag cancels the native drag.
   // Nothing is committed until the drop (`handleDrop` -> `onReorder`).
+  // The split pair is one tab in the row, so grabbing either of its two drags both, left then right.
   const draggedGroup =
-    draggedId === null ? [] : selectedTabIds.includes(draggedId) ? selectedTabIds.filter((id) => tabs.some((tab) => tab.id === id)) : [draggedId];
+    draggedId === null
+      ? []
+      : pairTabIds?.includes(draggedId)
+        ? [...pairTabIds]
+        : selectedTabIds.includes(draggedId)
+          ? selectedTabIds.filter((id) => tabs.some((tab) => tab.id === id))
+          : [draggedId];
+  const pairTarget = keepPairWhole(dropTarget);
   const displayIds = previewTabOrder(
     tabs.map((tab) => tab.id),
     draggedGroup,
-    dropTarget?.id ?? null,
-    dropTarget?.position ?? 'before',
+    pairTarget?.id ?? null,
+    pairTarget?.position ?? 'before',
   );
   const orderOf = (id: string): number => {
     const index = displayIds.indexOf(id);
@@ -256,8 +285,8 @@ export function TabBar({
   // A tab dragged in from another window has no element here to move, so the
   // slot it would take is held open with a blank placeholder instead.
   const foreignInsertAt =
-    draggedId === null && dropTarget !== null
-      ? tabs.findIndex((tab) => tab.id === dropTarget.id) + (dropTarget.position === 'after' ? 1 : 0)
+    draggedId === null && pairTarget !== null
+      ? tabs.findIndex((tab) => tab.id === pairTarget.id) + (pairTarget.position === 'after' ? 1 : 0)
       : null;
   // Every 20 s a shimmer runs along the tabs' icons and names, ten seconds out of step with the workspaces', so one of
   // the two runs every ten seconds.
@@ -275,6 +304,9 @@ export function TabBar({
     workspaceId,
     tabs.map((tab) => tab.id),
   );
+  /** Which half of the split pair's joint tab a tab is, if either. */
+  const pairSideOf = (tabId: string): 'left' | 'right' | undefined =>
+    pairTabIds?.[0] === tabId ? 'left' : pairTabIds?.[1] === tabId ? 'right' : undefined;
   // Live tabs take the even `order` slots and a closing tab the odd slot just before the tab that took its place, so
   // it shrinks where it was.
   const slotOrder = (index: number): number => 2 * index + 2;
@@ -294,7 +326,7 @@ export function TabBar({
     >
       {(ghostTab ? [...tabs, ghostTab] : tabs).map((tab) => (
         <Tab
-          splitSide={splitSides[tab.id]}
+          pairSide={pairSideOf(tab.id)}
           key={tab.id}
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
@@ -310,10 +342,9 @@ export function TabBar({
           onActivate={onActivate}
           onClose={onClose}
           isDragging={
-            tab.id === draggedId ||
             tab.id === grabbedTabId ||
-            // Dragging one selected tab drags them all, so they all show as grabbed.
-            (draggedId !== null && selectedTabIds.includes(draggedId) && selectedTabIds.includes(tab.id))
+            // Dragging one selected tab drags them all, as one of the split pair drags both: they all show as grabbed.
+            draggedGroup.includes(tab.id)
           }
           onDragStart={() => {
             setDraggedId(tab.id);
@@ -387,7 +418,7 @@ export function TabBar({
       ))}
       {exiting.map(({ tab, slot }) => (
         <Tab
-          splitSide={splitSides[tab.id]}
+          pairSide={undefined}
           key={`exiting-${tab.id}`}
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
@@ -422,8 +453,8 @@ export function TabBar({
 
 interface TabProps {
   readonly tab: TabState;
-  /** The split-screen side this tab is on ("L" or "R"), shown beside its close button, or none. */
-  readonly splitSide: 'L' | 'R' | undefined;
+  /** Which half of the split pair's joint tab this is (no edge drawn on the side it meets the other), or neither. */
+  readonly pairSide: 'left' | 'right' | undefined;
   /** What the tab shows instead of its page title (saved name or domain), or `null` to show the title. */
   readonly label: string | null;
   readonly isActive: boolean;
@@ -459,7 +490,7 @@ interface TabProps {
 /** One tab. A `div[role=tab]` rather than a `<button>` because it hosts its own close `<button>`. */
 function Tab({
   tab,
-  splitSide,
+  pairSide,
   label,
   isActive,
   isSelected,
@@ -479,15 +510,6 @@ function Tab({
   isExiting,
   onTransitionEnd,
 }: TabProps) {
-  // The split-side badge as drawn: kept, marked leaving, while it fades out after `splitSide` goes.
-  const [badgeSide, setBadgeSide] = useState(splitSide);
-  const [badgeLeaving, setBadgeLeaving] = useState(false);
-  if (splitSide && (splitSide !== badgeSide || badgeLeaving)) {
-    setBadgeSide(splitSide);
-    setBadgeLeaving(false);
-  } else if (!splitSide && badgeSide && !badgeLeaving) {
-    setBadgeLeaving(true);
-  }
   const activate = (): void => onActivate(tab.id);
   const ripples = useClickRipples();
   const titleText = label ?? (tab.title || 'New Tab');
@@ -552,7 +574,7 @@ function Tab({
       aria-hidden={isExiting || undefined}
       draggable={!isExiting}
       data-tab-id={isExiting || isGhost ? undefined : tab.id}
-      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isSelected ? ' tab-bar__tab--selected' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}${isEntering ? ' tab-bar__tab--entering' : ''}${isExiting ? ' tab-bar__tab--exiting' : ''}`}
+      className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isSelected ? ' tab-bar__tab--selected' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}${isEntering ? ' tab-bar__tab--entering' : ''}${isExiting ? ' tab-bar__tab--exiting' : ''}${pairSide ? ` tab-bar__tab--pair-${pairSide}` : ''}`}
       onAnimationEnd={(event) => {
         // Only the last of the tab's own opening or closing animations, not a ripple's (which bubbles up from inside
         // it): the tab is tidied away, or settles, once all of its motion is over.
@@ -630,22 +652,6 @@ function Tab({
       <span className="tab-bar__title" title={tab.title || undefined}>
         {titleText}
       </span>
-      {/* Which side of a split screen this tab is on (or will be), just left of the close button; it fades in, and
-          out again keeping its letter until it's gone. */}
-      {badgeSide && (
-        <span
-          className={`tab-bar__split-side${badgeLeaving ? ' tab-bar__split-side--leaving' : ''}`}
-          aria-label={badgeSide === 'L' ? 'Left side' : 'Right side'}
-          onAnimationEnd={() => {
-            if (badgeLeaving) {
-              setBadgeSide(undefined);
-              setBadgeLeaving(false);
-            }
-          }}
-        >
-          {badgeSide}
-        </span>
-      )}
       <button
         type="button"
         className="tab-bar__close hover-glow chrome-tooltip"

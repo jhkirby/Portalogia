@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-11-12
 
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state';
@@ -215,6 +215,45 @@ class RenderedBlockWidget extends WidgetType {
 
 // ── WHICH BLOCKS ARE DRAWN ──────────────────────────────────────────────
 
+/** Marks the first line of the block being edited, with the reader's tag for it (see `blockSpacing`). */
+const EDIT_TOP = 'data-lp-edit-top';
+
+/** Marks the last line of the block being edited, with the reader's tag for it (see `blockSpacing`). */
+const EDIT_BOTTOM = 'data-lp-edit-bottom';
+
+/**
+ * A blank line after the block being edited, folded to no height: the reader has no lines for them, so they'd push
+ * everything below down by their height while the caret was in the block, and back up when it left. The reader's
+ * spacing comes from the blocks around it instead (`blockSpacing`). Folded by its look only, so the line is still
+ * there for the caret to move onto, which shows it again.
+ */
+const FOLDED_GAP = Decoration.line({ class: 'cm-lp-folded-gap' });
+
+/**
+ * The element the reader draws a block as, for measuring the space it keeps above and below (`blockSpacing`).
+ * @param name The block's syntax node.
+ * @returns The tag; a paragraph's for anything else.
+ */
+function readerTag(name: string): string {
+  const heading = /^(?:ATX|Setext)Heading([1-6])$/.exec(name);
+  if (heading) {
+    return `h${heading[1]}`;
+  }
+  const tags: Record<string, string> = {
+    BulletList: 'ul',
+    OrderedList: 'ol',
+    Blockquote: 'blockquote',
+    FencedCode: 'pre',
+    CodeBlock: 'pre',
+    HorizontalRule: 'hr',
+    Table: 'table',
+  };
+  return tags[name] ?? 'p';
+}
+
+/** Every tag `readerTag` names. */
+const READER_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'blockquote', 'pre', 'hr', 'table'];
+
 /**
  * The note's blocks, each drawn as the reader would draw it, except the ones
  * the caret is in while the editor has focus — those stay as text (styled by
@@ -228,31 +267,51 @@ class RenderedBlockWidget extends WidgetType {
 function buildBlocks(state: EditorState): DecorationSet {
   const { doc } = state;
   const tree = ensureSyntaxTree(state, doc.length, 200) ?? syntaxTree(state);
-  const blocks: { from: number; to: number; drawn: boolean; table: boolean }[] = [];
+  const blocks: { from: number; to: number; drawn: boolean; table: boolean; name: string }[] = [];
   for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
     const from = doc.lineAt(node.from).from;
     // A node can end at the start of the next line (its own line break included); its last line is the one before.
     const to = doc.lineAt(node.to > node.from && doc.lineAt(node.to).from === node.to ? node.to - 1 : node.to).to;
-    blocks.push({ from, to, drawn: !UNDRAWN_BLOCKS.has(node.name), table: node.name === 'Table' });
+    blocks.push({ from, to, drawn: !UNDRAWN_BLOCKS.has(node.name), table: node.name === 'Table', name: node.name });
   }
   const focused = state.field(focusedField);
   const touches = (from: number, to: number): boolean =>
     focused && state.selection.ranges.some((range) => range.from <= to && range.to >= from);
-  // A table stays drawn with the caret in it: it is edited cell by cell where it stands (see `TableWidget`).
-  const isText = (block: (typeof blocks)[number]): boolean =>
-    !block.drawn || (!block.table && touches(block.from, block.to));
   const ranges: Range<Decoration>[] = [];
   blocks.forEach((block, index) => {
     const next = blocks[index + 1];
     // The block's reach: itself and the blank lines after it, up to the next block.
     const reach = next ? Math.max(block.to, doc.lineAt(next.from - 1).to) : doc.length;
-    if (!block.drawn || (!block.table && touches(block.from, reach))) {
+    if (!block.drawn) {
       return;
     }
-    // A table keeps the blank lines after it as text while the caret is on them, so they can be typed on.
-    const blankLinesInUse = block.table && reach > block.to && touches(block.to + 1, reach);
-    const nextIsText = next !== undefined && isText(next);
-    const end = nextIsText || blankLinesInUse ? block.to : reach;
+    // The blank lines after the block are only text while the caret is on them, so they can be typed on.
+    const blankLinesInUse = reach > block.to && touches(block.to + 1, reach);
+    if (!block.table && touches(block.from, reach)) {
+      // The block being edited, left as text. It takes the room the drawn block took, so nothing around it moves as
+      // the caret comes and goes: the blank lines after it fold away (unless the caret is on them, `blankLinesInUse`),
+      // and its first and last lines are marked for `blockSpacing` to give the reader's space above and below.
+      const tag = readerTag(block.name);
+      const firstLine = doc.lineAt(block.from).from;
+      const lastLine = doc.lineAt(block.to).from;
+      if (firstLine === lastLine) {
+        ranges.push(Decoration.line({ attributes: { [EDIT_TOP]: tag, [EDIT_BOTTOM]: tag } }).range(firstLine));
+      } else {
+        ranges.push(Decoration.line({ attributes: { [EDIT_TOP]: tag } }).range(firstLine));
+        ranges.push(Decoration.line({ attributes: { [EDIT_BOTTOM]: tag } }).range(lastLine));
+      }
+      if (reach > block.to && !blankLinesInUse) {
+        for (let pos = block.to + 1; pos <= reach; ) {
+          const line = doc.lineAt(pos);
+          ranges.push(FOLDED_GAP.range(line.from));
+          pos = line.to + 1;
+        }
+      }
+      return;
+    }
+    // A drawn block folds in the blank lines after it, as the reader has no lines for them: its own spacing stands in.
+    // A table keeps them as text while the caret is on them; any other block with the caret there is text itself.
+    const end = blankLinesInUse ? block.to : reach;
     const source = doc.sliceString(block.from, block.to);
     const widget = block.table
       ? new TableWidget(source, index === 0, drawRenderedBlock)
@@ -330,17 +389,68 @@ function edgeMargin(container: Element, side: 'Top' | 'Bottom'): number {
 }
 
 /**
+ * The space the reader keeps above and below each kind of block (`readerTag`): its margins, and for a block drawn
+ * with a padded, bordered edge (a level-2 heading's underline) that edge too, since the line being edited has none.
+ * @param sample A hidden `.md-reader` holding one element of every kind.
+ * @returns Each tag's space above and below, in px.
+ */
+function readerSpacing(sample: HTMLElement): Map<string, { top: number; bottom: number }> {
+  const spacing = new Map<string, { top: number; bottom: number }>();
+  for (const element of Array.from(sample.querySelectorAll<HTMLElement>('[data-tag]'))) {
+    const style = getComputedStyle(element);
+    const px = (value: string): number => parseFloat(value) || 0;
+    spacing.set(element.dataset['tag'] ?? '', {
+      top: px(style.marginTop) + px(style.paddingTop) + px(style.borderTopWidth),
+      bottom: px(style.marginBottom) + px(style.paddingBottom) + px(style.borderBottomWidth),
+    });
+  }
+  return spacing;
+}
+
+/**
+ * Builds the hidden sample `readerSpacing` measures: one element of each kind, laid out as a drawn block lays its
+ * content out (one level down in a `.md-reader`, so the "no space above the first element" rule meets the wrapper).
+ * @returns The sample, not yet in the page.
+ */
+function buildSpacingSample(): HTMLElement {
+  const sample = document.createElement('div');
+  sample.className = 'md-reader cm-lp-spacing-sample';
+  sample.setAttribute('aria-hidden', 'true');
+  const content = document.createElement('div');
+  content.appendChild(document.createElement('span'));
+  for (const tag of READER_TAGS) {
+    const element = document.createElement(tag);
+    element.dataset['tag'] = tag;
+    content.appendChild(element);
+  }
+  sample.appendChild(content);
+  return sample;
+}
+
+/**
  * Gives the drawn blocks the reader's spacing. In the reader, the margin
  * below one block and the margin above the next collapse into the larger of
  * the two; each drawn block keeps its margins inside itself (so the editor
  * can measure it), so here the overlap is taken back by pulling each block up
  * by the smaller of the two. The note's first block, like the reader's first
  * element, has no space above it.
+ *
+ * The block being edited (text, not drawn) gets the same: its first and last lines (`EDIT_TOP`, `EDIT_BOTTOM`) are
+ * padded out to the reader's gap to the drawn blocks either side, less what those blocks already keep inside them.
+ * So the text sits where the drawn block did, and nothing below it moves as the caret goes in and out.
  */
+/** The measure that spaces the block being edited, kept apart from the drawn blocks' own (`blockSpacing`). */
+const editSpacingKey = {};
+
 const blockSpacing = ViewPlugin.fromClass(
   class {
+    /** The hidden `.md-reader` the reader's spacing is measured from (`readerSpacing`). */
+    private readonly sample: HTMLElement;
+
     /** @param view The editor. */
     public constructor(private readonly view: EditorView) {
+      this.sample = buildSpacingSample();
+      view.dom.appendChild(this.sample);
       this.schedule();
     }
 
@@ -349,7 +459,62 @@ const blockSpacing = ViewPlugin.fromClass(
       this.schedule();
     }
 
+    /** Takes the sample back out of the page. */
+    public destroy(): void {
+      this.sample.remove();
+    }
+
     private schedule(): void {
+      this.view.requestMeasure({
+        key: editSpacingKey,
+        read: (view) => {
+          const spacing = readerSpacing(this.sample);
+          /** The drawn block next to a line, past any folded gap, or `null` if text (or nothing) is there. */
+          const drawnBeside = (line: Element, side: 'previous' | 'next'): Element | null => {
+            let element = side === 'previous' ? line.previousElementSibling : line.nextElementSibling;
+            while (element?.classList.contains('cm-lp-folded-gap')) {
+              element = side === 'previous' ? element.previousElementSibling : element.nextElementSibling;
+            }
+            return element?.classList.contains('cm-lp-block') ? element : null;
+          };
+          return Array.from(view.contentDOM.querySelectorAll<HTMLElement>(':scope > .cm-line')).map((line) => {
+            let top = 0;
+            let bottom = 0;
+            const topTag = line.getAttribute(EDIT_TOP);
+            if (topTag !== null) {
+              const above = drawnBeside(line, 'previous');
+              const content = above?.firstElementChild;
+              // The note's first block has no space above it, as in the reader.
+              if (above && content) {
+                top = Math.max(0, (spacing.get(topTag)?.top ?? 0) - edgeMargin(content, 'Bottom'));
+              }
+            }
+            const bottomTag = line.getAttribute(EDIT_BOTTOM);
+            if (bottomTag !== null) {
+              const below = drawnBeside(line, 'next');
+              const content = below?.firstElementChild;
+              if (below && content) {
+                bottom = Math.max(0, (spacing.get(bottomTag)?.bottom ?? 0) - edgeMargin(content, 'Top'));
+              }
+            }
+            return { line, top: top > 0 ? `${top}px` : '', bottom: bottom > 0 ? `${bottom}px` : '' };
+          });
+        },
+        write: (lines, view) => {
+          let changed = false;
+          for (const { line, top, bottom } of lines) {
+            // Every line, so one no longer being edited (the editor reuses line elements) loses its padding.
+            if (line.style.paddingTop !== top || line.style.paddingBottom !== bottom) {
+              line.style.paddingTop = top;
+              line.style.paddingBottom = bottom;
+              changed = true;
+            }
+          }
+          if (changed) {
+            view.requestMeasure();
+          }
+        },
+      });
       this.view.requestMeasure({
         key: blockSpacing,
         read: (view) =>

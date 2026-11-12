@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {
@@ -85,9 +85,9 @@ const api: PortalogiaApi = {
   renamePdfFile: (id, name) => invoke(IpcChannel.PdfRename, { id, name }),
   goToPdfPage: (id, page) => invoke(IpcChannel.PdfGoToPage, { id, page }),
   setPointerMode: (id, mode) => invoke(IpcChannel.TabsSetPointerMode, { id, mode }),
-  toggleEditMode: (id) => invoke(IpcChannel.TabsToggleEditMode, { id }),
   createMarkdownTab: () => invoke(IpcChannel.TabsCreateMarkdown),
   openMarkdownFile: (id) => invoke(IpcChannel.MarkdownOpenFile, { id }),
+  openLocalPage: (id) => invoke(IpcChannel.TabsOpenLocalPage, { id }),
   newMarkdownFile: (id) => invoke(IpcChannel.MarkdownNewFile, { id }),
   closeMarkdownFile: (id) => invoke(IpcChannel.MarkdownCloseFile, { id }),
   deleteMarkdownFile: (id) => invoke(IpcChannel.MarkdownDeleteFile, { id }),

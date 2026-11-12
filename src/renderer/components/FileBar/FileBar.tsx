@@ -1,10 +1,12 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import type { ReactNode } from 'react';
-import { useFadingProgress } from '../../hooks/useFadingProgress';
+import type { LoadBytes } from '@shared/tab-state';
+import { useFadingProgress, useFadingValue } from '../../hooks/useFadingProgress';
+import { formatByteFraction } from '../../lib/formatBytes';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
 
@@ -19,6 +21,8 @@ interface FileBarProps {
   readonly onToggleBookmark: () => void;
   /** How far the file being opened has got, 0-100, or `null` when there's none to show. */
   readonly loadProgress: number | null;
+  /** The file's bytes read so far over its size, beside the percentage, or `null`. */
+  readonly loadBytes: LoadBytes | null;
   /** What the bar holds after the star: the file name box, or the search an empty tab shows instead. */
   readonly children: ReactNode;
 }
@@ -31,8 +35,17 @@ interface FileBarProps {
  * file opens, its progress fills the bar from the left, with the percentage at
  * the right end, the way a web page's load does.
  */
-export function FileBar({ isBookmarked, canBookmark, bookmarkLabel, onToggleBookmark, loadProgress, children }: FileBarProps) {
+export function FileBar({
+  isBookmarked,
+  canBookmark,
+  bookmarkLabel,
+  onToggleBookmark,
+  loadProgress,
+  loadBytes,
+  children,
+}: FileBarProps) {
   const shownProgress = useFadingProgress(loadProgress);
+  const shownBytes = useFadingValue(loadBytes);
   const starLabel = isBookmarked ? 'Remove bookmark' : bookmarkLabel;
 
   return (
@@ -55,6 +68,15 @@ export function FileBar({ isBookmarked, canBookmark, bookmarkLabel, onToggleBook
         <BookmarkStarIcon filled={isBookmarked} size={14} />
       </button>
       <span className="address-bar__field">{children}</span>
+      {/* The bytes loaded over the bytes to load, just left of the percentage, fading with it. */}
+      {shownProgress && shownBytes && shownBytes.value.total > 0 && (
+        <span
+          className={`address-bar__bytes${shownProgress.leaving ? ' address-bar__progress--leaving' : ''}`}
+          aria-label="Bytes loaded"
+        >
+          {formatByteFraction(shownBytes.value.loaded, shownBytes.value.total)}
+        </span>
+      )}
       {/* …and the same as a number at the bar's right end, held at 100% for a second once the file has opened. */}
       {shownProgress && (
         <span

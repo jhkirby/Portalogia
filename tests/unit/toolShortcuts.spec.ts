@@ -1,11 +1,10 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-11-12
 
 import { test, expect } from '@playwright/test';
 import {
-  isEditModeToggle,
   isToolShortcut,
   pointerModeShortcut,
   tabJumpIndex,
@@ -56,29 +55,6 @@ test.describe('isToolShortcut', () => {
     for (const key of ['w', 'n', 't', 'b', 'f', 'l', 'z', 'arrowleft', '1', '2', '3']) {
       expect(isToolShortcut(chord(key, '', 'control'))).toBe(false);
     }
-  });
-});
-
-test.describe('isEditModeToggle', () => {
-  test('Ctrl+Alt+Shift+E switches edit mode', () => {
-    expect(isEditModeToggle(chord('E', 'KeyE', 'control', 'alt', 'shift'))).toBe(true);
-    expect(isEditModeToggle(chord('E', 'KeyE', 'meta', 'alt', 'shift'))).toBe(true);
-  });
-
-  test('matched by the physical key, whatever character AltGr makes of it', () => {
-    expect(isEditModeToggle(chord('€', 'KeyE', 'control', 'alt', 'shift'))).toBe(true);
-    expect(isEditModeToggle(chord('E', 'KeyQ', 'control', 'alt', 'shift'))).toBe(false);
-  });
-
-  test('every one of the three modifiers is needed', () => {
-    expect(isEditModeToggle(chord('e', 'KeyE', 'control'))).toBe(false);
-    expect(isEditModeToggle(chord('E', 'KeyE', 'control', 'shift'))).toBe(false);
-    expect(isEditModeToggle(chord('e', 'KeyE', 'control', 'alt'))).toBe(false);
-    expect(isEditModeToggle(chord('E', 'KeyE', 'alt', 'shift'))).toBe(false);
-  });
-
-  test('the switch is not itself a tool shortcut, so edit mode never leaves it to the page', () => {
-    expect(isToolShortcut(chord('E', 'KeyE', 'control', 'alt', 'shift'))).toBe(false);
   });
 });
 

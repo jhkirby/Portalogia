@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -140,7 +140,7 @@ export async function clickMenuItem(app: ElectronApplication, label: string): Pr
 /**
  * Presses a key in a tab's page the way a physical key press arrives: through
  * Electron's input pipeline, so main's `before-input-event` (every tab
- * shortcut, Shift+Escape, edit mode) sees it before the page does.
+ * shortcut, Shift+Escape) sees it before the page does.
  * Playwright's `page.keyboard` dispatches straight into the renderer and
  * skips that handler, so a test of an app shortcut pressed from a page must
  * use this instead.

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -114,15 +114,16 @@ export function buildMenu(
           click: () => getTabManager()?.createSecretsTab(),
         },
         {
-          // Does nothing unless the active tab is a PDF viewer (`openPdfFile` ignores other tabs).
-          label: 'Open PDF',
+          // Opens what the active tab shows: a PDF, a note, or a web page saved on the computer (each ignores the
+          // others' kinds).
+          label: 'Open File',
           accelerator: 'CmdOrCtrl+O',
           click: () => {
             const id = getActiveTabId();
             if (id) {
-              // The same shortcut opens a note on a Markdown tab (each ignores the other's kind).
               void getTabManager()?.openPdfFile(id);
               void getTabManager()?.openMarkdownFile(id);
+              void getTabManager()?.openLocalPage(id);
             }
           },
         },
@@ -357,19 +358,9 @@ export function buildMenu(
           accelerator: 'CmdOrCtrl+Alt+E',
           click: () => getTabManager()?.toggleSectionEditing(),
         },
-        // The tools' entries below are display only: `TabManager.handleToolShortcut` dispatches their keys, so that a
-        // browser tab in edit mode can leave them to its page — a registered accelerator takes its key first.
-        {
-          label: 'Toggle Edit Mode',
-          accelerator: 'CmdOrCtrl+Alt+Shift+E',
-          registerAccelerator: false,
-          click: () => {
-            const id = getActiveTabId();
-            if (id) {
-              getTabManager()?.toggleEditMode(id);
-            }
-          },
-        },
+        // The tools' entries below are display only: `TabManager.handleToolShortcut` dispatches their keys from the
+        // chrome, so that a page with the keyboard gets them (a web app's own Ctrl+I, P, E…) — a registered
+        // accelerator would take its key before any page saw it.
         {
           label: 'Pan Tool',
           accelerator: 'Alt+1',

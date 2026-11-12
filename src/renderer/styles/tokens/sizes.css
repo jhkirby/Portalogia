@@ -47,6 +47,8 @@
      process animates tab content's bounds over exactly this long so it
      moves in step with these transitions instead of snapping ahead of or
      behind them. */
+  /* How far the active tab's accent streak runs past each of its sides before it has faded out (tab-bar.css). */
+  --size-tab-streak-reach: 72px;
   --size-sidebar-toggle-duration: 220ms;
   /* A sidebar's labels through its slide: collapsing, they're gone in the first stretch, before the narrowing edge
      reaches them; expanding, they wait until the slide (ease-out, so most of the way open by then) has room for them. */

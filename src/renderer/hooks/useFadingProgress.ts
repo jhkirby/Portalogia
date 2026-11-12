@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useEffect, useState } from 'react';
 
@@ -14,6 +14,32 @@ export interface ShownProgress {
   readonly leaving: boolean;
 }
 
+/** Any value as a bar draws it while it fades out: the last one, marked as leaving. */
+export interface ShownValue<T> {
+  readonly value: T;
+  readonly leaving: boolean;
+}
+
+/**
+ * A value a bar shows while a load runs, faded out rather than dropped when it goes: the last one stays drawn, marked
+ * as leaving, until the fade is done (`PROGRESS_FADE_MS`).
+ * @param value The value now, or `null` once there's none.
+ * @returns What to draw, or `null` once there's nothing.
+ */
+export function useFadingValue<T>(value: T | null): ShownValue<T> | null {
+  const [shown, setShown] = useState<ShownValue<T> | null>(value === null ? null : { value, leaving: false });
+  useEffect(() => {
+    if (value !== null) {
+      setShown({ value, leaving: false });
+      return undefined;
+    }
+    setShown((current) => (current ? { ...current, leaving: true } : null));
+    const timer = window.setTimeout(() => setShown(null), PROGRESS_FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+  return shown;
+}
+
 /**
  * A load's progress as a bar draws it: when the progress goes (a second after 100%), it fades out rather than
  * vanishing, the last value staying drawn, marked as leaving, until the fade is done. Shared by the address bar and the
@@ -22,15 +48,5 @@ export interface ShownProgress {
  * @returns What to draw, or `null` once there's nothing.
  */
 export function useFadingProgress(progress: number | null): ShownProgress | null {
-  const [shown, setShown] = useState<ShownProgress | null>(progress === null ? null : { value: progress, leaving: false });
-  useEffect(() => {
-    if (progress !== null) {
-      setShown({ value: progress, leaving: false });
-      return undefined;
-    }
-    setShown((current) => (current ? { ...current, leaving: true } : null));
-    const timer = window.setTimeout(() => setShown(null), PROGRESS_FADE_MS);
-    return () => window.clearTimeout(timer);
-  }, [progress]);
-  return shown;
+  return useFadingValue(progress);
 }

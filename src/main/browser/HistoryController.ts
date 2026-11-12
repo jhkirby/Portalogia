@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-11-12
 
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -97,12 +97,15 @@ export class HistoryController {
    * `onBeforeRedirect` on it — which is why anything else that needs to
    * know a request finished hears it through `onRequestCompleted`.
    * @param ses The session browser tabs load their pages in.
-   * @param onRequestCompleted Told of every finished request's page (the load progress estimate).
+   * @param onRequestCompleted Told of every finished request, by its page and its own id (the load progress estimate).
    */
-  public attachTo(ses: Session, onRequestCompleted: (webContentsId: number | undefined) => void = () => {}): void {
+  public attachTo(
+    ses: Session,
+    onRequestCompleted: (webContentsId: number | undefined, requestId: number) => void = () => {},
+  ): void {
     const filter = { urls: RECORDED_URLS };
     ses.webRequest.onCompleted(filter, (details) => {
-      onRequestCompleted(details.webContentsId);
+      onRequestCompleted(details.webContentsId, details.id);
       this.record(details.resourceType, details.webContentsId, details.url, details.method, details.statusCode, details.timestamp);
     });
     ses.webRequest.onBeforeRedirect(filter, (details) => {

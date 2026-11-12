@@ -21,6 +21,7 @@ import {
   FileCloseIcon,
   FileNewIcon,
   FileOpenIcon,
+  HomeIcon,
   FormattedIcon,
   ItalicIcon,
   LatexIcon,
@@ -105,6 +106,7 @@ export function App() {
     workspaceImages,
     savedWorkspaceImages,
     splitView,
+    splitPair,
     tabSelectionOrder,
     focusedTabId,
     toggleSplitScreen,
@@ -137,9 +139,9 @@ export function App() {
     stop,
     openPdfFile,
     setPointerMode,
-    toggleEditMode,
     renamePdfFile,
     openMarkdownFile,
+    openLocalPage,
     newMarkdownFile,
     closeMarkdownFile,
     renameMarkdownFile,
@@ -564,11 +566,8 @@ export function App() {
         <NavControls
           canGoBack={pageTab?.canGoBack ?? false}
           canGoForward={pageTab?.canGoForward ?? false}
-          isLoading={pageTab?.isLoading ?? false}
           onBack={() => tab && goBack(tab.id)}
           onForward={() => tab && goForward(tab.id)}
-          onReloadOrStop={() => handleReloadOrStop(tab)}
-          onHome={() => tab && navigate(tab.id, HOME_URL)}
         />
         {/* Remounted per tab (via key) so its draft text never leaks between tabs. */}
         <AddressBar
@@ -576,12 +575,15 @@ export function App() {
           url={pageIsHome ? '' : (pageTab?.url ?? '')}
           isLoading={pageTab?.isLoading ?? false}
           loadProgress={pageTab?.loadProgress ?? null}
+          loadBytes={pageTab?.loadBytes ?? null}
           onNavigate={(input) => tab && navigate(tab.id, input)}
           bookmarks={pageBookmarks}
           isBookmarked={pageBookmark !== null}
           canBookmark={pageTab !== null && !pageIsHome}
           bookmarkName={pageBookmark?.title ?? null}
           onToggleBookmark={() => handleToggleBookmark(tab)}
+          canReload={pageTab !== null}
+          onReloadOrStop={() => handleReloadOrStop(tab)}
         />
       </>
     );
@@ -658,8 +660,30 @@ export function App() {
   }
 
   // A note's or PDF's own file actions, in the Tools sidebar: a note's New, Open, Close and Delete (its Export menu
-  // follows them); a PDF's Open, Close, Delete and Export.
+  // follows them); a PDF's Open, Close, Delete and Export; a web page's Open and Home (its Export menu follows).
   const fileActions = ((): readonly ToolsBarAction[] => {
+    // A web tab's: open a page saved on the computer, and go home — both just above its Export menu.
+    if (activeTab?.kind === 'browser') {
+      const { id } = activeTab;
+      return [
+        {
+          id: 'page-open',
+          name: 'Open',
+          icon: <FileOpenIcon />,
+          disabled: false,
+          tooltip: `Open a web page saved on this computer (${formatShortcut('O')})`,
+          onClick: () => openLocalPage(id),
+        },
+        {
+          id: 'page-home',
+          name: 'Home',
+          icon: <HomeIcon />,
+          disabled: isHome,
+          tooltip: `Home (${formatShortcut('H')})`,
+          onClick: () => navigate(id, HOME_URL),
+        },
+      ];
+    }
     if (activeTab?.kind !== 'markdown' && activeTab?.kind !== 'pdf') {
       return [];
     }
@@ -766,17 +790,6 @@ export function App() {
     ];
     return [modes, formatting];
   })();
-
-  // Split screen: while its button is hovered with two tabs selected, the tab row marks them "L" and "R" (the first
-  // selected goes on the left); while split, the two sides stay marked.
-  const [splitHover, setSplitHover] = useState(false);
-  const splitSides = useMemo((): Readonly<Record<string, 'L' | 'R'>> => {
-    if (splitView) {
-      return { [splitView.primaryTabId]: 'L', [splitView.secondaryTabId]: 'R' };
-    }
-    const [left, right, ...more] = tabSelectionOrder;
-    return splitHover && left && right && more.length === 0 ? { [left]: 'L', [right]: 'R' } : {};
-  }, [splitView, tabSelectionOrder, splitHover]);
 
   // A note's or PDF's Delete: confirmed the same way as Clear History (typing "delete"), over its tab, before its
   // file goes to the Recycle Bin.
@@ -1004,7 +1017,7 @@ export function App() {
               onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
               onTearOffEnd={tearOffTabEnd}
               onReportDropRegions={reportDropRegions}
-              splitSides={splitSides}
+              pairTabIds={splitPair ? [splitPair.primaryTabId, splitPair.secondaryTabId] : null}
               splitTabIds={splitView ? [splitView.primaryTabId, splitView.secondaryTabId] : []}
             />
             <div className="titlebar__corner">
@@ -1038,7 +1051,6 @@ export function App() {
               canSplit={tabSelectionOrder.length === 2}
               onToggleSplit={toggleSplitScreen}
               onSwapSplit={swapSplitSides}
-              onSplitHover={setSplitHover}
               onOpenTabSearch={openTabSearch}
               findOpen={findOpen}
               canFind={canFind}
@@ -1238,7 +1250,13 @@ export function App() {
           focusMode={focusMode}
           onToggleVisible={toggleToolsSidebar}
           canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
-          canPoint={activeTabId !== null}
+          // Something to point at: a web page other than home, a PDF or note with its file open, or a terminal (its
+          // shell is always there). Same rule as main's `canEnableTool`.
+          canPoint={
+            activeTab?.kind === 'terminal' ||
+            (browserTab !== null && !isHome) ||
+            ((activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown') && activeTab.fileName !== null)
+          }
           // Marks go on the formatted, read-only note, so editing or raw text locks them too.
           annotationToolsLocked={
             isHome ||
@@ -1255,9 +1273,6 @@ export function App() {
               setPointerMode(pointerModeTab.id, mode);
             }
           }}
-          showEditMode={browserTab !== null}
-          editMode={browserTab?.editMode ?? false}
-          onToggleEditMode={() => browserTab && toggleEditMode(browserTab.id)}
           showLaserPointer={!isTablePage}
           laserPointerActive={laserPointerActive}
           onToggleLaserPointer={() => setLaserPointer(!laserPointerActive)}

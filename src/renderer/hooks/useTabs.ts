@@ -17,6 +17,7 @@ const EMPTY_STATE: BrowserState = {
   workspaceImages: [],
   savedWorkspaceImages: {},
   splitView: null,
+  splitPair: null,
   focusMode: false,
   contentFocused: false,
   sidebarVisible: true,
@@ -195,10 +196,6 @@ export function useTabs() {
     void window.portalogia.setPointerMode(id, mode).then(logIfFailed);
   }, []);
 
-  const toggleEditMode = useCallback((id: string) => {
-    void window.portalogia.toggleEditMode(id).then(logIfFailed);
-  }, []);
-
   /** Resolves to an error message to show the user, or `null` on success. */
   const renamePdfFile = useCallback(async (id: string, name: string): Promise<string | null> => {
     const result = await window.portalogia.renamePdfFile(id, name);
@@ -210,6 +207,9 @@ export function useTabs() {
   }, []);
   const openMarkdownFile = useCallback((id: string) => {
     void window.portalogia.openMarkdownFile(id).then(logIfFailed);
+  }, []);
+  const openLocalPage = useCallback((id: string) => {
+    void window.portalogia.openLocalPage(id).then(logIfFailed);
   }, []);
   const newMarkdownFile = useCallback((id: string) => {
     void window.portalogia.newMarkdownFile(id).then(logIfFailed);
@@ -400,6 +400,7 @@ export function useTabs() {
     workspaceImages: state.workspaceImages,
     savedWorkspaceImages: state.savedWorkspaceImages,
     splitView: state.splitView,
+    splitPair: state.splitPair,
     secondaryTab,
     focusMode: state.focusMode,
     contentFocused: state.contentFocused,
@@ -438,10 +439,10 @@ export function useTabs() {
     openPdfFile,
     goToPdfPage,
     setPointerMode,
-    toggleEditMode,
     renamePdfFile,
     createMarkdownTab,
     openMarkdownFile,
+    openLocalPage,
     newMarkdownFile,
     closeMarkdownFile,
     renameMarkdownFile,

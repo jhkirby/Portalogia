@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { Fragment, useRef, type ReactNode } from 'react';
 import type { PointerMode } from '@shared/tab-state';
@@ -14,7 +14,6 @@ import {
   ExportIcon,
   HandIcon,
   HighlighterIcon,
-  KeyboardIcon,
   LaserPointerIcon,
   PenIcon,
   RevertIcon,
@@ -46,9 +45,6 @@ interface ToolsBarProps {
   readonly pointerModesLocked: boolean;
   readonly onSetPointerMode: (mode: PointerMode) => void;
   /** Web pages only, whose pages may bind the tools' keys. */
-  readonly showEditMode: boolean;
-  readonly editMode: boolean;
-  readonly onToggleEditMode: () => void;
   readonly showLaserPointer: boolean;
   readonly laserPointerActive: boolean;
   readonly onToggleLaserPointer: () => void;
@@ -123,7 +119,7 @@ interface Tool {
 
 /**
  * The Tools sidebar on the window's right edge: the page tools, in the order
- * the toolbar used to show them — Pan and Select, Edit mode, the laser
+ * the toolbar used to show them — Pan and Select, the laser
  * pointer, Pen, Highlighter, Comment, Text box, Crop and Revert — each only
  * where the active tab can use it. Each row is the tool's name, then its icon
  * at the right; a tool that's on is filled in, as the selected workspace is.
@@ -343,20 +339,6 @@ function toolsFor(props: ToolsBarProps): readonly Tool[] {
         onClick: () => props.onSetPointerMode('select'),
       },
     );
-  }
-  if (props.showEditMode) {
-    tools.push({
-      id: 'edit-mode',
-      name: 'Edit mode',
-      label: props.editMode ? 'Turn off edit mode' : 'Turn on edit mode',
-      icon: <KeyboardIcon />,
-      pressed: props.editMode,
-      disabled: false,
-      tooltip: `${
-        props.editMode ? "Turn off edit mode: the tools' shortcuts work again" : "Turn on edit mode: the page gets the tools' shortcut keys"
-      } (${formatShortcut('Alt+Shift+E')})`,
-      onClick: props.onToggleEditMode,
-    });
   }
   if (props.showLaserPointer) {
     tools.push({

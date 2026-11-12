@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-29 */
+   Last Modified: 2026-11-12 */
 
 /* ── ADDRESS BAR ──────────────────────────────────────────────────────── */
 
@@ -164,8 +164,57 @@
   text-align: right;
 }
 
-/* Done: the tint and the percentage fade away together (`PROGRESS_FADE_MS` in `AddressBar`) rather than vanishing. */
+/* Reload (Stop while loading) at the bar's right end, where the percentage shows while a page loads: hidden until the
+   pointer is over the bar, and while the bar is being typed in, so it never sits under the text being edited. Laid
+   over the end of the bar rather than in its row, so showing it moves nothing. */
+.address-bar__reload {
+  position: absolute;
+  top: 50%;
+  right: var(--size-spacing-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+
+  background: var(--color-address-bg);
+  border: none;
+  border-radius: 50%;
+
+  color: var(--color-tab-text);
+  cursor: pointer;
+
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease-out;
+}
+
+.address-bar:hover:not(:focus-within) .address-bar__reload {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Loading and hovered: Stop takes the percentage's place rather than sitting over it. */
+.address-bar:hover:not(:focus-within):has(.address-bar__reload) .address-bar__percent {
+  visibility: hidden;
+}
+
+/* The load's bytes, just left of the percentage and drawn like it: loaded over the total to load. */
+.address-bar__bytes {
+  flex: none;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-address-placeholder);
+  white-space: nowrap;
+}
+
+/* Done: the tint, the bytes and the percentage fade away together (`PROGRESS_FADE_MS` in `AddressBar`) rather than
+   vanishing. */
 .address-bar__progress,
+.address-bar__bytes,
 .address-bar__percent {
   transition: opacity 300ms ease-out;
 }

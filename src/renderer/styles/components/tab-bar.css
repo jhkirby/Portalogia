@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-10-29 */
+   Last Modified: 2026-11-12 */
 
 /* ── TAB BAR ──────────────────────────────────────────────────────────── */
 
@@ -103,10 +103,10 @@
     tab-bar-tab-close 240ms cubic-bezier(0.4, 0, 0.2, 1) 170ms forwards;
 }
 
-/* Outlined only while at rest: not the active tab, not part of a multi-selection,
-   not hovered, not being dragged. The same thin line color as the chrome's other
-   borders (the sidebar edge, the toolbar's bottom line), so it follows the theme. */
-.tab-bar__tab:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging):not(:hover) {
+/* Outlined whenever it isn't the active tab, part of a multi-selection, or being dragged — hovered too, so a tab
+   keeps its shape under the pointer. The same thin line color as the chrome's other borders (the sidebar edge, the
+   toolbar's bottom line), so it follows the theme. */
+.tab-bar__tab:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging) {
   border-color: var(--color-chrome-border);
   /* Above its neighbours, so the shared edge stays drawn even where the next tab's background (the active tab's, or a
      hovered one's) would otherwise paint over it. */
@@ -121,7 +121,33 @@
   background: var(--color-tab-bg-active);
   border-color: var(--color-accent-text);
   border-bottom: 1px solid var(--color-accent-text);
+  /* The outline glows: a soft halo of the accent around it, as the page's frame glows while it has the keyboard. */
+  box-shadow: 0 0 10px 1px rgba(var(--color-accent-rgb), 0.45);
   color: var(--color-tab-text-active);
+}
+
+/* A streak of the accent along the line the active tab stands on, running on past both its sides and fading out, so
+   the tab reads as lit from below. Drawn over its own bottom edge (the border's row, hence `bottom: -1px`) and over
+   the neighbours' bases, which the active tab sits above (`z-index: 2`). Its glow follows the streak's fade, since a
+   drop shadow takes the shape of what it shadows. */
+.tab-bar__tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: calc(-1 * var(--size-tab-streak-reach));
+  right: calc(-1 * var(--size-tab-streak-reach));
+  height: 1px;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-accent-text) var(--size-tab-streak-reach),
+    var(--color-accent-text) calc(100% - var(--size-tab-streak-reach)),
+    transparent
+  );
+  filter: drop-shadow(0 0 3px rgba(var(--color-accent-rgb), 0.9));
+
+  pointer-events: none;
 }
 
 /* Multi-selected (Ctrl/Shift+click) tabs take the active tab's own background
@@ -251,49 +277,40 @@
 /* Which side of a split screen this tab is on, "L" or "R", just left of its close button: while the split-screen
    button is hovered with two tabs selected, and all the while it's split. A small accent badge, so it reads at a
    glance without crowding the title. */
-.tab-bar__split-side {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-
-  background: var(--color-selection-bg);
-  border: 1px solid var(--color-accent-text);
-  border-radius: var(--size-radius-sm);
-
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--color-accent-text);
-
-  animation: split-side-in 160ms ease-out both;
+/* ── The split pair's joint tab ──
+   The two tabs shown side by side (`BrowserState.splitPair`) sit next to each other in the row and read as one tab:
+   no edge where they meet, and square corners there, so the outline runs round the pair. Each one's glow (and, while
+   shown, the accent streak) is cut off where it meets the other, rather than spilling over it: kept far enough out on
+   every other side for the streak's whole reach. */
+/* Both selectors: the second matches the at-rest outline's own (`:not()`s and all), which would otherwise outrank it
+   while the pair is put away. */
+.tab-bar__tab--pair-left,
+.tab-bar__tab--pair-left:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging) {
+  border-right-color: transparent;
+  border-top-right-radius: 0;
+  clip-path: inset(
+    calc(-1 * var(--size-tab-streak-reach)) 0 calc(-1 * var(--size-tab-streak-reach))
+      calc(-1 * var(--size-tab-streak-reach))
+  );
 }
 
-/* Going: faded out, then taken away (`Tab` drops it at the animation's end). */
-.tab-bar__split-side--leaving {
-  animation: split-side-out 160ms ease-in both;
+.tab-bar__tab--pair-right,
+.tab-bar__tab--pair-right:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging) {
+  border-left-color: transparent;
+  border-top-left-radius: 0;
+  clip-path: inset(
+    calc(-1 * var(--size-tab-streak-reach)) calc(-1 * var(--size-tab-streak-reach))
+      calc(-1 * var(--size-tab-streak-reach)) 0
+  );
 }
 
-@keyframes split-side-in {
-  from {
-    opacity: 0;
-  }
+/* The effects layer follows the joint's square inner corners too. */
+.tab-bar__tab--pair-left .tab-bar__effects {
+  border-top-right-radius: 0;
 }
 
-@keyframes split-side-out {
-  to {
-    opacity: 0;
-  }
-}
-
-/* Next to instant, rather than none: the badge leaves at its animation's end. */
-@media (prefers-reduced-motion: reduce) {
-  .tab-bar__split-side,
-  .tab-bar__split-side--leaving {
-    animation-duration: 1ms;
-  }
+.tab-bar__tab--pair-right .tab-bar__effects {
+  border-top-left-radius: 0;
 }
 
 .tab-bar__close {

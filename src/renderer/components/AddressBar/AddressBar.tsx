@@ -6,15 +6,16 @@
 import { SEARCH_SUGGESTIONS_LIMIT } from '@shared/constants';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { AddressSuggestionItem } from '@shared/ipc-contract';
-import type { BookmarkState } from '@shared/tab-state';
+import type { BookmarkState, LoadBytes } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
-import { useFadingProgress } from '../../hooks/useFadingProgress';
+import { useFadingProgress, useFadingValue } from '../../hooks/useFadingProgress';
+import { formatByteFraction } from '../../lib/formatBytes';
 import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 import { pageLabel } from '../../lib/pageLabel';
 import { rankSuggestions } from '../../lib/suggestionRanking';
 import { formatShortcut } from '../../lib/shortcuts';
-import { BookmarkStarIcon } from '../icons';
+import { BookmarkStarIcon, ReloadIcon, StopIcon } from '../icons';
 
 interface AddressBarProps {
   /** The active tab's current URL; used to keep the field in sync with navigation. */
@@ -22,6 +23,8 @@ interface AddressBarProps {
   readonly isLoading: boolean;
   /** How far the page's load has got, 0-100, or `null` when there's none to show (see `BrowserTabState.loadProgress`). */
   readonly loadProgress: number | null;
+  /** The load's bytes so far over the bytes it's loading, beside the percentage, or `null` (see `BrowserTabState.loadBytes`). */
+  readonly loadBytes: LoadBytes | null;
   /** Called with the raw typed text on submit; normalization happens on the main-process side. */
   readonly onNavigate: (input: string) => void;
   /** Every saved bookmark, filtered locally against the draft to power the suggestions dropdown. */
@@ -34,6 +37,10 @@ interface AddressBarProps {
   readonly bookmarkName: string | null;
   /** Called when the star is clicked: bookmarks the page, or removes its bookmark. */
   readonly onToggleBookmark: () => void;
+  /** Whether there's a page to reload (or stop): a web tab. */
+  readonly canReload: boolean;
+  /** Reloads the page, or stops it while it loads. */
+  readonly onReloadOrStop: () => void;
 }
 
 /** Every match, up to a generous limit: the dropdown scrolls through them. */
@@ -71,17 +78,21 @@ export function AddressBar({
   url,
   isLoading,
   loadProgress,
+  loadBytes,
   onNavigate,
   bookmarks,
   isBookmarked,
   canBookmark,
   bookmarkName,
   onToggleBookmark,
+  canReload,
+  onReloadOrStop,
 }: AddressBarProps) {
   const [draft, setDraft] = useState(url);
 
   // When the load's progress goes (a second after 100%), it fades out rather than vanishing.
   const shownProgress = useFadingProgress(loadProgress);
+  const shownBytes = useFadingValue(loadBytes);
   const [isFocused, setIsFocused] = useState(false);
   // -1: no row highlighted, so Enter submits what's typed. Down moves into the list.
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -320,6 +331,15 @@ export function AddressBar({
           </span>
         )}
       </span>
+      {/* The bytes loaded over the bytes to load, just left of the percentage, fading with it. */}
+      {shownProgress && shownBytes && shownBytes.value.total > 0 && (
+        <span
+          className={`address-bar__bytes${shownProgress.leaving ? ' address-bar__progress--leaving' : ''}`}
+          aria-label="Bytes loaded"
+        >
+          {formatByteFraction(shownBytes.value.loaded, shownBytes.value.total)}
+        </span>
+      )}
       {/* …and the same as a number at the bar's right end, held at 100% for a second once the page has loaded. */}
       {shownProgress && (
         <span
@@ -332,6 +352,21 @@ export function AddressBar({
         >
           {shownProgress.value}%
         </span>
+      )}
+      {/* Reload (Stop while the page loads), in the percentage's place at the bar's right end: shown only while the
+          pointer is over the bar and nothing is being typed in it (address-bar.css). */}
+      {canReload && (
+        <button
+          type="button"
+          className="address-bar__reload hover-glow chrome-tooltip"
+          // Taken by the press, not left with the button: focusing it would count as editing the bar, and hide it.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onReloadOrStop}
+          aria-label={isLoading ? 'Stop' : 'Reload'}
+          data-tooltip={isLoading ? 'Stop' : `Reload (${formatShortcut('R')})`}
+        >
+          {isLoading ? <StopIcon size={14} /> : <ReloadIcon size={14} />}
+        </button>
       )}
     </form>
   );

@@ -431,6 +431,19 @@ export function registerTabIpc(
 
   // PDF toolbar actions come from the chrome but are routed by tab id, as
   // the tab may have been moved to another window's manager.
+  ipcMain.handle(IpcChannel.TabsOpenLocalPage, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
+    const parsed = tabIdRequestSchema.safeParse(rawRequest);
+    if (!parsed.success) {
+      return { ok: false, code: 'invalid-request', message: parsed.error.message };
+    }
+    try {
+      await chromeManagerForTab(event, parsed.data.id)?.openLocalPage(parsed.data.id);
+      return { ok: true, data: null };
+    } catch (error) {
+      return toErrorResult(error);
+    }
+  });
+
   ipcMain.handle(IpcChannel.PdfOpenFile, async (event, rawRequest: unknown): Promise<IpcResult<null>> => {
     const parsed = tabIdRequestSchema.safeParse(rawRequest);
     if (!parsed.success) {
@@ -667,15 +680,6 @@ export function registerTabIpc(
       return { ok: false, code: 'invalid-request', message: parsed.error.message };
     }
     chromeManagerForTab(event, parsed.data.id)?.setPointerMode(parsed.data.id, parsed.data.mode);
-    return { ok: true, data: null };
-  });
-
-  ipcMain.handle(IpcChannel.TabsToggleEditMode, (event, rawRequest: unknown): IpcResult<null> => {
-    const parsed = tabIdRequestSchema.safeParse(rawRequest);
-    if (!parsed.success) {
-      return { ok: false, code: 'invalid-request', message: parsed.error.message };
-    }
-    chromeManagerForTab(event, parsed.data.id)?.toggleEditMode(parsed.data.id);
     return { ok: true, data: null };
   });
 

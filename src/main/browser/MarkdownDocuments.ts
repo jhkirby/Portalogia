@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
@@ -105,7 +105,7 @@ export class MarkdownDocuments {
     id: string,
     path: string,
     history: 'reset' | 'push',
-    onProgress?: (fraction: number) => void,
+    onProgress?: (fraction: number, bytesRead: number, totalBytes: number) => void,
   ): Promise<OpenedNote> {
     const loaded = await this.read(path, onProgress);
     const previous = this.notes.get(id);
@@ -282,16 +282,16 @@ export class MarkdownDocuments {
     this.notes.delete(id);
   }
 
-  /** Reads and normalizes one note from disk, telling `onProgress` the share of it read so far (0-1). */
+  /** Reads and normalizes one note from disk, telling `onProgress` the share of it read so far (0-1), and the bytes. */
   private async read(
     path: string,
-    onProgress?: (fraction: number) => void,
+    onProgress?: (fraction: number, bytesRead: number, totalBytes: number) => void,
   ): Promise<{ content: string; ending: LineEnding; mtimeMs: number }> {
     if (!isMarkdownPath(path)) {
       throw new Error('That file is not a Markdown note (.md or .markdown).');
     }
     const read = await readFileCapped(path, MAX_NOTE_BYTES, (bytesRead, totalBytes) =>
-      onProgress?.(Math.min(bytesRead, totalBytes) / Math.max(totalBytes, 1)),
+      onProgress?.(Math.min(bytesRead, totalBytes) / Math.max(totalBytes, 1), bytesRead, totalBytes),
     );
     if (read.kind === 'not-file') {
       throw new Error('That is not a file.');

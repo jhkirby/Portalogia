@@ -76,6 +76,7 @@ import {
   type SecretPromptOffer,
 } from '@shared/ipc-contract';
 import { isNavigableUrl, normalizeUrlOrSearch } from '@shared/url';
+import { LOCAL_PAGE_EXTENSIONS, localPageUrl } from './localPage';
 import type {
   BrowserState,
   BrowserTabState,
@@ -123,7 +124,7 @@ import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
 import { editableKindOf, hasEditableFocus } from './editableFocus';
 import { isTextEditingChord, type TextBoxContext } from './textEditingChords';
-import { isEditModeToggle, isToolShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
+import { isToolShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -279,6 +280,9 @@ const SPLIT_PAGE_MARGIN_PX = CONTENT_FRAME_INSET_X_PX / 2;
  */
 const fileLoads = new Map<string, FileLoadProgress>();
 
+/** The whole percent of its file each PDF or Markdown tab last pushed its byte count at (`setFileLoadBytes`). */
+const fileLoadByteSteps = new Map<string, number>();
+
 /** How much of a PDF's load is reading it from disk; the rest is its page parsing the document and measuring its pages. */
 const PDF_READ_SHARE_PERCENT = 50;
 
@@ -369,8 +373,15 @@ export class TabManager {
   private splitClosing = false;
   /** Whether the split's sides are trading places (`swapSplitSides`), faded out and back in. */
   private splitSwapping = false;
-  /** The split each workspace was showing when it was left, by workspace id: shown again on coming back. */
-  private readonly splitByWorkspace = new Map<string, SplitViewState>();
+  /**
+   * Each workspace's split pair, by workspace id: the two tabs last shown side by side there, left then right. Kept
+   * while another tab is shown (in the workspace or another one), so choosing either again shows the split again
+   * (`activateTab`); let go only when the split is closed on purpose (`exitSplitView`), or a tab of it leaves the
+   * workspace (`prunePairs`). The tab row shows the two side by side, as one tab (`BrowserState.splitPair`).
+   */
+  private readonly pairByWorkspace = new Map<string, SplitViewState>();
+  /** Set while `activateTab` brings a pair's split back, so the activations it makes don't try to bring it back again. */
+  private restoringPair = false;
   /**
    * The style hiding the stat bar of a page that draws its own (a note, PDF or terminal) while it's the split's other
    * side, by tab: the bottom row shows one set of stats, the active side's (`syncSplitStatBars`).
@@ -799,11 +810,11 @@ export class TabManager {
       url: DEFAULT_TAB_URL,
       isLoading: true,
       loadProgress: null,
+      loadBytes: null,
       canGoBack: false,
       canGoForward: false,
       favicon: null,
       pointerMode: 'select',
-      editMode: false,
       workspaceId,
     });
 
@@ -1008,6 +1019,7 @@ export class TabManager {
       page: 1,
       pageCount: 0,
       loadProgress: null,
+      loadBytes: null,
       canGoBack: false,
       canGoForward: false,
       pointerMode: 'pan',
@@ -1112,6 +1124,7 @@ export class TabManager {
       contentWidth: 0,
       contentWidthMin: 0,
       loadProgress: null,
+      loadBytes: null,
       canGoBack: false,
       canGoForward: false,
       pointerMode: 'select',
@@ -1129,6 +1142,40 @@ export class TabManager {
     }
 
     return this.getState();
+  }
+
+  /**
+   * Lets the user pick a web page saved on the computer and loads it in a web tab — the only way a tab shows a `file:`
+   * address (`localPageUrl`), since nothing typed, linked or restored may load one. The page's own pictures, styles and
+   * scripts beside it load with it; a link from it to another file on the computer stays refused (`wireEvents`).
+   * @param id The web tab. A no-op if it isn't one.
+   */
+  public async openLocalPage(id: string): Promise<void> {
+    if (this.states.get(id)?.kind !== 'browser') {
+      return;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: 'Open web page',
+      properties: ['openFile'],
+      filters: [{ name: 'Web pages', extensions: [...LOCAL_PAGE_EXTENSIONS] }],
+    });
+    const [filePath] = filePaths;
+    if (canceled || !filePath) {
+      return;
+    }
+    const url = localPageUrl(filePath);
+    if (url === null) {
+      dialog.showErrorBox('Can’t open this page', 'Only a page saved on this computer can be opened, not one on a network share.');
+      return;
+    }
+    const view = this.views.get(id);
+    if (!view || view.webContents.isDestroyed()) {
+      return;
+    }
+    void view.webContents.loadURL(url).catch(() => {
+      // A failed load shows through `did-fail-load` (see `wireEvents`); the rejection adds nothing.
+    });
   }
 
   /**
@@ -1213,9 +1260,10 @@ export class TabManager {
     const load = this.fileLoadOf(id);
     load.begin();
     try {
-      const note = await markdownDocuments.open(id, path, history, (fraction) =>
-        load.update(fraction * NOTE_READ_SHARE_PERCENT),
-      );
+      const note = await markdownDocuments.open(id, path, history, (fraction, bytesRead, totalBytes) => {
+        load.update(fraction * NOTE_READ_SHARE_PERCENT);
+        this.setFileLoadBytes(id, bytesRead, totalBytes);
+      });
       this.adoptMarkdownNote(id, path, note.name, 'open', history === 'push' ? null : 'view', anchor);
       load.finish();
       return true;
@@ -1360,6 +1408,7 @@ export class TabManager {
       mode: 'view',
       display: 'formatted',
       loadProgress: null,
+      loadBytes: null,
       canGoBack: false,
       canGoForward: false,
     });
@@ -2412,9 +2461,10 @@ export class TabManager {
     let data: Buffer;
     try {
       // Reading is the first part of the load; the page reports the rest (`setPdfLoadProgress`).
-      const read = await readFileCapped(filePath, MAX_PDF_BYTES, (bytesRead, totalBytes) =>
-        load.update((Math.min(bytesRead, totalBytes) / Math.max(totalBytes, 1)) * PDF_READ_SHARE_PERCENT),
-      );
+      const read = await readFileCapped(filePath, MAX_PDF_BYTES, (bytesRead, totalBytes) => {
+        load.update((Math.min(bytesRead, totalBytes) / Math.max(totalBytes, 1)) * PDF_READ_SHARE_PERCENT);
+        this.setFileLoadBytes(id, bytesRead, totalBytes);
+      });
       if (read.kind === 'too-large') {
         throw new Error('That PDF is too large to open (limit 512 MB).');
       }
@@ -2513,6 +2563,7 @@ export class TabManager {
       page: 1,
       pageCount: 0,
       loadProgress: null,
+      loadBytes: null,
       canGoBack: false,
       canGoForward: false,
     });
@@ -2603,13 +2654,39 @@ export class TabManager {
     return load;
   }
 
-  /** Sets a PDF or Markdown tab's `loadProgress`, for its file bar. */
+  /** Sets a PDF or Markdown tab's `loadProgress`, for its file bar. Its byte count goes when the progress does. */
   private setFileLoadProgress(id: string, loadProgress: number | null): void {
     const current = this.states.get(id);
     if ((current?.kind !== 'pdf' && current?.kind !== 'markdown') || current.loadProgress === loadProgress) {
       return;
     }
-    this.states.set(id, { ...current, loadProgress });
+    this.states.set(id, { ...current, loadProgress, ...(loadProgress === null ? { loadBytes: null } : {}) });
+    if (loadProgress === null) {
+      fileLoadByteSteps.delete(id);
+    }
+    this.emitState();
+  }
+
+  /**
+   * Sets how much of the file a PDF or Markdown tab is reading has been read, for beside its file bar's percentage.
+   * Pushed at most once per whole percent of the file (and at its end), so reading a large one doesn't flood the
+   * chrome with a state push per chunk.
+   * @param id The tab.
+   * @param bytesRead The bytes read so far.
+   * @param totalBytes The file's size.
+   */
+  private setFileLoadBytes(id: string, bytesRead: number, totalBytes: number): void {
+    const current = this.states.get(id);
+    if (current?.kind !== 'pdf' && current?.kind !== 'markdown') {
+      return;
+    }
+    const loaded = Math.min(bytesRead, totalBytes);
+    const step = totalBytes > 0 ? Math.floor((loaded / totalBytes) * 100) : 100;
+    if (fileLoadByteSteps.get(id) === step) {
+      return;
+    }
+    fileLoadByteSteps.set(id, step);
+    this.states.set(id, { ...current, loadBytes: { loaded, total: totalBytes } });
     this.emitState();
   }
 
@@ -2679,29 +2756,6 @@ export class TabManager {
       cursorWarper.prepare();
     }
     this.emitState();
-  }
-
-  /**
-   * Turns a browser tab's edit mode on or off: while it's on, the toolbar
-   * tools' keyboard shortcuts are left to the page (see `isToolShortcut`).
-   * @param id The tab. A no-op on anything but a browser tab.
-   */
-  public toggleEditMode(id: string): void {
-    const current = this.states.get(id);
-    if (current?.kind !== 'browser') {
-      return;
-    }
-    this.states.set(id, { ...current, editMode: !current.editMode });
-    this.emitState();
-  }
-
-  /**
-   * Whether a tab leaves the tools' keyboard shortcuts to its page (edit mode).
-   * @param id The tab.
-   */
-  private isInEditMode(id: string | null): boolean {
-    const state = id ? this.states.get(id) : undefined;
-    return state?.kind === 'browser' && state.editMode;
   }
 
   /** `setPointerMode` for the active tab — the View menu's entries. */
@@ -3118,9 +3172,21 @@ export class TabManager {
       }
     }
 
-    const entries = Array.from(this.states.entries()).filter(([tabId]) => tabId !== id);
-    const insertAt = beforeId === null ? entries.length : entries.findIndex(([tabId]) => tabId === beforeId);
-    entries.splice(insertAt === -1 ? entries.length : insertAt, 0, [id, moving]);
+    // A split pair moves as one, left then right; and a tab dropped between the two lands before the pair instead.
+    const movingPair = this.pairContaining(id);
+    const moved = movingPair ? [movingPair.primaryTabId, movingPair.secondaryTabId] : [id];
+    const targetPair = beforeId === null ? null : this.pairContaining(beforeId);
+    const before = targetPair && targetPair !== movingPair ? targetPair.primaryTabId : beforeId;
+    if (before !== null && moved.includes(before)) {
+      return this.getState();
+    }
+    const entries = Array.from(this.states.entries()).filter(([tabId]) => !moved.includes(tabId));
+    const insertAt = before === null ? entries.length : entries.findIndex(([tabId]) => tabId === before);
+    const movedEntries = moved.flatMap((tabId): [string, TabState][] => {
+      const state = this.states.get(tabId);
+      return state ? [[tabId, state]] : [];
+    });
+    entries.splice(insertAt === -1 ? entries.length : insertAt, 0, ...movedEntries);
 
     this.states.clear();
     for (const [tabId, state] of entries) {
@@ -3627,6 +3693,23 @@ export class TabManager {
       // tab just selected.
       this.showWithoutKeyboard(id);
       return this.focusSplitSide(id);
+    }
+    // A tab of the workspace's split pair, put away while another tab was shown: the split comes back, with this side
+    // the active one.
+    const pair = this.restoringPair ? null : this.pairContaining(id);
+    if (pair && !this.splitView) {
+      this.restoringPair = true;
+      try {
+        this.activateTab(pair.primaryTabId);
+        this.enterSplitView(pair.secondaryTabId);
+      } finally {
+        this.restoringPair = false;
+      }
+      if (this.activeTabId !== id) {
+        this.showWithoutKeyboard(id);
+        this.focusSplitSide(id);
+      }
+      return this.getState();
     }
     if (this.splitView) {
       this.teardownSplitView();
@@ -4704,23 +4787,11 @@ export class TabManager {
     if (!this.workspaces.has(id) || id === this.activeWorkspaceId) {
       return this.getState();
     }
-    // A split stays with its workspace: put away on leaving, shown again on coming back.
-    if (this.splitView && !this.splitClosing) {
-      this.splitByWorkspace.set(this.activeWorkspaceId, this.splitView);
-    } else {
-      this.splitByWorkspace.delete(this.activeWorkspaceId);
-    }
+    // A split stays with its workspace (`pairByWorkspace`): put away on leaving, and shown again on coming back when
+    // the tab shown there last is one of its two (`activateTab`).
     this.activeWorkspaceId = id;
     this.selectedWorkspaceIds.clear();
-    const split = this.splitByWorkspace.get(id);
-    this.splitByWorkspace.delete(id);
-    const inWorkspace = (tabId: string): boolean => this.states.get(tabId)?.workspaceId === id;
-    if (split && inWorkspace(split.primaryTabId) && inWorkspace(split.secondaryTabId)) {
-      this.activateTab(split.primaryTabId);
-      this.enterSplitView(split.secondaryTabId);
-    } else {
-      this.focusWorkspaceDefaultTab(id);
-    }
+    this.focusWorkspaceDefaultTab(id);
     return this.getState();
   }
 
@@ -5369,6 +5440,12 @@ export class TabManager {
         return;
       }
       this.splitView = { primaryTabId: split.secondaryTabId, secondaryTabId: split.primaryTabId };
+      const workspaceId = this.states.get(split.primaryTabId)?.workspaceId;
+      if (workspaceId) {
+        this.pairByWorkspace.set(workspaceId, this.splitView);
+      }
+      // The row's two tabs trade places with the sides they show.
+      this.placeTabAfter(split.primaryTabId, split.secondaryTabId);
       this.updateBounds();
       this.emitState();
       // In again: an opaque cover fading to clear goes on first, then the one that faded out comes off under it.
@@ -5499,6 +5576,12 @@ export class TabManager {
     this.splitClosing = false;
     this.splitSwapping = false;
     this.splitView = { primaryTabId: primaryId, secondaryTabId: secondaryId };
+    const workspaceId = this.states.get(primaryId)?.workspaceId;
+    if (workspaceId) {
+      this.pairByWorkspace.set(workspaceId, this.splitView);
+    }
+    // Side by side in the row too, the right one just after the left, so the two read as one tab.
+    this.placeTabAfter(secondaryId, primaryId);
     this.registry.detachViewFromAllWindows(secondaryView);
     // Index 0 — see `activateTab`'s own `addChildView` call for why.
     this.window.contentView.addChildView(secondaryView, 0);
@@ -5514,6 +5597,11 @@ export class TabManager {
   public exitSplitView(): BrowserState {
     if (!this.splitView || this.splitClosing) {
       return this.getState();
+    }
+    // Closed on purpose: the two are no longer a pair, and the row shows them apart again.
+    const workspaceId = this.states.get(this.splitView.primaryTabId)?.workspaceId;
+    if (workspaceId) {
+      this.pairByWorkspace.delete(workspaceId);
     }
     // The chrome shows one screen at once (`getState`), its frame widening in step as the views move.
     this.splitClosing = true;
@@ -5648,9 +5736,11 @@ export class TabManager {
    * tab views' own key handling, a direct IPC call — can turn on a tool its
    * button shows as disabled.
    *
-   * Every tool needs an active tab, and none works on a History tab. Beyond the
-   * laser pointer, none can mark a terminal, the blank home page, or a PDF or
-   * Markdown tab with no file open; the crop tool only exists for a PDF, the
+   * Every tool needs an active tab with something on it, and none works on a
+   * History, Bookmarks or Secrets tab. The laser pointer needs content to point
+   * at: not the blank home page, nor a PDF or note with no file open — a
+   * terminal always has its shell. The others can't mark a terminal either; the
+   * crop tool only exists for a PDF, the
    * text box tool doesn't exist for a note, and a note's marks go on its
    * rendered view, so none works while it's being edited.
    * @param tool Which tool is being switched on.
@@ -5662,7 +5752,17 @@ export class TabManager {
       return false;
     }
     if (tool === 'laser') {
-      return active.kind !== 'history' && active.kind !== 'bookmarks' && active.kind !== 'secrets';
+      switch (active.kind) {
+        case 'terminal':
+          return true;
+        case 'browser':
+          return active.url !== HOME_URL;
+        case 'pdf':
+        case 'markdown':
+          return active.fileName !== null;
+        default:
+          return false;
+      }
     }
     if (
       active.kind === 'terminal' ||
@@ -5682,6 +5782,9 @@ export class TabManager {
 
   /** Turns off any tool that's on but unavailable on the now-active tab (`canEnableTool`) — call when a tab is activated or a PDF is closed, since a tool left on would mark nothing and its button would sit pressed and disabled. */
   private releaseUnavailableTools(): void {
+    if (this.laserPointerActive && !this.canEnableTool('laser')) {
+      this.setLaserPointer(false);
+    }
     if (this.highlighterActive && !this.canEnableTool('highlighter')) {
       this.setHighlighter(false);
     }
@@ -6703,17 +6806,25 @@ export class TabManager {
    * `shouldListTabForThisWindow`) — otherwise Ctrl+Right/Left could land on
    * a linked twin (see `createLinkedTwin`) this window doesn't even show a
    * row for, stealing it away from wherever it's actually mounted.
+   *
+   * The workspace's split pair (`pairByWorkspace`) is one stop, as the row
+   * draws it as one tab: from either of its two the step goes to the tab
+   * beside the pair, never to the other of the two; and a step onto the pair
+   * shows its split again (`activateTab`).
    * @param direction `1` for the next tab, `-1` for the previous one.
    * @returns The full browser state after the change.
    */
   public cycleTab(direction: 1 | -1): BrowserState {
-    const workspaceTabIds = this.listedTabIds(this.activeWorkspaceId);
-    const currentIndex = this.activeTabId ? workspaceTabIds.indexOf(this.activeTabId) : -1;
-    if (workspaceTabIds.length <= 1 || currentIndex === -1) {
+    const pair = this.pairByWorkspace.get(this.activeWorkspaceId);
+    // Each stop once: the pair by its left tab, its right one left out.
+    const stops = this.listedTabIds(this.activeWorkspaceId).filter((tabId) => tabId !== pair?.secondaryTabId);
+    const current = this.activeTabId && this.activeTabId === pair?.secondaryTabId ? pair.primaryTabId : this.activeTabId;
+    const currentIndex = current ? stops.indexOf(current) : -1;
+    if (stops.length <= 1 || currentIndex === -1) {
       return this.getState();
     }
-    const nextIndex = (currentIndex + direction + workspaceTabIds.length) % workspaceTabIds.length;
-    return this.activateTab(workspaceTabIds[nextIndex]!);
+    const nextIndex = (currentIndex + direction + stops.length) % stops.length;
+    return this.activateTab(stops[nextIndex]!);
   }
 
   /**
@@ -6952,33 +7063,22 @@ export class TabManager {
    * The toolbar tools' keyboard shortcuts — the laser pointer (Ctrl+I), pen
    * (Ctrl+P), highlighter (Ctrl+J), comments (Ctrl+M), text box (Ctrl+E),
    * Pan and Select (Alt+1, Alt+2), crop (Ctrl+Shift+X) and Revert
-   * Annotations (Ctrl+Shift+R) — and edit mode's switch (Ctrl+Alt+Shift+E).
-   * Their menu entries are display-only (see buildMenu.ts), so that a browser
-   * tab in edit mode can leave the tools' keys to its page: a registered
+   * Annotations (Ctrl+Shift+R). Pressed in the chrome only: with the keyboard
+   * in a page they're the page's (a web app binds the same keys), which is why
+   * their menu entries are display-only (see buildMenu.ts) — a registered
    * accelerator takes its key before any page sees it.
    * @param event The input event, so a handled key can `preventDefault`.
    * @param input Electron's parsed key info.
-   * @param tabId The tab the key acts on: the one whose page has the keyboard, or the active one from the chrome.
-   * @returns Whether the key was one of them — handled, or left to the page in edit mode — so the caller looks no further.
+   * @param tabId The tab the key acts on: the active one.
+   * @returns Whether the key was one of them and was handled, so the caller looks no further.
    */
   private handleToolShortcut(event: Electron.Event, input: Electron.Input, tabId: string | null): boolean {
     if (input.type !== 'keyDown') {
       return false;
     }
-    if (isEditModeToggle(input)) {
-      event.preventDefault();
-      if (!input.isAutoRepeat && tabId) {
-        this.toggleEditMode(tabId);
-      }
-      return true;
-    }
     const pointerMode = pointerModeShortcut(input);
     if (!isToolShortcut(input) && !pointerMode) {
       return false;
-    }
-    // In edit mode a tool's key is the page's: not prevented, so it reaches the page (from the chrome, it does nothing).
-    if (this.isInEditMode(tabId)) {
-      return true;
     }
     event.preventDefault();
     // A held key repeats; these are toggles, so only the first press counts.
@@ -7360,6 +7460,7 @@ export class TabManager {
       workspaceImages: this.workspaceImages.listStates(),
       savedWorkspaceImages: this.savedWorkspaceImages(),
       splitView: this.splitClosing ? null : this.splitView,
+      splitPair: this.pairByWorkspace.get(this.activeWorkspaceId) ?? null,
       focusMode: this.focusMode,
       contentFocused: this.isContentFocused(),
       sidebarVisible: this.sidebarVisible,
@@ -7665,7 +7766,47 @@ export class TabManager {
    * listening" — it just has more listeners now.
    */
   private emitState(): void {
+    this.prunePairs();
     this.registry.notifyAll();
+  }
+
+  /**
+   * The workspace's split pair, if the tab is one of its two.
+   * @param tabId The tab.
+   * @returns The pair, or `null`.
+   */
+  private pairContaining(tabId: string): SplitViewState | null {
+    const workspaceId = this.states.get(tabId)?.workspaceId;
+    const pair = workspaceId ? this.pairByWorkspace.get(workspaceId) : undefined;
+    return pair && (pair.primaryTabId === tabId || pair.secondaryTabId === tabId) ? pair : null;
+  }
+
+  /** Lets go of any split pair a tab has left: closed, or moved to another workspace. */
+  private prunePairs(): void {
+    for (const [workspaceId, pair] of this.pairByWorkspace) {
+      const inWorkspace = (tabId: string): boolean => this.states.get(tabId)?.workspaceId === workspaceId;
+      if (!inWorkspace(pair.primaryTabId) || !inWorkspace(pair.secondaryTabId)) {
+        this.pairByWorkspace.delete(workspaceId);
+      }
+    }
+  }
+
+  /**
+   * Moves a tab to just after another in the row's order (`states`, whose insertion order the row follows).
+   * @param id The tab to move.
+   * @param anchorId The tab it goes after.
+   */
+  private placeTabAfter(id: string, anchorId: string): void {
+    const moving = this.states.get(id);
+    if (!moving || id === anchorId || !this.states.has(anchorId)) {
+      return;
+    }
+    const entries = Array.from(this.states.entries()).filter(([tabId]) => tabId !== id);
+    entries.splice(entries.findIndex(([tabId]) => tabId === anchorId) + 1, 0, [id, moving]);
+    this.states.clear();
+    for (const [tabId, state] of entries) {
+      this.states.set(tabId, state);
+    }
   }
 
   /** @returns The current tabs/workspaces reduced to `SessionStore`'s minimal recreatable shape — see `restoreSession` for why it's not the full `TabState`. */
@@ -7764,20 +7905,20 @@ export class TabManager {
         progressClear = null;
       }
       webLoad = true;
-      beginLoad(wc.id, (percent) => this.patchState(id, { loadProgress: percent }));
+      beginLoad(wc.id, (percent, bytes) => this.patchState(id, { loadProgress: percent, loadBytes: bytes }));
     });
     wc.on('did-stop-loading', () => {
-      endLoad(wc.id);
+      const bytes = endLoad(wc.id);
       if (!webLoad) {
-        this.patchState(id, { isLoading: false, loadProgress: null, ...historyFlags() });
+        this.patchState(id, { isLoading: false, loadProgress: null, loadBytes: null, ...historyFlags() });
         return;
       }
       webLoad = false;
-      this.patchState(id, { isLoading: false, loadProgress: 100, ...historyFlags() });
+      this.patchState(id, { isLoading: false, loadProgress: 100, loadBytes: bytes, ...historyFlags() });
       progressClear = setTimeout(() => {
         progressClear = null;
         if (!wc.isDestroyed() && !wc.isLoading()) {
-          this.patchState(id, { loadProgress: null });
+          this.patchState(id, { loadProgress: null, loadBytes: null });
         }
       }, LOAD_PROGRESS_HOLD_MS);
     });
@@ -8061,8 +8202,8 @@ export class TabManager {
         return;
       }
 
-      // The tools' keys (Ctrl+I, P, J, M, E, Alt+1, 2, Ctrl+Shift+X, R) and edit mode's switch work only from the
-      // chrome: with the keyboard in the page they are the page's, like every key that moves between tabs.
+      // The tools' keys (Ctrl+I, P, J, M, E, Alt+1, 2, Ctrl+Shift+X, R) work only from the chrome: with the keyboard
+      // in the page they are the page's, like every key that moves between tabs.
 
       // No modifier, so it falls outside the `cmdOrCtrl`-gated switch below
       // — Escape exits Focus Mode if it's on, and/or turns off the laser

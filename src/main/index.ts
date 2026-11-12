@@ -37,7 +37,7 @@ import { registerAccentColorIpc } from './ipc/registerAccentColorIpc';
 import { registerMarkdownIpc } from './ipc/registerMarkdownIpc';
 import { registerTabIpc } from './ipc/registerTabIpc';
 import { registerThemeIpc } from './ipc/registerThemeIpc';
-import { requestFinished, requestStarted } from './browser/loadProgress';
+import { requestFinished, requestStarted, responseStarted } from './browser/loadProgress';
 import { registerStatusIpc } from './ipc/registerStatusIpc';
 import { registerWindowIpc } from './ipc/registerWindowIpc';
 import { chromeWindowOf } from './ipc/senderGuards';
@@ -239,13 +239,18 @@ void app.whenReady().then(() => {
   // First, so the headers hook the chrome's CSP registers through exists before any window does.
   void adBlocker.start(session.defaultSession);
   // The load progress estimate counts each page's requests: sent, then completed (through the history's own listener,
-  // the session allowing one per event) or failed.
-  historyController.attachTo(session.defaultSession, (webContentsId) => requestFinished(webContentsId));
+  // the session allowing one per event) or failed; and its bytes, by each response's size as it starts.
+  historyController.attachTo(session.defaultSession, (webContentsId, requestId) =>
+    requestFinished(webContentsId, requestId),
+  );
   session.defaultSession.webRequest.onSendHeaders({ urls: ['http://*/*', 'https://*/*'] }, (details) =>
     requestStarted(details.webContentsId),
   );
+  session.defaultSession.webRequest.onResponseStarted({ urls: ['http://*/*', 'https://*/*'] }, (details) =>
+    responseStarted(details.webContentsId, details.id, contentLengthOf(details.responseHeaders)),
+  );
   session.defaultSession.webRequest.onErrorOccurred({ urls: ['http://*/*', 'https://*/*'] }, (details) =>
-    requestFinished(details.webContentsId),
+    requestFinished(details.webContentsId, details.id, true),
   );
 
   // Deny every site permission request (camera, mic, geolocation, ...) by
@@ -323,6 +328,17 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+/**
+ * A response's size from its headers, for the load's byte count.
+ * @param headers The response's headers, any case.
+ * @returns Its `Content-Length` in bytes, or `null` if it gave none (or nonsense).
+ */
+function contentLengthOf(headers: Record<string, string[]> | undefined): number | null {
+  const entry = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === 'content-length');
+  const value = entry ? Number(entry[1][0]) : Number.NaN;
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
 
 /**
  * Resolves the `TabManager` owning whichever window actually sent a

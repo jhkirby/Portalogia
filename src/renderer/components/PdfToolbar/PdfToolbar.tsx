@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-12
 
 import { useState } from 'react';
 import type { BookmarkState, PdfTabState } from '@shared/tab-state';
@@ -101,6 +101,7 @@ export function PdfToolbar({
         bookmarkLabel="Bookmark this PDF"
         onToggleBookmark={() => onToggleBookmark(tab.id)}
         loadProgress={tab.loadProgress}
+        loadBytes={tab.loadBytes}
       >
         {/* Before a file is open there's nothing to rename, so the bar is a search over the bookmarked PDFs instead. */}
         {fileName === null ? (

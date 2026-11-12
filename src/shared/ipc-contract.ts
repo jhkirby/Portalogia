@@ -135,6 +135,8 @@ export const IpcChannel = {
   /** Save prompt → main: how tall its card is, so its view is sized to it and covers no more of the page. */
   SecretPromptHeight: 'secret-prompt:height',
   PdfOpenFile: 'pdf:open-file',
+  /** Chrome → main: show the open dialog for a web tab, and load the page picked from the computer in it. */
+  TabsOpenLocalPage: 'tabs:open-local-page',
   PdfRename: 'pdf:rename',
   /** PDF page → main: the marks drawn on the open document, to persist. */
   PdfSaveAnnotations: 'pdf:save-annotations',
@@ -169,8 +171,6 @@ export const IpcChannel = {
   PdfScrollToPage: 'pdf:scroll-to-page',
   /** Chrome → main: switch a PDF, Markdown or browser tab between panning and selecting. */
   TabsSetPointerMode: 'tabs:set-pointer-mode',
-  /** Chrome → main: turn a browser tab's edit mode on or off (its tool shortcuts go to the page). */
-  TabsToggleEditMode: 'tabs:toggle-edit-mode',
   /** Main → browser tab's page: its pointer mode, and whether a tool has the pointer instead. */
   TabPointerMode: 'tab:pointer-mode',
   /** Main → browser tab's page: Shift+Escape was pressed; take the caret out of any text box. */
@@ -768,13 +768,13 @@ export interface PortalogiaApi {
   goToPdfPage(id: string, page: number): Promise<IpcResult<null>>;
   /** Sets what a drag on a PDF, Markdown or browser tab's document does: pan it, or select its text (and click its links). */
   setPointerMode(id: string, mode: PointerMode): Promise<IpcResult<null>>;
-  /** Turns a browser tab's edit mode on or off: while on, the toolbar tools' keyboard shortcuts go to the page. */
-  toggleEditMode(id: string): Promise<IpcResult<null>>;
 
   /** Opens a new Markdown tab (the toolbar's MD button, Ctrl+Shift+M, or File > New Markdown Tab). */
   createMarkdownTab(): Promise<IpcResult<BrowserState>>;
   /** Shows the open dialog for a Markdown tab; the chosen note is delivered to that tab's page by main. */
   openMarkdownFile(id: string): Promise<IpcResult<null>>;
+  /** Shows the open dialog for a web tab, and loads the web page picked from the computer in it. */
+  openLocalPage(id: string): Promise<IpcResult<null>>;
   /** Asks where to create a new, empty note and opens it in the tab. */
   newMarkdownFile(id: string): Promise<IpcResult<null>>;
   /** Closes the tab's open note, leaving the tab empty. */

@@ -1,34 +1,24 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-11-12
 
-import { formatAltShortcut, formatShortcut } from '../../lib/shortcuts';
-import { ReloadIcon, StopIcon } from '../icons';
+import { formatAltShortcut } from '../../lib/shortcuts';
 
 interface NavControlsProps {
   /** Whether the active tab has back history. */
   readonly canGoBack: boolean;
   /** Whether the active tab has forward history. */
   readonly canGoForward: boolean;
-  /** Whether the active tab is mid-navigation (swaps reload for stop). */
-  readonly isLoading: boolean;
   readonly onBack: () => void;
   readonly onForward: () => void;
-  readonly onReloadOrStop: () => void;
-  readonly onHome: () => void;
 }
 
-/** Back / forward / reload-or-stop / home buttons for the active tab. */
-export function NavControls({
-  canGoBack,
-  canGoForward,
-  isLoading,
-  onBack,
-  onForward,
-  onReloadOrStop,
-  onHome,
-}: NavControlsProps) {
+/**
+ * Back and forward for the active tab. Reload sits at the address bar's own right end (`AddressBar`), and Home in the
+ * Tools sidebar.
+ */
+export function NavControls({ canGoBack, canGoForward, onBack, onForward }: NavControlsProps) {
   return (
     <div className="nav-controls">
       <button
@@ -50,24 +40,6 @@ export function NavControls({
         data-tooltip={`Forward (${formatAltShortcut('→')})`}
       >
         ›
-      </button>
-      <button
-        type="button"
-        className="nav-controls__button hover-glow chrome-tooltip"
-        onClick={onReloadOrStop}
-        aria-label={isLoading ? 'Stop' : 'Reload'}
-        data-tooltip={isLoading ? 'Stop' : `Reload (${formatShortcut('R')})`}
-      >
-        {isLoading ? <StopIcon size={15} /> : <ReloadIcon size={15} />}
-      </button>
-      <button
-        type="button"
-        className="nav-controls__button hover-glow chrome-tooltip"
-        onClick={onHome}
-        aria-label="Home"
-        data-tooltip={`Home (${formatShortcut('H')})`}
-      >
-        ⌂
       </button>
     </div>
   );

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-11-12
 
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { ZOOM_PERCENT_MAX, ZOOM_PERCENT_MIN } from '@shared/constants';
@@ -115,7 +115,7 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
         −
       </button>
       <div
-        className="zoom-control__bubble chrome-tooltip"
+        className="zoom-control__bubble hover-grow chrome-tooltip"
         data-tooltip={`Zoom percent (${formatShortcut('Shift+0')}) — ${ZOOM_PERCENT_MIN}–${ZOOM_PERCENT_MAX}%`}
       >
         <input

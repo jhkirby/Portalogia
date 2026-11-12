@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-11-12
 
 import { syntaxTree } from '@codemirror/language';
 import { renderedBlocks } from './livePreviewBlocks';
@@ -458,7 +458,21 @@ const livePreviewTheme = EditorView.theme({
   // line breaks aren't the editor's preserved whitespace.
   '.cm-lp-block': { display: 'flow-root', whiteSpace: 'normal', cursor: 'text' },
   '.cm-lp-block__content': { display: 'flow-root' },
-  '.cm-lp-h1, .cm-lp-h2, .cm-lp-h3, .cm-lp-h4, .cm-lp-h5, .cm-lp-h6': { fontWeight: '700', lineHeight: '1.35' },
+  // The reader's heading line height (markdown-viewer.css), so a heading being edited is as tall as it is drawn.
+  '.cm-lp-h1, .cm-lp-h2, .cm-lp-h3, .cm-lp-h4, .cm-lp-h5, .cm-lp-h6': { fontWeight: '700', lineHeight: '1.25' },
+  // Measured for its spacing only (`blockSpacing`): never seen, never in the way.
+  '.cm-lp-spacing-sample': {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '0',
+    height: '0',
+    overflow: 'hidden',
+    visibility: 'hidden',
+    pointerEvents: 'none',
+  },
+  // The blank lines after the block being edited, folded away (`livePreviewBlocks`).
+  '.cm-line.cm-lp-folded-gap': { height: '0', padding: '0', overflow: 'hidden' },
   '.cm-lp-h1': { fontSize: '2em' },
   '.cm-lp-h2': { fontSize: '1.55em' },
   '.cm-lp-h3': { fontSize: '1.25em' },
