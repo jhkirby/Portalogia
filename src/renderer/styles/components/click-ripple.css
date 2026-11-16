@@ -1,0 +1,41 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-18 */
+
+/* ── CLICK RIPPLE ─────────────────────────────────────────────────────── */
+
+/* The accent-coloured ripple a click on a tab or a workspace spreads from the pointer (`useClickRipples`). It sits in
+   its element's own clipped effects layer, which gives it its rounded shape, and removes itself when it ends. */
+.click-ripple {
+  position: absolute;
+
+  background: rgba(var(--color-accent-rgb), 0.3);
+  border-radius: 50%;
+
+  transform: scale(0);
+  animation: click-ripple 520ms ease-out forwards;
+}
+
+@keyframes click-ripple {
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+
+/* Still run, as a fade: a ripple removes itself when its animation ends. */
+@media (prefers-reduced-motion: reduce) {
+  .click-ripple {
+    transform: scale(1);
+    animation-name: click-ripple-fade;
+  }
+}
+
+@keyframes click-ripple-fade {
+  to {
+    opacity: 0;
+  }
+}

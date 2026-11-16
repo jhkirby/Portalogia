@@ -1,0 +1,152 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── TITLEBAR CLOCK ───────────────────────────────────────────────────── */
+/* Shares the titlebar's top-right corner with WindowControls (see app.css's
+   `.titlebar__corner`), showing while the pointer is away from the tab row
+   and fading out as the controls fade in. Never takes the pointer: the
+   window-drag strip and the controls beneath it keep their clicks. */
+
+/* One row, in sections split by thin rules: Bluetooth and the Wi-Fi network | the battery | the temperature, then the
+   date stacked over the time. */
+.titlebar-clock {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-md);
+  padding: 0 var(--size-spacing-md);
+
+  color: var(--color-tab-text);
+  /* Digits of one width, so the time doesn't shift sideways as it changes. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+
+  /* Takes the pointer while showing, so pointing at the clock counts as being on the row (`.titlebar:hover`) and brings
+     up the controls, as pointing anywhere else on it does; once they're up (below) it lets clicks through to them. */
+  user-select: none;
+  transition: opacity var(--size-titlebar-reveal-duration) ease-out;
+}
+
+.titlebar:is(:hover, :has(:focus-visible), .titlebar--pointer-inside) .titlebar-clock {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.titlebar-clock__clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* Flex boxes, so the icons centre on the row instead of sitting on a text baseline; the device count and the network's
+   name sit close beside their icons, as the battery's percent does. */
+.titlebar-clock__audio,
+.titlebar-clock__bluetooth,
+.titlebar-clock__wifi {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
+/* The playback device's name shows in full. */
+.titlebar-clock__audio-device {
+  white-space: nowrap;
+}
+
+/* A long network name would push the clock around; it stops at a set width with an ellipsis. */
+.titlebar-clock__network {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The thin rule between sections: as tall as the date-over-time stack's text, faint so the readings still lead. */
+.titlebar-clock__divider {
+  align-self: center;
+  width: 1px;
+  height: 1.5em;
+
+  background: currentColor;
+  opacity: 0.35;
+}
+
+/* The icon and its percentage, close together as one item. The fill's color is the level's, through the
+   `--battery-fill` the icon reads (see `BatteryIcon`); a normal level leaves it at the text color. */
+.titlebar-clock__battery {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
+/* A little more room than the icon gets, so "54% 3 h" reads as two values rather than one. */
+.titlebar-clock__battery-time {
+  margin-left: var(--size-spacing-xs);
+}
+
+.titlebar-clock__battery[data-level='charging'] {
+  --battery-fill: var(--color-battery-charging);
+}
+
+.titlebar-clock__battery[data-level='low'] {
+  --battery-fill: var(--color-battery-low);
+}
+
+.titlebar-clock__battery[data-level='critical'] {
+  --battery-fill: var(--color-battery-critical);
+}
+
+/* Before the time, in the same row under the date and at the same size. */
+.titlebar-clock__time-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-spacing-sm);
+}
+
+.titlebar-clock__temperature {
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
+/* A text that takes turns (`FadeSwap`): the temperature's unit, a Bluetooth device's name. The old one fades out, then
+   the new one in, each over 220ms (`FADE_MS` in FadeSwap.tsx). */
+.fade-swap {
+  transition: opacity 220ms ease-in-out;
+}
+
+.fade-swap--out {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-swap {
+    transition: none;
+  }
+}
+
+/* A connected Bluetooth device's name, beside the icon; it shows in full, as the playback device's does. */
+.titlebar-clock__device {
+  white-space: nowrap;
+}
+
+.titlebar-clock__date {
+  font-size: var(--size-font-sm);
+}
+
+.titlebar-clock__time {
+  font-size: var(--size-font-md);
+  font-weight: 600;
+}
+
+/* The time zone after the time (`EDT`): lighter than the time, so the digits still lead. */
+.titlebar-clock__zone {
+  margin-left: var(--size-spacing-xs);
+  font-weight: 400;
+}

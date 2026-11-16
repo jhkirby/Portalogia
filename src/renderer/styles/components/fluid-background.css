@@ -1,0 +1,15 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-22 */
+
+/* ── FLUID BACKGROUND ─────────────────────────────────────────────────── */
+/* The fluid filling an empty note or PDF tab (`FluidBackground`, `startFluid`): over the whole of its positioned
+   parent, behind the rest of what's in it, and never taking the pointer itself (the parent passes it on). */
+.fluid-background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}

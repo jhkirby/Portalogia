@@ -1,0 +1,35 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── NAV CONTROLS ─────────────────────────────────────────────────────── */
+
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-controls__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 18px;
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.nav-controls__button:disabled {
+  color: var(--color-button-disabled-text);
+  cursor: default;
+}

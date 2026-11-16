@@ -1,0 +1,715 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-12 */
+
+/* ── SIDEBAR ──────────────────────────────────────────────────────────── */
+/* Rail on the left edge of the window, beneath the top bar (see app.css's
+   `.app-shell`, a column of [.app, .main-row] — `.main-row` a row of
+   [.sidebar, .tab-content]) rather than spanning the full window height
+   and competing with it for the top-left corner. Its height comes from
+   `.main-row`'s default flex `align-items: stretch`, not an explicit
+   rule here, so only `width` needs setting; the actual tab content still
+   starts at that same x-offset regardless of the sidebar's own content —
+   see TabManager.computeMainBounds() in the main process for
+   how a browser tab's native view is shifted right by --size-sidebar-width
+   to clear it (Terminal, `.tab-content`'s other occupant, clears it via
+   plain CSS flow instead). */
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: var(--size-sidebar-width);
+  min-height: 0;
+  box-sizing: border-box;
+
+  background: var(--color-chrome-bg);
+  border-right: 1px solid var(--color-chrome-border);
+
+  /* Ctrl+L (TabManager.toggleSidebar) toggles `.sidebar--hidden`, driving
+     this same slide; the main process animates the native tab content's
+     bounds over the same --size-sidebar-toggle-duration and a matching
+     ease-out-cubic curve so the two move in step. */
+  transition:
+    width var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    border-color var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* An ordinary Ctrl+L toggle, not Focus Mode — collapses to a narrow rail of
+   icons: the show/hide button on top, then the workspaces (see
+   TabManager.targetLeftInset, which shifts the tab's own native content
+   to clear exactly this much). `.sidebar--focus-mode` below overrides
+   this to a true 0 when Focus Mode is what's actually collapsing it. */
+.sidebar--hidden {
+  width: var(--size-sidebar-collapsed-width);
+}
+
+/* Only Focus Mode drops the sidebar's right border: a collapsed rail keeps its
+   thin vertical line, so the edge between sidebar and page stays marked. */
+.sidebar--hidden.sidebar--focus-mode {
+  width: 0;
+  border-right-color: transparent;
+}
+
+/* Everything in the sidebar: the heading, the workspace list and the
+   buttons below it. What no longer fits as the sidebar collapses clips here. */
+.sidebar__inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--size-spacing-sm);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    padding-right var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.sidebar--hidden .sidebar__inner {
+  /* A little room either side, so the selected pill's grey doesn't run into the window's edge or the border. */
+  padding-left: 6px;
+  padding-right: 6px;
+  /* Collapsed, this still occupies `--size-sidebar-collapsed-width` — not
+     0 (see `.sidebar--hidden` above) — specifically so its squeezed
+     contents stay usable: a workspace pill's colored dot is still
+     clickable to switch to it, and the show/hide button and "New
+     workspace"'s icon are still clickable too, even though there's no
+     longer room to show any label text (clipped by this element's own
+     `overflow: hidden`). Their tooltips are drawn above the page beside the
+     rail (`installChromeTooltips`), so they show in full collapsed too. */
+}
+
+/* ── HEADING ──────────────────────────────────────────────────────────── */
+
+/* "Workspaces", and the show/hide button at the right, above the first workspace. */
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin-bottom: var(--size-spacing-xs);
+  flex-shrink: 0;
+}
+
+/* A flex basis of 0: the name takes only the room the button leaves, so as the sidebar collapses the name is
+   squeezed away first and the button stays its full size until the rail is narrower than it. */
+.sidebar__title {
+  overflow: hidden;
+  flex: 1 1 0;
+  min-width: 0;
+  /* In line with the workspaces' icons below. Slides away with the collapse, so the button isn't squeezed by it. */
+  padding-left: var(--size-spacing-sm);
+
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-tab-text-active);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
+}
+
+.sidebar--hidden .sidebar__title {
+  padding-left: 0;
+
+  opacity: 0;
+  text-overflow: clip;
+  transition:
+    padding-left var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    opacity var(--size-sidebar-label-fade-out) ease-in;
+}
+
+/* Collapsed, the rail is narrower than this button's 28px, so it shrinks to fill it, its icon centred over the
+   workspaces' icons below. */
+.sidebar__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 28px;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  cursor: pointer;
+}
+
+.sidebar__toggle:hover {
+  color: var(--color-tab-text-active);
+}
+
+/* ── WORKSPACE LIST ───────────────────────────────────────────────────── */
+
+.workspace-bar {
+  display: flex;
+  flex-direction: column;
+  /* Sized to its pills, not stretched to fill the sidebar, so "New workspace"
+     sits right under the last one; once the list outgrows the sidebar it
+     shrinks (min-height: 0) and scrolls, leaving that button in view below. */
+  /* So a pill's `offsetTop` is measured from the list, as dragging one to a new place needs. */
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  gap: var(--size-spacing-xs);
+  overflow-y: auto;
+  /* Explicit rather than left to default to `visible` — the CSS Overflow
+     spec computes a *lone* `overflow-y: auto` as `overflow-x: auto` too
+     (browsers refuse a "scrolls one axis, clips the other" combination),
+     which was quietly giving this list its own native horizontal
+     scrollbar (complete with its own arrow-button ends) the instant its
+     content was even a fraction of a pixel wider than the sidebar —
+     something a vertical list should never need in the first place, since
+     `.workspace-bar__name`'s ellipsis already handles a name too long to
+     fit. */
+  overflow-x: hidden;
+
+  /* No visible scrollbar: the list still scrolls with the mouse wheel (or
+     touchpad), which is all it needs. `scrollbar-width` is the standard
+     property; the pseudo-element covers Chromium builds that still key off it. */
+  scrollbar-width: none;
+}
+
+.workspace-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-bar__pill {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+  box-sizing: border-box;
+  flex-shrink: 0;
+
+  /* None, so the pointer's glow (pointer-glow.css) shows through a pill, under its icon and name; only the selected
+     pill's own fill covers it. */
+  background: transparent;
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+/* Hovering makes the workspace's icon and name glow (`.hover-glow`), with no colour behind them. Its pencil and ×
+   take no part in that: each glows only while the pointer is on it. */
+.workspace-bar__pill:hover :is(.workspace-bar__edit, .workspace-bar__remove):not(:hover) {
+  text-shadow: none;
+}
+
+.workspace-bar__pill:hover :is(.workspace-bar__edit, .workspace-bar__remove):not(:hover) svg {
+  filter: none;
+}
+
+.workspace-bar__pill--active {
+  color: var(--color-tab-text-active);
+}
+
+/* A tab dragged from `TabBar` is currently hovering this pill (see
+   `WorkspaceBar`'s own `handleDragOver`) — an outline, which is drawn over
+   everything in the pill, so it stays visible over the selected colour. */
+.workspace-bar__pill--drop-target {
+  outline: 2px solid var(--color-accent-text);
+  outline-offset: -2px;
+}
+
+/* A new workspace on its way in (see `useWorkspaceTransitions`): its row opens first, so the workspaces below it
+   and "New workspace" glide down, then it slides in rightward from the sidebar's left edge (clipped until it
+   arrives), the way a closed one leaves. The negative margin keeps the list's gap from appearing all at once.
+   `WorkspaceBar` ends it on `workspace-pill-slide-in`. */
+.workspace-bar__pill--entering {
+  animation:
+    workspace-pill-open 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    workspace-pill-slide-in 240ms cubic-bezier(0.2, 0.8, 0.3, 1) 200ms backwards;
+}
+
+@keyframes workspace-pill-open {
+  from {
+    height: 0;
+    margin-bottom: calc(-1 * var(--size-spacing-xs));
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+  to {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+@keyframes workspace-pill-slide-in {
+  from {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+/* A closed workspace on its way out (see `useWorkspaceTransitions`): it slides left out of the sidebar, which clips it
+   at its edge, then its height folds away so the pills below glide up instead of jumping. The negative margin
+   takes back the list's gap along with it, or the last few pixels would still jump. `WorkspaceBar` stops drawing
+   it on the last animation (`workspace-pill-collapse`). Timed like a closing tab. */
+.workspace-bar__pill--exiting {
+  overflow: hidden;
+  pointer-events: none;
+  animation:
+    workspace-pill-slide-out 180ms cubic-bezier(0.5, 0, 0.75, 0) forwards,
+    workspace-pill-collapse 240ms cubic-bezier(0.4, 0, 0.2, 1) 180ms forwards;
+}
+
+@keyframes workspace-pill-slide-out {
+  to {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+@keyframes workspace-pill-collapse {
+  from {
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+  to {
+    height: 0;
+    margin-bottom: calc(-1 * var(--size-spacing-xs));
+    transform: translateX(calc(-100% - var(--size-spacing-sm)));
+  }
+}
+
+/* Multi-selected (Ctrl/Shift+click) workspaces: the active pill's own neutral look, like the tabs. */
+.workspace-bar__pill--selected {
+  color: var(--color-tab-text-active);
+}
+
+/* Below the pill's content and above its hover layer: the selected colour and the click ripples, clipped to the
+   pill's rounded shape. */
+.workspace-bar__effects {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+
+  border-radius: inherit;
+
+  pointer-events: none;
+}
+
+/* The selected colour leaves at once, and grows in like the hover on the workspace that becomes selected (a click,
+   or stepping with Ctrl+Up/Down): the transition is only on the way in. */
+.workspace-bar__selected-fill {
+  position: absolute;
+  inset: 0;
+
+  background: var(--color-tab-bg-active);
+  border-radius: inherit;
+
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.workspace-bar__pill--active .workspace-bar__selected-fill,
+.workspace-bar__pill--selected .workspace-bar__selected-fill {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity 140ms ease-out;
+}
+
+/* The workspace being dragged to a new place: its in-place highlight is the only cue (no drag snapshot follows the
+   pointer), drawn by the fill layer so it shows on the selected workspace too. */
+.workspace-bar__pill--dragging .workspace-bar__selected-fill {
+  background: var(--color-tab-dragging-bg);
+
+  opacity: 1;
+  transform: scale(1);
+  transition: none;
+}
+
+/* Holds the workspace icon (see `WorkspaceIcon`): a fixed square, so names line up whichever icon is chosen. */
+.workspace-bar__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.workspace-bar__name {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  transition: opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
+}
+
+.workspace-bar__name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  font: inherit;
+  color: inherit;
+}
+
+.workspace-bar__name-input:focus {
+  outline: none;
+}
+
+.workspace-bar__edit,
+.workspace-bar__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 13px;
+  line-height: 1;
+  color: inherit;
+
+  cursor: pointer;
+
+  /* Only shown while its own workspace is hovered (or keyboard-focused), and
+     not while a tab is being dragged over that workspace — then the pill is a
+     drop target, and an "x" would only invite a misdrop onto it. Faded out
+     rather than removed, so the name's width doesn't shift as the pointer
+     moves down the list. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Unlike the remove button, the edit button takes no room at all until its
+   pill is hovered: with both reserving space, names got cut short at rest.
+   The negative margin cancels the pill's own flex gap on its side. */
+.workspace-bar__edit {
+  width: 0;
+  margin-left: calc(-1 * var(--size-spacing-sm));
+  overflow: hidden;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__edit,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__edit {
+  width: 18px;
+  margin-left: 0;
+  overflow: visible;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__edit,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__edit,
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__remove,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The two buttons sit closer to each other, and to the pill's right end, than the pill's own gap and padding would put
+   them: half the gap between them, and half the padding after them. */
+.workspace-bar__pill {
+  padding-right: calc(var(--size-spacing-sm) / 2);
+}
+
+.workspace-bar__remove {
+  margin-left: calc(-1 * var(--size-spacing-sm) / 2);
+}
+
+/* Collapsed, the pill's room is the rail less its padding: its usual
+   side padding would push a 16px icon past that and clip it. Trimmed so the
+   whole icon, whatever its shape, sits inside and roughly centered. */
+.sidebar--hidden .workspace-bar__pill {
+  padding-left: 6px;
+  padding-right: 0;
+}
+
+.sidebar--hidden .workspace-bar__new {
+  padding-left: 10px;
+  padding-right: 0;
+}
+
+/* ── NEW WORKSPACE ────────────────────────────────────────────────────── */
+
+.workspace-bar__new {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  margin-top: var(--size-spacing-xs);
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+  box-sizing: border-box;
+  flex-shrink: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+/* A tab dragged from `TabBar` is currently hovering this button — same
+   drop-target treatment as `.workspace-bar__pill--drop-target`. */
+.workspace-bar__new--drop-target {
+  box-shadow: inset 0 0 0 2px var(--color-accent-text);
+}
+
+.workspace-bar__new-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  flex-shrink: 0;
+
+  font-size: 14px;
+}
+
+.workspace-bar__new-label {
+  overflow: hidden;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  transition: opacity var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
+}
+
+/* ── Through the slide ──
+   Nothing in the sidebar snaps when it starts to collapse or expand. The labels fade (out at once, in once there's
+   room) and clip rather than ellipsize, which would rewrite each one every frame as the edge passed over it. The
+   pills and "New workspace" ease their padding into the rail's, so the icons glide onto its centre line instead of
+   jumping there. The selector's extra class outranks `.hover-glow`'s own transition, which is kept. */
+.sidebar--hidden :is(.workspace-bar__name, .workspace-bar__new-label) {
+  opacity: 0;
+  text-overflow: clip;
+  transition: opacity var(--size-sidebar-label-fade-out) ease-in;
+}
+
+.sidebar :is(.workspace-bar__pill, .workspace-bar__new) {
+  transition:
+    color 160ms ease-out,
+    text-shadow 160ms ease-out,
+    padding var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* "New workspace" and the images button stack once collapsed (and sit side by side again once open): a change of
+   layout that can't glide, so the pair fades back in across it instead of jumping. Two names for one fade, so the
+   change of class each way starts it over. */
+.sidebar .workspace-bar__actions {
+  animation: sidebar-actions-in-open var(--size-sidebar-toggle-duration) ease-out;
+}
+
+.sidebar--hidden .workspace-bar__actions {
+  animation-name: sidebar-actions-in-collapsed;
+}
+
+@keyframes sidebar-actions-in-open {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sidebar-actions-in-collapsed {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── WORKSPACE IMAGES ─────────────────────────────────────────────────── */
+
+/* A workspace's icon turns into a star while it is hovered (or keyboard-focused): a click saves the workspace as
+   an image. The star takes the icon's own 16px square, so the name doesn't shift as the pointer moves down the list.
+   Left alone while a tab is being dragged over the pill — then it is a drop target. */
+.workspace-bar__star {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  cursor: pointer;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__glyph,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__glyph {
+  display: none;
+}
+
+.workspace-bar__pill:hover:not(.workspace-bar__pill--drop-target) .workspace-bar__star,
+.workspace-bar__pill:focus-within:not(.workspace-bar__pill--drop-target) .workspace-bar__star {
+  display: flex;
+}
+
+.workspace-bar__glyph {
+  display: flex;
+}
+
+.workspace-bar__star:hover,
+.workspace-bar__star[aria-pressed='true'] {
+  color: var(--color-accent-text);
+}
+
+/* A saved workspace's filled star, hovered, is about to be unsaved: it spins a quarter turn (the star looks the
+   same every quarter) and dulls from the accent to grey, so the click reads as taking the star away. */
+.workspace-bar__star[aria-pressed='true']:hover {
+  color: var(--color-tab-text);
+}
+
+.workspace-bar__star[aria-pressed='true']:hover svg {
+  animation: workspace-star-unset 380ms ease-in-out;
+}
+
+@keyframes workspace-star-unset {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  45% {
+    transform: rotate(60deg) scale(0.7);
+  }
+
+  100% {
+    transform: rotate(90deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-bar__star[aria-pressed='true']:hover svg {
+    animation: none;
+  }
+
+  .workspace-bar__pill--active .workspace-bar__selected-fill,
+  .workspace-bar__pill--selected .workspace-bar__selected-fill {
+    transition: none;
+  }
+}
+
+/* Collapsed, a pill shows only its icon: centred in the pill's grey (its width less the icon's, halved, on the left; a
+   percentage padding is of the list's width, which is the pill's). */
+.sidebar--hidden .workspace-bar__pill {
+  padding-left: calc((100% - 16px) / 2);
+}
+
+/* Collapsed, the pill is just its icon: swapping that for the star would put a different target under the pointer
+   the moment it arrives to pick the workspace. `:is()` matches the specificity of the expanded hover rules above. */
+.sidebar--hidden .workspace-bar__pill:is(:hover, :focus-within) .workspace-bar__star {
+  display: none;
+}
+
+.sidebar--hidden .workspace-bar__pill:is(:hover, :focus-within) .workspace-bar__glyph {
+  display: flex;
+}
+
+/* "New workspace" and the images button share a row; collapsed, they stack. */
+.workspace-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  margin-top: var(--size-spacing-xs);
+  /* A thin line, the chrome's own border colour, setting "New workspace" and the images button off from the list of
+     workspaces above them. */
+  padding-top: var(--size-spacing-xs);
+  border-top: 1px solid var(--color-chrome-border);
+  flex-shrink: 0;
+}
+
+.sidebar--hidden .workspace-bar__actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.workspace-bar__actions .workspace-bar__new {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  margin-top: 0;
+  /* The label needs every pixel it can get beside the images button. */
+  padding-right: 0;
+}
+
+.workspace-bar__images {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  box-sizing: border-box;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  cursor: pointer;
+}
+
+.workspace-bar__images:hover {
+  color: var(--color-tab-text-active);
+}
+
+/* Collapsed, it fills the narrow column like the button above it, its icon centered on the same line as the + (whose
+   8px icon sits 10px in, centered 14px from the edge) and the workspace icons: a 16px icon 6px in is centered there too. */
+.sidebar--hidden .workspace-bar__images {
+  width: 100%;
+  justify-content: flex-start;
+  padding-left: 6px;
+}
+
+/* ── Shimmer ──
+   Every 20 seconds (`useShimmerTick`) a wave runs down the workspaces, top to bottom: each one's icon
+   and name brighten where they are, one after another, `--shimmer-index`
+   setting how far along the wave each is. Two identical keyframes taken by
+   turns (`data-shimmer` a/b), since an animation only restarts when its name
+   changes. */
+.workspace-bar[data-shimmer='a'] :is(.workspace-bar__glyph, .workspace-bar__name) {
+  animation: workspace-shimmer-a 700ms ease-in-out calc(var(--shimmer-index, 0) * 70ms) both;
+}
+
+.workspace-bar[data-shimmer='b'] :is(.workspace-bar__glyph, .workspace-bar__name) {
+  animation: workspace-shimmer-b 700ms ease-in-out calc(var(--shimmer-index, 0) * 70ms) both;
+}
+
+@keyframes workspace-shimmer-a {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+  }
+}
+
+@keyframes workspace-shimmer-b {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-bar[data-shimmer] :is(.workspace-bar__glyph, .workspace-bar__name) {
+    animation: none;
+  }
+}

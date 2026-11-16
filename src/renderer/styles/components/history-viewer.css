@@ -1,0 +1,268 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-27 */
+
+/* ── HISTORY VIEWER ───────────────────────────────────────────────────── */
+/* `history.html`'s whole page — a History tab's own `WebContentsView` (see
+   `TabManager.createHistoryTab`), so none of the chrome's stylesheets reach it.
+   `bookmarks.html` loads it too: the Bookmarks tab's table is this one's, with
+   its own columns and edit boxes on top (`bookmarks-viewer.css`). */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  /* None: the margin around the frame shows the chrome's flowing metal behind this see-through page
+     (`MetalBackground`, `TabManager.makePageSeeThrough`). */
+  background: transparent;
+  color: var(--color-tab-text-active);
+}
+
+#root {
+  height: 100%;
+}
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-spacing-md);
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--size-content-frame-y) var(--size-content-frame-x);
+}
+
+/* ── Table ── */
+
+.history__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-content-frame-radius);
+}
+
+/* The vertical scroll bar runs from the bottom of the column headers down, not through them: the headers stay put
+   over the rows, so the bar is the rows' alone. `--history-header-height` is the header row's measured height, set by
+   `HistoryViewer`.
+
+   The line under the headers ends with the table, which stops short of the bar, so the track's own top border carries
+   it on to the table's right edge. The track starts 1px higher to put that border on the same pixel row as the
+   headers' line (the last row of their measured height). */
+.history__table-wrap::-webkit-scrollbar-track:vertical {
+  margin-top: calc(var(--history-header-height, 1px) - 1px);
+
+  border-top: 1px solid var(--color-panel-border);
+}
+
+.history__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  font-size: var(--size-font-md);
+}
+
+.history__th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--size-spacing-sm) var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  /* The line under the headers, drawn inside the cell's last pixel row rather than as a border: in a collapsed-border
+     table a sticky cell's border doesn't stick, so once scrolled it went off with the rows and left only the scroll
+     track's piece of the line (below) standing alone at the right. */
+  box-shadow: inset 0 -1px 0 var(--color-panel-border);
+
+  font-size: var(--size-font-sm);
+  font-weight: 600;
+  text-align: left;
+  color: var(--color-tab-text);
+}
+
+.history__th--time {
+  width: 200px;
+}
+
+/* The narrow columns leave room for their heading's sort mark beside the name (`SortHeader`). */
+.history__th--type {
+  width: 72px;
+}
+
+.history__th--method {
+  width: 96px;
+}
+
+.history__th--status {
+  width: 88px;
+}
+
+.history__th--bookmark {
+  width: 170px;
+}
+
+/* Room for the copy and delete buttons side by side. */
+.history__th--actions {
+  width: 72px;
+}
+
+.history__cell {
+  padding: 6px var(--size-spacing-md);
+  overflow: hidden;
+
+  border-bottom: 1px solid var(--color-chrome-border);
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history__cell--time,
+.history__cell--type,
+.history__cell--method {
+  color: var(--color-tab-text);
+}
+
+/* "None", and a PDF's missing status: there's nothing to show, so it recedes. */
+.history__cell--muted {
+  color: var(--color-address-placeholder);
+}
+
+.history__cell--status {
+  font-variant-numeric: tabular-nums;
+}
+
+.history__status--ok {
+  color: #34a853;
+}
+
+.history__status--redirect {
+  color: #f9ab00;
+}
+
+.history__status--error {
+  color: #d93025;
+}
+
+.history__row:hover {
+  background: var(--color-button-hover-bg);
+}
+
+/* Rows fade up into place when the table appears (or new ones arrive), each a moment after the one above it
+   (`--row-index`, capped, so a long table doesn't keep you waiting). */
+.history__row {
+  animation: history-row-in 260ms ease-out calc(var(--row-index, 0) * 18ms) both;
+}
+
+/* A deleted row fades and slides out to the left where it stood; `HistoryViewer` drops it when this ends. */
+.history__row--exiting {
+  pointer-events: none;
+  animation: history-row-out 240ms ease-in both;
+}
+
+@keyframes history-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes history-row-out {
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history__row {
+    animation: none;
+  }
+
+  .history__row--exiting {
+    animation-duration: 1ms;
+  }
+}
+
+.history__cell--actions {
+  padding: 0 var(--size-spacing-xs);
+}
+
+.history__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* Copy and delete: hidden until the pointer is over the row (or the button itself is focused with the keyboard). */
+.history__action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-tab-text);
+
+  opacity: 0;
+  cursor: pointer;
+}
+
+.history__row:hover .history__action-button,
+.history__action-button:focus-visible {
+  opacity: 1;
+}
+
+.history__action-button {
+  --hover-grow-bg: var(--color-close-hover-bg);
+}
+
+.history__action-button:hover {
+  color: var(--color-tab-text-active);
+}
+
+/* Shown after a copy lands, and kept visible for as long as it's up even if the pointer moves off the row. */
+.history__copy--done {
+  opacity: 1;
+  color: var(--color-accent-text);
+}
+
+.history__empty {
+  margin: 0;
+  padding: 40px var(--size-spacing-md);
+
+  text-align: center;
+  color: var(--color-tab-text);
+}
+
+/* The rest of the message, not yet showing, holding its place: see `HistoryViewer`'s `emptyRest`. */
+.history__empty-rest {
+  visibility: hidden;
+}
+
+.history__note {
+  flex: none;
+  margin: 0;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+}

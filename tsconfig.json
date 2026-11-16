@@ -1,0 +1,16 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.preload.json" },
+    { "path": "./tsconfig.web.json" }
+  ],
+  "compilerOptions": {
+    // Not used by `tsc -b` (this project owns no files of its own — see
+    // `references` above), but read by Playwright Test's module resolver
+    // so `@shared/*` imports inside files pulled into a test resolve
+    // correctly.
+    "baseUrl": ".",
+    "paths": { "@shared/*": ["src/shared/*"] }
+  }
+}

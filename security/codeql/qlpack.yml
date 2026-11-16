@@ -1,0 +1,8 @@
+name: portalogia/security-queries
+version: 0.1.0
+description: Project-specific CodeQL security queries for the Portalogia Electron browser.
+library: false
+dependencies:
+  codeql/javascript-all: "*"
+extractor: javascript
+defaultSuiteFile: suites/portalogia-security.qls

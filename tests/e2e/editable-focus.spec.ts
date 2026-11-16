@@ -1,0 +1,79 @@
+// Project: Portalogia
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-10-29
+
+import type { Page } from 'playwright';
+import { test, expect, openInActiveTab, pressInChrome, pressInTab } from './fixtures';
+
+/** Which tab (by position) the chrome shows as selected; the editor page is the second, at 1. */
+async function selectedTabIndex(window: Page): Promise<number> {
+  return window
+    .getByRole('tablist', { name: 'Open tabs' })
+    .getByRole('tab')
+    .evaluateAll((tabs) => tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true'));
+}
+
+test.describe('Ctrl+Left/Right in a web page text box', () => {
+  // Two tabs, the editor page active and last, so a tab switch would be plain to see.
+  test.beforeEach(async ({ window }) => {
+    await window.evaluate(() => window.portalogia.createTab());
+    await expect(window.getByRole('tablist', { name: 'Open tabs' }).getByRole('tab')).toHaveCount(2);
+  });
+
+  test('in a plain text box, it moves the caret instead of switching tabs', async ({ electronApp, window, server }) => {
+    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
+    await expect.poll(() => selectedTabIndex(window)).toBe(1);
+    await page.locator('#box').click();
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
+    await expect.poll(() => selectedTabIndex(window)).toBe(1);
+  });
+
+  test('in an editor inside a frame (as Google Docs has), it moves the caret instead of switching tabs', async ({
+    electronApp,
+    window,
+    server,
+  }) => {
+    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
+    await page.frameLocator('#frame').locator('body').click();
+    await pressInTab(electronApp, '/editor', 'Control+ArrowLeft');
+    await page.waitForTimeout(300);
+    expect(await selectedTabIndex(window)).toBe(1);
+    // The keys reached the frame's editor, which moved its caret: typing lands at the start of a word.
+    await page.keyboard.type('X');
+    await expect(page.frameLocator('#frame').locator('body')).toContainText(/(^|\s)X\w*/);
+  });
+
+  test('Shift+Escape leaves the frame’s editor even when the page keeps Escape for itself (as Google Docs does)', async ({
+    electronApp,
+    window,
+    server,
+  }) => {
+    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
+    await page.evaluate(() => {
+      const frameWindow = (document.getElementById('frame') as HTMLIFrameElement).contentWindow!;
+      frameWindow.addEventListener('keydown', (event) => event.key === 'Escape' && event.preventDefault(), true);
+    });
+    await page.frameLocator('#frame').locator('body').click();
+    await pressInTab(electronApp, '/editor', 'Escape');
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('IFRAME');
+    await pressInTab(electronApp, '/editor', 'Shift+Escape');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe('IFRAME');
+    // The keyboard is the chrome's now, where Ctrl+Left switches tabs.
+    await pressInChrome(electronApp, 'Control+ArrowLeft');
+    await expect.poll(() => selectedTabIndex(window)).toBe(0);
+  });
+
+  test('a frame’s editor counts as rich text: Ctrl+I is italic for the page, not the laser pointer', async ({
+    electronApp,
+    window,
+    server,
+  }) => {
+    const page = await openInActiveTab(electronApp, window, server.url('/editor'));
+    await page.frameLocator('#frame').locator('body').click();
+    await pressInTab(electronApp, '/editor', 'Control+i');
+    await page.waitForTimeout(300);
+    await expect(window.getByRole('button', { name: 'Turn on laser pointer' })).toHaveAttribute('aria-pressed', 'false');
+  });
+});

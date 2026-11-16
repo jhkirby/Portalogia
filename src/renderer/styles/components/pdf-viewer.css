@@ -1,0 +1,760 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── PDF VIEWER ───────────────────────────────────────────────────────── */
+/* `pdf.html`'s whole page — a PDF tab's own `WebContentsView` (see
+   `TabManager.createPdfTab`), so none of the chrome's stylesheets reach it. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  /* None: the margin around the frame shows the chrome's flowing metal behind this see-through page
+     (`MetalBackground`, `TabManager.makePageSeeThrough`). */
+  background: transparent;
+  color: var(--color-tab-text-active);
+}
+
+#root {
+  height: 100%;
+}
+
+.pdf-viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Stat bar ── */
+/* Along the bottom, like a note's (markdown-viewer.css's `.md-status`): the page box, the document's counts, and the
+   selection's while there is one. */
+
+.pdf-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--size-spacing-md) * 1.5);
+  height: 26px;
+  padding: 0 var(--size-spacing-md);
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+  border-top: 1px solid var(--color-chrome-border);
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  white-space: nowrap;
+}
+
+.pdf-status__item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Where the pointer is (`x×y`): first, in steady-width digits so the bar doesn't shuffle as it moves. */
+.pdf-status__pointer {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
+}
+
+/* How much of the document is in view (`top%–bottom%`), right after the pointer, steady-width for the same reason. */
+.pdf-status__scroll {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-status__total {
+  color: var(--color-address-placeholder);
+}
+
+/* The selection's own counts, kept together as one group, in the bar's own colour. */
+.pdf-status__selection {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-md);
+  /* A thin vertical line sets the selection's counts off from the rest; it's there only while they are. */
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+  border-left: 1px solid var(--color-chrome-border);
+}
+
+/* The page box: plain text until the pointer is over it or the caret is in it, like the note's jump boxes. */
+.pdf-status__field {
+  box-sizing: content-box;
+  height: 18px;
+  padding: 0 3px;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tab-text-active);
+  text-align: right;
+}
+
+.pdf-status__field:hover {
+  border-color: var(--color-chrome-border);
+}
+
+.pdf-status__field:focus {
+  border-color: var(--color-accent-text);
+  outline: none;
+}
+
+/* ── Document area ── */
+
+/* The document (or the empty page before one is open) and its side panel sit in a rounded, bordered frame, like the
+   History table; the stat bar stays full width below it, and the chrome's colour shows around it. Positioned for the
+   side panel's toggle in its corner; `min-height: 0` lets it shrink so the document scrolls inside it. */
+.pdf-viewer__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  margin: var(--size-content-frame-y) var(--size-content-frame-x);
+  overflow: hidden;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-content-frame-radius);
+}
+
+/* The page has the keyboard (`trackPageFocus`): the frame lights up in the accent, as a web page's does. */
+.pdf-viewer__body {
+  transition:
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+.page-focused .pdf-viewer__body {
+  border-color: var(--color-accent-text);
+  /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */
+  box-shadow:
+    0 0 0 1px var(--color-accent-text),
+    0 0 14px 2px rgba(var(--color-accent-rgb), 0.55);
+}
+
+/* No document open: the blank page a browser tab shows (`homePage.ts`), not the panel's colour. */
+.pdf-viewer__body--empty {
+  background: var(--color-blank-page-bg);
+}
+
+.pdf-viewer__scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+
+  /* In Pan mode dragging moves the document (Okular's Browse tool), never selects. */
+  user-select: none;
+}
+
+.pdf-viewer__scroll--pannable {
+  --pdf-hand-open: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect x='7' y='4.5' width='3' height='10' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='10' y='2.5' width='3' height='11' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='13' y='3.5' width='3' height='10' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='16' y='6' width='3' height='8' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='7' y='10' width='12' height='11' rx='4' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='5' y='10' width='3' height='8.5' rx='1.5' transform='rotate(-28 7.5 18.5)' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='7' y='4.5' width='3' height='10' rx='1.5' fill='%23fff'/><rect x='10' y='2.5' width='3' height='11' rx='1.5' fill='%23fff'/><rect x='13' y='3.5' width='3' height='10' rx='1.5' fill='%23fff'/><rect x='16' y='6' width='3' height='8' rx='1.5' fill='%23fff'/><rect x='7' y='10' width='12' height='11' rx='4' fill='%23fff'/><rect x='5' y='10' width='3' height='8.5' rx='1.5' transform='rotate(-28 7.5 18.5)' fill='%23fff'/><path d='M10 6.5V12' stroke='%23000' stroke-width='1' stroke-linecap='round' fill='none'/><path d='M13 5.5V12' stroke='%23000' stroke-width='1' stroke-linecap='round' fill='none'/><path d='M16 7.5V12' stroke='%23000' stroke-width='1' stroke-linecap='round' fill='none'/></svg>") 12 12;
+  --pdf-hand-closed: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect x='7' y='8.5' width='3' height='5' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='10' y='7.5' width='3' height='5' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='13' y='8' width='3' height='5' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='16' y='9' width='3' height='5' rx='1.5' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='7' y='10.5' width='12' height='10' rx='4' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='5' y='12' width='3' height='6' rx='1.5' transform='rotate(-25 6.5 17)' fill='%23000' stroke='%23000' stroke-width='2'/><rect x='7' y='8.5' width='3' height='5' rx='1.5' fill='%23fff'/><rect x='10' y='7.5' width='3' height='5' rx='1.5' fill='%23fff'/><rect x='13' y='8' width='3' height='5' rx='1.5' fill='%23fff'/><rect x='16' y='9' width='3' height='5' rx='1.5' fill='%23fff'/><rect x='7' y='10.5' width='12' height='10' rx='4' fill='%23fff'/><rect x='5' y='12' width='3' height='6' rx='1.5' transform='rotate(-25 6.5 17)' fill='%23fff'/><path d='M10 9.5V12' stroke='%23000' stroke-width='1' stroke-linecap='round' fill='none'/><path d='M13 9V12' stroke='%23000' stroke-width='1' stroke-linecap='round' fill='none'/><path d='M16 10V12' stroke='%23000' stroke-width='1' stroke-linecap='round' fill='none'/></svg>") 12 12;
+
+  /* The app's own hands, never the OS's grab cursors, so the hand looks the same before, during and after a drag.
+     Drawn white with a black edge, like the system pointer, to show on light pages and dark ones. */
+  cursor: var(--pdf-hand-open), default;
+}
+
+/* pdf.js gives its text spans an I-beam; while panning, the whole page is the hand. */
+.pdf-viewer__scroll--pannable .textLayer :is(span, br) {
+  cursor: inherit;
+}
+
+.pdf-viewer__scroll--panning {
+  cursor: var(--pdf-hand-closed), default;
+}
+
+/* Select mode: a drag selects text, and links take clicks. Only with no tool on — otherwise a press is the tool's. */
+.pdf-viewer__scroll[data-pointer-mode='select'][data-tool='none'] {
+  user-select: text;
+}
+
+.pdf-viewer__scroll[data-pointer-mode='select'][data-tool='none'] .pdf-link {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* `min-width: 100%` + `width: max-content` keeps a document narrower than
+   the view centered, while a wider-than-view one overflows to the right
+   and stays fully scrollable (plain `align-items: center` would clip its
+   left edge). */
+.pdf-viewer__pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  gap: var(--size-spacing-md);
+  width: max-content;
+  min-width: 100%;
+  padding: var(--size-spacing-md);
+}
+
+.pdf-viewer__page {
+  /* Anchors the highlight, text and annotation layers stacked on the canvas. */
+  position: relative;
+  flex-shrink: 0;
+
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.pdf-viewer__canvas {
+  display: block;
+}
+
+/* ── Empty / error ── */
+
+/* Positioned for the fluid filling it (`FluidBackground`); the error message sits above the fluid. */
+.pdf-viewer__empty {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--size-spacing-md);
+  height: 100%;
+}
+
+.pdf-viewer__error {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+
+  font-size: var(--size-font-sm);
+  color: #d93025;
+}
+
+.pdf-viewer__error--floating {
+  position: absolute;
+  right: var(--size-spacing-md);
+  bottom: var(--size-spacing-md);
+  padding: var(--size-spacing-sm) var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+}
+
+/* ── Tools ── */
+
+/* Each tool's cursor (set inline as `--pdf-tool-cursor`) wins over the
+   text layer's own I-beam, everywhere on the page. */
+.pdf-viewer__scroll[data-tool='pen'] *,
+.pdf-viewer__scroll[data-tool='highlighter'] *,
+.pdf-viewer__scroll[data-tool='comment'] *,
+.pdf-viewer__scroll[data-tool='text'] * {
+  cursor: var(--pdf-tool-cursor) !important;
+}
+
+/* Inside a text box the caret's own I-beam is what the user needs. */
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb__input {
+  cursor: text !important;
+}
+
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb__size,
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb__button {
+  cursor: auto !important;
+}
+
+/* pdf.js colours a text selection with the system's accent (Windows' blue); a selection is the app's accent here, as
+   on every other page. One class more specific than pdf.js's `.textLayer ::selection`, since which of the two
+   stylesheets loads last isn't fixed (pdf.js's is bundled with the script). */
+.pdf-viewer__scroll .textLayer ::selection {
+  background: rgba(var(--color-accent-rgb), 0.4);
+}
+
+/* Highlighter: text becomes selectable (no panning), the native selection
+   stays invisible, and the drag preview is painted via `::highlight()`. */
+.pdf-viewer__scroll[data-tool='highlighter'] {
+  user-select: text;
+}
+
+.pdf-viewer__scroll[data-tool='highlighter'] ::selection {
+  background: transparent !important;
+}
+
+/* ── Links ── */
+
+/* Invisible boxes over the document's links. They ignore the pointer except in Select mode (above), so in Pan mode a
+   press on a link pans like anywhere else. */
+.pdf-link-layer {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+.pdf-link {
+  position: absolute;
+
+  pointer-events: none;
+}
+
+/* ── Highlights ── */
+
+.pdf-hl-layer {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+/* `multiply` keeps the page's text readable through the tint. */
+.pdf-hl-rect {
+  position: absolute;
+
+  mix-blend-mode: multiply;
+}
+
+.pdf-hl-rect--hovered {
+  opacity: 0.5;
+}
+
+/* ── Annotations (pen strokes, comments) ── */
+
+/* Covers the page exactly. Pointer events pass through unless the pen or
+   comment tool is on, so the document still pans and its text selects. */
+.pdf-annot {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+.pdf-annot--pen,
+.pdf-annot--comment,
+.pdf-annot--text {
+  pointer-events: auto;
+}
+
+.pdf-annot__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+
+  pointer-events: none;
+}
+
+/* Page-relative coordinates stretch with the page, so the stroke width is
+   pinned to screen pixels instead of scaling with it. */
+.pdf-annot__line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Wider, invisible copy of each stroke so it's easy to hover and click. */
+.pdf-annot__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  vector-effect: non-scaling-stroke;
+}
+
+.pdf-annot--pen .pdf-annot__hit {
+  pointer-events: stroke;
+}
+
+.pdf-annot--pen .pdf-annot__stroke:hover .pdf-annot__line {
+  stroke-opacity: 0.4;
+}
+
+/* Comment dot and box — same look as the browser tabs' (`tabComments.ts`),
+   positioned on the page instead of the viewport. The dot stays clickable
+   with any tool, so a saved comment can always be opened. */
+.pdf-annot__dot {
+  position: absolute;
+  z-index: 5;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  transition: box-shadow 120ms ease;
+
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.pdf-annot__dot:hover {
+  box-shadow:
+    0 0 0 5px var(--ns-comment-glow, rgba(66, 133, 244, 0.55)),
+    0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.pdf-annot__box {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  width: 220px;
+  padding: 6px;
+
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+
+  font:
+    13px/1.4 system-ui,
+    -apple-system,
+    sans-serif;
+  color: #1b1b1b;
+
+  pointer-events: auto;
+  user-select: text;
+}
+
+.pdf-annot__input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Text boxes ── */
+
+/* Placed by its top-left corner on the page: the padding is a grabbable
+   frame around the text (dragging it moves the box), pulled back out with a
+   negative margin so the text still lands where it was dropped. Inert unless
+   the text tool is on, so with it off the page beneath still pans and
+   selects. Helvetica is what the export sets the text in, so screen and file
+   match. */
+.pdf-tb {
+  position: absolute;
+  z-index: 5;
+  box-sizing: content-box;
+  margin: -8px 0 0 -8px;
+  padding: 8px;
+
+  font-family: Helvetica, Arial, sans-serif;
+
+  pointer-events: none;
+}
+
+.pdf-annot--text .pdf-tb {
+  pointer-events: auto;
+}
+
+.pdf-viewer__scroll[data-tool='text'] .pdf-tb {
+  cursor: move !important;
+}
+
+/* No padding or border, so the textarea's corner is the text's own origin;
+   the visible frame is an outline for the same reason. */
+.pdf-tb__input {
+  display: block;
+  box-sizing: content-box;
+  min-width: 2px;
+  min-height: 1.2em;
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  resize: none;
+  overflow: hidden;
+
+  font-family: inherit;
+  line-height: 1.2;
+  white-space: pre;
+  field-sizing: content;
+  color: inherit;
+  caret-color: var(--pdf-tb-color);
+  user-select: text;
+}
+
+.pdf-annot--text .pdf-tb:hover .pdf-tb__input {
+  outline-color: color-mix(in srgb, var(--pdf-tb-color) 45%, transparent);
+}
+
+.pdf-tb:focus-within .pdf-tb__input {
+  outline-color: var(--pdf-tb-color);
+}
+
+/* The options panel (size, alignment, delete), shown only while the box is
+   being edited. It's the opposite of the app's theme — dark on a light
+   theme, light on a dark one — so it stands out from the page behind it. */
+.pdf-tb__bar {
+  position: absolute;
+  top: 4px;
+  left: 100%;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding: 3px 4px;
+
+  background: #2b2d31;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+
+  font:
+    12px/1 system-ui,
+    -apple-system,
+    sans-serif;
+  color: #f2f2f2;
+  white-space: nowrap;
+
+  cursor: default !important;
+}
+
+.pdf-tb:focus-within .pdf-tb__bar {
+  display: flex;
+}
+
+.pdf-tb--flip .pdf-tb__bar {
+  right: 100%;
+  left: auto;
+  margin-right: 4px;
+  margin-left: 0;
+}
+
+.pdf-tb__size {
+  box-sizing: border-box;
+  width: 44px;
+  margin: 0 4px 0 0;
+  padding: 2px 3px;
+
+  background: #1e1f22;
+  border: 1px solid #4a4d52;
+  border-radius: 4px;
+
+  font: inherit;
+  text-align: center;
+  color: #f2f2f2;
+}
+
+.pdf-tb__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+
+  font: inherit;
+  font-size: 15px;
+  color: #c9ccd1;
+
+  cursor: pointer;
+}
+
+.pdf-tb__button:hover {
+  background: #3d4045;
+  color: #fff;
+}
+
+.pdf-tb__button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--pdf-tb-color) 45%, transparent);
+  color: #fff;
+}
+
+.pdf-tb__button--delete:hover {
+  color: #ff7b72;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pdf-tb__bar {
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    color: #1b1b1b;
+  }
+
+  .pdf-tb__size {
+    background: #fff;
+    border-color: #c4c4c4;
+    color: #1b1b1b;
+  }
+
+  .pdf-tb__button {
+    color: #555;
+  }
+
+  .pdf-tb__button:hover {
+    background: #eee;
+    color: #111;
+  }
+
+  .pdf-tb__button[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--pdf-tb-color) 30%, transparent);
+    color: #111;
+  }
+
+  .pdf-tb__button--delete:hover {
+    color: #c5221f;
+  }
+}
+
+/* ── Crop ── */
+
+/* Covers the page; the box inside it is the crop. Clipped so the dimming
+   shadow below stays on the page. */
+.pdf-crop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+
+  pointer-events: none;
+}
+
+/* With the tool on, the page isn't pannable, so the grab hand would mislead. */
+.pdf-viewer__scroll[data-tool='crop'],
+.pdf-viewer__scroll[data-tool='crop'] .pdf-crop {
+  cursor: default;
+}
+
+.pdf-crop__box {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* The shadow dims everything outside the box (the layer clips it to the page). */
+.pdf-crop__box--cropped {
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+
+.pdf-crop--editing .pdf-crop__box {
+  outline: 2px dotted var(--color-accent-text, #1a73e8);
+  outline-offset: -1px;
+}
+
+/* Edge handles are thin strips along each side; corners are small squares.
+   Both sit inside the box so they're never clipped by the page edge. */
+.pdf-crop__handle {
+  position: absolute;
+
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.pdf-crop__handle--n,
+.pdf-crop__handle--s {
+  left: 12px;
+  right: 12px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.pdf-crop__handle--e,
+.pdf-crop__handle--w {
+  top: 12px;
+  bottom: 12px;
+  width: 10px;
+  cursor: ew-resize;
+}
+
+.pdf-crop__handle--n { top: 0; }
+.pdf-crop__handle--s { bottom: 0; }
+.pdf-crop__handle--e { right: 0; }
+.pdf-crop__handle--w { left: 0; }
+
+.pdf-crop__handle--nw,
+.pdf-crop__handle--ne,
+.pdf-crop__handle--sw,
+.pdf-crop__handle--se {
+  width: 12px;
+  height: 12px;
+
+  background: var(--color-accent-text, #1a73e8);
+  border: 1px solid #ffffff;
+  border-radius: 2px;
+}
+
+.pdf-crop__handle--nw { top: 0; left: 0; cursor: nwse-resize; }
+.pdf-crop__handle--se { right: 0; bottom: 0; cursor: nwse-resize; }
+.pdf-crop__handle--ne { top: 0; right: 0; cursor: nesw-resize; }
+.pdf-crop__handle--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+.pdf-crop__reset {
+  position: absolute;
+  top: var(--size-spacing-sm, 6px);
+  left: var(--size-spacing-sm, 6px);
+  padding: 2px var(--size-spacing-sm, 6px);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* The page frame clips to the crop (or the whole page); the content box inside
+   is always the full page, shifted so the crop lands in the frame. */
+.pdf-viewer__page {
+  overflow: hidden;
+}
+
+.pdf-viewer__page-content {
+  position: absolute;
+}
+
+/* Multi-crop (Shift held): corners become larger rings on every page, so it's
+   clear a drag will crop all the slides in the same state together. */
+.pdf-crop--multi .pdf-crop__handle--nw,
+.pdf-crop--multi .pdf-crop__handle--ne,
+.pdf-crop--multi .pdf-crop__handle--sw,
+.pdf-crop--multi .pdf-crop__handle--se {
+  width: 18px;
+  height: 18px;
+
+  background: transparent;
+  border: 3px solid var(--color-accent-text, #1a73e8);
+  border-radius: 50%;
+}
+
+/* ── Find ── */
+
+/* The find bar's matches, painted over the text layer with the CSS Custom
+   Highlight API (see `usePdfFind`). Both are translucent: the page's own text
+   is drawn on the canvas beneath this layer, and a solid highlight would hide
+   it. The current match is just a stronger tint than the rest. */
+::highlight(portalogia-pdf-find) {
+  background-color: rgba(var(--color-accent-rgb), 0.35);
+}
+
+::highlight(portalogia-pdf-find-current) {
+  background-color: rgba(var(--color-accent-rgb), 0.75);
+}

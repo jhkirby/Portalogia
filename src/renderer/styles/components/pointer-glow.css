@@ -1,0 +1,44 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-24 */
+
+/* ── POINTER GLOW ─────────────────────────────────────────────────────── */
+/* The accent glowing around the pointer while it's over the tab row or the sidebar (`usePointerGlow` keeps
+   `--glow-x`/`--glow-y` under it). The area is its own stacking context and the glow sits at the bottom of it, so it
+   lights only the area's background: everything in the area paints over it. The tabs are given the row's colour in
+   place of their transparent one, so it never shows through them; the workspace pills stay see-through, so it lights
+   the sidebar under their icons and names, and only a filled (selected) pill covers it. */
+
+.pointer-glow-host {
+  isolation: isolate;
+}
+
+.pointer-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+
+  background: radial-gradient(
+    circle var(--size-pointer-glow-radius) at var(--glow-x, -999px) var(--glow-y, -999px),
+    rgba(var(--color-accent-rgb), 0.32),
+    rgba(var(--color-accent-rgb), 0.12) 45%,
+    transparent 100%
+  );
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--size-titlebar-reveal-duration) ease-out;
+}
+
+/* `--pointer-inside`: main's word that the pointer is on the tab row's empty (drag) space, where `:hover` can't tell. */
+.pointer-glow-host:is(:hover, .pointer-glow-host--pointer-inside) > .pointer-glow {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pointer-glow {
+    transition: none;
+  }
+}

@@ -1,0 +1,397 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-12 */
+
+/* ── APP SHELL ────────────────────────────────────────────────────────── */
+
+/* Until the first state from main has painted (`useTabs`): the sidebars take their remembered places without sliding
+   there from the placeholder state's. */
+.state-pending *,
+.state-pending *::before,
+.state-pending *::after {
+  transition: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  /* This chrome is a fixed single-window layout, never a scrollable
+     document — if any descendant (e.g. a tooltip positioned off a
+     right-edge button, or a sub-pixel rounding overshoot from the
+     sidebar's/Focus Mode's own animated resize) ever overflows the
+     window's bounds by even a little, this stops the whole page from
+     becoming a scrollable document over it. Without `overflow-y` here
+     too, that's exactly what happened: the tiniest vertical overflow was
+     enough for a stray scroll (a wheel tick over the wrong element,
+     nothing has to scroll it back) to shift the entire fixed layout up,
+     permanently exposing blank space below `.app-shell` — including
+     under `BookmarkPopup`'s blurred backdrop, since it's sized to
+     `.tab-content`, which shifted along with everything else. */
+  overflow: hidden;
+
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+/* The OS/browser default keyboard-focus outline (a gold ring on this
+   Windows box) shows up on any focusable chrome element — a tab, a
+   button — that doesn't already style its own focus state, since none of
+   this chrome opts into it deliberately. Suppressed everywhere rather
+   than per-component so no future focusable element can reintroduce it by
+   omission; each element's existing hover/active/selected styling (tab
+   background, button background, etc.) carries the visual feedback
+   instead. Scoped to this document only — a tab's own page content is a
+   separate native `WebContentsView`, unaffected by this rule. */
+* {
+  outline: none;
+}
+
+/* Column of [full-width top bar, main row]. The top bar owns the entire
+   top-left corner — the sidebar starts below it rather than competing
+   with it there — so it must come first in source order and span the
+   full width, with the main row beneath it. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  /* The chrome is UI, not content: tab titles, workspace names, and toolbar
+     labels shouldn't be selectable (a drag over them just painted a stray
+     highlight). Text fields below opt back in. */
+  user-select: none;
+}
+
+/* Anything the user actually types into stays selectable — the address bar's
+   URL, the zoom percent, a workspace rename, the bookmark popup's fields. */
+.app-shell input,
+.app-shell textarea {
+  user-select: text;
+}
+
+/* Row of [sidebar, tab content] filling the rest of `.app-shell`'s height
+   below the top bar. Every tab's actual content, browser or terminal, is
+   a native `WebContentsView` the main process positions directly over
+   `.tab-content`'s area, entirely outside this DOM — see
+   TabManager.computeMainBounds(). `BookmarkPopup` is the one thing that
+   does render inside `.tab-content` (see App.tsx). */
+.main-row {
+  /* Holds the metal, which lies under all three of its columns. */
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.tab-content {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The flowing metal behind every tab (`MetalBackground`): the whole row, under the sidebars (opaque, so it shows only
+   in the tab area between them), the frame's border and the stat bar, and never in the pointer's way. Its size
+   doesn't change as a sidebar slides, so neither does the pattern. Drawn small and stretched to fit (see
+   `metalFluid.ts`'s `RENDER_SCALE`). The columns after it, positioned, paint over it. */
+.metal-background {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+
+  pointer-events: none;
+}
+
+/* The metal's cover through a light/dark switch (`MetalBackground`): the new theme's toolbar colour, faded in over
+   the metal and out again by opacity alone. Its colour changes at once, never with the rest of the page's colours
+   (`.theme-fading` in colors.css, which this outranks), so it never shows the old theme's. */
+.main-row .metal-background__cover {
+  position: absolute;
+  inset: 0;
+
+  background: var(--color-chrome-bg);
+
+  opacity: 0;
+  pointer-events: none;
+  /* THEME_FADE_MS each way: in with the rest of the app's colours, then out once they're done. */
+  transition: opacity 600ms ease-in-out !important;
+}
+
+/* The border around a web page: the frame every tab's content sits in (the History table's look). Main places the
+   page's own view just inside it (`TabManager.computeMainBounds`, `CONTENT_FRAME_*`), above the stat bar's strip,
+   and rounds the view's corners to match. */
+.tab-content__frame {
+  position: absolute;
+  top: var(--size-content-frame-y);
+  right: var(--size-content-frame-x);
+  bottom: calc(var(--size-status-bar-height) + var(--size-content-frame-y));
+  left: var(--size-content-frame-x);
+  box-sizing: border-box;
+
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-content-frame-radius);
+  pointer-events: none;
+
+  transition:
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+/* Split screen: a frame for each side showing a web page, the gap between them the same as between a single frame
+   and the sidebar (`--size-content-frame-x`). Main lays the two views out to match (`TabManager.computeSplitPanes`). */
+.tab-content__frame--split-left,
+.tab-content__frame--split-right {
+  width: calc((100% - 3 * var(--size-content-frame-x)) / 2);
+}
+
+.tab-content__frame--split-left {
+  right: auto;
+}
+
+.tab-content__frame--split-right {
+  left: auto;
+}
+
+/* Coming apart, in step with main moving the views (`TabManager.animateSplit`, SPLIT_ANIMATION_MS, the same
+   ease-out cubic): the left frame narrows out of the one whole frame, the right grows in from the right edge. */
+.tab-content__frame--split-left.tab-content__frame--entering {
+  animation: split-frame-left 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.tab-content__frame--split-right.tab-content__frame--entering {
+  animation: split-frame-right 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+/* Coming back together: the one frame left widens back out of its half — the left, or the right if that was kept. */
+.tab-content__frame--joining {
+  animation: split-frame-join 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.tab-content__frame--joining-right {
+  animation: split-frame-join-right 320ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+@keyframes split-frame-left {
+  from {
+    width: calc(100% - 2 * var(--size-content-frame-x));
+  }
+}
+
+@keyframes split-frame-right {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+/* The left half's right edge: one gap in from the middle of the area. */
+@keyframes split-frame-join {
+  from {
+    right: calc((100% + var(--size-content-frame-x)) / 2);
+  }
+}
+
+/* The right half's left edge: the same distance in from the area's left. */
+@keyframes split-frame-join-right {
+  from {
+    left: calc((100% + var(--size-content-frame-x)) / 2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-content__frame--split-left,
+  .tab-content__frame--split-right,
+  .tab-content__frame--joining,
+  .tab-content__frame--joining-right {
+    animation: none;
+  }
+}
+
+/* The page has the keyboard (`BrowserState.contentFocused`): the frame lights up in the accent. */
+.tab-content__frame--focused {
+  border-color: var(--color-accent-text);
+  /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */
+  box-shadow:
+    0 0 0 1px var(--color-accent-text),
+    0 0 14px 2px rgba(var(--color-accent-rgb), 0.55);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* The BrowserWindow itself is much taller; everything below this is the
+     native WebContentsView the main process draws, not part of this DOM. */
+  height: var(--size-chrome-height);
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+
+  /* Animates in step with `.app__bar`'s own `transform` transition below,
+     and with TabManager.ts's `animateBoundsInset` for the native tab
+     content — all three share the same duration/easing so the chrome
+     visibly slides up rather than the content underneath just snapping to
+     fill the freed space a beat early or late. */
+  transition: height var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* Focus Mode leaves the window its own size (not OS fullscreen; see
+   `setFocusMode` in TabManager.ts), so the page fills just this window — must
+   track CHROME_HEIGHT_FOCUSED_PX
+   in src/shared/constants.ts (0), which the main process uses to grow the
+   page into the space this frees up. */
+.app--focus-mode {
+  height: var(--size-chrome-height-focused);
+}
+
+/* Both bars move together as this row's own child (see App.tsx) —
+   `height: var(--size-chrome-height)` on `.app` is a fixed target `.app`
+   itself shrinks away from, not this element's own height, so this stays
+   its natural size throughout and just slides upward out of `.app`'s
+   now-clipped (`overflow: hidden`) box. */
+.app__bar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+
+  transition: transform var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.app--focus-mode .app__bar {
+  transform: translateY(-100%);
+}
+
+/* ── TITLEBAR ─────────────────────────────────────────────────────────── */
+/* The frameless window's top row, sharing it between the tab strip and
+   WindowControls. An OS drag region, as in Chrome: any of it the tabs and
+   buttons don't cover (they opt out with `no-drag`) moves the window, and the
+   OS supplies the rest of a native title bar: double-click to maximize,
+   snapping to a screen edge, and pulling a maximized window back down. */
+.titlebar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  height: var(--size-tab-bar-height);
+  /* These heights are the *total* row heights main positions the native tab
+     view by (CHROME_HEIGHT_PX = tab bar + toolbar) — the bottom border has to
+     sit inside them, or it spills under that view and disappears. */
+  box-sizing: border-box;
+
+  background: var(--color-chrome-bg);
+  border-bottom: 1px solid var(--color-chrome-border);
+
+  -webkit-app-region: drag;
+}
+
+/* An inactive tab is see-through by default; on this row it's the row's own colour, so the pointer's glow
+   (pointer-glow.css) passes under it rather than showing through. */
+.titlebar {
+  --color-tab-bg: var(--color-chrome-bg);
+}
+
+/* The top-right corner, where the clock (`TitlebarClock`) and the window
+   controls take turns. Both sit in the one grid cell, so the corner is as wide
+   as the wider of the two and the clock never runs under the last tab.
+   Positioned and stacked like `.window-controls` itself (see its comment). */
+.titlebar__corner {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  /* Part of the drag region like the rest of the row: the corner is as wide as the clock, so the space left of the
+     window controls is the row's empty space too. Only the controls themselves opt out (window-controls.css); main
+     reports the pointer being on the row (`--pointer-inside`), which `:hover` can't over a drag region. */
+  grid-template-rows: 100%;
+  flex-shrink: 0;
+}
+
+.titlebar__corner > * {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+/* The new-tab button and the window controls show only while the pointer is
+   on the tab row (or the keyboard has moved into it); the rest of the time the
+   corner shows the clock instead. Faded rather than `visibility: hidden`, so
+   they stay in the accessibility tree and keyboard focus can still reach them —
+   and a pointer can't land on them without being on the row, which shows them. */
+.titlebar .tab-bar__new,
+.titlebar .window-controls {
+  opacity: 0;
+  transition: opacity var(--size-titlebar-reveal-duration) ease-out;
+}
+
+/* `:focus-visible` rather than `:focus-within`: a tab clicked with the mouse keeps focus, and the controls would then
+   stay up after the pointer left. */
+/* `--pointer-inside`: main's word that the pointer is on the row's empty (drag) space, where `:hover` can't tell. */
+.titlebar:is(:hover, :has(:focus-visible), .titlebar--pointer-inside) :is(.tab-bar__new, .window-controls) {
+  opacity: 1;
+}
+
+/* ── TOOLBAR ──────────────────────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--size-toolbar-height);
+  box-sizing: border-box; /* keeps the bottom border inside the row — see `.titlebar` */
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-sm);
+
+  background: var(--color-chrome-bg);
+  border-bottom: 1px solid var(--color-chrome-border);
+}
+
+/* Split screen: each side's tools in a half of the row of its own, a full-height line between the two halves, and the
+   window's own tools (`PageActions`) after them. */
+.toolbar__side {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  gap: var(--size-spacing-sm);
+}
+
+/* Half the room each: an address or file bar gives way further before the tools beside it do. */
+.toolbar__side :is(.address-bar, .file-bar) {
+  min-width: 120px;
+}
+
+/* A side's ad blocker and zoom stay whole; the address bar beside them takes up the slack. */
+.page-actions--side {
+  flex: none;
+}
+
+.toolbar__split-divider {
+  align-self: stretch;
+  flex: none;
+  width: 1px;
+  margin: 6px 0;
+
+  background: var(--color-chrome-border);
+}
+
+/* Stands in for NavControls + AddressBar while a terminal tab is active —
+   neither URL navigation nor back/forward history applies to a shell. */
+.toolbar__terminal-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  font-size: 13px;
+  font-family: Menlo, Consolas, monospace;
+  color: var(--color-tab-text);
+}

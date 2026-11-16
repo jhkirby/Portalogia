@@ -1,0 +1,474 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-12 */
+
+/* ── TAB BAR ──────────────────────────────────────────────────────────── */
+
+/* Lives inside `.titlebar` (see app.css), which supplies the shared
+   height/background/border and is itself an OS drag region, and flexes to
+   fill the space up to WindowControls. Deliberately left draggable itself
+   (unlike its children below) — tabs sit bottom-aligned via
+   `align-items: flex-end`, so this container's own bounding box includes
+   the thin sliver above them, which should stay part of the drag region
+   the same way it would above a native titlebar's tabs. Tabs have no
+   min-width floor (see `.tab-bar__tab`): with `flex-basis: 0` they always
+   shrink evenly to whatever width divides the row exactly, so this never
+   needs to scroll no matter how many tabs are open. */
+.tab-bar {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--size-spacing-sm);
+  /* No gap: neighbouring tabs share one border, drawn by overlapping their 1px edges (see `.tab-bar__tab + .tab-bar__tab`). */
+  gap: 0;
+}
+
+/* Deliberately no `overflow: hidden` here (only `.tab-bar__title` clips
+   its own text) — the close button's tooltip (see below) is a descendant
+   of this element, and an `overflow: hidden` ancestor clips positioned
+   descendants too, tooltip included, no matter how they're positioned. In
+   the extreme case of a tab shrunk well past its favicon+close's combined
+   width, those can spill slightly into a neighboring tab instead of being
+   clipped — accepted for the tradeoff of the tooltip actually being
+   visible. */
+.tab-bar__tab {
+  /* Anchors the click ripple's layer. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: var(--size-tab-max-width);
+  /* 14px = the original 6px gap above the tabs + 8px of extra drag strip
+     (see --size-tab-bar-height), so the tabs themselves keep their size. */
+  height: calc(var(--size-tab-bar-height) - 14px);
+  padding: 0 var(--size-spacing-sm);
+  gap: var(--size-spacing-xs);
+
+  background: var(--color-tab-bg);
+  /* Always 1px (transparent unless the rule below colors it) so a tab never
+     changes size as it is hovered or selected. No bottom edge: the tab sits
+     flush on the toolbar. */
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--size-radius-sm) var(--size-radius-sm) 0 0;
+
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+
+  /* Opts out of `.tab-bar`'s drag region — otherwise clicking, closing, or
+     dragging a tab would move the window instead. */
+  -webkit-app-region: no-drag;
+}
+
+/* The tab after another sits 1px over it, so the two edges are one line instead of two lines with a gap between. */
+.tab-bar__tab + .tab-bar__tab {
+  margin-left: -1px;
+}
+
+/* The tab's content sits above its effects layer (`.tab-bar__effects`, the
+   first child): positioned elements paint in document order, so making these
+   positioned too lifts them over it without a stacking context of their own,
+   which would trap the close button's tooltip inside the tab. */
+.tab-bar__tab > :not(.tab-bar__effects) {
+  position: relative;
+}
+
+/* Opening: the neighbours make room while the tab springs up out of the
+   toolbar, overshooting a little before it settles. Closing is the reverse: the tab sinks into the toolbar until it's
+   gone, then the gap closes. The part below the tab's resting bottom edge is
+   clipped (the clip moves against the tab), so it never covers the toolbar.
+   Its content is clipped sideways too while its width changes, rather than
+   spilling over the neighbours. `TabBar` finishes up on the last animation of
+   each (`tab-bar-tab-rise`, `tab-bar-tab-close`). */
+.tab-bar__tab--entering {
+  overflow: clip;
+  animation:
+    tab-bar-tab-open 160ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    tab-bar-tab-rise 320ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.tab-bar__tab--exiting {
+  overflow: clip;
+
+  pointer-events: none;
+  animation:
+    tab-bar-tab-sink 170ms cubic-bezier(0.5, 0, 0.75, 0) forwards,
+    tab-bar-tab-close 240ms cubic-bezier(0.4, 0, 0.2, 1) 170ms forwards;
+}
+
+/* Outlined whenever it isn't the active tab, part of a multi-selection, or being dragged — hovered too, so a tab
+   keeps its shape under the pointer. The same thin line color as the chrome's other borders (the sidebar edge, the
+   toolbar's bottom line), so it follows the theme. */
+.tab-bar__tab:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging) {
+  border-color: var(--color-chrome-border);
+  /* Above its neighbours, so the shared edge stays drawn even where the next tab's background (the active tab's, or a
+     hovered one's) would otherwise paint over it. */
+  z-index: 1;
+}
+
+/* The active tab is the one outlined in the accent, on all four sides: with several tabs selected (all drawn alike,
+   below), the outline still tells which one is in view. Above its neighbours, so their shared edges don't cover it. */
+.tab-bar__tab--active {
+  z-index: 2;
+
+  background: var(--color-tab-bg-active);
+  border-color: var(--color-accent-text);
+  border-bottom: 1px solid var(--color-accent-text);
+  /* The outline glows: a soft halo of the accent around it, as the page's frame glows while it has the keyboard. */
+  box-shadow: 0 0 10px 1px rgba(var(--color-accent-rgb), 0.45);
+  color: var(--color-tab-text-active);
+}
+
+/* A streak of the accent along the line the active tab stands on, running on past both its sides and fading out, so
+   the tab reads as lit from below. Drawn over its own bottom edge (the border's row, hence `bottom: -1px`) and over
+   the neighbours' bases, which the active tab sits above (`z-index: 2`). Its glow follows the streak's fade, since a
+   drop shadow takes the shape of what it shadows. */
+.tab-bar__tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: calc(-1 * var(--size-tab-streak-reach));
+  right: calc(-1 * var(--size-tab-streak-reach));
+  height: 1px;
+
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-accent-text) var(--size-tab-streak-reach),
+    var(--color-accent-text) calc(100% - var(--size-tab-streak-reach)),
+    transparent
+  );
+  filter: drop-shadow(0 0 3px rgba(var(--color-accent-rgb), 0.9));
+
+  pointer-events: none;
+}
+
+/* Multi-selected (Ctrl/Shift+click) tabs take the active tab's own background
+   and text color, so the whole group reads as selected. Deliberately neutral —
+   not the accent color, which can be any hue the user picked (red included). */
+.tab-bar__tab--selected {
+  background: var(--color-tab-bg-active);
+  color: var(--color-tab-text-active);
+}
+
+/* The tab currently being grabbed. No drag-image snapshot follows the
+   cursor (see TabBar.tsx's `TRANSPARENT_DRAG_IMAGE`), so this in-place
+   highlight is the only feedback that it's being dragged — placed after
+   `--active` so it wins over that background too. */
+.tab-bar__tab--dragging,
+.tab-bar__tab--dragging:hover {
+  background: var(--color-tab-dragging-bg);
+}
+
+/* The sliding active background and the click ripples, clipped to the tab's own rounded shape so neither spills past
+   it. Its own box rather than `overflow: hidden` on the tab, which would also clip the close button's tooltip (see
+   `.tab-bar__tab`). */
+.tab-bar__effects {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+
+  border-radius: inherit;
+
+  pointer-events: none;
+}
+
+/* Hovering a tab, the active one included, makes its name glow: the same glow as the sidebar's buttons
+   (`.hover-glow`), with nothing filling in behind it. A dragged tab's own highlight is its cue instead. */
+.tab-bar__title {
+  transition:
+    color 160ms ease-out,
+    text-shadow 160ms ease-out;
+}
+
+.tab-bar__tab:hover:not(.tab-bar__tab--dragging) .tab-bar__title {
+  color: var(--color-tab-text-active);
+  text-shadow: var(--hover-glow-text-shadow);
+}
+
+/* The active background sliding from the tab that was active to the newly active one (`useActiveTabSlide`). Each
+   tab draws the part of it that is over itself, so it passes under every title on the way. */
+.tab-bar__slide-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.tab-bar__active-slide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+
+  background: var(--color-tab-bg-active);
+  border-radius: var(--size-radius-sm) var(--size-radius-sm) 0 0;
+}
+
+/* The newly active tab waits for the sliding background rather than showing its own at once. */
+.tab-bar__tab--active[data-slide-target] {
+  background: var(--color-tab-bg);
+}
+
+/* While a tab from another window is dragged over this strip, the slot it
+   would take is held open as an empty tab-sized gap (see `TabBar`). */
+.tab-bar__placeholder {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: var(--size-tab-max-width);
+  height: calc(var(--size-tab-bar-height) - 14px);
+}
+
+.tab-bar__favicon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tab-bar__favicon-placeholder {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+
+  background: var(--color-chrome-border);
+  border-radius: 50%;
+}
+
+.tab-bar__terminal-icon {
+  flex-shrink: 0;
+
+  font-size: 11px;
+  font-family: Menlo, Consolas, monospace;
+  color: var(--color-accent-text);
+}
+
+/* An SVG, not text like the terminal's and PDF's glyphs — centered on the same line. */
+.tab-bar__history-icon {
+  display: flex;
+  align-items: center;
+}
+
+.tab-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+
+  border: 2px solid var(--color-spinner-track);
+  border-top-color: var(--color-spinner-active);
+  border-radius: 50%;
+
+  animation: tab-bar-spin 0.7s linear infinite;
+}
+
+.tab-bar__title {
+  overflow: hidden;
+  flex: 1;
+
+  font-size: inherit;
+  color: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Which side of a split screen this tab is on, "L" or "R", just left of its close button: while the split-screen
+   button is hovered with two tabs selected, and all the while it's split. A small accent badge, so it reads at a
+   glance without crowding the title. */
+/* ── The split pair's joint tab ──
+   The two tabs shown side by side (`BrowserState.splitPair`) sit next to each other in the row and read as one tab:
+   no edge where they meet, and square corners there, so the outline runs round the pair. Each one's glow (and, while
+   shown, the accent streak) is cut off where it meets the other, rather than spilling over it: kept far enough out on
+   every other side for the streak's whole reach. */
+/* Both selectors: the second matches the at-rest outline's own (`:not()`s and all), which would otherwise outrank it
+   while the pair is put away. */
+.tab-bar__tab--pair-left,
+.tab-bar__tab--pair-left:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging) {
+  border-right-color: transparent;
+  border-top-right-radius: 0;
+  clip-path: inset(
+    calc(-1 * var(--size-tab-streak-reach)) 0 calc(-1 * var(--size-tab-streak-reach))
+      calc(-1 * var(--size-tab-streak-reach))
+  );
+}
+
+.tab-bar__tab--pair-right,
+.tab-bar__tab--pair-right:not(.tab-bar__tab--active):not(.tab-bar__tab--selected):not(.tab-bar__tab--dragging) {
+  border-left-color: transparent;
+  border-top-left-radius: 0;
+  clip-path: inset(
+    calc(-1 * var(--size-tab-streak-reach)) calc(-1 * var(--size-tab-streak-reach))
+      calc(-1 * var(--size-tab-streak-reach)) 0
+  );
+}
+
+/* The effects layer follows the joint's square inner corners too. */
+.tab-bar__tab--pair-left .tab-bar__effects {
+  border-top-right-radius: 0;
+}
+
+.tab-bar__tab--pair-right .tab-bar__effects {
+  border-top-left-radius: 0;
+}
+
+.tab-bar__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 14px;
+  line-height: 1;
+  color: inherit;
+
+  cursor: pointer;
+
+  /* Only shown while its own tab is hovered (or keyboard-focused). Faded out
+     rather than removed, so its space stays reserved and a tab's title
+     doesn't shift width as the pointer moves across the strip. Its own glow
+     (`.hover-glow`) eases in alongside. */
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 150ms ease-out,
+    color 160ms ease-out,
+    text-shadow 160ms ease-out;
+}
+
+.tab-bar__tab:hover .tab-bar__close,
+.tab-bar__tab:focus-within .tab-bar__close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tab-bar__new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  margin-bottom: 6px;
+  margin-left: var(--size-spacing-xs);
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+
+  font-size: 16px;
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+
+  /* Opts out of `.tab-bar`'s drag region — see `.tab-bar__tab` above. */
+  -webkit-app-region: no-drag;
+}
+
+@keyframes tab-bar-tab-open {
+  from {
+    flex-grow: 0;
+    padding-right: 0;
+    padding-left: 0;
+  }
+}
+
+@keyframes tab-bar-tab-rise {
+  from {
+    transform: translateY(100%);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    transform: translateY(0);
+    clip-path: inset(0);
+  }
+}
+
+@keyframes tab-bar-tab-sink {
+  from {
+    transform: translateY(0);
+    clip-path: inset(0);
+  }
+  to {
+    transform: translateY(100%);
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+@keyframes tab-bar-tab-close {
+  from {
+    transform: translateY(100%);
+    clip-path: inset(0 0 100% 0);
+  }
+  /* `max-width` as well as `flex-grow`: with room to spare in the row, tabs sit at their max width, and shrinking
+     the grow alone leaves the width pinned there until the very end, so the tabs to the right jumped across. */
+  to {
+    flex-grow: 0;
+    max-width: 0;
+    padding-right: 0;
+    padding-left: 0;
+    border-width: 0;
+    transform: translateY(100%);
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+/* Still run (instantly), since a closing tab removes itself when its animation ends. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-bar__title,
+  .tab-bar__close {
+    transition: none;
+  }
+
+  .tab-bar__tab--entering,
+  .tab-bar__tab--exiting {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+}
+
+@keyframes tab-bar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Shimmer ──
+   Every 20 seconds (`useShimmerTick`) a wave runs along the tabs, left to right: each one's icon
+   and name brighten where they are, one after another, `--shimmer-index`
+   setting how far along the wave each is. Two identical keyframes taken by
+   turns (`data-shimmer` a/b), since an animation only restarts when its name
+   changes. */
+.tab-bar[data-shimmer='a'] :is(.tab-bar__terminal-icon, .tab-bar__favicon, .tab-bar__title) {
+  animation: tab-shimmer-a 700ms ease-in-out calc(var(--shimmer-index, 0) * 45ms) both;
+}
+
+.tab-bar[data-shimmer='b'] :is(.tab-bar__terminal-icon, .tab-bar__favicon, .tab-bar__title) {
+  animation: tab-shimmer-b 700ms ease-in-out calc(var(--shimmer-index, 0) * 45ms) both;
+}
+
+@keyframes tab-shimmer-a {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+  }
+}
+
+@keyframes tab-shimmer-b {
+  45% {
+    filter: brightness(1.8) drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-bar[data-shimmer] :is(.tab-bar__terminal-icon, .tab-bar__favicon, .tab-bar__title) {
+    animation: none;
+  }
+}

@@ -1,0 +1,26 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-25 */
+
+/* ── LASER POINTER OVERLAY ────────────────────────────────────────────── */
+
+/* Transparent all the way down — paired with `LaserPointerOverlay`'s own
+   `setBackgroundColor('#00000000')` on the main-process side, so the tab
+   view beneath this one keeps showing through everywhere the canvas below
+   doesn't itself paint. `cursor: none` is what actually "replaces" the OS
+   cursor with the drawn dot while this overlay is mounted. */
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  cursor: none;
+}
+
+#root,
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

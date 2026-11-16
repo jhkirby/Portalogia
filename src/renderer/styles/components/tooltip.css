@@ -1,0 +1,15 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── TOOLTIP ──────────────────────────────────────────────────────────── */
+
+/* Marks an element whose `data-tooltip` text shows as a tooltip while the pointer rests on it. Nothing is drawn here:
+   every tooltip is drawn by `TooltipOverlay`, a native view above everything in the window (the tab's own page
+   included), placed by `installChromeTooltips` so it always stays inside the window — see there. A self-drawn tooltip
+   rather than the native `title`, which Electron shows late and unreliably over this custom chrome, and never on a
+   `:disabled` button. */
+.chrome-tooltip {
+  position: relative;
+}

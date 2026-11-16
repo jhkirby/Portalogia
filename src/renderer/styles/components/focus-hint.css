@@ -1,0 +1,26 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-03 */
+
+/* ── FOCUS HINT ───────────────────────────────────────────────────────── */
+/* The last item in every stat bar (`FocusHint`): how to move the keyboard
+   into or out of the page. `margin-left: auto` pins it to the bar's far right
+   whatever the bar's other items take. When they take more than the bar has
+   (a narrow window), it stays stuck to the right edge over the items it
+   covers, in the bar's own background, rather than being cut off with them.
+   In the accent, so it reads as a hint rather than one more count. */
+
+.focus-hint {
+  position: sticky;
+  right: 0;
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--size-spacing-md);
+
+  /* The bar's background, so the items it covers don't show through. */
+  background: inherit;
+
+  color: var(--color-accent-text);
+  white-space: nowrap;
+}

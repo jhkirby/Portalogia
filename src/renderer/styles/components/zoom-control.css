@@ -1,0 +1,74 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-12 */
+
+/* ── ZOOM CONTROL ─────────────────────────────────────────────────────── */
+
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The pill behind the percent field — it grows in on hover (`hover-grow`), like `.page-actions__button` beside it, so
+   it stays quiet until interacted with, and stays while the field is being typed in. Its
+   own flex centers the input+suffix pair as one group, which is what
+   keeps the number visually centered in the bubble even though the input
+   itself is right-aligned against the tightly-following "%" (see
+   `.zoom-control__input`). */
+.zoom-control__bubble {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 var(--size-spacing-sm);
+
+  background: transparent;
+  border-radius: var(--size-radius-pill);
+}
+
+/* Typing in it: the fill stays up, as if hovered, while the field has the caret. */
+.zoom-control__bubble:focus-within::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Nothing to zoom: no fill, as a disabled button beside it shows none. */
+.zoom-control__bubble:has(.zoom-control__input:disabled) {
+  --hover-grow-bg: transparent;
+}
+
+.zoom-control__bubble:focus-within {
+  outline: 2px solid var(--color-address-border-focus);
+  outline-offset: -1px;
+}
+
+.zoom-control__input {
+  /* Fits "25"–"200" without clipping or reflowing as the digit count
+     changes; right-aligned so it sits flush against the "%" that follows
+     it regardless of how many digits are in it. */
+  width: 3ch;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  outline: none;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tab-text);
+  text-align: right;
+}
+
+.zoom-control__input:disabled {
+  color: var(--color-button-disabled-text);
+}
+
+.zoom-control__suffix {
+  margin-left: 1px;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+}

@@ -1,0 +1,129 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── EXPORT MENU ──────────────────────────────────────────────────────── */
+/* `ExportMenu`'s dropdown page (`export-menu.html`) — a dedicated
+   `WebContentsView` sized to `EXPORT_MENU_WIDTH_PX`×`EXPORT_MENU_HEIGHT_PX`
+   (see `ExportMenuOverlay`). Same constraints as `color-picker.css`: no
+   box-shadow (clipped at the view's edge). Corners are CSS-rounded over a
+   transparent view so the border stays connected around them. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+.export-menu {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--size-spacing-xs);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+
+  cursor: default;
+}
+
+/* Fades in as it opens and out as it closes (`useMenuFade`): MENU_FADE_MS each way, main keeping the view up until
+   the fade out is done. Closing, it takes no more clicks. */
+.menu-fade {
+  animation: menu-fade-in 150ms ease-out both;
+}
+
+.menu-fade--out {
+  animation: menu-fade-out 150ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes menu-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes menu-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-fade,
+  .menu-fade--out {
+    animation: none;
+  }
+}
+
+.export-menu__item {
+  flex: 0 0 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--size-spacing-sm);
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text-active);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.export-menu__item:hover:not(:disabled),
+.export-menu__item:focus-visible {
+  background: var(--color-button-hover-bg);
+  outline: none;
+}
+
+.export-menu__item:disabled {
+  color: var(--color-button-disabled-text);
+  cursor: default;
+}
+
+/* ── NEW TAB MENU ─────────────────────────────────────────────────────── */
+/* The tab row's "+" menu (`NewTabMenu`), drawn by its own copy of this page: the export menu's look, each row's icon
+   on its left. Its size is fixed in `NEW_TAB_MENU_WIDTH_PX`/`NEW_TAB_MENU_HEIGHT_PX`: 7 rows of 32px, the 9px rule
+   below, and the export menu's padding and border. */
+
+.new-tab-menu__item {
+  gap: var(--size-spacing-sm);
+}
+
+/* A fixed box, so the rows' text lines up whatever the icon. */
+.new-tab-menu__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+
+  color: var(--color-tab-text);
+}
+
+/* PDF, MD and >_ as the toolbar showed them: short bold text standing in for an icon. */
+.new-tab-menu__badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}

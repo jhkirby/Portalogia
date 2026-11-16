@@ -1,0 +1,56 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-12 */
+
+/* ── SIDEBAR SLIDE SNAPSHOT ───────────────────────────────────────────── */
+/* The picture of the tab's pages that stands in for them while the sidebar
+   slides (`ContentSnapshot`). Pinned by insets to `.tab-content`, so the
+   tab area's own layout moves and sizes it in the very frames the sidebar
+   does. Over the metal and the frame's border, under the popups
+   (`z-index: 100`). Never takes the pointer: the slide is a fifth of a
+   second, and what's under it then is only chrome. */
+
+.content-snapshot {
+  position: absolute;
+  z-index: 1;
+
+  pointer-events: none;
+}
+
+/* One pane: placed in fractions of the area, as main laid the panes out. */
+.content-snapshot__piece {
+  position: absolute;
+  overflow: hidden;
+}
+
+/* The picture is cut in three so it never stretches the page: the body
+   pinned left, the right edge (border, scrollbar) pinned right over it as
+   the pane narrows, and as it widens, the body's last column of pixels
+   drawn out to fill the gap. */
+.content-snapshot__body,
+.content-snapshot__seam,
+.content-snapshot__edge {
+  position: absolute;
+  top: 0;
+  display: block;
+  height: 100%;
+}
+
+.content-snapshot__body {
+  left: 0;
+}
+
+/* Holds the body to the left of the edge (its `right` is the edge's width, set inline), so a pane narrowing past the
+   body's own width never shows the body through the edge's see-through margin. */
+.content-snapshot__body-clip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+.content-snapshot__edge {
+  right: 0;
+}

@@ -1,0 +1,57 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── FILE BAR ─────────────────────────────────────────────────────────── */
+/* The PDF and note tabs' address bar (`FileBar`): it is drawn by `address-bar.css` (the `.address-bar` it also carries)
+   — the pill, the bookmark star at its left end, the progress fill and percentage. These rules only fit what it holds
+   into that pill: the file name box, or the search an empty tab shows, both without boxes of their own. Loaded after
+   the toolbars' stylesheets, whose search box this restyles. */
+
+/* Never squeezed below the address bar's own least width, but no wider rule needed: `.address-bar` already takes all
+   the room the toolbar leaves, up to the page tools. */
+.file-bar {
+  min-width: 200px;
+}
+
+/* The file name: a plain text field in the pill, as the URL is in the address bar. */
+.file-bar__name {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  font: inherit;
+  font-size: var(--size-font-md);
+  color: var(--color-address-text);
+  user-select: text;
+}
+
+.file-bar__name:focus {
+  outline: none;
+}
+
+/* The search an empty tab shows: the whole field, with the pill as its only box. */
+.file-bar .pdf-search {
+  flex: 1;
+}
+
+.file-bar .pdf-search__input {
+  height: auto;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  font-size: var(--size-font-md);
+}
+
+.file-bar .pdf-search__input:hover,
+.file-bar .pdf-search__input:focus {
+  border: none;
+  /* The pill around it glows instead (`.address-bar:focus-within`). */
+  box-shadow: none;
+}

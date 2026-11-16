@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    // Unlike tsconfig.node.json (the rest of main + preload), a preload
+    // script runs inside a renderer process and has full `window`/`document`
+    // access despite being bundled and type-checked alongside main-process
+    // code — `src/preload/tabHighlighter.ts` is the first one that actually
+    // touches the DOM (see `TabManager.createTab`'s own comment on why a
+    // preload is the right place for that, same as `tabZoom.ts`'s
+    // `webFrame` calls). Split into its own project instead of adding DOM to
+    // tsconfig.node.json directly so main-process files never see
+    // `window`/`document` as valid globals they could accidentally use.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    // No `"node"` here, deliberately — every preload file only ever imports
+    // from `electron` and `@shared`, never a `node:` builtin, so there's
+    // nothing here that needs Node's ambient types, and leaving them out
+    // sidesteps the well-known conflicts between `@types/node`'s globals and
+    // `lib.dom.d.ts`'s (e.g. `setTimeout`, `AbortController`).
+    "types": ["electron-vite/node"],
+    "baseUrl": ".",
+    "paths": { "@shared/*": ["src/shared/*"] }
+  },
+  "include": ["src/preload/**/*", "src/shared/**/*"]
+}

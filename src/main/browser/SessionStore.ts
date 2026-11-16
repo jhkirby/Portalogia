@@ -1,0 +1,168 @@
+// Project: Portalogia
+// Owner: Joshua H. Kirby
+// Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+// Last Modified: 2026-11-12
+
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { z } from 'zod';
+
+/**
+ * One tab's minimal recreatable state — enough to reopen it, not to replay
+ * its navigation history or (for a terminal) its scrollback. Same idea as
+ * `ClosedTab` (TabManager.ts) already uses for "reopen the last closed
+ * tab," just persisted to disk across restarts instead of kept in memory
+ * for the current run.
+ */
+const sessionTabSchema = z.object({
+  kind: z.enum(['browser', 'terminal', 'pdf', 'markdown', 'history', 'bookmarks', 'secrets']),
+  // A browser tab's address, or a Markdown tab's note path ('' once none is open).
+  // Meaningless for a terminal tab — kept on every entry anyway rather
+  // than splitting this into two schema variants, since restoring one is
+  // already just "ignore this field."
+  url: z.string(),
+  workspaceId: z.string().min(1),
+  active: z.boolean(),
+});
+
+const sessionWorkspaceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  color: z.string(),
+  // Absent in files written before workspaces had icons: those are all plain dots.
+  icon: z.string().default('dot'),
+});
+
+/** Whether each sidebar was shown in full (rather than as its rail) in the last window closed. */
+const sidebarLayoutSchema = z.object({
+  workspaces: z.boolean(),
+  tools: z.boolean(),
+});
+
+export type SidebarLayout = z.infer<typeof sidebarLayoutSchema>;
+
+const sessionFileSchema = z.object({
+  workspaces: z.array(sessionWorkspaceSchema),
+  tabs: z.array(sessionTabSchema),
+  activeWorkspaceId: z.string().min(1),
+  // Absent in files written before the sidebars were remembered: both start open, as they used to.
+  sidebars: sidebarLayoutSchema.optional(),
+});
+
+export type SessionSnapshot = z.infer<typeof sessionFileSchema>;
+
+/** The tabs and workspaces part of a session: what a window's `TabManager` builds. The sidebars are kept apart. */
+export type SessionContents = Omit<SessionSnapshot, 'sidebars'>;
+
+/**
+ * How long to let rapid-fire state changes settle before actually writing
+ * the session file. `TabManager.emitState()` fires on every title/favicon/
+ * loading-flag update while a page loads, not just the structural changes
+ * (new tab, closed tab, switched workspace) that make a saved session
+ * actually differ — debouncing collapses a burst of those into one
+ * `writeFileSync` shortly after they stop, instead of one per change.
+ */
+const SAVE_DEBOUNCE_MS = 400;
+
+/**
+ * Persists the current tabs/workspaces as JSON in the app's user-data
+ * directory, so relaunching the app restores exactly where the user left
+ * off instead of always starting from one fresh home tab. Loaded once at
+ * construction, same as `BookmarkStore`; unlike `BookmarkStore`'s
+ * synchronous per-mutation writes, saves here are debounced
+ * (`scheduleSave`) since tab/workspace state changes far more often
+ * mid-session, with an immediate `flush()` for the one moment that can't
+ * wait out the debounce: the window actually closing.
+ */
+export class SessionStore {
+  private readonly initial: SessionSnapshot | null;
+  private pending: SessionContents | null = null;
+  /** The contents last scheduled or loaded, so a sidebar change alone can still be written with them. */
+  private latest: SessionContents | null;
+  /**
+   * The sidebars as the last window to close left them. Kept apart from the contents, which every visible window
+   * writes as its tabs change: only a window closing sets this, so the last one closed is the one remembered.
+   */
+  private sidebars: SidebarLayout | undefined;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  /** @param filePath Where to read/write the session JSON file. */
+  public constructor(private readonly filePath: string) {
+    this.initial = this.load();
+    this.latest = this.initial;
+    this.sidebars = this.initial?.sidebars;
+  }
+
+  /** @returns The sidebars as they were when the app last closed, or `undefined` when none were saved yet. */
+  public getSidebars(): SidebarLayout | undefined {
+    return this.sidebars;
+  }
+
+  /**
+   * Records the sidebars of a window that's closing, to be written with the session on the next flush.
+   * @param sidebars Whether each sidebar was open in that window.
+   */
+  public recordSidebars(sidebars: SidebarLayout): void {
+    this.sidebars = sidebars;
+    this.pending ??= this.latest;
+  }
+
+  /**
+   * @returns The session as it was when the app last closed (or was last
+   *   flushed), or `null` if there's none saved yet (first launch) or the
+   *   file was missing/corrupt/schema-mismatched.
+   */
+  public get(): SessionSnapshot | null {
+    return this.initial;
+  }
+
+  /**
+   * Schedules a write of the given snapshot, debounced so a burst of
+   * `TabManager` state changes collapses into a single disk write shortly
+   * after they settle rather than one per change.
+   * @param snapshot The full session to persist once the debounce settles.
+   */
+  public scheduleSave(snapshot: SessionContents): void {
+    this.pending = snapshot;
+    this.latest = snapshot;
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+    }
+    this.timer = setTimeout(() => this.flush(), SAVE_DEBOUNCE_MS);
+  }
+
+  /**
+   * Writes whatever snapshot is pending immediately, skipping the
+   * debounce — call this right before the window closes, since nothing
+   * will fire the deferred timer after that. A no-op if nothing's pending.
+   */
+  public flush(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.pending === null) {
+      return;
+    }
+    const file: SessionSnapshot = { ...this.pending, sidebars: this.sidebars };
+    writeFileSync(this.filePath, JSON.stringify(file, null, 2), 'utf-8');
+    this.pending = null;
+  }
+
+  /**
+   * @returns The session loaded from disk, or `null` if the file is
+   *   missing, corrupt, or schema-mismatched — callers fall back to a
+   *   single fresh tab in that case, same as `BookmarkStore.load()`
+   *   falling back to an empty list.
+   */
+  private load(): SessionSnapshot | null {
+    if (!existsSync(this.filePath)) {
+      return null;
+    }
+    try {
+      const raw: unknown = JSON.parse(readFileSync(this.filePath, 'utf-8'));
+      return sessionFileSchema.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+}

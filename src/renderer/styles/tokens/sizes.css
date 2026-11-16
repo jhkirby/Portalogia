@@ -1,0 +1,85 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-11-12 */
+
+:root {
+  /* Also the titlebar's own height now that the tab strip and
+     WindowControls share one row (see `.titlebar` in app.css). */
+  /* 8px taller than the tabs need: the strip above them is the window's drag
+     handle (tabs and buttons opt out of dragging), and needs room to grab. */
+  --size-tab-bar-height: 48px;
+  --size-toolbar-height: 44px;
+  /* Must equal CHROME_HEIGHT_PX in src/shared/constants.ts — the main
+     process uses that constant to position tab content below this much
+     chrome, so the two can't drift independently. */
+  --size-chrome-height: 92px;
+  /* Must equal CHROME_HEIGHT_FOCUSED_PX in src/shared/constants.ts — 0,
+     since Focus Mode slides the entire titlebar row and toolbar out of
+     view (see `.app--focus-mode` in app.css) rather than just the tabs. */
+  --size-chrome-height-focused: 0px;
+  /* The web page stat bar's height. Must equal STATUS_BAR_HEIGHT_PX in src/shared/constants.ts: main leaves this
+     much of the window's bottom free below a web page for the bar. */
+  --size-status-bar-height: 26px;
+  /* The frame a tab's content sits in (the History table's look, for every kind of tab): its inset from the sides and
+     from the top and stat bar, and its corners. Must equal CONTENT_FRAME_* in src/shared/constants.ts: main places a
+     web page's view inside it. */
+  --size-content-frame-x: 20px;
+  --size-content-frame-y: 12px;
+  --size-content-frame-radius: 6px;
+
+  --size-tab-max-width: 220px;
+
+  /* Must equal SIDEBAR_WIDTH_PX in src/shared/constants.ts — the main
+     process shifts tab content right by this much so it never sits
+     underneath the sidebar. */
+  --size-sidebar-width: 180px;
+  /* Must equal SIDEBAR_COLLAPSED_WIDTH_PX in src/shared/constants.ts —
+     see its own comment there for why the sidebar collapses to this
+     instead of straight to 0. */
+  --size-sidebar-collapsed-width: 40px;
+  /* Must equal TOOLS_SIDEBAR_WIDTH_PX in src/shared/constants.ts — main narrows the tab's view by this much on the
+     right, so it never sits under the Tools sidebar. Hidden, it keeps --size-sidebar-collapsed-width, like the left. */
+  --size-tools-sidebar-width: 180px;
+  /* Must equal SIDEBAR_TOGGLE_DURATION_MS in src/shared/constants.ts —
+     shared by the sidebar's slide (Ctrl+L) and the chrome's Focus Mode
+     slide (Ctrl+Shift+F, see `.app--focus-mode` in app.css). The main
+     process animates tab content's bounds over exactly this long so it
+     moves in step with these transitions instead of snapping ahead of or
+     behind them. */
+  /* How far the active tab's accent streak runs past each of its sides before it has faded out (tab-bar.css). */
+  --size-tab-streak-reach: 72px;
+  --size-sidebar-toggle-duration: 220ms;
+  /* A sidebar's labels through its slide: collapsing, they're gone in the first stretch, before the narrowing edge
+     reaches them; expanding, they wait until the slide (ease-out, so most of the way open by then) has room for them. */
+  --size-sidebar-label-fade-out: 90ms;
+  --size-sidebar-label-fade-in: 130ms;
+  --size-sidebar-label-fade-in-delay: 80ms;
+  /* How fast the titlebar's corner swaps the clock for the window controls (and back) as the pointer comes onto the
+     tab row, and the new-tab button fades in with them. */
+  --size-titlebar-reveal-duration: 140ms;
+
+  --size-radius-sm: 6px;
+  --size-radius-pill: 15px;
+
+  --size-spacing-xs: 4px;
+  --size-spacing-sm: 8px;
+  --size-spacing-md: 12px;
+
+  --size-font-sm: 12px;
+  --size-font-md: 13px;
+  /* A note's or PDF's right-hand panel (`side-panel.css`): in `rem`, so a note's panel grows with its zoom. */
+  --size-side-panel-width: 15rem;
+  /* How far the tab row's and sidebar's glow reaches from the pointer (`.pointer-glow`). */
+  --size-pointer-glow-radius: 200px;
+}
+
+/* Markdown notes (`markdown.html`). */
+:root {
+  /* The note's text column — in `rem`, so it grows with zoom and the marks drawn in `em`s stay on the same words. */
+  --md-column-width: 46rem;
+  --md-editor-font-size: 0.9rem;
+  --md-font-ui: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --md-font-body: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --md-font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+}

@@ -1,0 +1,311 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── SIDE PANEL ───────────────────────────────────────────────────────── */
+/* The right-hand panel of a note or a PDF (`SidePanel`): tabs across the top, a list under them that scrolls on its
+   own, and the round-cornered button that shows and hides it (with, on a PDF's sections, an Edit one beside it). Loaded by `markdown.html` and `pdf.html`, after
+   `hover-grow.css`. */
+
+.side-panel-toggle {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.9rem;
+  z-index: 20;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.side-panel-toggle:hover {
+  color: var(--color-tab-text-active);
+}
+
+/* The PDF's sections' Edit: the same button, just left of the toggle. */
+.side-panel-toggle--edit {
+  right: calc(0.9rem + 1.9rem + 0.4rem);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* A corner button's tooltip (`CornerButton`): under the button and held to its right edge, so it opens leftward into
+   the page rather than past the window's edge. Styled like the chrome's tooltips (tooltip.css). */
+.side-panel-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-sm);
+  padding: 4px 8px;
+
+  background: var(--color-tooltip-bg);
+  /* Outlined in the accent, as every tooltip is. */
+  border: 1px solid var(--color-tooltip-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  color: var(--color-tooltip-text);
+  /* A button doesn't pass its page's font on. */
+  font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: var(--size-font-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.side-panel-tip__keys {
+  opacity: 0.7;
+}
+
+/* On, it's filled already, so the hover fill is a shade further — the same grey would show no change at all. */
+.side-panel-toggle[aria-pressed='true'] {
+  --hover-grow-bg: var(--color-button-pressed-hover-bg);
+
+  background: var(--color-button-hover-bg);
+  color: var(--color-tab-text-active);
+}
+
+.side-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: var(--size-side-panel-width);
+  padding-top: 3rem;
+  /* The list below the tabs scrolls (`.side-panel__body`), so the tabs stay in reach. */
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+  border-left: 1px solid var(--color-chrome-border);
+  font-size: var(--size-font-md);
+}
+
+.side-panel__tabs {
+  display: flex;
+  gap: var(--size-spacing-xs);
+  padding: 0 var(--size-spacing-sm) var(--size-spacing-sm);
+}
+
+.side-panel__tab {
+  flex: 1;
+  height: 26px;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  font: inherit;
+  font-size: var(--size-font-sm);
+  cursor: pointer;
+}
+
+.side-panel__tab--active {
+  border-color: var(--color-chrome-border);
+  color: var(--color-tab-text-active);
+}
+
+/* A text button in the panel: the sections' Add and Reset. */
+.side-panel__action {
+  height: 24px;
+  padding: 0 var(--size-spacing-md);
+
+  background: transparent;
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  font: inherit;
+  font-size: var(--size-font-sm);
+  cursor: pointer;
+}
+
+.side-panel__action:hover {
+  color: var(--color-tab-text-active);
+}
+
+.side-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.side-panel__list {
+  margin: 0;
+  padding: 0 var(--size-spacing-xs);
+
+  list-style: none;
+}
+
+.side-panel__item {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text-active);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.side-panel__item:hover {
+  background: var(--color-button-hover-bg);
+}
+
+/* An outbound link: what it reads as, and (when that's different) where it goes, smaller, beneath. */
+.side-panel__item--link {
+  display: flex;
+  flex-direction: column;
+}
+
+.side-panel__link-label,
+.side-panel__link-target {
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+}
+
+.side-panel__link-target {
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
+}
+
+/* A section: its name, and the page it starts on held to the right in steady-width digits. */
+.side-panel__item--section {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-spacing-sm);
+}
+
+.side-panel__section-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+}
+
+.side-panel__section-page {
+  flex: none;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-address-placeholder);
+}
+
+/* ── Editing sections: a name box, a page box and a remove button per row ── */
+
+.side-panel__edit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+  padding: 2px var(--size-spacing-xs);
+}
+
+.side-panel__input {
+  box-sizing: border-box;
+  height: 24px;
+  min-width: 0;
+  padding: 0 6px;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+  outline: none;
+
+  color: var(--color-tab-text-active);
+  font: inherit;
+  font-size: var(--size-font-sm);
+}
+
+.side-panel__input:focus {
+  border-color: var(--color-accent-text);
+}
+
+/* An empty or repeated name, or a page that's repeated or not in the document: red, focused or not. */
+.side-panel__input--invalid,
+.side-panel__input--invalid:focus {
+  border-color: var(--color-danger-text);
+}
+
+.side-panel__input--title {
+  flex: 1;
+}
+
+.side-panel__input--page {
+  flex: none;
+  width: 3.6em;
+
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Steppers would crowd a box this narrow; the number is typed. */
+.side-panel__input--page::-webkit-inner-spin-button,
+.side-panel__input--page::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.side-panel__remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+
+  --hover-grow-bg: var(--color-close-hover-bg);
+}
+
+.side-panel__remove:hover {
+  color: var(--color-tab-text-active);
+}
+
+.side-panel__edit-footer {
+  display: flex;
+  gap: var(--size-spacing-xs);
+  padding: var(--size-spacing-sm) var(--size-spacing-sm);
+}
+
+/* Why Done won't finish yet, above the Add and Reset buttons. */
+.side-panel__error {
+  margin: var(--size-spacing-sm) var(--size-spacing-md) 0;
+
+  font-size: var(--size-font-sm);
+  color: var(--color-danger-text);
+}
+
+.side-panel__empty {
+  margin: 0;
+  padding: 0 var(--size-spacing-md);
+
+  color: var(--color-address-placeholder);
+}

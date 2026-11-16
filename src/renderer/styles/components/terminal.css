@@ -1,0 +1,263 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── TERMINAL ─────────────────────────────────────────────────────────── */
+/* One terminal tab's whole page (`terminal.html`), a dedicated
+   `WebContentsView` the main process mounts/unmounts as its tab is
+   activated/backgrounded — see `TabManager.createTerminalTab`. Unlike the
+   chrome's own page, this is the entire document, so it fills the actual
+   viewport rather than some inset area of a larger layout. */
+
+html {
+  /* Lets `light-dark()` below (and `prefers-color-scheme` for
+     `xtermThemes.ts`) follow `nativeTheme.themeSource` instead of always
+     the OS default — same mechanism as the `portalogia://home` page
+     (see homePage.ts and `useTheme`'s doc comment). */
+  color-scheme: light dark;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  /* None: the margin around the frame shows the chrome's flowing metal behind this see-through page
+     (`MetalBackground`, `TabManager.makePageSeeThrough`). */
+  background: transparent;
+  /* This page is a fixed single-terminal layout, never meant to be a
+     scrollable document itself — same reasoning as the chrome's own
+     `html, body` rule in app.css. Without this, a sub-pixel mismatch
+     between xterm's own column-fit math (`FitAddon.fit()` in Terminal.tsx)
+     and this container's actual width — routine, not a bug in either one
+     — was enough to leave a permanent horizontal scrollbar across the
+     bottom of every terminal tab. xterm's own scrollback still scrolls
+     fine; that's a separate, deliberately-scrollable element
+     (`.xterm-viewport`) nested inside this one, untouched by this rule. */
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+/* The terminal above, its stat bar below. */
+.terminal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The terminal sits in a rounded, bordered frame, like the History table; the stat bar stays full width below it. */
+.terminal__surface {
+  flex: 1;
+  min-height: 0;
+  margin: var(--size-content-frame-y) var(--size-content-frame-x);
+  /* The same frame as every other tab's (the History table's look, `--color-panel-border`). The fallback is that
+     token's own two values, for the moment before `followSystemTheme` sets `data-theme`: without it the whole
+     border would drop out. */
+  border: 1px solid var(--color-panel-border, light-dark(#d7d9db, #5f6368));
+  border-radius: var(--size-content-frame-radius);
+  /* Room between the prompt and the window's left edge (and a little above the first line). xterm's fit measures the
+     space inside this padding, so its rows and columns stay whole. */
+  padding: 8px 0 0 14px;
+  box-sizing: border-box;
+  /* The terminal never draws past its own area, onto the stat bar below, even mid-resize. */
+  overflow: hidden;
+  /* xterm.js paints its own background from the `theme` option passed in
+     `Terminal.tsx` (see `xtermThemes.ts`); this is just the instant it
+     takes for that to happen, so it should match rather than always
+     flashing dark first in light mode. */
+  background: light-dark(#ffffff, #1e1e1e);
+
+  transition:
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+/* The cursor is in the terminal (`trackPageFocus`): the frame lights up in the accent, as a web page's does.
+   Shift+Escape gives the keyboard back to the chrome; Escape there hands it back. */
+.page-focused .terminal__surface {
+  border-color: var(--color-accent-text);
+  /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */
+  box-shadow:
+    0 0 0 1px var(--color-accent-text),
+    0 0 14px 2px rgba(var(--color-accent-rgb), 0.55);
+}
+
+/* Toggled by `Terminal.tsx`'s own `onHighlighterState` subscription — the
+   same pen-nib cursor `tabHighlighter.ts` shows over a browser tab's page,
+   swapped in over xterm's own text cursor while the highlighter tool is on. */
+.terminal__surface--highlighter-active,
+.terminal__surface--highlighter-active .xterm-screen {
+  cursor:
+    url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M9.7 15.3 15.3 9.7l4 4-5.6 5.6a1 1 0 0 1-1.4 0l-2.6-2.6a1 1 0 0 1 0-1.4Z" fill="%23222"/><path d="m15.3 9.7 4.6-4.6a1.7 1.7 0 0 1 2.4 2.4l-4.6 4.6-2.4-2.4Z" fill="none" stroke="%23222" stroke-width="1.6"/><path d="m9.5 15.5-5 5 2 2 5-5" fill="none" stroke="%23222" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+      2 22,
+    text;
+}
+
+/* Dark mode: light ink, so the cursor stays visible. */
+@media (prefers-color-scheme: dark) {
+  .terminal__surface--highlighter-active,
+  .terminal__surface--highlighter-active .xterm-screen {
+    cursor:
+      url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M9.7 15.3 15.3 9.7l4 4-5.6 5.6a1 1 0 0 1-1.4 0l-2.6-2.6a1 1 0 0 1 0-1.4Z" fill="%23f2f2f2"/><path d="m15.3 9.7 4.6-4.6a1.7 1.7 0 0 1 2.4 2.4l-4.6 4.6-2.4-2.4Z" fill="none" stroke="%23f2f2f2" stroke-width="1.6"/><path d="m9.5 15.5-5 5 2 2 5-5" fill="none" stroke="%23f2f2f2" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+        2 22,
+      text;
+  }
+}
+
+/* Toggled by `Terminal.tsx`'s own hover tracking (`setHoveredHighlight`) —
+   the visual cue that hovering this decoration and pressing D/Delete would
+   remove it, same as a browser tab's `.portalogia-highlight--hovered`. */
+.terminal-highlight--hovered {
+  opacity: 0.5;
+}
+
+/* Never shown on screen — filled with the terminal's full scrollback (see
+   `Terminal.tsx`'s `PREPARE_PRINT_GLOBAL`) and swapped in for `.terminal__surface`
+   only while printing (below). Ordinary flowing text in normal document
+   flow, deliberately not positioned/sized like `.terminal__surface` — that
+   one is pinned to exactly one viewport's worth of xterm's own canvas
+   (which is *all* `printToPDF()` used to capture, cropped to whatever page
+   of scrollback happened to be scrolled to); this one is free to run to
+   whatever height its content needs, which is what lets Chromium's own
+   print pagination below split it across as many pages as it takes. */
+.terminal__print-view {
+  display: none;
+  margin: 0;
+  padding: 16px;
+
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  font-family: Menlo, Consolas, 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+/* `exportToPdf`'s `printToPDF()` renders this page under the `print` media
+   type, same as Chrome's own "Save as PDF". Swaps the live, single-viewport
+   xterm canvas out for `.terminal__print-view`'s full scrollback dump, and
+   lets the page grow past one viewport's height (`html`/`body`/`.terminal`
+   are all pinned to exactly `100%` for the live, on-screen layout — see
+   above) so that dump can actually paginate across multiple pages instead
+   of being clipped to the first one. */
+@media print {
+  html,
+  body,
+  #root,
+  .terminal {
+    height: auto;
+    overflow: visible;
+  }
+
+  .terminal__surface,
+  .terminal__exited-banner {
+    display: none;
+  }
+
+  .terminal__print-view {
+    display: block;
+  }
+}
+
+.terminal__exited-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: var(--size-spacing-xs) var(--size-spacing-sm);
+
+  font-size: 12px;
+  color: #e8eaed;
+  background: rgba(0, 0, 0, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ── Stat bar ──
+   Along the bottom, like a note's, a PDF's and a web page's (`.md-status`, `.pdf-status`, `.web-status`). */
+.terminal-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--size-spacing-md) * 1.5);
+  height: var(--size-status-bar-height);
+  padding: 0 var(--size-spacing-md);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background: light-dark(#f1f3f4, #202124);
+  border-top: 1px solid light-dark(#d7d9db, #3c4043);
+
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: light-dark(#5f6368, #bdc1c6);
+  white-space: nowrap;
+}
+
+.terminal-status__item {
+  flex: none;
+}
+
+/* Where the pointer is (`x×y`): first, in steady-width digits so the bar doesn't shuffle as it moves. */
+.terminal-status__pointer {
+  min-width: 9ch;
+}
+
+/* The selection's own counts, set off from the rest by a thin vertical line; there only while there's a selection. */
+.terminal-status__selection {
+  display: flex;
+  flex: none;
+  gap: var(--size-spacing-md);
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+
+  border-left: 1px solid light-dark(#d7d9db, #3c4043);
+}
+
+/* ── Scroll bar ──
+   xterm draws its own (VS Code's), not the page's: made to look like the app's other scroll bars (scrollbar.css) — a
+   thin rounded thumb on no track, without the inset shadow along the top. Its sizes are set inline by xterm, so
+   these need `!important` to win. */
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: 8px !important;
+  background: transparent !important;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  left: 1px !important;
+  width: 6px !important;
+
+  background: var(--color-scrollbar-thumb, light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.2))) !important;
+  border-radius: 4px;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider:hover {
+  background: var(--color-scrollbar-thumb-hover, light-dark(rgba(0, 0, 0, 0.35), rgba(255, 255, 255, 0.3))) !important;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+  background: var(--color-scrollbar-thumb-active, light-dark(rgba(0, 0, 0, 0.45), rgba(255, 255, 255, 0.4))) !important;
+}
+
+.terminal__surface .xterm .xterm-scrollable-element > .shadow {
+  display: none !important;
+}
+
+/* No horizontal scroll bar: the terminal wraps to its width, so there's never anything to scroll sideways, and its
+   empty track showed as a black band along the bottom. */
+.terminal__surface .xterm .xterm-scrollable-element > .scrollbar.horizontal {
+  display: none !important;
+}
+
+/* xterm's scroll layer is painted black and runs a little past the last row of text, which showed as a black band
+   along the bottom; transparent, the terminal's own background shows there instead. */
+.terminal__surface .xterm .xterm-viewport {
+  background-color: transparent !important;
+}

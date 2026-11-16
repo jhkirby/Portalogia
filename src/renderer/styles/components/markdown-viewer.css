@@ -1,0 +1,1134 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── MARKDOWN VIEWER ──────────────────────────────────────────────────── */
+/* `markdown.html`'s whole page — a Markdown tab's own `WebContentsView` (see
+   `TabManager.createMarkdownTab`), so none of the chrome's stylesheets reach it.
+   Everything inside the note is sized in `em`/`rem`: the page scales its root
+   font size to zoom, and the text, the column and the marks drawn on it all
+   move together. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family: var(--md-font-ui);
+  /* None: the margin around the frame shows the chrome's flowing metal behind this see-through page
+     (`MetalBackground`, `TabManager.makePageSeeThrough`). */
+  background: transparent;
+  color: var(--color-tab-text-active);
+}
+
+#root {
+  height: 100%;
+}
+
+.md-viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  /* Around the frame below: nothing, so the chrome's flowing metal shows (see `html, body` above). */
+  background: transparent;
+}
+
+/* The note (or the empty page before one is open) sits in a rounded, bordered frame, like the History table; the
+   stat bar stays full width below it. */
+.md-viewer > :is(.md-viewer__body, .md-viewer__empty) {
+  margin: var(--size-content-frame-y) var(--size-content-frame-x);
+  overflow: hidden;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-content-frame-radius);
+}
+
+/* The page has the keyboard (`trackPageFocus`): the frame lights up in the accent, as a web page's does. */
+.md-viewer > :is(.md-viewer__body, .md-viewer__empty) {
+  transition:
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+.page-focused .md-viewer > :is(.md-viewer__body, .md-viewer__empty) {
+  border-color: var(--color-accent-text);
+  /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */
+  box-shadow:
+    0 0 0 1px var(--color-accent-text),
+    0 0 14px 2px rgba(var(--color-accent-rgb), 0.55);
+}
+
+/* The note (reader or editor) and its side panel, side by side above the status bar. `min-height: 0` lets it shrink
+   below its content, so the note scrolls inside it instead of pushing the bar off the page. */
+.md-viewer__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Status bar: the caret's place and the note's size ── */
+
+.md-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--size-spacing-md) * 1.5);
+  height: 26px;
+  padding: 0 var(--size-spacing-md);
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+  border-top: 1px solid var(--color-chrome-border);
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  white-space: nowrap;
+}
+
+.md-status__item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* The selection's own counts, kept together as one group, in the bar's own colour. */
+.md-status__selection {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-md);
+  /* A thin vertical line sets the selection's counts off from the rest; it's there only while they are. */
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+  border-left: 1px solid var(--color-chrome-border);
+}
+
+/* Where the pointer is (`x×y`): first, in steady-width digits so the bar doesn't shuffle as it moves. */
+.md-status__pointer {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
+}
+
+/* How much of the document is in view (`top%–bottom%`), right after the pointer, steady-width for the same reason. */
+.md-status__scroll {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
+}
+
+.md-status__total {
+  color: var(--color-address-placeholder);
+}
+
+/* A number that can be typed over: plain text until the pointer is over it or the caret is in it, like the toolbar's
+   file name. */
+.md-status__field {
+  box-sizing: content-box;
+  height: 18px;
+  padding: 0 3px;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tab-text-active);
+  text-align: right;
+}
+
+.md-status__field:hover:not(:disabled) {
+  border-color: var(--color-chrome-border);
+}
+
+.md-status__field:focus {
+  border-color: var(--color-accent-text);
+  outline: none;
+}
+
+.md-status__field:disabled {
+  color: var(--color-address-placeholder);
+}
+
+/* ── Empty: a blank page until a note is opened from the toolbar ── */
+
+.md-viewer__empty {
+  /* Positioned for the fluid filling it (`FluidBackground`). */
+  position: relative;
+  flex: 1;
+}
+
+/* Matched as specifically as the frame rule above, which would otherwise paint it the panel's colour. */
+.md-viewer > .md-viewer__empty {
+  background: var(--color-blank-page-bg);
+}
+
+/* ── The rendered note's scroll area ── */
+
+.md-viewer__scroll {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* The note's own size is what the marks are drawn against, so this wraps the text and the layer exactly. */
+.md-viewer__content {
+  position: relative;
+  min-height: 100%;
+}
+
+/* `--md-formatted-width` is the toolbar's width slider (`useNoteWidth`), when it's moved past the usual column. */
+.md-viewer__reader-host {
+  box-sizing: border-box;
+  max-width: var(--md-formatted-width, var(--md-column-width));
+  margin: 0 auto;
+  /* Room at the bottom so the last lines can be scrolled to the middle of the view, as in an editor. */
+  padding: 2rem 1.5rem 40vh;
+}
+
+/* Each tool's cursor (set inline as `--md-tool-cursor`) wins over the text's own I-beam, everywhere on the note. */
+.md-viewer__scroll[data-tool='pen'] *,
+.md-viewer__scroll[data-tool='highlighter'] *,
+.md-viewer__scroll[data-tool='comment'] * {
+  cursor: var(--md-tool-cursor) !important;
+}
+
+/* The highlighter selects text as ever; its own tint is drawn from the stored range once the selection ends. */
+.md-viewer__scroll[data-tool='pen'] {
+  user-select: none;
+}
+
+/* ── Editor ── */
+
+.md-viewer__editor {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.md-editor {
+  height: 100%;
+}
+
+/* ── Pan mode: the note is grabbed and moved like paper ── */
+
+/* The hand (set inline as `--md-hand-cursor`, open or closed) over the whole note, reader or editor, winning over
+   the text's I-beam and a link's pointer; nothing can be selected while the hand holds the page. */
+.md-viewer[data-pan] :is(.md-viewer__scroll, .cm-scroller),
+.md-viewer[data-pan] :is(.md-viewer__scroll, .cm-scroller) * {
+  user-select: none;
+
+  cursor: var(--md-hand-cursor) !important;
+}
+
+/* While grabbed, the drag's pointer capture sits on `.md-viewer__body` (see `useMarkdownPan`), so the cursor comes
+   from it rather than from whatever is under the pointer: the closed hand goes on the whole page, or the capturing
+   element would show its own arrow for the length of the drag. */
+.md-viewer[data-pan='grabbing'],
+.md-viewer[data-pan='grabbing'] * {
+  cursor: var(--md-hand-cursor) !important;
+}
+
+/* ── The reader's typography ── */
+
+.md-reader {
+  font-family: var(--md-font-body);
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--color-tab-text-active);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.md-reader > :first-child {
+  margin-top: 0;
+}
+
+.md-reader h1,
+.md-reader h2,
+.md-reader h3,
+.md-reader h4,
+.md-reader h5,
+.md-reader h6 {
+  margin: 1.6em 0 0.5em;
+
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.md-reader h1 {
+  font-size: 2em;
+}
+
+.md-reader h2 {
+  font-size: 1.55em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--color-chrome-border);
+}
+
+.md-reader h3 {
+  font-size: 1.25em;
+}
+
+.md-reader h4,
+.md-reader h5,
+.md-reader h6 {
+  font-size: 1.05em;
+}
+
+.md-reader h6 {
+  color: var(--color-tab-text);
+}
+
+.md-reader p,
+.md-reader ul,
+.md-reader ol,
+.md-reader blockquote,
+.md-reader pre,
+.md-reader table {
+  margin: 0.8em 0;
+}
+
+.md-reader ul,
+.md-reader ol {
+  padding-left: 1.7em;
+}
+
+.md-reader li {
+  margin: 0.2em 0;
+}
+
+.md-reader li > p {
+  margin: 0.3em 0;
+}
+
+.md-reader a {
+  color: var(--color-accent-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.md-reader a:hover {
+  text-decoration: underline;
+}
+
+/* A link to a note that doesn't exist yet: a click makes it, so it reads as "not there yet". */
+.md-reader a.md-wikilink--missing {
+  opacity: 0.6;
+  text-decoration: underline dashed;
+}
+
+.md-reader a.md-link-external::after {
+  content: '\2197';
+  margin-left: 0.15em;
+  font-size: 0.8em;
+}
+
+.md-reader hr {
+  margin: 1.6em 0;
+
+  border: none;
+  border-top: 1px solid var(--color-chrome-border);
+}
+
+.md-reader blockquote {
+  padding: 0 1em;
+
+  border-left: 3px solid var(--md-quote-border);
+  color: var(--color-tab-text);
+}
+
+.md-reader code {
+  padding: 0.12em 0.35em;
+
+  background: var(--md-code-bg);
+  border-radius: 4px;
+
+  font-family: var(--md-font-mono);
+  font-size: 0.88em;
+  color: var(--md-code-color);
+}
+
+.md-reader mark,
+.md-reader mark.md-highlight {
+  padding: 0 0.15em;
+
+  background: rgba(var(--color-accent-rgb), 0.3);
+  border-radius: 3px;
+  color: inherit;
+}
+
+.md-reader img {
+  max-width: 100%;
+  height: auto;
+}
+
+.md-reader img.md-image--loading {
+  min-width: 2rem;
+  min-height: 2rem;
+
+  background: var(--md-code-bg);
+}
+
+/* A web picture waiting for a click to load: its alt text in a chip, like a broken one, but clickable.
+   Loading it on sight would tell its server the note was opened. */
+.md-reader img.md-image--remote {
+  display: inline-block;
+  padding: 0.3em 0.6em;
+
+  background: var(--md-code-bg);
+  border: 1px dashed var(--color-tab-text);
+  border-radius: 4px;
+
+  color: var(--color-tab-text);
+  font-size: 0.85em;
+
+  cursor: pointer;
+}
+
+.md-reader img.md-image--broken {
+  display: inline-block;
+  padding: 0.3em 0.6em;
+
+  background: var(--md-code-bg);
+  border-radius: 4px;
+
+  color: var(--color-tab-text);
+  font-size: 0.85em;
+}
+
+.md-reader table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+
+  border-collapse: collapse;
+}
+
+.md-reader th,
+.md-reader td {
+  padding: 0.4em 0.8em;
+
+  border: 1px solid var(--color-chrome-border);
+}
+
+.md-reader th {
+  background: var(--md-code-bg);
+  font-weight: 600;
+}
+
+/* A table in the formatted editor is typed in where it stands, cell by cell (see `livePreviewTable.ts`). */
+.cm-lp-table .cm-lp-table__cell {
+  cursor: text;
+}
+
+/* The cell being typed in shows its Markdown; an inset ring marks it without shifting the table's lines. */
+.cm-lp-table .cm-lp-table__cell--editing {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(var(--color-accent-rgb), 0.8);
+  white-space: pre-wrap;
+  caret-color: var(--color-tab-text-active, currentColor);
+}
+
+/* A `#tag`. */
+.md-reader .md-tag {
+  padding: 0.05em 0.5em;
+
+  background: rgba(var(--color-accent-rgb), 0.15);
+  border-radius: 1em;
+
+  color: var(--color-accent-text);
+  font-size: 0.9em;
+}
+
+/* Task list items: no bullet, the box in its place. */
+.md-reader li:has(> input.md-task) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.md-reader input.md-task {
+  margin: 0 0.5em 0 0;
+
+  accent-color: var(--color-accent-text);
+  cursor: pointer;
+}
+
+.md-reader li:has(> input.md-task:checked) {
+  color: var(--color-tab-text);
+  text-decoration: line-through;
+}
+
+/* ── Math ── */
+
+.md-reader .md-math--display {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  text-align: center;
+}
+
+.md-reader .katex-display {
+  margin: 0;
+}
+
+/* ── Code blocks ── */
+
+.md-reader pre.md-code {
+  position: relative;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+
+  background: var(--md-code-bg);
+  border-radius: var(--size-radius-sm);
+}
+
+.md-reader pre.md-code code {
+  display: block;
+  padding: 0;
+
+  background: none;
+  color: var(--color-tab-text-active);
+  font-size: 0.85em;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+/* highlight.js's token classes, in the page's syntax colours. */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-built_in {
+  color: var(--md-syntax-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attr,
+.hljs-template-variable {
+  color: var(--md-syntax-string);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--md-syntax-number);
+}
+
+.hljs-title,
+.hljs-function,
+.hljs-section {
+  color: var(--md-syntax-function);
+}
+
+.hljs-type,
+.hljs-class,
+.hljs-name,
+.hljs-tag,
+.hljs-variable {
+  color: var(--md-syntax-type);
+}
+
+.hljs-comment,
+.hljs-quote,
+.hljs-meta,
+.hljs-deletion {
+  color: var(--md-syntax-comment);
+  font-style: italic;
+}
+
+/* Language, Copy and Run: shown when the block is hovered, so a page of code isn't a page of buttons. */
+.md-code-controls {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+pre.md-code:hover .md-code-controls,
+.md-code-controls:focus-within {
+  opacity: 1;
+}
+
+.md-code-controls__language {
+  color: var(--color-address-placeholder);
+  font-family: var(--md-font-ui);
+  font-size: 0.72rem;
+}
+
+.md-code-controls__button {
+  height: 1.5rem;
+  padding: 0 0.6rem;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text-active);
+  font-family: var(--md-font-ui);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.md-code-controls__button--run {
+  border-color: var(--color-accent-text);
+  color: var(--color-accent-text);
+}
+
+.md-code-controls__button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* What a block printed, under it. */
+.md-code-output {
+  position: relative;
+  margin: -0.4em 0 0.8em;
+  padding: 0.6em 1em;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-chrome-border);
+  border-radius: var(--size-radius-sm);
+
+  font-family: var(--md-font-mono);
+  font-size: 0.8rem;
+}
+
+.md-code-output--failed,
+.md-code-output--error {
+  border-color: #d93025;
+}
+
+.md-code-output--running {
+  color: var(--color-tab-text);
+}
+
+.md-code-output--error {
+  padding-right: 2rem;
+
+  color: #d93025;
+  font-family: var(--md-font-ui);
+}
+
+.md-code-output__text {
+  margin: 0;
+
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.md-code-output__text--stderr {
+  color: #d93025;
+}
+
+.md-code-output__empty,
+.md-code-output__summary {
+  color: var(--color-address-placeholder);
+  font-family: var(--md-font-ui);
+  font-size: 0.72rem;
+}
+
+.md-code-output__summary {
+  margin-top: 0.4em;
+}
+
+.md-code-output__clear {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.3rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-tab-text);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ── Callouts ── */
+
+.md-reader .md-callout {
+  --callout-rgb: var(--md-callout-blue);
+
+  margin: 1em 0;
+  overflow: hidden;
+
+  background: rgba(var(--callout-rgb), 0.1);
+  border: 1px solid rgba(var(--callout-rgb), 0.35);
+  border-left: 4px solid rgb(var(--callout-rgb));
+  border-radius: var(--size-radius-sm);
+  color: var(--color-tab-text-active);
+}
+
+.md-reader .md-callout--cyan {
+  --callout-rgb: var(--md-callout-cyan);
+}
+
+.md-reader .md-callout--green {
+  --callout-rgb: var(--md-callout-green);
+}
+
+.md-reader .md-callout--orange {
+  --callout-rgb: var(--md-callout-orange);
+}
+
+.md-reader .md-callout--red {
+  --callout-rgb: var(--md-callout-red);
+}
+
+.md-reader .md-callout--purple {
+  --callout-rgb: var(--md-callout-purple);
+}
+
+.md-reader .md-callout--gray {
+  --callout-rgb: var(--md-callout-gray);
+}
+
+.md-reader .md-callout__title {
+  padding: 0.5em 1em;
+
+  color: rgb(var(--callout-rgb));
+  font-weight: 600;
+}
+
+.md-reader summary.md-callout__title {
+  cursor: pointer;
+}
+
+.md-reader .md-callout__body {
+  padding: 0 1em;
+}
+
+.md-reader .md-callout__body > :first-child {
+  margin-top: 0;
+}
+
+.md-reader .md-callout__body > :last-child {
+  margin-bottom: 0.6em;
+}
+
+/* ── Highlights, find ── */
+
+/* A highlight is drawn from a stored text range, not wrapped in an element, so the note's own markup is
+   never touched. `multiply` isn't available to `::highlight()`; the alpha keeps the text readable. */
+::highlight(portalogia-md-find) {
+  background-color: rgba(var(--color-accent-rgb), 0.35);
+}
+
+::highlight(portalogia-md-find-current) {
+  background-color: rgba(var(--color-accent-rgb), 0.75);
+}
+
+/* ── Annotations (pen strokes, comments) ── */
+
+/* Covers the whole note. Pointer events pass through unless the pen or comment tool is on, so the note
+   still scrolls, selects and follows links. */
+.md-annot {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+.md-annot--pen,
+.md-annot--comment {
+  pointer-events: auto;
+}
+
+.md-annot__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+
+  pointer-events: none;
+}
+
+/* The strokes are in `em`s, which stretch with zoom, so the stroke width is pinned to screen pixels instead. */
+.md-annot__line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Wider, invisible copy of each stroke so it's easy to hover and click. */
+.md-annot__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  vector-effect: non-scaling-stroke;
+}
+
+.md-annot--pen .md-annot__hit {
+  pointer-events: stroke;
+}
+
+.md-annot--pen .md-annot__stroke:hover .md-annot__line {
+  stroke-opacity: 0.4;
+}
+
+/* Comment dot and box — same look as the browser tabs' (`tabComments.ts`) and the PDF viewer's. The dot
+   stays clickable with any tool, so a saved comment can always be opened. */
+.md-annot__dot {
+  position: absolute;
+  z-index: 5;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  transition: box-shadow 120ms ease;
+
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.md-annot__dot:hover {
+  box-shadow:
+    0 0 0 5px var(--ns-comment-glow, rgba(66, 133, 244, 0.55)),
+    0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.md-annot__box {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  width: 220px;
+  padding: 6px;
+
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+
+  font:
+    13px/1.4 system-ui,
+    -apple-system,
+    sans-serif;
+  color: #1b1b1b;
+
+  pointer-events: auto;
+  user-select: text;
+}
+
+.md-annot__input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Printing (PDF export) ── */
+/* `TabManager.exportMarkdown` flips the page into its print layout (`data-printing`), then prints it. The
+   note is drawn full length on white, in the light colours whatever the theme, with none of the page's
+   own controls, and the scroll containers un-clipped so the whole note flows across pages. */
+
+@page {
+  size: letter;
+  margin: 18mm;
+}
+
+@media print {
+  :root,
+  :root[data-theme='dark'],
+  :root[data-theme='light'] {
+    --color-panel-bg: #ffffff;
+    --color-tab-text-active: #1a1a1a;
+    --color-tab-text: #444444;
+    --color-chrome-border: #d7d9db;
+    --color-address-placeholder: #6f7479;
+    --md-code-bg: #f3f4f6;
+    --md-code-color: #8a3b00;
+    --md-quote-border: #c4c7ca;
+    --md-syntax-keyword: #a626a4;
+    --md-syntax-string: #50a14f;
+    --md-syntax-number: #b76b01;
+    --md-syntax-function: #4078f2;
+    --md-syntax-type: #c18401;
+    --md-syntax-comment: #8a8d91;
+  }
+
+  html,
+  body,
+  #root,
+  .md-viewer,
+  .md-viewer__scroll,
+  .md-viewer__content {
+    display: block;
+    height: auto;
+    overflow: visible;
+
+    background: #ffffff;
+    color: #1a1a1a;
+  }
+
+  .md-viewer__reader-host {
+    max-width: none;
+    padding: 0;
+  }
+
+  .side-panel-toggle,
+  .side-panel,
+  .md-status,
+  .md-code-controls,
+  .md-code-output__clear,
+  .md-viewer__editor {
+    display: none !important;
+  }
+
+  .md-reader pre.md-code {
+    white-space: pre-wrap;
+    break-inside: avoid;
+  }
+
+  .md-reader pre.md-code code {
+    white-space: pre-wrap;
+  }
+
+  .md-reader h1,
+  .md-reader h2,
+  .md-reader h3 {
+    break-after: avoid;
+  }
+
+  .md-reader table,
+  .md-reader .md-callout,
+  .md-reader img {
+    break-inside: avoid;
+  }
+
+  /* Colours (highlights, strokes, callouts) must survive into the PDF. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ── Editor right-click menu and link box ── */
+
+.md-menu,
+.md-link {
+  position: fixed;
+  z-index: 50;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+
+  font-family: var(--md-font-ui);
+  font-size: var(--size-font-md);
+  color: var(--color-tab-text-active);
+}
+
+.md-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
+  padding: var(--size-spacing-xs);
+}
+
+.md-menu__item {
+  position: relative;
+  padding: 6px var(--size-spacing-md);
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.md-menu__item:hover {
+  background: var(--color-button-hover-bg);
+}
+
+/* The row's tooltip (its name and keyboard command), in the same look as the chrome's. It opens to the right of the menu, or to the left when there's no room. */
+.md-menu__item:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  z-index: 60;
+  padding: 4px 8px;
+
+  background: var(--color-tooltip-bg);
+  /* Outlined in the accent, as every tooltip is. */
+  border: 1px solid var(--color-tooltip-border);
+  border-radius: var(--size-radius-sm);
+  transform: translateY(-50%);
+
+  color: var(--color-tooltip-text);
+  font-size: var(--size-font-sm);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.md-menu--flip .md-menu__item:hover::after {
+  left: auto;
+  right: calc(100% + 10px);
+}
+
+.md-link {
+  width: 18rem;
+  padding: var(--size-spacing-sm);
+}
+
+.md-link__label {
+  margin-bottom: var(--size-spacing-xs);
+
+  color: var(--color-tab-text);
+  font-size: var(--size-font-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-link__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--size-spacing-sm);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-address-text);
+  font: inherit;
+}
+
+.md-link__input:focus {
+  outline: none;
+  border-color: var(--color-address-border-focus);
+  box-shadow: var(--shadow-focus-glow);
+}
+
+.md-link__list {
+  margin: var(--size-spacing-xs) 0 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.md-link__option {
+  display: block;
+  width: 100%;
+  padding: 4px var(--size-spacing-sm);
+  overflow: hidden;
+
+  background: transparent;
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.md-link__option:hover,
+.md-link__option--selected {
+  background: var(--color-button-hover-bg);
+}
+
+/* ── Table size box ── */
+/* The Table button's box (`TablePopup`): the link box's panel and inputs, with two narrow number boxes side by side
+   and a Create button under them. */
+
+.md-table-box {
+  width: auto;
+}
+
+.md-table-box__fields {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--size-spacing-sm);
+}
+
+.md-table-box__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.md-table-box__name {
+  color: var(--color-tab-text);
+  font-size: var(--size-font-sm);
+}
+
+.md-table-box__input {
+  width: 5.5rem;
+
+  font-variant-numeric: tabular-nums;
+}
+
+/* The "×" between the two boxes, level with their text. */
+.md-table-box__by {
+  padding-bottom: 5px;
+
+  color: var(--color-tab-text);
+}
+
+.md-table-box__create {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: var(--size-spacing-sm);
+
+  background: var(--color-accent-text);
+  border: none;
+  border-radius: var(--size-radius-sm);
+
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.md-table-box__create:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.md-table-box__create:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,0 +1,1 @@
+export { TabSearchPopup } from './TabSearchPopup';

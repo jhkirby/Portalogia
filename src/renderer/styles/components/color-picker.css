@@ -1,0 +1,138 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-09-25 */
+
+/* ── COLOR PICKER ─────────────────────────────────────────────────────── */
+/* `ColorPicker`'s dropdown's whole page (`color-picker.html`) — a
+   dedicated `WebContentsView` the main process sizes to
+   `COLOR_PICKER_PANEL_WIDTH_PX`×`COLOR_PICKER_PANEL_HEIGHT_PX` and stacks
+   above the active tab's view (see `ColorPickerOverlay`), rather than
+   chrome-drawn HTML the way `BookmarkPopup` is. Its bounds are always
+   exactly that fixed size, so — same reasoning as
+   `suggestions-overlay.css` — there's no `position: fixed`, no backdrop,
+   and no box-shadow (it would just get clipped at the view's own tight
+   edge). Corners are CSS-rounded over a transparent view, so the border
+   stays connected around them (see `ColorPickerOverlay`'s constructor). */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* This page's own document never inherits `app.css`'s `html, body`
+     font-family — that rule only reaches the chrome's page (`index.html`).
+     Must stay in sync with it, same relationship this file's colors have
+     with `colors.css` via `data-theme` (see `color-picker-main.tsx`). */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#root {
+  height: 100%;
+}
+
+.color-picker__panel {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-spacing-sm);
+  padding: var(--size-spacing-md);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  /* Drawn here over a transparent view, so the border curves round its corners. */
+  border-radius: var(--size-radius-sm);
+
+  cursor: default;
+}
+
+/* Fixed-pixel swatches (not `1fr`) so this grid's own height is exact,
+   not fractional — `COLOR_PICKER_PANEL_HEIGHT_PX` (@shared/constants) is
+   arithmetic done against this file's own numbers (192 + 8 + 68 + 8 + 28
+   + padding + border = 330), and a `1fr` column would round differently
+   than JS's math expects. Centered rather than stretched to the panel's
+   own width for the same reason `ADDRESS_SUGGESTION_ROW_HEIGHT_PX` is a
+   fixed constant rather than measured — one less thing that could drift. */
+.color-picker__recents {
+  display: grid;
+  grid-template-columns: repeat(5, 32px);
+  justify-content: center;
+  gap: var(--size-spacing-xs);
+}
+
+.color-picker__recent {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+
+  background: var(--color-button-hover-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 50%;
+
+  cursor: pointer;
+}
+
+.color-picker__recent:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.color-picker__recent:disabled {
+  /* An empty slot — no color has filled it yet — shown as a plain hollow
+     ring rather than a swatch, and not interactive. */
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+
+.color-picker__fields {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-xs);
+}
+
+.color-picker__field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 2px;
+  height: 28px;
+  padding: 0 var(--size-spacing-xs);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+}
+
+.color-picker__field:focus-within {
+  border-color: var(--color-address-border-focus);
+}
+
+/* Fits "RRGGBB" (6 hex digits) where the RGB fields only need 3 — wider
+   so the flex row doesn't crowd the field that actually needs the room. */
+.color-picker__field--hex {
+  flex: 1.6;
+}
+
+.color-picker__field-label {
+  font-size: var(--size-font-sm);
+  color: var(--color-address-placeholder);
+}
+
+.color-picker__field-input {
+  width: 100%;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+  outline: none;
+
+  font-size: var(--size-font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-address-text);
+}

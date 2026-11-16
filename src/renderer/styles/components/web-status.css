@@ -1,0 +1,88 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── WEB PAGE STAT BAR ────────────────────────────────────────────────── */
+/* Along the bottom of `.tab-content`, in the strip main keeps free below a web
+   page (`STATUS_BAR_HEIGHT_PX`). Looks like the note's and the PDF's bars
+   (`.md-status`, `.pdf-status`), which those pages draw themselves. Below the
+   popups (`z-index: 100`), which cover the whole tab area, this strip included. */
+
+.web-status {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--size-spacing-md) * 1.5);
+  height: var(--size-status-bar-height);
+  padding: 0 var(--size-spacing-md);
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background: var(--color-chrome-bg);
+  border-top: 1px solid var(--color-chrome-border);
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.web-status__item {
+  flex: none;
+}
+
+/* Where the pointer is (`x×y`): first, in steady-width digits so the bar doesn't shuffle as it moves. */
+.web-status__pointer {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
+}
+
+/* How much of the document is in view (`top%–bottom%`), right after the pointer, steady-width for the same reason. */
+.web-status__scroll {
+  min-width: 9ch;
+
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus and Hovering together, set off from the counts by a thin vertical line; there only while one of them is. */
+.web-status__elements {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--size-spacing-md);
+  min-width: 0;
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+
+  border-left: 1px solid var(--color-chrome-border);
+}
+
+/* The selection's own counts, kept together as one group, in the bar's own colour. */
+.web-status__selection {
+  display: flex;
+  flex: none;
+  gap: var(--size-spacing-md);
+  /* A thin vertical line sets the selection's counts off from the rest; it's there only while they are. */
+  padding-left: calc(var(--size-spacing-md) * 1.5);
+  border-left: 1px solid var(--color-chrome-border);
+}
+
+/* The focused and hovered elements: the fields that may be cut short, so they shrink and end in an ellipsis. The
+   focused one keeps to its own size; the hovered one takes whatever room is left. */
+.web-status__element {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  color: var(--color-address-placeholder);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+.web-status__element--hovered {
+  flex: 1 1 auto;
+}

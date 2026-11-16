@@ -1,0 +1,192 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── FIND BAR ─────────────────────────────────────────────────────────── */
+/* `find.html`'s whole page — the find bar's own small `WebContentsView` (see
+   `FindOverlay`), sized by main to exactly `FIND_BAR_WIDTH_PX` ×
+   `FIND_BAR_HEIGHT_PX` (shared/constants.ts), so there's nothing to position
+   here, only to lay out. A shadow would be clipped at the view's own edge, so
+   the panel is set apart by its border instead. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+
+  /* Separate document; doesn't inherit `app.css`'s font — keep in sync. */
+  font-family:
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background: var(--color-panel-bg);
+  color: var(--color-tab-text-active);
+}
+
+#root {
+  height: 100%;
+}
+
+.find-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0 var(--size-spacing-sm);
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+}
+
+.find-bar__input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  margin-right: 4px;
+  padding: 0 var(--size-spacing-sm);
+  box-sizing: border-box;
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-md);
+  color: var(--color-address-text);
+
+  /* Its hover and focus borders fade in and out rather than switching at once. */
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 180ms ease-out;
+}
+
+.find-bar__input::placeholder {
+  color: var(--color-address-placeholder);
+}
+
+.find-bar__input:hover {
+  border-color: var(--color-address-border-hover);
+}
+
+.find-bar__input:focus {
+  outline: none;
+  border-color: var(--color-address-border-focus);
+  box-shadow: var(--shadow-focus-glow);
+}
+
+/* A regular expression that doesn't compile. */
+.find-bar__input--invalid,
+.find-bar__input--invalid:focus {
+  border-color: #d93025;
+}
+
+/* A focused pattern that doesn't compile glows red, not in the accent. */
+.find-bar__input--invalid:focus {
+  box-shadow:
+    0 0 3px rgba(217, 48, 37, 0.75),
+    0 0 10px rgba(217, 48, 37, 0.45);
+}
+
+/* The three switches (Aa, ab, .*) and the arrows share one button look. */
+.find-bar__switch,
+.find-bar__step,
+.find-bar__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+.find-bar__switch:hover,
+.find-bar__step:hover:not(:disabled),
+.find-bar__close:hover {
+  color: var(--color-tab-text-active);
+}
+
+/* On: the app's accent — whatever the color picker has chosen. */
+.find-bar__switch[aria-pressed='true'] {
+  background: rgba(var(--color-accent-rgb), 0.3);
+  border-color: rgb(var(--color-accent-rgb));
+  color: var(--color-tab-text-active);
+}
+
+/* "ab" with its underline, VS Code's mark for Match Whole Word. */
+.find-bar__switch--word {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.find-bar__step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.find-bar__close {
+  font-size: 16px;
+}
+
+/* The fraction: an editable current occurrence over the total. */
+.find-bar__count {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 3px;
+  min-width: 78px;
+  margin: 0 var(--size-spacing-xs);
+
+  font-size: var(--size-font-sm);
+  color: var(--color-tab-text);
+  white-space: nowrap;
+}
+
+.find-bar__count--invalid {
+  color: #d93025;
+}
+
+.find-bar__numerator {
+  box-sizing: content-box;
+  min-width: 1ch;
+  height: 20px;
+  padding: 0 3px;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  font: inherit;
+  text-align: right;
+  color: var(--color-tab-text-active);
+}
+
+/* Hover shows the grey border; the accent is for when the cursor is inside — as in the PDF page box. */
+.find-bar__numerator:hover:not(:disabled) {
+  border-color: var(--color-chrome-border);
+}
+
+.find-bar__numerator:focus {
+  outline: none;
+  border-color: var(--color-accent-text);
+}
+
+.find-bar__numerator:disabled {
+  color: var(--color-tab-text);
+}

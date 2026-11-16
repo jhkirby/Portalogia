@@ -1,0 +1,101 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-06 */
+
+/* ── WORKSPACE EDITOR ─────────────────────────────────────────────────── */
+/* `WorkspaceEditPopup` reuses `bookmark-popup.css`'s backdrop, panel, header,
+   input and button rules, so it looks like the app's other popups; this file
+   only adds what is its own: the name row, the icon dropdown, the wheel. */
+
+/* Narrower than the bookmark popup's own `min(24rem, 90vw)`: it only has to
+   fit the 192px wheel and a name beside the icon button. */
+.workspace-editor {
+  width: min(22rem, 90vw);
+}
+
+.workspace-editor__name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-spacing-sm);
+}
+
+.workspace-editor__name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The dropdown's anchor: the list below is positioned against this. */
+.workspace-editor__icon-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.workspace-editor__icon-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 var(--size-spacing-sm);
+
+  background: var(--color-address-bg);
+  border: 1px solid var(--color-address-border);
+  border-radius: var(--size-radius-sm);
+
+  color: var(--color-address-placeholder);
+
+  cursor: pointer;
+}
+
+.workspace-editor__icon-button:hover,
+.workspace-editor__icon-button[aria-expanded='true'] {
+  border-color: var(--color-address-border-focus);
+}
+
+.workspace-editor__chevron {
+  font-size: 10px;
+}
+
+/* Finite height: it scrolls rather than growing past the popup. Six columns
+   of 32px cells, plus padding and the scrollbar. */
+.workspace-editor__icon-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 2px;
+  box-sizing: content-box;
+  max-height: 176px;
+  padding: var(--size-spacing-xs);
+  overflow-y: auto;
+
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--size-radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.workspace-editor__icon-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--size-radius-sm);
+
+  cursor: pointer;
+}
+
+.workspace-editor__icon-option:hover {
+  background: var(--color-button-hover-bg);
+}
+
+.workspace-editor__icon-option--selected {
+  border-color: var(--color-accent-text);
+}

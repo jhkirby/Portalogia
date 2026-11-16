@@ -1,0 +1,26 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── MARKDOWN TOOLBAR ─────────────────────────────────────────────────── */
+/* The Markdown tab's controls inside the chrome's main toolbar, in the slot a
+   browser tab gives to NavControls + AddressBar. Looks like `PdfToolbar`'s;
+   the bar with the star and file name is `FileBar` (`file-bar.css`). The
+   View/Edit and Formatted/Raw buttons are in the Tools sidebar. */
+
+.markdown-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: var(--size-spacing-sm);
+  /* No smaller than its own controls: in a narrow window the page tools beside it scroll instead (`.page-actions`). */
+  min-width: min-content;
+}
+
+.markdown-toolbar__error {
+  flex-shrink: 0;
+
+  font-size: var(--size-font-sm);
+  color: #d93025;
+}

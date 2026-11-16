@@ -1,0 +1,233 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* `useTheme` sets `data-theme` on `<html>` before first paint (see its
+   `useLayoutEffect`) reflecting either a stored choice or, on first ever
+   launch, the OS's own light/dark preference — so by the time anything
+   renders, one of these two blocks always applies; there's no third,
+   `prefers-color-scheme`-driven block left to fall back to. */
+/* `--color-accent-rgb` is every theme's single source for "the app's
+   blue" — `useAccentColor` overwrites it with an inline style on this
+   same element once `ColorPicker` has anything to say (persisted, so a
+   relaunch keeps it too), which beats a selector's specificity in either
+   theme. The literal triplets below are only what's on screen before
+   that hook's first paint (and if storage is ever unavailable) — the
+   light theme's original accent blue, Google's Material "blue 600". */
+:root {
+  --color-accent-rgb: 26, 115, 232;
+  /* A focused search field's border glows in the accent, in either theme: two shadows, a tight bright one over a
+     wide soft one, so the glow hugs the border rather than haze around it. */
+  --shadow-focus-glow:
+    0 0 3px rgba(var(--color-accent-rgb), 0.75),
+    0 0 10px rgba(var(--color-accent-rgb), 0.45);
+}
+
+/* The browser's own native text-selection highlight (dragging over a
+   workspace name, an address-bar suggestion's URL, anything selectable
+   in this chrome) — tied to the same accent rather than left at
+   Chromium's default blue, same reasoning as every other `--color-
+   accent-rgb`-derived token above. Every one of this app's own renderer
+   documents loads this file, so this one rule covers all of them; it has
+   no effect on a tab's own page content, which is a separate document
+   entirely — see `applySelectionAccent` (main process) for that half. */
+::selection {
+  background-color: rgba(var(--color-accent-rgb), 0.4);
+}
+
+/* No focus ring on the app's own pages: Chromium's default (`outline: auto`) rings a clicked button in white and
+   colour, which the app never draws. At no specificity, so a component's own focus style (an input's accent border)
+   still wins. A web page keeps its ring, coloured with the accent by main (`pageSelectionAccent.ts`). */
+:where(:focus, :focus-visible) {
+  outline: none;
+}
+
+/* A light/dark switch fades (`themeFade.ts` puts this class on for its length): every colour transitions, on every
+   element, over `THEME_FADE_MS` (600ms). Live, so whatever moves on the page keeps moving through it. */
+:root.theme-fading,
+:root.theme-fading *,
+:root.theme-fading *::before,
+:root.theme-fading *::after {
+  transition:
+    background-color 600ms ease-in-out,
+    color 600ms ease-in-out,
+    border-color 600ms ease-in-out,
+    outline-color 600ms ease-in-out,
+    fill 600ms ease-in-out,
+    stroke 600ms ease-in-out,
+    box-shadow 600ms ease-in-out !important;
+}
+
+/* The chrome's light/dark switch (`applyTheme`'s `snapshot`): the old theme's picture and the live page in the new
+   one crossfade on the compositor, over `THEME_FADE_MS`. The pointer passes through to the live page beneath, so a
+   click mid-fade still lands. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 600ms;
+  animation-timing-function: ease-in-out;
+}
+
+:root[data-theme='light'] {
+  --color-chrome-bg: #f1f3f4;
+  /* The titlebar battery's fill: plugged in, 30% or less, 10% or less. Darker than the dark theme's, to read on grey. */
+  --color-battery-charging: #188038;
+  --color-battery-low: #e37400;
+  --color-battery-critical: #d93025;
+  /* Text that warns of something that can't be undone (Clear History's confirmed "DELETE"). */
+  --color-danger-text: #d93025;
+  /* The window drag strip above the tabs, while it's dragging the window. */
+  --color-grip-active-bg: #c2c6ca;
+  --color-chrome-border: #d7d9db;
+
+  --color-tab-bg: transparent;
+  --color-tab-bg-active: #ffffff;
+  --color-tab-text: #444444;
+  --color-tab-text-active: #1a1a1a;
+  --color-tab-hover-bg: #e4e6e7;
+  --color-close-hover-bg: rgba(0, 0, 0, 0.18);
+  --color-tab-dragging-bg: rgba(var(--color-accent-rgb), 0.35);
+
+  --color-address-bg: #ffffff;
+  --color-address-border: #d7d9db;
+  --color-address-border-hover: #80868b; /* darker grey on hover (light theme) */
+  --color-address-border-focus: rgb(var(--color-accent-rgb));
+  --color-address-text: #1a1a1a;
+  --color-address-placeholder: #8a8d91;
+
+  --color-button-hover-bg: #e4e6e7;
+  /* Hovering a button that is already filled (switched on): a shade past the hover grey. */
+  --color-button-pressed-hover-bg: #d3d6d8;
+  --color-button-disabled-text: #b7b9bb;
+  --color-scrollbar-thumb: #c4c7ca;
+  --color-scrollbar-thumb-hover: #9aa0a6;
+  --color-scrollbar-thumb-active: #6f7479;
+
+  --color-spinner-track: #d7d9db;
+  --color-spinner-active: rgb(var(--color-accent-rgb));
+
+  --color-panel-bg: #ffffff;
+  --color-panel-border: #d7d9db;
+  /* An empty note or PDF tab, inside its frame: the same as a browser tab's blank home page (`homePage.ts`). */
+  --color-blank-page-bg: #ffffff;
+  --color-overlay-backdrop: rgba(32, 33, 36, 0.35);
+  /* A pale tint of the accent rather than a fixed blue, so a selected
+     row/pressed button still reads as "accent-colored" no matter what
+     color `ColorPicker` lands on. */
+  --color-selection-bg: color-mix(in srgb, rgb(var(--color-accent-rgb)) 12%, white);
+  --color-accent-text: rgb(var(--color-accent-rgb));
+
+  /* Tooltips: white on the light theme, dark on the dark, each outlined in the accent (`--color-tooltip-border`). */
+  --color-tooltip-bg: #ffffff;
+  --color-tooltip-text: #202124;
+  --color-tooltip-border: var(--color-accent-text);
+
+  /* A hovered sidebar or nav button's glow (`.hover-glow`): a light glow can't show on this theme's light chrome, so
+     it's the accent, softened. */
+  --color-hover-glow: rgba(var(--color-accent-rgb), 0.55);
+}
+
+:root[data-theme='dark'] {
+  --color-chrome-bg: #202124;
+  /* The titlebar battery's fill: plugged in, 30% or less, 10% or less. */
+  --color-battery-charging: #81c995;
+  --color-battery-low: #f29900;
+  --color-battery-critical: #f28b82;
+  /* Text that warns of something that can't be undone (Clear History's confirmed "DELETE"). */
+  --color-danger-text: #f28b82;
+  /* The window drag strip above the tabs, while it's dragging the window. */
+  --color-grip-active-bg: #4a4d52;
+  --color-chrome-border: #3c4043;
+
+  --color-tab-bg: transparent;
+  --color-tab-bg-active: #35363a;
+  --color-tab-text: #bdc1c6;
+  --color-tab-text-active: #e8eaed;
+  --color-tab-hover-bg: #3c4043;
+  --color-close-hover-bg: rgba(255, 255, 255, 0.22);
+  --color-tab-dragging-bg: rgba(var(--color-accent-rgb), 0.35);
+
+  --color-address-bg: #303134;
+  --color-address-border: #5f6368;
+  --color-address-border-hover: #80868b; /* lighter grey on hover (dark theme) */
+  --color-address-border-focus: rgb(var(--color-accent-rgb));
+  --color-address-text: #e8eaed;
+  --color-address-placeholder: #9aa0a6;
+
+  --color-button-hover-bg: #3c4043;
+  --color-button-pressed-hover-bg: #4d5156;
+  --color-button-disabled-text: #5f6368;
+  --color-scrollbar-thumb: #4a4d51;
+  --color-scrollbar-thumb-hover: #6b6f74;
+  --color-scrollbar-thumb-active: #9a9ea3;
+
+  --color-spinner-track: #5f6368;
+  --color-spinner-active: rgb(var(--color-accent-rgb));
+
+  --color-panel-bg: #2d2e31;
+  --color-panel-border: #5f6368;
+  --color-blank-page-bg: #202124;
+  --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
+  /* Neutral gray rather than an accent tint, deliberately — unlike the
+     light theme's pale-blue selection wash, a pale tint of an arbitrary
+     accent color reads poorly against this theme's dark panels at low
+     opacity, so dark selection stays theme-neutral instead of tracking
+     the picker. */
+  --color-selection-bg: #3c4043;
+  --color-accent-text: rgb(var(--color-accent-rgb));
+
+  --color-tooltip-bg: #2a2b2e;
+  --color-tooltip-text: #e8eaed;
+  --color-tooltip-border: var(--color-accent-text);
+
+  /* A hovered sidebar or nav button's glow (`.hover-glow`): the same soft white as the workspaces' shimmer. */
+  --color-hover-glow: rgba(255, 255, 255, 0.55);
+}
+
+/* ── MARKDOWN NOTES ───────────────────────────────────────────────────── */
+/* What the Markdown tab's page (`markdown.html`) draws a note with, beyond the chrome tokens above:
+   the callout families, code, and the syntax colours of code blocks and of the editor. Printing swaps
+   in the light values whatever the theme (see `markdown-viewer.css`), so a PDF is always dark on white. */
+:root[data-theme='light'] {
+  --md-code-bg: #f3f4f6;
+  --md-code-color: #8a3b00;
+  --md-quote-border: #c4c7ca;
+  --md-math-color: #7a3fb0;
+  --md-callout-blue: 8, 109, 221;
+  --md-callout-cyan: 0, 150, 160;
+  --md-callout-green: 8, 150, 80;
+  --md-callout-orange: 224, 118, 0;
+  --md-callout-red: 216, 50, 60;
+  --md-callout-purple: 120, 82, 210;
+  --md-callout-gray: 110, 115, 120;
+  --md-syntax-keyword: #a626a4;
+  --md-syntax-string: #50a14f;
+  --md-syntax-number: #b76b01;
+  --md-syntax-function: #4078f2;
+  --md-syntax-type: #c18401;
+  --md-syntax-comment: #8a8d91;
+}
+
+:root[data-theme='dark'] {
+  --md-code-bg: #26272a;
+  --md-code-color: #f0a875;
+  --md-quote-border: #5f6368;
+  --md-math-color: #c7a0f5;
+  --md-callout-blue: 78, 160, 255;
+  --md-callout-cyan: 40, 200, 210;
+  --md-callout-green: 60, 200, 120;
+  --md-callout-orange: 255, 160, 60;
+  --md-callout-red: 255, 100, 110;
+  --md-callout-purple: 170, 135, 255;
+  --md-callout-gray: 160, 165, 170;
+  --md-syntax-keyword: #d19cf5;
+  --md-syntax-string: #98c379;
+  --md-syntax-number: #d19a66;
+  --md-syntax-function: #61afef;
+  --md-syntax-type: #e5c07b;
+  --md-syntax-comment: #7f848e;
+}

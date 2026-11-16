@@ -1,0 +1,48 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-29 */
+
+/* ── WINDOW CONTROLS ──────────────────────────────────────────────────── */
+/* Lives inside `.titlebar` (see app.css), which is the frameless window's
+   drag region — these buttons opt back out of dragging so a click lands
+   on them instead of moving the window. */
+
+.window-controls {
+  /* Positioned and above the titlebar's drag strip (z-index 1), which also
+     reaches the top of this corner. */
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+
+  -webkit-app-region: no-drag;
+}
+
+.window-controls__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  padding: 0;
+
+  background: transparent;
+  border: none;
+
+  color: var(--color-tab-text);
+
+  cursor: pointer;
+}
+
+/* Hovered, the buttons glow (`.hover-glow`) rather than filling in. Close glows red in either theme, the OS
+   convention of a red close button, so it stays distinct from the other two. */
+.window-controls__button--close {
+  --color-hover-glow: rgba(232, 17, 35, 0.85);
+}
+
+.window-controls__button--close.hover-glow:hover {
+  color: #ff4d5a;
+}
+

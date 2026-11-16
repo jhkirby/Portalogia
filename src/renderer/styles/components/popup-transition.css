@@ -1,0 +1,107 @@
+/* Project: Portalogia
+   Owner: Joshua H. Kirby
+   Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+   Last Modified: 2026-10-22 */
+
+/* ── POPUP TRANSITION ─────────────────────────────────────────────────── */
+/* How a popup over the page comes and goes (see `PopupTransition`). Every such
+   popup shares the same three layers: the still of the page
+   (`.bookmark-popup__preview`), the tinting scrim, and the panel (its
+   `role="dialog"`), so they're animated here by those, not per popup. */
+
+/* No box of its own: the popup inside lays out against `.tab-content`. */
+.popup-transition {
+  display: contents;
+}
+
+/* Fade and blur in: the still starts as the page looked (sharp, unscaled) and
+   softens into the backdrop, while the tint fades up over it. Closing runs it
+   back, sharpening into the page, so the live page that then returns lines up. */
+.popup-transition .bookmark-popup__preview {
+  animation: popup-preview-in 220ms ease-out both;
+}
+
+.popup-transition .bookmark-popup__scrim {
+  animation: popup-scrim-in 220ms ease-out both;
+}
+
+/* Grows in from a little smaller, as if coming forward. */
+.popup-transition [role='dialog'] {
+  animation: popup-panel-in 200ms cubic-bezier(0.2, 0.8, 0.3, 1.1) both;
+}
+
+.popup-transition[data-closing] .bookmark-popup__preview {
+  animation: popup-preview-out 200ms ease-in both;
+}
+
+.popup-transition[data-closing] .bookmark-popup__scrim {
+  animation: popup-scrim-out 200ms ease-in both;
+}
+
+/* Its end is when the popup has gone (`PopupTransition`'s `EXIT_ANIMATION`); as
+   long as the slowest layer, so nothing is cut short. */
+.popup-transition[data-closing] [role='dialog'] {
+  animation: popup-panel-out 200ms ease-in both;
+}
+
+/* Nothing in a popup on its way out takes a click. */
+.popup-transition[data-closing] * {
+  pointer-events: none;
+}
+
+@keyframes popup-preview-in {
+  from {
+    filter: blur(0);
+    transform: scale(1);
+  }
+  to {
+    filter: blur(20px);
+    transform: scale(1.1);
+  }
+}
+
+@keyframes popup-preview-out {
+  from {
+    filter: blur(20px);
+    transform: scale(1.1);
+  }
+  to {
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes popup-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes popup-scrim-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes popup-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes popup-panel-out {
+  to {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+/* Still run (instantly), since a closing popup goes away when its animation ends. */
+@media (prefers-reduced-motion: reduce) {
+  .popup-transition .bookmark-popup__preview,
+  .popup-transition .bookmark-popup__scrim,
+  .popup-transition [role='dialog'] {
+    animation-duration: 1ms;
+  }
+}
