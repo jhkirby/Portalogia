@@ -22,12 +22,12 @@ Those rows are the coverage gaps.
 | F7 Ad blocking and tracking protection | 4 | 4 | 0 |
 | F8 Annotation tools | 7 | 0 | 7 |
 | F9 PDF viewer | 7 | 0 | 7 |
-| F10 Markdown notes | 11 | 11 | 0 |
+| F10 Markdown notes | 14 | 14 | 0 |
 | F11 Terminal | 2 | 1 | 1 |
 | F12 Window and chrome | 9 | 5 | 4 |
 | F13 Page export | 2 | 0 | 2 |
 | F14 Security and privacy controls | 6 | 2 | 4 |
-| **Total** | **84** | **49** | **35** |
+| **Total** | **87** | **52** | **35** |
 
 ---
 
@@ -148,6 +148,9 @@ own versions. Marks are saved by the app, never written into the page or file.
 | F10.9 | **Run code blocks** (JavaScript, Python, shell, PowerShell, Ruby, Go and more) after a consent prompt. Shows output and exit code, and stops runaway scripts. | UT-MDM-17, UT-MDM-18, UT-MDM-19, UT-MDM-20 |
 | F10.10 | **LaTeX autocomplete** inside `$…$`, skipping code and escaped dollars, with common commands first. | UT-MDM-21, UT-MDM-22 |
 | F10.11 | **Export a note** as PDF, Markdown or plain text. | UT-MD-14, UT-MD-15, UT-MD-16, UT-MD-17, UT-MD-18 |
+| F10.12 | **Formatted editing.** Edit + Formatted edits the note as a document (ProseMirror): no Markdown markers, no highlighted caret line, and nothing typed turns into formatting. Blocks that weren't edited are written back byte for byte; edited ones keep the note's own style. | UT-MDRT (markdownRoundTrip.spec.ts), E2E-MDE-01, E2E-MDE-02 |
+| F10.13 | **Block tools.** Heading (H1–H6 picker), bulleted, numbered and check lists, callouts (type picker), divider, code block, LaTeX block, table, picture and raw HTML, from the Tools sidebar, the Format menu, the right-click menu and Google Docs–style shortcuts. Each also works on raw text. | UT-MDFT (markdownFormattedTools.spec.ts), E2E-MDE-02, E2E-MDE-03 |
+| F10.14 | **Element controls.** A heading's size bar; a link's edit popup (web address or note, heading, alias); a table's row, column, alignment and delete bar with drag-selected cells in the accent colour; a callout's type, title and fold; a formula's or HTML block's source box with live preview; a picture's drag-to-resize, change and remove. Pictures picked from anywhere on disk are linked relative to the note and allowed to load. | UT-MDFT, E2E-MDE-03 |
 
 > F10.11's tests cover the plain-text conversion only. The PDF and `.md`
 > exports have no test.

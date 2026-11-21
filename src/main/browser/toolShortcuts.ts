@@ -1,8 +1,9 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
+import type { MarkdownFormatAction } from '@shared/ipc-contract';
 import type { KeyChord } from './textEditingChords';
 
 /** A key event with the physical key it came from, as Electron's `Input` reports it. */
@@ -69,4 +70,47 @@ export function tabJumpIndex(input: PhysicalKeyChord): number | null {
   }
   const at = TAB_JUMP_CODES.indexOf(input.code);
   return at === -1 ? null : at;
+}
+
+/** Ctrl+Alt + a physical key, in a note being edited, and the block it makes (Google Docs' headings, plus four more). */
+const MARKDOWN_ALT_CODES: Readonly<Record<string, MarkdownFormatAction>> = {
+  Digit0: 'heading0',
+  Digit1: 'heading1',
+  Digit2: 'heading2',
+  Digit3: 'heading3',
+  Digit4: 'heading4',
+  Digit5: 'heading5',
+  Digit6: 'heading6',
+  KeyC: 'callout',
+  KeyD: 'divider',
+  KeyH: 'html',
+  KeyI: 'image',
+};
+
+/** Ctrl+Shift + a physical digit, as in Google Docs: numbered list, bulleted list, checklist. */
+const MARKDOWN_SHIFT_CODES: Readonly<Record<string, MarkdownFormatAction>> = {
+  Digit7: 'orderedList',
+  Digit8: 'bulletList',
+  Digit9: 'taskList',
+};
+
+/**
+ * The note editor's block shortcut a key is, if any: Ctrl+Alt+0–6 (normal
+ * text, headings), Ctrl+Alt+C/D/H/I (callout, divider, raw HTML, picture), and
+ * Ctrl+Shift+7/8/9 (numbered, bulleted, checklist). By physical key, since
+ * Ctrl+Alt is AltGr on many layouts and Shift turns the digits into symbols.
+ * @param input The key event.
+ * @returns The formatting action, or `null`.
+ */
+export function markdownFormatShortcut(input: PhysicalKeyChord): MarkdownFormatAction | null {
+  if (!(input.control || input.meta)) {
+    return null;
+  }
+  if (input.alt && !input.shift) {
+    return MARKDOWN_ALT_CODES[input.code] ?? null;
+  }
+  if (input.shift && !input.alt) {
+    return MARKDOWN_SHIFT_CODES[input.code] ?? null;
+  }
+  return null;
 }

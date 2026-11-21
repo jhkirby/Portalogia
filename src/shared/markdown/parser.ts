@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-11-21
 
 import { Marked, type Token, type Tokens, type TokenizerAndRendererExtension } from 'marked';
 
@@ -80,8 +80,18 @@ export function slugifyHeading(text: string): string {
 }
 
 /** Turns an `![[img.png|300]]` alias into a usable width, or `null` if it isn't a plain number. */
-function embedWidth(alias: string): number | null {
+export function embedWidth(alias: string): number | null {
   return /^\d{1,4}$/.test(alias) ? Number(alias) : null;
+}
+
+/**
+ * Splits an image's alt text from the width Obsidian lets it carry (`![alt|300](path)`).
+ * @param text The alt text as written between `![` and `]`.
+ * @returns The alt text without the width, and the width (or `null` if none was given).
+ */
+export function splitImageAlt(text: string): { readonly alt: string; readonly width: number | null } {
+  const match = /^(.*?)\|(\d{1,4})$/s.exec(text);
+  return match ? { alt: match[1] ?? '', width: Number(match[2]) } : { alt: text, width: null };
 }
 
 /** The extensions that add `[[wikilinks]]`, `$math$` and `==highlights==` to Markdown — shared so the page and main read a note the same way. */
@@ -211,6 +221,13 @@ export function createMarkdownEngine(hooks: MarkdownHooks = {}): MarkdownEngine 
       // Marked's own checkbox has no class, so the page couldn't tell a task item's box from one in a note's raw HTML.
       checkbox({ checked }) {
         return `<input class="md-task" type="checkbox" disabled${checked ? ' checked' : ''}> `;
+      },
+      // `![alt|300](path)` — Obsidian's way of giving an ordinary image a width, which the formatted editor writes.
+      image({ href, title, text }) {
+        const { alt, width } = splitImageAlt(text);
+        const titleAttribute = title ? ` title="${escapeHtml(title)}"` : '';
+        const widthAttribute = width === null ? '' : ` width="${width}"`;
+        return `<img src="${escapeHtml(href)}" alt="${escapeHtml(alt)}"${titleAttribute}${widthAttribute}>`;
       },
       code({ text, lang }) {
         const language = (lang ?? '').trim().split(/\s+/)[0] ?? '';

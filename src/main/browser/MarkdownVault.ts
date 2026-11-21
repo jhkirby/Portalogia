@@ -1,12 +1,12 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-24
+// Last Modified: 2026-11-21
 
 import { lookup } from 'node:dns/promises';
 import { readdir, stat } from 'node:fs/promises';
 import { BlockList, isIP } from 'node:net';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, parse as parsePath, relative, resolve, sep } from 'node:path';
 import type { MarkdownBacklink } from '@shared/ipc-contract';
 import { splitWikiTarget } from '@shared/markdown/parser';
 import { readFileCapped } from '../platform/readFileCapped';
@@ -387,9 +387,15 @@ export async function findBacklinks(currentPath: string): Promise<MarkdownBackli
  * Only picture file types are read, and only up to a size cap.
  * @param currentPath The note showing the picture.
  * @param src The embed's name or the image's path.
+ * @param isPicked Whether the user picked this exact file in the image dialog — the one way a picture outside the
+ *   note's folders may be shown (see `PickedImageStore`).
  * @returns The data URL, or `null` if it can't be read.
  */
-export async function readImageDataUrl(currentPath: string, src: string): Promise<string | null> {
+export async function readImageDataUrl(
+  currentPath: string,
+  src: string,
+  isPicked: (path: string) => boolean = () => false,
+): Promise<string | null> {
   if (!isLocalPathText(src)) {
     return null;
   }
@@ -398,7 +404,7 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
   const roots = await searchRoots(currentPath);
   for (const text of new Set([withoutFragment, safeDecode(withoutFragment)])) {
     const path = resolve(dirname(currentPath), text);
-    if (extname(path).toLowerCase() in IMAGE_MIME_TYPES && isWithinRoots(path, roots) && (await isFile(path))) {
+    if (extname(path).toLowerCase() in IMAGE_MIME_TYPES && (isWithinRoots(path, roots) || isPicked(path)) && (await isFile(path))) {
       found = path;
       break;
     }
@@ -430,6 +436,32 @@ export async function readImageDataUrl(currentPath: string, src: string): Promis
   } catch {
     return null;
   }
+}
+
+/** The picture types the formatted editor's image dialog offers — the ones `readImageDataUrl` can show. */
+export const PICKABLE_IMAGE_EXTENSIONS: readonly string[] = Object.keys(IMAGE_MIME_TYPES).map((extension) => extension.slice(1));
+
+/**
+ * How a note links to a picture the user picked: a path relative to the
+ * note's folder with `/` separators (as Obsidian and the web write it), each
+ * part URL-encoded so spaces and brackets can't end the link early. A picture
+ * on another drive can't be reached relatively, so it gets its absolute path.
+ * @param notePath The note's absolute path.
+ * @param imagePath The picture's absolute path.
+ * @param pathApi The path functions to use (Windows or POSIX) — injected for testing.
+ */
+export function imageLinkFor(
+  notePath: string,
+  imagePath: string,
+  pathApi: Pick<typeof import('node:path'), 'dirname' | 'relative' | 'parse'> = { dirname, relative, parse: parsePath },
+): string {
+  const from = pathApi.dirname(notePath);
+  const sameRoot = pathApi.parse(from).root.toLowerCase() === pathApi.parse(imagePath).root.toLowerCase();
+  const raw = (sameRoot ? pathApi.relative(from, imagePath) : imagePath).replace(/\\/g, '/');
+  return raw
+    .split('/')
+    .map((part, index) => (index === 0 && /^[a-z]:$/i.test(part) ? part : encodeURIComponent(part)))
+    .join('/');
 }
 
 /** How long a web picture may take to arrive before it's given up on. */

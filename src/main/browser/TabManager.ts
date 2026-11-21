@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -100,6 +100,7 @@ import { EMPTY_MARKDOWN_ANNOTATIONS, markdownAnnotationStore } from './MarkdownA
 import { FileLoadProgress } from './FileLoadProgress';
 import { onAnnotationsChanged } from './annotationChanges';
 import { MarkdownDocuments } from './MarkdownDocuments';
+import { PickedImageStore } from './PickedImageStore';
 import {
   MARKDOWN_EXTENSION_PATTERN,
   findBacklinks,
@@ -107,6 +108,8 @@ import {
   isMarkdownPath,
   listNoteNames,
   fetchRemoteImageDataUrl,
+  imageLinkFor,
+  PICKABLE_IMAGE_EXTENSIONS,
   readImageDataUrl,
   resolveLinkTarget,
   resolveWikiLinks,
@@ -124,7 +127,7 @@ import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
 import { editableKindOf, hasEditableFocus } from './editableFocus';
 import { isTextEditingChord, type TextBoxContext } from './textEditingChords';
-import { isToolShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
+import { isToolShortcut, markdownFormatShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -232,6 +235,13 @@ const pdfBacklinkPaths = new Map<string, readonly string[]>();
 
 /** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
 const markdownDocuments = new MarkdownDocuments();
+
+/** The pictures the user picked in a note's image dialog (see `PickedImageStore`), made on first use — `app` must be ready. */
+let pickedImageStore: PickedImageStore | null = null;
+function pickedImages(): PickedImageStore {
+  pickedImageStore ??= new PickedImageStore(join(app.getPath('userData'), 'picked-images.json'));
+  return pickedImageStore;
+}
 
 /** How long the address bar's progress line stays at 100% after a page finishes loading, so it can be read. */
 const LOAD_PROGRESS_HOLD_MS = 1000;
@@ -1575,6 +1585,35 @@ export class TabManager {
   }
 
   /**
+   * The note editor's block shortcuts, Google Docs style: Ctrl+Alt+0–6 (normal text, headings 1–6), Ctrl+Shift+7/8/9
+   * (numbered, bulleted, checklist), and Ctrl+Alt+C/D/H/I (callout, divider, raw HTML, picture). Matched by physical
+   * key, since Ctrl+Alt is AltGr on many layouts and Shift turns the digits into symbols. Only taken while a note is
+   * being edited and has the caret (`formatMarkdown`); otherwise the key goes on as usual.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @param id The tab the key was pressed in.
+   * @returns Whether the key was taken.
+   */
+  private handleMarkdownFormatShortcut(event: Electron.Event, input: Electron.Input, id: string): boolean {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || this.states.get(id)?.kind !== 'markdown') {
+      return false;
+    }
+    const action = markdownFormatShortcut(input);
+    if (action === null) {
+      return false;
+    }
+    if (input.isAutoRepeat) {
+      event.preventDefault();
+      return true;
+    }
+    if (!this.formatMarkdown(id, action)) {
+      return false;
+    }
+    event.preventDefault();
+    return true;
+  }
+
+  /**
    * Runs a formatting command from the Tools sidebar on a Markdown tab's editor. Unlike `formatMarkdown` (a shortcut
    * pressed in the page), the click left the keyboard in the chrome, so the page is given it first; the editor kept
    * its selection, which the command then acts on.
@@ -1688,7 +1727,33 @@ export class TabManager {
   /** An image beside the tab's note as a data URL — see `readImageDataUrl`. */
   public async readMarkdownImage(id: string, src: string): Promise<string | null> {
     const path = markdownDocuments.pathOf(id);
-    return path ? readImageDataUrl(path, src) : null;
+    return path ? readImageDataUrl(path, src, (candidate) => pickedImages().has(candidate)) : null;
+  }
+
+  /**
+   * The formatted editor's Image button: the user picks a picture from disk, which is remembered as one this note
+   * may show (`PickedImageStore`), and the page is given the link to write for it.
+   * @param id The Markdown tab.
+   * @returns The link (relative to the note where possible), or `null` if nothing was picked.
+   */
+  public async pickMarkdownImage(id: string): Promise<string | null> {
+    const notePath = markdownDocuments.pathOf(id);
+    if (this.states.get(id)?.kind !== 'markdown' || !notePath) {
+      return null;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: 'Insert a picture',
+      defaultPath: dirname(notePath),
+      properties: ['openFile'],
+      filters: [{ name: 'Pictures', extensions: [...PICKABLE_IMAGE_EXTENSIONS] }],
+    });
+    const [imagePath] = filePaths;
+    if (canceled || !imagePath || !PICKABLE_IMAGE_EXTENSIONS.includes(extname(imagePath).slice(1).toLowerCase())) {
+      return null;
+    }
+    pickedImages().add(imagePath);
+    return imageLinkFor(notePath, imagePath);
   }
 
   /** A web picture the user clicked to load in the tab's note, as a data URL — see `fetchRemoteImageDataUrl`. */
@@ -8081,6 +8146,9 @@ export class TabManager {
       // on any Alt chord below, and a page could swallow them, so the Window menu's accelerators alone
       // never fired while a tab had the keyboard.
       if (owner.handleWindowShortcut(event, input)) {
+        return;
+      }
+      if (owner.handleMarkdownFormatShortcut(event, input, id)) {
         return;
       }
 

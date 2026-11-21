@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-11-21
 
 import { useEffect, useRef } from 'react';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
@@ -11,25 +11,11 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { python } from '@codemirror/lang-python';
 import { indentOnInput, LanguageDescription } from '@codemirror/language';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
-import {
-  Decoration,
-  drawSelection,
-  EditorView,
-  highlightActiveLine,
-  highlightActiveLineGutter,
-  keymap,
-  lineNumbers,
-  MatchDecorator,
-  ViewPlugin,
-  type DecorationSet,
-  type ViewUpdate,
-} from '@codemirror/view';
+import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
 import { latexCompletionSource, wikiLinkCompletionSource } from '../../lib/markdown/editorCompletions';
 import { editorFindField } from '../../lib/markdown/editorFind';
 import { lineMotionKeymap } from '../../lib/markdown/editorLineMotion';
-import { editorHighlight, editorTheme } from '../../lib/markdown/editorTheme';
-import { livePreview as livePreviewExtension } from '../../lib/markdown/livePreview';
-import { syncRenderedBlocksFocus } from '../../lib/markdown/livePreviewBlocks';
+import { editorTheme } from '../../lib/markdown/editorTheme';
 
 /** Languages whose code blocks get their own colouring inside the editor — the two that can also be run, the rest stay plain. */
 const CODE_LANGUAGES = [
@@ -38,13 +24,11 @@ const CODE_LANGUAGES = [
 ];
 
 /**
- * The two settings that change while the editor is open: whether it can be
- * edited, and whether it shows the note formatted (live preview) or raw.
- * Module-level so a saved state from an earlier mount, which carries these
- * same compartments, can be reconfigured too.
+ * The setting that changes while the editor is open: whether it can be
+ * edited. Module-level so a saved state from an earlier mount, which carries
+ * this same compartment, can be reconfigured too.
  */
 const editableCompartment = new Compartment();
-const previewCompartment = new Compartment();
 
 /**
  * @param readOnly Whether the note is only being viewed.
@@ -72,45 +56,14 @@ const clickableLineNumbers = lineNumbers({
   },
 });
 
-/**
- * @param formatted Whether the note is shown formatted.
- * @returns The live preview with its syntax colours and math and wikilink marks, or — for raw text — line numbers
- *   in a gutter, as in a code editor, and every character exactly as typed: no bold, italic, code or link styling.
- */
-function previewExtensions(formatted: boolean): Extension {
-  return formatted
-    ? [livePreviewExtension(), editorHighlight, markupDecorations()]
-    : [clickableLineNumbers, highlightActiveLineGutter(), EditorView.editorAttributes.of({ class: 'cm-raw' })];
-}
-
-/** Marks `[[wikilinks]]` and `$math$` in the source so they read as what they are while writing. */
-function markupDecorations(): Extension {
-  const wiki = new MatchDecorator({ regexp: /\[\[[^\]\n]+\]\]/g, decoration: Decoration.mark({ class: 'cm-wikilink' }) });
-  const math = new MatchDecorator({
-    // `\\.` is a backslash escape and `[^$\\\n]` anything but `$`, a backslash or a newline. The two never overlap, so a
-    // long unclosed `$....` can't backtrack exponentially, and math containing the letter `n` is still matched.
-    regexp: /\$\$[^$]+?\$\$|\$(?!\s)(?:\\.|[^$\\\n])+?(?<!\s)\$(?!\d)/g,
-    decoration: Decoration.mark({ class: 'cm-math' }),
-  });
-  return [wiki, math].map((decorator) =>
-    ViewPlugin.fromClass(
-      class {
-        public decorations: DecorationSet;
-        public constructor(view: EditorView) {
-          this.decorations = decorator.createDeco(view);
-        }
-        public update(update: ViewUpdate): void {
-          this.decorations = decorator.updateDeco(update, this.decorations);
-        }
-      },
-      { decorations: (plugin) => plugin.decorations },
-    ),
-  );
-}
+/** Raw text's look: line numbers in a gutter, as in a code editor, and every character exactly as typed. */
+const RAW_EXTENSIONS: Extension = [clickableLineNumbers, highlightActiveLineGutter(), EditorView.editorAttributes.of({ class: 'cm-raw' })];
 
 interface MarkdownEditorProps {
   /** The note's source, as it is when the editor opens. Later changes made elsewhere come through `onView`'s view, not this prop. */
   readonly initialSource: string;
+  /** Where the caret starts (from the formatted editor, on a switch), as an offset into the note, or `null`. */
+  readonly initialCaret: number | null;
   /** The editor's last state from the previous time it was open on this very text, so undo carries across a switch to the rendered view and back. */
   readonly savedState: EditorState | null;
   readonly onChange: (source: string) => void;
@@ -124,8 +77,6 @@ interface MarkdownEditorProps {
   readonly initialScroll: number;
   /** View mode: the text can be read and selected but not changed. */
   readonly readOnly: boolean;
-  /** Formatted display: the note is drawn formatted while staying editable, Obsidian-style (see `livePreview`). */
-  readonly livePreview: boolean;
   /**
    * Where the caret is (its offset in the note) and what's selected (`from` to `to`, equal when nothing is), whenever
    * either moves or the text under them changes — for the status bar.
@@ -136,14 +87,14 @@ interface MarkdownEditorProps {
 /**
  * The note in CodeMirror: Markdown with colouring, list continuation on
  * Enter, bracket pairing, and completion — LaTeX commands while typing math,
- * and the vault's note names after `[[`. Shows the raw text, or (with
- * `livePreview`) the note formatted while still editable; `readOnly` makes
- * either one view-only. Both switch in place, keeping the undo history. The
- * editor is created once per mount; the viewer unmounts it only for the
- * read-only formatted reader. Escape takes the caret out of it.
+ * and the vault's note names after `[[`. The raw text, line-numbered;
+ * `readOnly` makes it view-only, switching in place and keeping the undo
+ * history. (Edit + Formatted is `FormattedEditor`; View + Formatted is the
+ * reader.) Escape takes the caret out of it.
  */
 export function MarkdownEditor({
   initialSource,
+  initialCaret,
   savedState,
   onChange,
   onView,
@@ -151,7 +102,6 @@ export function MarkdownEditor({
   onContextMenu,
   initialScroll,
   readOnly,
-  livePreview,
   onSelection,
 }: MarkdownEditorProps) {
   const viewRef = useRef<EditorView | null>(null);
@@ -211,7 +161,7 @@ export function MarkdownEditor({
         indentWithTab,
       ]),
       editableCompartment.of(editableExtensions(readOnly)),
-      previewCompartment.of(previewExtensions(livePreview)),
+      RAW_EXTENSIONS,
       editorFindField,
       EditorView.domEventHandlers({
         contextmenu: (event) => {
@@ -234,17 +184,16 @@ export function MarkdownEditor({
     const state =
       savedState && savedState.doc.toString() === initialSource
         ? savedState
-        : EditorState.create({ doc: initialSource, extensions });
+        : EditorState.create({
+            doc: initialSource,
+            extensions,
+            ...(initialCaret === null ? {} : { selection: { anchor: Math.max(0, Math.min(initialCaret, initialSource.length)) } }),
+          });
     // A saved state keeps its own extensions and history; only a fresh one needs them built here — but its two
     // switchable settings are brought up to date.
     const view = new EditorView({ state, parent: host });
     if (state === savedState) {
-      view.dispatch({
-        effects: [
-          editableCompartment.reconfigure(editableExtensions(readOnly)),
-          previewCompartment.reconfigure(previewExtensions(livePreview)),
-        ],
-      });
+      view.dispatch({ effects: editableCompartment.reconfigure(editableExtensions(readOnly)) });
     }
     viewRef.current = view;
     onViewRef.current(view);
@@ -253,10 +202,12 @@ export function MarkdownEditor({
     if (!readOnly) {
       view.focus();
     }
-    syncRenderedBlocksFocus(view);
     requestAnimationFrame(() => {
       const scroller = view.scrollDOM;
       scroller.scrollTop = initialScroll * scroller.scrollHeight;
+      if (initialCaret !== null && state !== savedState) {
+        view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: 'center' }) });
+      }
     });
     return () => {
       viewRef.current = null;
@@ -268,23 +219,17 @@ export function MarkdownEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // View ↔ Edit and Raw ↔ Formatted, in place: the document, its scroll and its undo history stay.
+  // View ↔ Edit, in place: the document, its scroll and its undo history stay.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) {
       return;
     }
-    view.dispatch({
-      effects: [
-        editableCompartment.reconfigure(editableExtensions(readOnly)),
-        previewCompartment.reconfigure(previewExtensions(livePreview)),
-      ],
-    });
+    view.dispatch({ effects: editableCompartment.reconfigure(editableExtensions(readOnly)) });
     if (!readOnly) {
       view.focus();
     }
-    syncRenderedBlocksFocus(view);
-  }, [readOnly, livePreview]);
+  }, [readOnly]);
 
   return <div ref={hostRef} className="md-editor" />;
 }

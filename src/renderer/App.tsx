@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { HistoryClearRange, MarkdownFormatAction, PageStats } from '@shared/ipc-contract';
@@ -29,6 +29,14 @@ import {
   NoteEditIcon,
   RawIcon,
   TableIcon,
+  HeadingIcon,
+  BulletListIcon,
+  NumberedListIcon,
+  ChecklistIcon,
+  CalloutIcon,
+  DividerIcon,
+  ImageIcon,
+  HtmlIcon,
   TrashIcon,
 } from './components/icons';
 import { formatShortcut } from './lib/shortcuts';
@@ -781,12 +789,20 @@ export function App() {
       onClick: () => formatMarkdown(id, action),
     });
     const formatting: ToolsBarAction[] = [
+      format('heading', 'Heading', <HeadingIcon />, `Heading size: pick one (${formatShortcut('Alt+1')} to ${formatShortcut('Alt+6')}; ${formatShortcut('Alt+0')} for text)`),
       format('bold', 'Bold', <BoldIcon />, `Bold (${formatShortcut('B')})`),
       format('italic', 'Italic', <ItalicIcon />, `Italic (${formatShortcut('I')})`),
       format('link', 'Link', <LinkIcon />, `Make a link (${formatShortcut('Shift+U')})`),
-      format('latex', 'LaTeX block', <LatexIcon />, `Wrap in a LaTeX block (${formatShortcut('Shift+L')})`),
-      format('code', 'Code block', <CodeBlockIcon />, `Wrap in a code block (${formatShortcut('Shift+K')})`),
+      format('bulletList', 'Bullets', <BulletListIcon />, `Bulleted list (${formatShortcut('Shift+8')})`),
+      format('orderedList', 'Numbered', <NumberedListIcon />, `Numbered list (${formatShortcut('Shift+7')})`),
+      format('taskList', 'Checklist', <ChecklistIcon />, `Checklist (${formatShortcut('Shift+9')})`),
+      format('callout', 'Callout', <CalloutIcon />, `Callout: pick a type (${formatShortcut('Alt+C')})`),
+      format('divider', 'Divider', <DividerIcon />, `Horizontal divider (${formatShortcut('Alt+D')})`),
+      format('code', 'Code block', <CodeBlockIcon />, `Code block (${formatShortcut('Shift+K')})`),
+      format('latex', 'LaTeX block', <LatexIcon />, `LaTeX block (${formatShortcut('Shift+L')})`),
       format('table', 'Table', <TableIcon />, 'Insert a table at the caret'),
+      format('image', 'Picture', <ImageIcon />, `Insert a picture from a file (${formatShortcut('Alt+I')})`),
+      format('html', 'Raw HTML', <HtmlIcon />, `Raw HTML block (${formatShortcut('Alt+H')})`),
     ];
     return [modes, formatting];
   })();

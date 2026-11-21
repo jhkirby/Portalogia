@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-21
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import type { ZodType } from 'zod';
@@ -147,6 +147,7 @@ export function registerMarkdownIpc(
   invokeFromPage(IpcChannel.MarkdownReadImage, markdownReadImageRequestSchema, (manager, request) =>
     manager.readMarkdownImage(request.id, request.src),
   );
+  invokeFromPage(IpcChannel.MarkdownPickImage, tabIdRequestSchema, (manager, request) => manager.pickMarkdownImage(request.id));
   invokeFromPage(IpcChannel.MarkdownReadRemoteImage, markdownReadRemoteImageRequestSchema, (manager, request) =>
     manager.readMarkdownRemoteImage(request.id, request.url),
   );
