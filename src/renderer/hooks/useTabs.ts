@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_WORKSPACE_ID, ZOOM_PERCENT_DEFAULT } from '@shared/constants';
-import type { DropRegionRect, IpcResult, MarkdownFormatAction } from '@shared/ipc-contract';
+import type { IpcResult, MarkdownFormatAction } from '@shared/ipc-contract';
 import type { BrowserState, MarkdownDisplay, PointerMode } from '@shared/tab-state';
 
 const EMPTY_STATE: BrowserState = {
@@ -142,15 +142,6 @@ export function useTabs() {
   const moveTabToWorkspace = useCallback((id: string, workspaceId: string) => {
     void window.portalogia.moveTabToWorkspace(id, workspaceId).then(logIfFailed);
   }, []);
-  const tearOffTab = useCallback((id: string, screenX: number, screenY: number, live?: boolean) => {
-    window.portalogia.tearOffTab(id, screenX, screenY, live);
-  }, []);
-  const reportDropRegions = useCallback((rects: readonly DropRegionRect[]) => {
-    window.portalogia.reportDropRegions(rects);
-  }, []);
-  const tearOffTabEnd = useCallback((id: string, accepted: boolean) => {
-    window.portalogia.tearOffTabEnd(id, accepted);
-  }, []);
   const navigate = useCallback((id: string, url: string) => {
     void window.portalogia.navigate(id, url).then(logIfFailed);
   }, []);
@@ -258,9 +249,6 @@ export function useTabs() {
 
   const createWorkspace = useCallback((name?: string) => {
     void window.portalogia.createWorkspace(name).then(logIfFailed);
-  }, []);
-  const createWorkspaceWithTab = useCallback((tabId: string) => {
-    void window.portalogia.createWorkspaceWithTab(tabId).then(logIfFailed);
   }, []);
   const switchWorkspace = useCallback((id: string) => {
     void window.portalogia.switchWorkspace(id).then(logIfFailed);
@@ -426,9 +414,6 @@ export function useTabs() {
     selectWorkspaceRange,
     moveTab,
     moveTabToWorkspace,
-    tearOffTab,
-    tearOffTabEnd,
-    reportDropRegions,
     navigate,
     goBack,
     goForward,
@@ -460,7 +445,6 @@ export function useTabs() {
     revertPage,
 
     createWorkspace,
-    createWorkspaceWithTab,
     switchWorkspace,
     renameWorkspace,
     moveWorkspace,

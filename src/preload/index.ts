@@ -40,10 +40,6 @@ const api: PortalogiaApi = {
   selectTabRange: (id) => invoke(IpcChannel.TabsSelectRange, { id }),
   moveTab: (id, beforeId) => invoke(IpcChannel.TabsMove, { id, beforeId }),
   moveTabToWorkspace: (id, workspaceId) => invoke(IpcChannel.TabsMoveToWorkspace, { id, workspaceId }),
-  tearOffTab: (id, screenX, screenY, live) =>
-    ipcRenderer.send(IpcChannel.TabsTearOff, { id, screenX, screenY, live }),
-  reportDropRegions: (rects) => ipcRenderer.send(IpcChannel.TabsDropRegions, { rects }),
-  tearOffTabEnd: (id, accepted) => ipcRenderer.send(IpcChannel.TabsTearOffEnd, { id, accepted }),
   navigate: (id, url) => invoke(IpcChannel.TabsNavigate, { id, url }),
   goBack: (id) => invoke(IpcChannel.TabsGoBack, { id }),
   goForward: (id) => invoke(IpcChannel.TabsGoForward, { id }),

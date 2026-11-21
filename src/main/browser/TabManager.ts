@@ -25,7 +25,6 @@ import {
   CHROME_HEIGHT_PX,
   MAX_TABS_PER_WORKSPACE,
   MAX_WORKSPACES,
-  TAB_STRIP_HEIGHT_PX,
   DEFAULT_TAB_URL,
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
@@ -236,6 +235,12 @@ const pdfBacklinkPaths = new Map<string, readonly string[]>();
 /** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
 const markdownDocuments = new MarkdownDocuments();
 
+/** How long Ctrl must be held on its own before it swaps the pointer (`handleQuickPointerKey`): longer than a shortcut takes. */
+const QUICK_SWITCH_DELAY_MS = 150;
+
+/** A marking tool that a held Ctrl can set aside and bring back. */
+type QuickSwitchTool = 'laser' | 'pen' | 'highlighter' | 'comment' | 'text' | 'crop';
+
 /** The pictures the user picked in a note's image dialog (see `PickedImageStore`), made on first use — `app` must be ready. */
 let pickedImageStore: PickedImageStore | null = null;
 function pickedImages(): PickedImageStore {
@@ -416,7 +421,16 @@ export class TabManager {
   private selectedTabIds = new Set<string>();
   /** Workspaces multi-selected (Ctrl/Shift+click), active one included. Read through `currentWorkspaceSelection`. */
   private selectedWorkspaceIds = new Set<string>();
-  private dropRegions: readonly { x: number; y: number; width: number; height: number }[] = [];
+  /**
+   * A held Ctrl's swap (`handleQuickPointerKey`): the tab it was made on, and what to put back when Ctrl is let go —
+   * the pointer mode it swapped from, or the marking tool it set aside.
+   */
+  private quickSwitch: {
+    readonly tabId: string;
+    readonly restore: { readonly kind: 'mode'; readonly mode: PointerMode } | { readonly kind: 'tool'; readonly tool: QuickSwitchTool };
+  } | null = null;
+  /** Counting down to a held Ctrl's swap — cleared if another key makes it a shortcut first. */
+  private quickSwitchTimer: ReturnType<typeof setTimeout> | null = null;
   private highlighterActive = false;
   private commentToolActive = false;
   private textToolActive = false;
@@ -647,7 +661,11 @@ export class TabManager {
     // terminal. Not a menu accelerator for the same reason the reorder
     // gesture isn't — it needs to check the active tab's kind, which a
     // static accelerator can't express.
+    // Ctrl let go in another app never reaches this one: leaving the window ends a held Ctrl's swap.
+    this.window.on('blur', () => this.endQuickSwitch());
     this.window.webContents.on('before-input-event', (event, input) => {
+      // Ctrl held alone swaps the pointer for quick access; it takes no key, so everything below still sees them.
+      this.handleQuickPointerKey(input);
       if (this.handleReorderGestureInput(event, input) || this.handleWindowShortcut(event, input)) {
         return;
       }
@@ -2830,6 +2848,114 @@ export class TabManager {
     }
   }
 
+  /**
+   * Ctrl held on its own, for quick access: Pan and Select trade places while it's down, or — with a marking tool on
+   * (laser pointer, pen, highlighter, comments, text box, crop) — the tool steps aside for the pointer mode under it.
+   * Letting go puts things back as they were. Only after Ctrl has been held alone for `QUICK_SWITCH_DELAY_MS`, so a
+   * shortcut (Ctrl+C, Ctrl+click…) never flickers the pointer; another key meanwhile is a chord, and calls it off.
+   * Fed every key, from the chrome and from every tab's page (`before-input-event`); takes none of them.
+   * @param input Electron's parsed key info.
+   */
+  public handleQuickPointerKey(input: Electron.Input): void {
+    const isCtrl = input.key === 'Control';
+    if (input.type === 'keyDown' && isCtrl && !input.alt && !input.shift && !input.meta) {
+      if (!input.isAutoRepeat && this.quickSwitchTimer === null && this.quickSwitch === null) {
+        this.quickSwitchTimer = setTimeout(() => {
+          this.quickSwitchTimer = null;
+          this.engageQuickSwitch();
+        }, QUICK_SWITCH_DELAY_MS);
+      }
+      return;
+    }
+    // Any other key while Ctrl is down makes it a shortcut, and letting go of Ctrl ends the hold: either way, back.
+    if ((input.type === 'keyDown' && !isCtrl) || (input.type === 'keyUp' && isCtrl)) {
+      this.endQuickSwitch();
+    }
+  }
+
+  /** Swaps the pointer for as long as Ctrl stays down — see `handleQuickPointerKey`. */
+  private engageQuickSwitch(): void {
+    const tabId = this.activeTabId;
+    const state = tabId ? this.states.get(tabId) : undefined;
+    if (!tabId || (state?.kind !== 'pdf' && state?.kind !== 'markdown' && state?.kind !== 'browser')) {
+      return;
+    }
+    if ((state.kind === 'pdf' || state.kind === 'markdown') && state.fileName === null) {
+      return;
+    }
+    const tool = this.activePointerTool();
+    if (tool !== null) {
+      // The tool steps aside; the pointer mode it was covering shows again.
+      this.quickSwitch = { tabId, restore: { kind: 'tool', tool } };
+      this.turnOffPointerTools();
+      this.emitState();
+      return;
+    }
+    this.quickSwitch = { tabId, restore: { kind: 'mode', mode: state.pointerMode } };
+    this.setPointerMode(tabId, state.pointerMode === 'pan' ? 'select' : 'pan');
+  }
+
+  /** Puts the pointer back as it was before Ctrl was held, if a hold had swapped it. */
+  private endQuickSwitch(): void {
+    if (this.quickSwitchTimer !== null) {
+      clearTimeout(this.quickSwitchTimer);
+      this.quickSwitchTimer = null;
+    }
+    const held = this.quickSwitch;
+    this.quickSwitch = null;
+    // Only on the tab it was swapped on: a tab switched to meanwhile keeps its own pointer.
+    if (!held || held.tabId !== this.activeTabId) {
+      return;
+    }
+    if (held.restore.kind === 'mode') {
+      this.setPointerMode(held.tabId, held.restore.mode);
+      return;
+    }
+    switch (held.restore.tool) {
+      case 'laser':
+        this.setLaserPointer(true);
+        break;
+      case 'pen':
+        this.setPen(true);
+        break;
+      case 'highlighter':
+        this.setHighlighter(true);
+        break;
+      case 'comment':
+        this.setCommentTool(true);
+        break;
+      case 'text':
+        this.setTextTool(true);
+        break;
+      case 'crop':
+        this.setCrop(true);
+        break;
+    }
+  }
+
+  /** The marking tool that has the pointer, if one does. */
+  private activePointerTool(): QuickSwitchTool | null {
+    if (this.laserPointerActive) {
+      return 'laser';
+    }
+    if (this.penActive) {
+      return 'pen';
+    }
+    if (this.highlighterActive) {
+      return 'highlighter';
+    }
+    if (this.commentToolActive) {
+      return 'comment';
+    }
+    if (this.textToolActive) {
+      return 'text';
+    }
+    if (this.cropActive) {
+      return 'crop';
+    }
+    return null;
+  }
+
   /** Turns off every tool that takes the pointer over: the laser pointer, pen, highlighter, comments, text boxes and crop. */
   private turnOffPointerTools(): void {
     if (this.laserPointerActive) {
@@ -4290,28 +4416,6 @@ export class TabManager {
   }
 
   /**
-   * Whether a screen point is over this window's tab strip or workspace
-   * sidebar — the two places a dragged-out tab can be dropped back in. Used
-   * by the torn-off window (`main/index.ts`'s `followCursor`) to get out of
-   * the way, so the OS drag reaches this window's own drop handlers.
-   */
-  public isOverTabDropRegion(screenX: number, screenY: number): boolean {
-    if (this.window.isDestroyed() || !this.window.isVisible() || this.window.isMinimized()) {
-      return false;
-    }
-    const content = this.window.getContentBounds();
-    const x = screenX - content.x;
-    const y = screenY - content.y;
-    if (x < 0 || y < 0 || x >= content.width || y >= content.height) {
-      return false;
-    }
-    return (
-      y < TAB_STRIP_HEIGHT_PX ||
-      this.dropRegions.some((r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
-    );
-  }
-
-  /**
    * Takes a tab's view off this window without activating anything in its
    * place (unlike `releaseTab`, which falls back to a neighbor or a fresh
    * home tab). For a window that's about to be closed while its tab lives
@@ -4333,22 +4437,6 @@ export class TabManager {
   /** Marks this window as one being dragged around whole (see `suppressWorkspaceFallback`). */
   public setSuppressWorkspaceFallback(suppress: boolean): void {
     this.suppressWorkspaceFallback = suppress;
-  }
-
-  /** Whether `tabId` is the only tab this window lists in its workspace — dragging it out then moves the whole window instead of spawning another. */
-  public isOnlyTabInItsWorkspace(tabId: string): boolean {
-    const workspaceId = this.states.get(tabId)?.workspaceId;
-    if (workspaceId === undefined) {
-      return false;
-    }
-    const dragged = this.registry.selectionContainingTab(tabId) ?? [tabId];
-    const listed = this.listedTabIds(workspaceId);
-    return listed.length === dragged.length && listed.every((listedId) => dragged.includes(listedId));
-  }
-
-  /** Records where this window's tab drop targets are (client coordinates) — see `isOverTabDropRegion`. */
-  public setDropRegions(rects: readonly { x: number; y: number; width: number; height: number }[]): void {
-    this.dropRegions = rects;
   }
 
   /** @returns The workspace a tab currently belongs to, or `undefined` if it no longer exists. */
@@ -8156,6 +8244,8 @@ export class TabManager {
 
     wc.on('before-input-event', (event, input) => {
       const owner = owningManager();
+      // Ctrl held alone swaps the pointer for quick access (see `handleQuickPointerKey`); it takes no key.
+      owner.handleQuickPointerKey(input);
 
       // Window shortcuts (Ctrl+Alt+M, Ctrl+Alt+Enter), ahead of everything else: a terminal returns early
       // on any Alt chord below, and a page could swallow them, so the Window menu's accelerators alone

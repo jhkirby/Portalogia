@@ -151,17 +151,23 @@
 }
 
 /* Multi-selected (Ctrl/Shift+click) tabs take the active tab's own background
-   and text color, so the whole group reads as selected. Deliberately neutral —
-   not the accent color, which can be any hue the user picked (red included). */
+   and text color, so the whole group reads as selected, and an outline of
+   their own: the accent, faint and without the active tab's glow, so the
+   active one still stands out as the one in view. */
 .tab-bar__tab--selected {
   background: var(--color-tab-bg-active);
   color: var(--color-tab-text-active);
 }
 
-/* The tab currently being grabbed. No drag-image snapshot follows the
-   cursor (see TabBar.tsx's `TRANSPARENT_DRAG_IMAGE`), so this in-place
-   highlight is the only feedback that it's being dragged — placed after
-   `--active` so it wins over that background too. */
+.tab-bar__tab--selected:not(.tab-bar__tab--active) {
+  z-index: 1;
+
+  border-color: rgba(var(--color-accent-rgb), 0.45);
+}
+
+/* The tab being dragged (it follows the pointer along the row, `TabBar`'s
+   `placeGrabbed`), and the others of a selection dragged with it — placed
+   after `--active` so it wins over that background too. */
 .tab-bar__tab--dragging,
 .tab-bar__tab--dragging:hover {
   background: var(--color-tab-dragging-bg);
@@ -212,15 +218,6 @@
 /* The newly active tab waits for the sliding background rather than showing its own at once. */
 .tab-bar__tab--active[data-slide-target] {
   background: var(--color-tab-bg);
-}
-
-/* While a tab from another window is dragged over this strip, the slot it
-   would take is held open as an empty tab-sized gap (see `TabBar`). */
-.tab-bar__placeholder {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: var(--size-tab-max-width);
-  height: calc(var(--size-tab-bar-height) - 14px);
 }
 
 .tab-bar__favicon {

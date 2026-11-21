@@ -102,6 +102,32 @@ export interface ToolsBarSection {
   readonly actions: readonly ToolsBarAction[];
 }
 
+/**
+ * Each row's hover motion (`icon-hop.css`), by its id: what its icon does — the hand waves, the pen writes, the trash
+ * can shakes. A row not listed (a formatting button) takes the default hop.
+ */
+const HOP_BY_ID: Readonly<Record<string, string>> = {
+  pan: 'wave',
+  select: 'blink',
+  'laser-pointer': 'pulse',
+  pen: 'write',
+  highlighter: 'swipe',
+  comment: 'pop',
+  'text-box': 'type',
+  crop: 'snip',
+  revert: 'rewind',
+  'page-open': 'open',
+  'page-home': 'bounce',
+  'file-new': 'pop',
+  'file-open': 'open',
+  'file-close': 'shake',
+  'file-delete': 'shake',
+  'file-export': 'rise',
+  export: 'rise',
+  'note-mode': 'flip',
+  'note-display': 'flip',
+};
+
 /** The pointer modes, headed "Pointer"; every other tool is headed "Annotate". */
 const POINTER_TOOL_IDS = new Set(['pan', 'select']);
 
@@ -208,7 +234,8 @@ export function ToolsBar(props: ToolsBarProps) {
           {!gone && (
             <button
               type="button"
-              className="sidebar__toggle hover-glow chrome-tooltip"
+              className="sidebar__toggle hover-glow icon-hop chrome-tooltip"
+              data-hop="slide-x"
               onClick={(event) => {
                 onToggleVisible();
                 event.currentTarget.blur();
@@ -232,7 +259,8 @@ export function ToolsBar(props: ToolsBarProps) {
               )}
               <button
                 type="button"
-                className={`tools-sidebar__tool hover-glow chrome-tooltip${tool.pressed ? ' tools-sidebar__tool--on' : ''}`}
+                className={`tools-sidebar__tool hover-glow icon-hop chrome-tooltip${tool.pressed ? ' tools-sidebar__tool--on' : ''}`}
+                data-hop={HOP_BY_ID[tool.id]}
                 onClick={(event) => {
                   ripples.add(tool.id, event);
                   tool.onClick();
@@ -260,7 +288,8 @@ export function ToolsBar(props: ToolsBarProps) {
                 <button
                   key={action.id}
                   type="button"
-                  className="tools-sidebar__tool hover-glow chrome-tooltip"
+                  className="tools-sidebar__tool hover-glow icon-hop chrome-tooltip"
+                  data-hop={HOP_BY_ID[action.id]}
                   onClick={(event) => {
                     ripples.add(action.id, event);
                     action.onClick();
@@ -285,7 +314,8 @@ export function ToolsBar(props: ToolsBarProps) {
               <button
                 ref={exportMenu.anchorRef}
                 type="button"
-                className={`tools-sidebar__tool hover-glow chrome-tooltip${exportMenu.isOpen ? ' tools-sidebar__tool--on' : ''}`}
+                className={`tools-sidebar__tool hover-glow icon-hop chrome-tooltip${exportMenu.isOpen ? ' tools-sidebar__tool--on' : ''}`}
+                data-hop={HOP_BY_ID['export']}
                 onClick={(event) => {
                   ripples.add('export', event);
                   exportMenu.toggle();
@@ -311,8 +341,8 @@ export function ToolsBar(props: ToolsBarProps) {
 }
 
 /**
- * A section's heading in the Tools sidebar, in capitals, with a rule above it unless it's the first thing in the list
- * (`.tools-sidebar__heading`). It fades away, like the rows' names, as the sidebar narrows to its rail.
+ * A section's heading in the Tools sidebar, in capitals, in the middle of the rule that sets the section off
+ * (`.tools-sidebar__heading`). Its words fade away, like the rows' names, as the sidebar narrows to its rail; the rule stays.
  * @param props.title The section's name, written as a word ("Annotate"); the stylesheet puts it in capitals.
  */
 function SectionHeading({ title }: { readonly title: string }) {

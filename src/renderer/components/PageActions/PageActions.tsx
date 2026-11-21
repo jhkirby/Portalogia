@@ -8,7 +8,15 @@ import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { DuplicateTabIcon, FindIcon, OpenInNewWindowIcon, SearchIcon, SplitScreenIcon, SwapSidesIcon } from '../icons';
+import {
+  DuplicateTabIcon,
+  FindIcon,
+  MoveToWorkspaceIcon,
+  OpenInNewWindowIcon,
+  SearchIcon,
+  SplitScreenIcon,
+  SwapSidesIcon,
+} from '../icons';
 
 interface PageActionsProps {
   /** Whether the screen is split (two tabs side by side): the split button then goes back to one. */
@@ -23,6 +31,10 @@ interface PageActionsProps {
   readonly canDuplicate: boolean;
   /** Opens a copy of the active tab right after it. */
   readonly onDuplicateTab: () => void;
+  /** Whether another workspace has room for the active tab (`MAX_TABS_PER_WORKSPACE`). */
+  readonly canMoveTab: boolean;
+  /** Opens the popup that moves the active tab to another workspace. */
+  readonly onMoveTab: () => void;
   /**
    * The active tab's own tools (`TabActions`: the ad blocker, zoom), after Find — or `null` in split screen, where
    * each half of the toolbar has its side's instead.
@@ -61,6 +73,8 @@ export function PageActions({
   onSwapSplit,
   canDuplicate,
   onDuplicateTab,
+  canMoveTab,
+  onMoveTab,
   onOpenTabSearch,
   findOpen,
   canFind,
@@ -98,7 +112,8 @@ export function PageActions({
       {splitActive && (
         <button
           type="button"
-          className="page-actions__button hover-grow chrome-tooltip"
+          className="page-actions__button hover-glow icon-hop chrome-tooltip"
+          data-hop="flip"
           onClick={onSwapSplit}
           aria-label="Swap sides"
           data-tooltip="Swap sides"
@@ -109,7 +124,8 @@ export function PageActions({
       {/* Split screen: the two selected tabs side by side (the first selected on the left), or back to one. */}
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="spread"
         onClick={onToggleSplit}
         disabled={!splitActive && !canSplit}
         aria-pressed={splitActive}
@@ -127,7 +143,8 @@ export function PageActions({
       {/* A copy of the active tab, right after it: the same page, file or kind of tool. */}
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="nudge"
         onClick={onDuplicateTab}
         disabled={!canDuplicate}
         aria-label="Duplicate tab"
@@ -139,9 +156,24 @@ export function PageActions({
       >
         <DuplicateTabIcon />
       </button>
+      {/* The active tab to another workspace — one with room for it — picked in a popup over the page. */}
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="slide"
+        onClick={onMoveTab}
+        disabled={!canMoveTab}
+        aria-label="Move tab to workspace"
+        data-tooltip={
+          canMoveTab ? 'Move tab to another workspace' : 'Move tab: no other workspace has room for it'
+        }
+      >
+        <MoveToWorkspaceIcon />
+      </button>
+      <button
+        type="button"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="search"
         onClick={onOpenTabSearch}
         aria-label="Search tabs"
         data-tooltip={`Search tabs (${formatShortcut('K')})`}
@@ -150,7 +182,8 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="scan"
         onClick={onToggleFind}
         disabled={!canFind}
         aria-pressed={findOpen}
@@ -162,7 +195,8 @@ export function PageActions({
       {tabActions ?? <span className="page-actions__divider" role="separator" aria-hidden="true" />}
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="pop-out"
         onClick={onOpenWorkspaceInNewWindow}
         aria-label="Open tab in new window"
         data-tooltip={`Open tab in new window (${formatShortcut('Shift+O')})`}
@@ -171,24 +205,26 @@ export function PageActions({
       </button>
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="expand"
         onClick={onToggleFocusMode}
         aria-pressed={focusMode}
         aria-label={focusMode ? 'Exit Focus Mode' : 'Enter Focus Mode'}
         data-tooltip={`${focusMode ? 'Exit Focus Mode' : 'Enter Focus Mode'} (${formatShortcut('Shift+F')})`}
       >
-        ⛶
+        <span className="icon-hop__glyph">⛶</span>
       </button>
       <span className="page-actions__divider" role="separator" aria-hidden="true" />
       <ColorPicker />
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="spin"
         onClick={onToggleTheme}
         aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
         data-tooltip={`${theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} (${formatShortcut('D')})`}
       >
-        {theme === 'dark' ? '☾︎' : '☀︎'}
+        <span className="icon-hop__glyph">{theme === 'dark' ? '☾︎' : '☀︎'}</span>
       </button>
     </div>
   );

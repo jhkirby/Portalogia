@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-17
+// Last Modified: 2026-11-21
 
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { TabState } from '@shared/tab-state';
@@ -41,8 +41,8 @@ export interface TabTransitions {
  * @param workspaceId The workspace the row belongs to.
  * @param displayIds The tabs' ids in the order they're drawn (which a drag can preview differently from `tabs`).
  * @param barRef The strip element, whose `.tab-bar__tab[data-tab-id]` children are measured.
- * @param keepIds Tabs that leave the row without closing here (one torn off into its own window, still drawn
- *   until its drag ends), which mustn't also shrink out.
+ * @param keepIds Tabs that leave the row without closing here, which mustn't shrink out (none, now a drag
+ *   can't take a tab out of the row; kept for callers that move a tab away).
  * @returns The extra state to draw.
  */
 export function useTabTransitions(
@@ -104,6 +104,10 @@ export function useTabTransitions(
       return;
     }
     for (const element of elements) {
+      // The tab being dragged follows the pointer (`TabBar`'s `placeGrabbed`); a slide would fight it.
+      if (element.dataset['grabbed'] !== undefined) {
+        continue;
+      }
       const from = previous.get(element.dataset['tabId'] ?? '');
       const delta = from === undefined ? 0 : from - element.offsetLeft;
       if (Math.abs(delta) > 1) {

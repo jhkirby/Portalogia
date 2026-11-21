@@ -158,7 +158,7 @@ export function HistoryToolbar({ tab, onRequestClear }: HistoryToolbarProps) {
         onChange={(event) => setAmountText(event.target.value.replace(/\D/g, ''))}
       />
       <UnitSelect options={UNIT_OPTIONS} value={unit} onChange={changeUnit} label="Unit of time to clear" />
-      <button type="button" className="history-toolbar__clear hover-grow" onClick={clear} disabled={!hasHistoryToClear}>
+      <button type="button" className="history-toolbar__clear hover-glow" onClick={clear} disabled={!hasHistoryToClear}>
         Clear History
       </button>
     </div>

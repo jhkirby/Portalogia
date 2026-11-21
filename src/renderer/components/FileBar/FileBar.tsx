@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react';
 import type { LoadBytes } from '@shared/tab-state';
 import { useFadingProgress, useFadingValue } from '../../hooks/useFadingProgress';
-import { formatByteFraction } from '../../lib/formatBytes';
+import { formatByteCount } from '../../lib/formatBytes';
 import { formatShortcut } from '../../lib/shortcuts';
 import { BookmarkStarIcon } from '../icons';
 
@@ -58,7 +58,8 @@ export function FileBar({
       )}
       <button
         type="button"
-        className="address-bar__bookmark hover-grow chrome-tooltip"
+        className="address-bar__bookmark hover-glow icon-hop chrome-tooltip"
+        data-hop="twinkle"
         onClick={onToggleBookmark}
         disabled={!canBookmark}
         aria-pressed={isBookmarked}
@@ -74,7 +75,8 @@ export function FileBar({
           className={`address-bar__bytes${shownProgress.leaving ? ' address-bar__progress--leaving' : ''}`}
           aria-label="Bytes loaded"
         >
-          {formatByteFraction(shownBytes.value.loaded, shownBytes.value.total)}
+          {/* What has arrived so far, counting up as it loads. */}
+          {formatByteCount(shownBytes.value.loaded)}
         </span>
       )}
       {/* …and the same as a number at the bar's right end, held at 100% for a second once the file has opened. */}

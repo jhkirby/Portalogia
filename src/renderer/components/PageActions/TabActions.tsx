@@ -68,7 +68,8 @@ export function TabActions({
       {showAdBlock && (
         <button
           type="button"
-          className="page-actions__button hover-grow page-actions__button--adblock chrome-tooltip"
+          className="page-actions__button hover-glow icon-hop page-actions__button--adblock chrome-tooltip"
+          data-hop="shield"
           onClick={onToggleAdBlock}
           disabled={adBlockGloballyOff}
           // Lit while the blocker is *off* here, so the default (blocking) state stays quiet.

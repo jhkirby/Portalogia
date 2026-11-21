@@ -313,9 +313,8 @@ export const WORKSPACE_COLORS = [
 
 /**
  * Height, in CSS pixels, of the tab strip (the `.titlebar` row) at the top
- * of the window. Main uses it to tell when a dragged-out tab is hovering
- * another window's tab strip (see `TabManager.isOverTabDropRegion`). Must
- * equal `--size-tab-bar-height` in `sizes.css`.
+ * of the window. Main uses it to tell when the pointer is on the tab row
+ * (`titlebarHover.ts`). Must equal `--size-tab-bar-height` in `sizes.css`.
  */
 export const TAB_STRIP_HEIGHT_PX = 48;
 

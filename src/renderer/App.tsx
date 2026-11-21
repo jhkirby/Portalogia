@@ -59,13 +59,14 @@ import { WorkspaceBar } from './components/WorkspaceBar';
 import { ItemsStatusBar, WebStatusBar } from './components/WebStatusBar';
 import { PAGE_UNFOCUS_KEYS, TERMINAL_UNFOCUS_KEYS } from './components/FocusHint';
 import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
+import { MoveTabPopup, type MoveTabDestination } from './components/MoveTabPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
 import { usePointerGlow } from './hooks/usePointerGlow';
 
 /** The popups that cover the page, each closed with an animation (see `PopupTransition`). */
-type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote' | 'revert';
+type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote' | 'revert' | 'moveTab';
 
 /** The longest a popup's closing motion may take before it closes anyway (it can't end while the window is hidden). */
 const POPUP_EXIT_FALLBACK_MS = 500;
@@ -137,10 +138,6 @@ export function App() {
     selectWorkspaceRange,
     moveTab,
     moveTabToWorkspace,
-    tearOffTab,
-    tearOffTabEnd,
-    reportDropRegions,
-    createWorkspaceWithTab,
     navigate,
     goBack,
     goForward,
@@ -259,26 +256,13 @@ export function App() {
     window.setTimeout(() => finishPopupClose(name), POPUP_EXIT_FALLBACK_MS);
   };
   /** The workspace images popup while open: the still of the tab standing in behind it. */
+  /** The move-tab popup while open: the tab being moved, and the still of it standing in behind the popup. */
+  const [movePopup, setMovePopup] = useState<{ readonly tabId: string; readonly previewImage: string | null } | null>(null);
   const [imagesPopup, setImagesPopup] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   /** The workspace editor while open: which workspace, and the still of the tab standing in behind it. */
   const [workspaceEdit, setWorkspaceEdit] = useState<{ readonly workspaceId: string; readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const { theme, toggleTheme } = useTheme();
   const adBlock = useAdBlock();
-
-  // Tells main a dragged tab was dropped on this window, as a backup to the
-  // dragged tab's own `dragend` (which can go missing if the tab's element
-  // is moved while the drag is in flight) — main uses either to finish a
-  // live tear-off. A drop that isn't a tab drag carries no tab id and is ignored.
-  useEffect(() => {
-    const handleDrop = (event: DragEvent): void => {
-      const tabId = event.dataTransfer?.getData('text/plain');
-      if (tabId) {
-        tearOffTabEnd(tabId, true);
-      }
-    };
-    document.addEventListener('drop', handleDrop, true);
-    return () => document.removeEventListener('drop', handleDrop, true);
-  }, [tearOffTabEnd]);
 
   // Belt-and-suspenders for the chrome-focused case, same reasoning as
   // Ctrl+Shift+F's menu accelerator: reliable when chrome itself has OS
@@ -953,6 +937,47 @@ export function App() {
 
   useEffect(() => window.portalogia.onOpenWorkspaceImages(openWorkspaceImages));
 
+  // Where the active tab can go: every other workspace with room for one more tab, in the sidebar's order.
+  const moveDestinations: readonly MoveTabDestination[] = (() => {
+    const own = activeTab?.workspaceId;
+    return workspaces
+      .filter((workspace) => workspace.id !== own)
+      .map((workspace) => ({ workspace, tabCount: tabs.filter((tab) => tab.workspaceId === workspace.id).length }))
+      .filter(({ tabCount }) => tabCount < MAX_TABS_PER_WORKSPACE);
+  })();
+
+  // Opens like the workspace images: the active tab's view comes off the window and a blurred still of it stands in.
+  const openMoveTab = (): void => {
+    if (movePopup) {
+      closeMoveTab(null);
+      return;
+    }
+    const tabId = activeTabId;
+    if (!tabId) {
+      return;
+    }
+    setMovePopup({ tabId, previewImage: null });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setMovePopup((current) => (current ? { tabId, previewImage } : current));
+    });
+  };
+
+  // A move takes the tab out of this workspace, so the still is only put back if the tab is still the active one
+  // (main checks).
+  const closeMoveTab = (workspaceId: string | null): void => {
+    if (!movePopup) {
+      return;
+    }
+    const { tabId } = movePopup;
+    closePopupAnimated('moveTab', () => {
+      if (workspaceId) {
+        moveTabToWorkspace(tabId, workspaceId);
+      }
+      endTabPreview(tabId);
+      setMovePopup(null);
+    });
+  };
+
   // Like the bookmark popup, the editor covers whichever kind of tab is showing, so that tab's native view comes off
   // the window first and a still of its last frame stands in behind the popup.
   const openWorkspaceEditor = (workspaceId: string): void => {
@@ -1033,10 +1058,6 @@ export function App() {
               onClose={closeTab}
               onReorder={moveTab}
               grabbedTabId={grabbedTabId}
-              onDragEndOutside={tearOffTab}
-              onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
-              onTearOffEnd={tearOffTabEnd}
-              onReportDropRegions={reportDropRegions}
               pairTabIds={splitPair ? [splitPair.primaryTabId, splitPair.secondaryTabId] : null}
               splitTabIds={splitView ? [splitView.primaryTabId, splitView.secondaryTabId] : []}
             />
@@ -1072,6 +1093,8 @@ export function App() {
               onToggleSplit={toggleSplitScreen}
               // Main refuses a tab past the workspace's limit, as the tab row's "+" button does (`MAX_TABS_PER_WORKSPACE`).
               canDuplicate={activeTabId !== null && workspaceTabs.length < MAX_TABS_PER_WORKSPACE}
+              canMoveTab={activeTabId !== null && moveDestinations.length > 0}
+              onMoveTab={openMoveTab}
               onDuplicateTab={() => {
                 if (activeTabId) {
                   duplicateTab(activeTabId);
@@ -1115,8 +1138,6 @@ export function App() {
           onMove={moveWorkspace}
           onEdit={openWorkspaceEditor}
           onRemove={removeWorkspace}
-          onDropTab={moveTabToWorkspace}
-          onDropTabToNewWorkspace={createWorkspaceWithTab}
           onSaveImage={saveWorkspaceImage}
           onRemoveImage={removeWorkspaceImage}
           onOpenImages={openWorkspaceImages}
@@ -1211,6 +1232,18 @@ export function App() {
                 previewImage={workspaceEdit.previewImage}
                 onSave={handleSaveWorkspace}
                 onClose={closeWorkspaceEditor}
+              />
+            </PopupTransition>
+          )}
+          {movePopup && (
+            <PopupTransition closing={closingPopups.has('moveTab')} onExited={() => finishPopupClose('moveTab')}>
+              <MoveTabPopup
+                destinations={moveDestinations}
+                maxTabs={MAX_TABS_PER_WORKSPACE}
+                tabTitle={tabs.find((tab) => tab.id === movePopup.tabId)?.title || 'New Tab'}
+                previewImage={movePopup.previewImage}
+                onMove={(workspaceId) => closeMoveTab(workspaceId)}
+                onClose={() => closeMoveTab(null)}
               />
             </PopupTransition>
           )}

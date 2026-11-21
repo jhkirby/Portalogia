@@ -106,16 +106,17 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
     <div className="zoom-control">
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="squash"
         onClick={onZoomOut}
         disabled={!canZoom}
         aria-label="Zoom out"
         data-tooltip={`Zoom out (${formatShortcut('-')})`}
       >
-        −
+        <span className="icon-hop__glyph">−</span>
       </button>
       <div
-        className="zoom-control__bubble hover-grow chrome-tooltip"
+        className="zoom-control__bubble hover-glow chrome-tooltip"
         data-tooltip={`Zoom percent (${formatShortcut('Shift+0')}) — ${ZOOM_PERCENT_MIN}–${ZOOM_PERCENT_MAX}%`}
       >
         <input
@@ -138,13 +139,14 @@ export function ZoomControl({ percent, canZoom, onZoomOut, onZoomIn, onSetZoom }
       </div>
       <button
         type="button"
-        className="page-actions__button hover-grow chrome-tooltip"
+        className="page-actions__button hover-glow icon-hop chrome-tooltip"
+        data-hop="turn"
         onClick={onZoomIn}
         disabled={!canZoom}
         aria-label="Zoom in"
         data-tooltip={`Zoom in (${formatShortcut('=')})`}
       >
-        +
+        <span className="icon-hop__glyph">+</span>
       </button>
     </div>
   );

@@ -63,8 +63,7 @@
 }
 
 .page-actions__button[aria-pressed='true'] {
-  /* The pressed fill is the cue; a grey layer growing over it would hide it. */
-  --hover-grow-bg: transparent;
+  /* The pressed fill is the cue. */
 
   background: var(--color-selection-bg);
   color: var(--color-accent-text);

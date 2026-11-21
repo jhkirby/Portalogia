@@ -28,6 +28,7 @@ export { SidebarIcon } from './SidebarIcon';
 export { SpeakerIcon } from './SpeakerIcon';
 export { SplitScreenIcon } from './SplitScreenIcon';
 export { DuplicateTabIcon } from './DuplicateTabIcon';
+export { MoveToWorkspaceIcon } from './MoveToWorkspaceIcon';
 export { SwapSidesIcon } from './SwapSidesIcon';
 export { WorkspaceImagesIcon } from './WorkspaceImagesIcon';
 export { WifiIcon } from './WifiIcon';
