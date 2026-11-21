@@ -34,6 +34,7 @@ function invoke<T>(channel: string, payload?: unknown): Promise<IpcResult<T>> {
 const api: PortalogiaApi = {
   createTab: (url) => invoke(IpcChannel.TabsCreate, { url }),
   closeTab: (id) => invoke(IpcChannel.TabsClose, { id }),
+  duplicateTab: (id) => invoke(IpcChannel.TabsDuplicate, { id }),
   activateTab: (id) => invoke(IpcChannel.TabsActivate, { id }),
   toggleTabSelection: (id) => invoke(IpcChannel.TabsToggleSelect, { id }),
   selectTabRange: (id) => invoke(IpcChannel.TabsSelectRange, { id }),

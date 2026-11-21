@@ -3832,7 +3832,11 @@ export class TabManager {
     } else if (leaving) {
       releaseView(leaving.view, this.window);
     }
-    // Sized again now it's the active tab: whether the bottom is kept for the web stat bar depends on its kind.
+    // Sized again now it's the active tab: whether the bottom is kept for the web stat bar, and the right edge for the
+    // Tools sidebar (which a History, Bookmarks or Secrets page doesn't have), depends on its kind.
+    if (!this.isAnimatingBounds) {
+      this.rightInsetNow = this.targetRightInset();
+    }
     view?.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
     this.pushPageStats();
     // Showing a different tab (a plain click, a shortcut, a fallback after a
@@ -7636,10 +7640,19 @@ export class TabManager {
    * (`SIDEBAR_COLLAPSED_WIDTH_PX`) hidden, and 0 in Focus Mode — the left sidebar's `targetLeftInset`, mirrored.
    */
   private targetRightInset(): number {
-    if (this.focusMode) {
+    if (this.focusMode || this.activeHasNoTools()) {
       return 0;
     }
     return this.toolsSidebarVisible ? TOOLS_SIDEBAR_WIDTH_PX : SIDEBAR_COLLAPSED_WIDTH_PX;
+  }
+
+  /**
+   * Whether the active tab is a History, Bookmarks or Secrets page: a table with nothing to point at, mark or export,
+   * so it has no Tools sidebar (`App.tsx` doesn't draw one) and its page takes the right edge too.
+   */
+  private activeHasNoTools(): boolean {
+    const kind = this.activeTabId ? this.states.get(this.activeTabId)?.kind : undefined;
+    return kind === 'history' || kind === 'bookmarks' || kind === 'secrets';
   }
 
   /**
@@ -7664,12 +7677,14 @@ export class TabManager {
   }
 
   /**
-   * Whether the active tab's view sits inside the content frame (`CONTENT_FRAME_*`): a web page, outside Focus Mode
-   * and a page's own fullscreen. A note, PDF, terminal or History page fills its view and draws its own frame.
+   * Whether the active tab's view sits inside the content frame (`CONTENT_FRAME_*`): a web page, outside a page's own
+   * fullscreen. Focus Mode keeps the frame — the background still flows around the page, as it does around a note's
+   * or PDF's own frame — except in split screen, where the two sides just share the area. A note, PDF, terminal or
+   * History page fills its view and draws its own frame.
    */
   private framesActiveView(): boolean {
     const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
-    return active?.kind === 'browser' && !this.focusMode && this.htmlFullScreenTabId === null;
+    return active?.kind === 'browser' && this.htmlFullScreenTabId === null && !(this.focusMode && this.splitView);
   }
 
   /** @returns The bounds a single full-width tab view should occupy for a given sidebar/chrome inset. */

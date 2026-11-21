@@ -5,14 +5,14 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { HistoryClearRange, MarkdownFormatAction, PageStats } from '@shared/ipc-contract';
-import { HOME_URL, ZOOM_PERCENT_STEP } from '@shared/constants';
+import { HOME_URL, MAX_TABS_PER_WORKSPACE, ZOOM_PERCENT_STEP } from '@shared/constants';
 import type { TabState } from '@shared/tab-state';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { ClearHistoryPopup } from './components/ClearHistoryPopup';
 import { ConfirmWordPopup } from './components/ConfirmWordPopup';
 import { Mist } from './components/Mist';
-import { ToolsBar, type ToolsBarAction } from './components/ToolsBar';
+import { ToolsBar, type ToolsBarAction, type ToolsBarSection } from './components/ToolsBar';
 import {
   BoldIcon,
   CodeBlockIcon,
@@ -127,6 +127,7 @@ export function App() {
     canRevert,
     grabbedTabId,
     closeTab,
+    duplicateTab,
     activateTab,
     selectedTabIds,
     selectedWorkspaceIds,
@@ -751,7 +752,7 @@ export function App() {
   // A note's own sections in the Tools sidebar, between the tools and its file actions: first its View/Edit and
   // Formatted/Raw buttons, each named and drawn for the state the note is in and flipping it on a click; then its
   // formatting buttons, which work while it's being edited.
-  const noteSections = ((): readonly (readonly ToolsBarAction[])[] => {
+  const noteSections = ((): readonly ToolsBarSection[] => {
     if (activeTab?.kind !== 'markdown') {
       return [];
     }
@@ -804,7 +805,10 @@ export function App() {
       format('image', 'Picture', <ImageIcon />, `Insert a picture from a file (${formatShortcut('Alt+I')})`),
       format('html', 'Raw HTML', <HtmlIcon />, `Raw HTML block (${formatShortcut('Alt+H')})`),
     ];
-    return [modes, formatting];
+    return [
+      { title: 'Mode', actions: modes },
+      { title: 'Format', actions: formatting },
+    ];
   })();
 
   // A note's or PDF's Delete: confirmed the same way as Clear History (typing "delete"), over its tab, before its
@@ -1066,6 +1070,13 @@ export function App() {
               splitActive={splitView !== null}
               canSplit={tabSelectionOrder.length === 2}
               onToggleSplit={toggleSplitScreen}
+              // Main refuses a tab past the workspace's limit, as the tab row's "+" button does (`MAX_TABS_PER_WORKSPACE`).
+              canDuplicate={activeTabId !== null && workspaceTabs.length < MAX_TABS_PER_WORKSPACE}
+              onDuplicateTab={() => {
+                if (activeTabId) {
+                  duplicateTab(activeTabId);
+                }
+              }}
               onSwapSplit={swapSplitSides}
               onOpenTabSearch={openTabSearch}
               findOpen={findOpen}
@@ -1119,10 +1130,17 @@ export function App() {
             too), and this element's bounds already match that natively —
             same area the hidden `WebContentsView` it's standing in for
             would otherwise occupy. */}
-        <div className="tab-content">
+        <div
+          className="tab-content"
+          // Where the page sits, for the popups' blurred still (bookmark-popup.css): in the chrome's frame (a web
+          // page), in its own (any other tab), or both sides of a split across the area.
+          data-frame={splitView ? 'split' : activeTab?.kind === 'browser' ? 'web' : 'page'}
+          data-focus-mode={focusMode || undefined}
+        >
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
-              terminal or History page draws its own frame, and Focus Mode shows none. */}
-          {!focusMode &&
+              terminal or History page draws its own frame. Focus Mode keeps it, down to the window's bottom (there's
+              no stat bar), so the background still shows around the page — except in split screen. */}
+          {!(focusMode && splitView) &&
             (splitView ? (
               // Split screen: a frame for each side showing a web page (a note, PDF or terminal draws its own), lit on
               // whichever side has the keyboard.
@@ -1142,7 +1160,7 @@ export function App() {
             ) : (
               activeTab?.kind === 'browser' && (
                 <div
-                  className={`tab-content__frame${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
+                  className={`tab-content__frame${focusMode ? ' tab-content__frame--focus-mode' : ''}${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
                   aria-hidden="true"
                   onAnimationEnd={() => setFrameMotion(null)}
                 />
@@ -1264,6 +1282,7 @@ export function App() {
         <ToolsBar
           visible={toolsSidebarVisible}
           focusMode={focusMode}
+          absent={isTablePage}
           onToggleVisible={toggleToolsSidebar}
           canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
           // Something to point at: a web page other than home, a PDF or note with its file open, or a terminal (its
@@ -1321,6 +1340,7 @@ export function App() {
           exportMarkdown={activeTab?.kind === 'markdown'}
           fileActions={fileActions}
           actionSections={noteSections}
+          fileActionsTitle={activeTab?.kind === 'browser' ? 'Page' : 'File'}
           onRevertPage={openRevert}
         />
       </div>

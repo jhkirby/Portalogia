@@ -147,6 +147,11 @@ body {
     box-shadow 160ms ease-out;
 }
 
+/* Focus Mode: no stat bar below, so the frame comes down to the window's bottom margin, as a note's does. */
+.tab-content__frame--focus-mode {
+  bottom: var(--size-content-frame-y);
+}
+
 /* Split screen: a frame for each side showing a web page, the gap between them the same as between a single frame
    and the sidebar (`--size-content-frame-x`). Main lays the two views out to match (`TabManager.computeSplitPanes`). */
 .tab-content__frame--split-left,

@@ -27,6 +27,7 @@ export { ShieldIcon } from './ShieldIcon';
 export { SidebarIcon } from './SidebarIcon';
 export { SpeakerIcon } from './SpeakerIcon';
 export { SplitScreenIcon } from './SplitScreenIcon';
+export { DuplicateTabIcon } from './DuplicateTabIcon';
 export { SwapSidesIcon } from './SwapSidesIcon';
 export { WorkspaceImagesIcon } from './WorkspaceImagesIcon';
 export { WifiIcon } from './WifiIcon';

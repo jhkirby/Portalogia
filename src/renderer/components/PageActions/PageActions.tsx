@@ -4,10 +4,11 @@
 // Last Modified: 2026-11-12
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
 import type { Theme } from '../../hooks/useTheme';
 import { formatShortcut } from '../../lib/shortcuts';
 import { ColorPicker } from '../ColorPicker';
-import { FindIcon, OpenInNewWindowIcon, SearchIcon, SplitScreenIcon, SwapSidesIcon } from '../icons';
+import { DuplicateTabIcon, FindIcon, OpenInNewWindowIcon, SearchIcon, SplitScreenIcon, SwapSidesIcon } from '../icons';
 
 interface PageActionsProps {
   /** Whether the screen is split (two tabs side by side): the split button then goes back to one. */
@@ -18,6 +19,10 @@ interface PageActionsProps {
   readonly onToggleSplit: () => void;
   /** While split, the two sides trade places. */
   readonly onSwapSplit: () => void;
+  /** Whether there's a tab to duplicate and room for its copy (a workspace holds at most `MAX_TABS_PER_WORKSPACE`). */
+  readonly canDuplicate: boolean;
+  /** Opens a copy of the active tab right after it. */
+  readonly onDuplicateTab: () => void;
   /**
    * The active tab's own tools (`TabActions`: the ad blocker, zoom), after Find — or `null` in split screen, where
    * each half of the toolbar has its side's instead.
@@ -54,6 +59,8 @@ export function PageActions({
   canSplit,
   onToggleSplit,
   onSwapSplit,
+  canDuplicate,
+  onDuplicateTab,
   onOpenTabSearch,
   findOpen,
   canFind,
@@ -116,6 +123,21 @@ export function PageActions({
         }
       >
         <SplitScreenIcon split={splitActive} />
+      </button>
+      {/* A copy of the active tab, right after it: the same page, file or kind of tool. */}
+      <button
+        type="button"
+        className="page-actions__button hover-grow chrome-tooltip"
+        onClick={onDuplicateTab}
+        disabled={!canDuplicate}
+        aria-label="Duplicate tab"
+        data-tooltip={
+          canDuplicate
+            ? `Duplicate tab (${formatShortcut('Shift+D')})`
+            : `Duplicate tab: this workspace already has ${MAX_TABS_PER_WORKSPACE} tabs, the most it can hold`
+        }
+      >
+        <DuplicateTabIcon />
       </button>
       <button
         type="button"

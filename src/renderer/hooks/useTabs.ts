@@ -118,6 +118,9 @@ export function useTabs() {
   const closeTab = useCallback((id: string) => {
     void window.portalogia.closeTab(id).then(logIfFailed);
   }, []);
+  const duplicateTab = useCallback((id: string) => {
+    void window.portalogia.duplicateTab(id).then(logIfFailed);
+  }, []);
   const toggleTabSelection = useCallback((id: string) => {
     void window.portalogia.toggleTabSelection(id).then(logIfFailed);
   }, []);
@@ -415,6 +418,7 @@ export function useTabs() {
 
     createTab,
     closeTab,
+    duplicateTab,
     activateTab,
     toggleTabSelection,
     selectTabRange,

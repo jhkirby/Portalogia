@@ -16,6 +16,7 @@ import type { BookmarkState, BrowserState, MarkdownDisplay, PointerMode } from '
 export const IpcChannel = {
   TabsCreate: 'tabs:create',
   TabsClose: 'tabs:close',
+  TabsDuplicate: 'tabs:duplicate',
   TabsActivate: 'tabs:activate',
   TabsToggleSelect: 'tabs:toggle-select',
   TabsSelectRange: 'tabs:select-range',
@@ -672,6 +673,8 @@ export interface AdBlockState {
 export interface PortalogiaApi {
   createTab(url?: string): Promise<IpcResult<BrowserState>>;
   closeTab(id: string): Promise<IpcResult<BrowserState>>;
+  /** Opens a copy of a tab right after it: the same page, file or kind of tool (Ctrl+Shift+D). */
+  duplicateTab(id: string): Promise<IpcResult<BrowserState>>;
   activateTab(id: string): Promise<IpcResult<BrowserState>>;
   /** Ctrl+click: adds the tab to (or removes it from) the multi-selection, along with the active tab, without switching to it. */
   toggleTabSelection(id: string): Promise<IpcResult<BrowserState>>;

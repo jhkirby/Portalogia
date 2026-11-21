@@ -32,16 +32,12 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
 
   filter: blur(20px);
-  /* Scaled past its own box so blur's own edge softening never reveals a
-     sliver of unblurred content at the frame's edge — relies on
-     `.tab-content`'s own `overflow: hidden` (app.css) to actually clip
-     that overscan; without it, the scaled-up image paints past
-     `.tab-content`'s bounds and bleeds into the toolbar/sidebar above and
-     beside it instead of stopping at the edge. */
-  transform: scale(1.1);
+  /* Blurred where the page is, not over the margin around it: the blur is clipped to the page's frame (clip-path
+     applies after the filter), at its own size — no zoom. */
+  clip-path: var(--popup-frame-clip);
 }
 
 .bookmark-popup__scrim {
@@ -49,6 +45,65 @@
   inset: 0;
 
   background: var(--color-overlay-backdrop);
+  clip-path: var(--popup-frame-clip);
+}
+
+/* Where the page sits in the tab area (`.tab-content`'s `data-frame`, App.tsx), so the still and its tint cover just
+   the page's frame. A note, PDF, terminal or table page fills the area and draws its own frame inside it, with its stat
+   bar below; a web page's view sits just inside the chrome's frame, above the chrome's stat bar — the same rectangle
+   either way. In Focus Mode there's no stat bar, so the frame comes down to the bottom margin. */
+.tab-content {
+  --popup-frame-bottom: calc(var(--size-status-bar-height) + var(--size-content-frame-y));
+  --popup-frame-clip: inset(
+    var(--size-content-frame-y) var(--size-content-frame-x) var(--popup-frame-bottom) var(--size-content-frame-x)
+      round var(--size-content-frame-radius)
+  );
+}
+
+.tab-content[data-focus-mode] {
+  --popup-frame-bottom: var(--size-content-frame-y);
+}
+
+/* A web page's still is the view alone (inside the frame's 1px border), so it's drawn there rather than stretched
+   over the whole area. */
+.tab-content[data-frame='web'] .bookmark-popup__preview {
+  top: calc(var(--size-content-frame-y) + 1px);
+  left: calc(var(--size-content-frame-x) + 1px);
+  width: calc(100% - 2 * (var(--size-content-frame-x) + 1px));
+  height: calc(100% - var(--size-content-frame-y) - var(--popup-frame-bottom) - 2px);
+
+  clip-path: inset(0 round calc(var(--size-content-frame-radius) - 1px));
+}
+
+/* Split screen: one still of both sides, across the whole area. */
+.tab-content[data-frame='split'] {
+  --popup-frame-clip: inset(0);
+}
+
+/* The page's frame stays drawn around the blurred still, lit in the accent as a frame with the keyboard is
+   (`.tab-content__frame--focused`): the popup has the keyboard, and it belongs to this page. Over the still and its
+   tint, never in the pointer's way. */
+.bookmark-popup__backdrop::after,
+.tab-search__backdrop::after {
+  content: '';
+  position: absolute;
+  top: var(--size-content-frame-y);
+  right: var(--size-content-frame-x);
+  bottom: var(--popup-frame-bottom);
+  left: var(--size-content-frame-x);
+  box-sizing: border-box;
+
+  border: 1px solid var(--color-accent-text);
+  border-radius: var(--size-content-frame-radius);
+  box-shadow:
+    0 0 0 1px var(--color-accent-text),
+    0 0 14px 2px rgba(var(--color-accent-rgb), 0.55);
+  pointer-events: none;
+}
+
+.tab-content[data-frame='split'] .bookmark-popup__backdrop::after,
+.tab-content[data-frame='split'] .tab-search__backdrop::after {
+  display: none;
 }
 
 .bookmark-popup {

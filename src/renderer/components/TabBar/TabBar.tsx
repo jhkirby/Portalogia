@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-11-12
 
-import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
@@ -48,6 +48,9 @@ const noop = (): void => undefined;
 
 /** How far below the tab strip the cursor must travel before the tab tears off into its own window. */
 const TEAR_OFF_MARGIN_PX = 16;
+/** The longest a dropped order is held waiting for main's reordered tabs (see `heldOrder`). */
+const HELD_ORDER_MS = 1500;
+
 /** How long the cursor must stay out of the tab strip before it tears off — see `onDragMove`. */
 const TEAR_OFF_DWELL_MS = 200;
 
@@ -127,6 +130,23 @@ export function TabBar({
   splitTabIds,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  /**
+   * The order a drag was dropped in, drawn until main's reordered tabs arrive (`handleDrop`). Dropped as soon as the
+   * row's order changes — the new order is then the real one — or after `HELD_ORDER_MS` if it never does (a drop that
+   * changed nothing, or a reorder main refused).
+   */
+  const [heldOrder, setHeldOrder] = useState<readonly string[] | null>(null);
+  const tabOrderKey = tabs.map((tab) => tab.id).join('\n');
+  useEffect(() => {
+    setHeldOrder(null);
+  }, [tabOrderKey]);
+  useEffect(() => {
+    if (heldOrder === null) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setHeldOrder(null), HELD_ORDER_MS);
+    return () => window.clearTimeout(timer);
+  }, [heldOrder]);
   // Set once the drag has already torn off into its own window, so the
   // release doesn't tear it off a second time (`onDragEndOutside`).
   const tornOffRef = useRef(false);
@@ -194,6 +214,11 @@ export function TabBar({
     const draggedTabId = event.dataTransfer.getData('text/plain');
     const target = keepPairWhole(dropTarget);
     if (draggedTabId && target) {
+      // The row stays as the drag left it until main's new order arrives, rather than springing back to the old order
+      // for the moment in between and then sliding forward again.
+      if (draggedId !== null) {
+        setHeldOrder(displayIds);
+      }
       const targetIndex = tabs.findIndex((tab) => tab.id === target.id);
       const insertIndex = target.position === 'before' ? targetIndex : targetIndex + 1;
       onReorder(draggedTabId, tabs[insertIndex]?.id ?? null);
@@ -272,8 +297,11 @@ export function TabBar({
           ? selectedTabIds.filter((id) => tabs.some((tab) => tab.id === id))
           : [draggedId];
   const pairTarget = keepPairWhole(dropTarget);
+  const tabIds = tabs.map((tab) => tab.id);
+  // A just-dropped order, held until the tabs' own order catches up; ignored once the row holds other tabs.
+  const held = heldOrder !== null && heldOrder.length === tabIds.length && tabIds.every((id) => heldOrder.includes(id));
   const displayIds = previewTabOrder(
-    tabs.map((tab) => tab.id),
+    held ? heldOrder : tabIds,
     draggedGroup,
     pairTarget?.id ?? null,
     pairTarget?.position ?? 'before',
