@@ -16,7 +16,7 @@ interface, see [design.md](design.md). For the security model, see
 | Interface | React 19 |
 | Build | electron-vite 5 (Vite 6) |
 | Validation | zod, for every IPC request and every file read from disk |
-| Markdown | marked, DOMPurify, KaTeX, highlight.js, CodeMirror 6 |
+| Markdown | marked, DOMPurify, KaTeX, highlight.js, CodeMirror 6 (raw text), ProseMirror (formatted editing) |
 | PDF | pdf.js (viewing), pdf-lib (exporting) |
 | Terminal | xterm.js (display), node-pty (shell process) |
 | Ad blocking | `@ghostery/adblocker-electron` |
@@ -102,7 +102,7 @@ loads its own page with its own preload:
 | `browser` | any http(s) site or `portalogia://home` | `tabZoom` (also loads `tabHighlighter`, `tabComments`, `tabTextBoxes`, `tabPen`, `tabFind`) | A web page |
 | `terminal` | `terminal.html` | `terminal` | xterm.js connected to a node-pty shell |
 | `pdf` | `pdf.html` | `pdf` | pdf.js viewer with annotation layers |
-| `markdown` | `markdown.html` | `markdown` | Note reader and CodeMirror editor |
+| `markdown` | `markdown.html` | `markdown` | Note reader, formatted (ProseMirror) editor and raw (CodeMirror) editor |
 | `history` | `history.html` | `history` | Searchable browsing history |
 
 ## Main process modules

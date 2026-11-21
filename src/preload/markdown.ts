@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-21
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { MarkdownAnnotations } from '@shared/ipc-schemas';
@@ -39,6 +39,7 @@ const MarkdownResolveLinks = 'markdown:resolve-links';
 const MarkdownBacklinks = 'markdown:backlinks';
 const MarkdownListNotes = 'markdown:list-notes';
 const MarkdownReadImage = 'markdown:read-image';
+const MarkdownPickImage = 'markdown:pick-image';
 const MarkdownReadRemoteImage = 'markdown:read-remote-image';
 const MarkdownRunCode = 'markdown:run-code';
 const FindCommandChannel = 'find:command';
@@ -287,6 +288,10 @@ const api: PortalogiaMarkdownApi = {
   readImage: async (src) => {
     const result = (await ipcRenderer.invoke(MarkdownReadImage, { id: tabId, src })) as string | null;
     return result ?? null;
+  },
+  pickImage: async () => {
+    const result = (await ipcRenderer.invoke(MarkdownPickImage, { id: tabId })) as string | null;
+    return typeof result === 'string' ? result : null;
   },
   readRemoteImage: async (url) => {
     const result = (await ipcRenderer.invoke(MarkdownReadRemoteImage, { id: tabId, url })) as string | null;

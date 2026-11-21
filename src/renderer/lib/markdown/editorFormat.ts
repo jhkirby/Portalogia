@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-11-21
 
 import type { EditorView } from '@codemirror/view';
 
@@ -164,5 +164,115 @@ export function insertTable(view: EditorView, at: number, rows: number, columns:
     selection: { anchor: firstCell, head: firstCell + 'Column 1'.length },
     scrollIntoView: true,
   });
+  view.focus();
+}
+
+// ── RAW-TEXT VERSIONS OF THE BLOCK TOOLS ────────────────────────────────
+
+/** The lines the selection touches, as `[from, to]` line numbers. */
+function selectedLines(view: EditorView): { first: number; last: number } {
+  const { from, to } = view.state.selection.main;
+  const doc = view.state.doc;
+  return { first: doc.lineAt(from).number, last: doc.lineAt(to).number };
+}
+
+/** A line's own text after any heading, list or task marker (and its indent), and that indent. */
+function stripBlockMarker(text: string): { indent: string; body: string } {
+  const match = /^(\s*)(?:#{1,6}\s+|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)?(.*)$/.exec(text);
+  return { indent: match?.[1] ?? '', body: match?.[2] ?? text };
+}
+
+/**
+ * Makes the selected lines headings of a level (or, at 0, plain lines), replacing any heading or list marker.
+ * @param level 0–6.
+ */
+export function setHeadingLines(view: EditorView, level: number): void {
+  const doc = view.state.doc;
+  const { first, last } = selectedLines(view);
+  const changes = [];
+  for (let number = first; number <= last; number += 1) {
+    const line = doc.line(number);
+    const { body } = stripBlockMarker(line.text);
+    const prefix = level > 0 ? `${'#'.repeat(level)} ` : '';
+    changes.push({ from: line.from, to: line.to, insert: `${prefix}${body}` });
+  }
+  view.dispatch({ changes, scrollIntoView: true });
+  view.focus();
+}
+
+/** The list kinds a raw line can be made: their marker for the `index`th line. */
+const LIST_MARKERS: Readonly<Record<'bullet' | 'ordered' | 'task', (index: number) => string>> = {
+  bullet: () => '- ',
+  ordered: (index) => `${index + 1}. `,
+  task: () => '- [ ] ',
+};
+
+/** Whether a line already starts with this kind of list marker. */
+function hasListMarker(text: string, kind: 'bullet' | 'ordered' | 'task'): boolean {
+  const trimmed = text.trimStart();
+  if (kind === 'task') {
+    return /^[-*+]\s+\[[ xX]\]\s/.test(trimmed);
+  }
+  if (kind === 'ordered') {
+    return /^\d+[.)]\s/.test(trimmed);
+  }
+  return /^[-*+]\s/.test(trimmed) && !/^[-*+]\s+\[[ xX]\]\s/.test(trimmed);
+}
+
+/**
+ * The list buttons on raw text: the selected lines become items of that kind
+ * (numbered in order), or — if they all already are — plain lines again.
+ * @param kind Bullets, numbers or checkboxes.
+ */
+export function toggleListLines(view: EditorView, kind: 'bullet' | 'ordered' | 'task'): void {
+  const doc = view.state.doc;
+  const { first, last } = selectedLines(view);
+  let all = true;
+  for (let number = first; number <= last; number += 1) {
+    if (!hasListMarker(doc.line(number).text, kind)) {
+      all = false;
+    }
+  }
+  const changes = [];
+  for (let number = first; number <= last; number += 1) {
+    const line = doc.line(number);
+    const { indent, body } = stripBlockMarker(line.text);
+    const marker = all ? '' : LIST_MARKERS[kind](number - first);
+    changes.push({ from: line.from, to: line.to, insert: `${indent}${marker}${body}` });
+  }
+  view.dispatch({ changes, scrollIntoView: true });
+  view.focus();
+}
+
+/**
+ * Puts a block of Markdown on lines of its own at the caret, set off by blank
+ * lines (as `insertTable` does), with the caret `caretAt` characters into it.
+ * @param markdown The block.
+ * @param caretAt Where in the block the caret goes (defaults to its end).
+ */
+export function insertBlockText(view: EditorView, markdown: string, caretAt = markdown.length): void {
+  const doc = view.state.doc;
+  const line = doc.lineAt(view.state.selection.main.head);
+  const blank = line.text.trim() === '';
+  const from = blank ? line.from : line.to;
+  const previous = blank ? (line.number > 1 ? doc.line(line.number - 1).text : '') : line.text;
+  const next = line.number < doc.lines ? doc.line(line.number + 1).text : null;
+  const before = blank ? (previous.trim() === '' ? '' : '\n') : '\n\n';
+  const after = next === null ? '\n' : next.trim() === '' ? '' : '\n';
+  view.dispatch({
+    changes: { from, to: line.to, insert: `${before}${markdown}${after}` },
+    selection: { anchor: from + before.length + caretAt },
+    scrollIntoView: true,
+  });
+  view.focus();
+}
+
+/**
+ * Puts text at the caret (replacing the selection), with the caret after it.
+ * @param text What to insert, e.g. `![](pic.png)`.
+ */
+export function insertInlineText(view: EditorView, text: string): void {
+  const { from, to } = view.state.selection.main;
+  view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, scrollIntoView: true });
   view.focus();
 }

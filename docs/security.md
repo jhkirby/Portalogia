@@ -83,7 +83,7 @@ that remains. The adversary IDs are from the table above.
 | T9 | A site reads or changes the user's annotations | A1 | Private notes leaked or altered | Comment and text-box UI is in a *closed* shadow root, created by the preload rather than found by id (SEC-004). Annotations are stored by main, not in the page. | Low |
 | T10 | A site uses camera, microphone, location or notifications | A1 | Surveillance, spam | The permission handler denies everything except full-screen for http(s) pages and pointer lock for the app's own PDF page | Low |
 | T11 | A corrupt or planted profile file | A6 | Crash, or injected state (such as a malicious tab URL) | Every store parses with zod and falls back to defaults on failure. Restored URLs still pass the scheme allowlist. | Low |
-| T12 | Path traversal or credential leak through note links and images | A4 | Reading arbitrary files. NTLM hash leak through UNC paths. | Note and PDF reopen accepts only known paths. Renames refuse separators and reserved names. Image reads are limited by extension and size. UNC paths (`\\host`, `//host`) are refused. | Low |
+| T12 | Path traversal or credential leak through note links and images | A4 | Reading arbitrary files. NTLM hash leak through UNC paths. | Note and PDF reopen accepts only known paths. Renames refuse separators and reserved names. Image reads are limited by extension and size, and to the note's own folders, except for the exact files the user picked in the Picture dialog (`PickedImageStore`): a note can name any path, but only a person can choose one. UNC paths (`\\host`, `//host`) are refused. | Low |
 | T13 | Tracking across sites | A1, A5 | Profiling | Ghostery filter lists. Tracking parameters stripped from URLs. No telemetry. | Low |
 | T14 | The installed app is tampered with | A6 | Persistent compromise | None yet. Builds are unsigned, no Electron fuses are set, and the app is a plain folder, not an ASAR archive (SEC-008). | **High. Open.** |
 | T15 | A dependency is compromised | A7 | Anything | Lockfile with `npm ci`. electron-builder and its vulnerable build tooling removed (SEC-007). License notices generated from the real dependency tree. | Medium |
@@ -99,7 +99,8 @@ that remains. The adversary IDs are from the table above.
 | Errors as values | `IpcResult` returns `error.message` only, never stack traces |
 | Scheme allowlist | `isNavigableUrl` in `src/shared/url.ts` |
 | Content Security Policy | `src/shared/csp.ts` (app pages), `src/shared/markdown/csp.ts` (notes), the `page-csp` build plugin, and the home page's own CSP header |
-| Markdown sanitizing | `src/renderer/lib/markdown/renderNote.ts`, `enhance.ts` |
+| Markdown sanitizing | `src/renderer/lib/markdown/renderNote.ts` (`renderNote`, and `sanitizeNoteHtml` for the formatted editor's raw HTML blocks), `enhance.ts` |
+| Picked-picture allowlist | `PickedImageStore.ts`, `readImageDataUrl` in `MarkdownVault.ts`, `TabManager.pickMarkdownImage` |
 | Remote image fetch | `fetchRemoteImageDataUrl` in `MarkdownVault.ts` |
 | Code-run consent | `TabManager.ts` (`markdownTrustedBlocks`), `MarkdownCodeRunner.ts` |
 | Permission handler | `src/main/index.ts` (`setPermissionRequestHandler`) |

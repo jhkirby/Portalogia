@@ -1,9 +1,10 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-11-21
 
 import katex from 'katex';
+import { CALLOUT_PATTERN, calloutKind } from '@shared/markdown/callouts';
 import { slugifyHeading } from '@shared/markdown/parser';
 import { REMOTE_SRC_ATTRIBUTE } from './renderNote';
 import { UI_ATTRIBUTE } from './textOffsets';
@@ -76,40 +77,6 @@ export function enableTasks(root: Element): void {
   });
 }
 
-/** The colour family and default title of each Obsidian callout type. */
-const CALLOUT_KINDS: Readonly<Record<string, { readonly family: string; readonly title: string }>> = {
-  note: { family: 'blue', title: 'Note' },
-  info: { family: 'blue', title: 'Info' },
-  todo: { family: 'blue', title: 'To do' },
-  abstract: { family: 'cyan', title: 'Abstract' },
-  summary: { family: 'cyan', title: 'Summary' },
-  tldr: { family: 'cyan', title: 'TL;DR' },
-  tip: { family: 'cyan', title: 'Tip' },
-  hint: { family: 'cyan', title: 'Hint' },
-  important: { family: 'cyan', title: 'Important' },
-  success: { family: 'green', title: 'Success' },
-  check: { family: 'green', title: 'Check' },
-  done: { family: 'green', title: 'Done' },
-  question: { family: 'orange', title: 'Question' },
-  help: { family: 'orange', title: 'Help' },
-  faq: { family: 'orange', title: 'FAQ' },
-  warning: { family: 'orange', title: 'Warning' },
-  caution: { family: 'orange', title: 'Caution' },
-  attention: { family: 'orange', title: 'Attention' },
-  failure: { family: 'red', title: 'Failure' },
-  fail: { family: 'red', title: 'Failure' },
-  missing: { family: 'red', title: 'Missing' },
-  danger: { family: 'red', title: 'Danger' },
-  error: { family: 'red', title: 'Error' },
-  bug: { family: 'red', title: 'Bug' },
-  example: { family: 'purple', title: 'Example' },
-  quote: { family: 'gray', title: 'Quote' },
-  cite: { family: 'gray', title: 'Quote' },
-};
-
-/** `[!type]`, an optional fold sign, then an optional title, at the start of a quote's first line. */
-const CALLOUT_PATTERN = /^\s*\[!([A-Za-z]+)\]([+-])?[ \t]*([^\n]*)\n?/;
-
 /**
  * Turns Obsidian callouts (`> [!note] Title`) into styled boxes. A quote
  * whose first line isn't `[!type]` is left as an ordinary quote.
@@ -126,7 +93,7 @@ export function convertCallouts(root: Element): void {
       return;
     }
     const type = (match[1] ?? '').toLowerCase();
-    const kind = CALLOUT_KINDS[type] ?? { family: 'blue', title: type.charAt(0).toUpperCase() + type.slice(1) };
+    const kind = calloutKind(type);
     const customTitle = (match[3] ?? '').trim();
     firstText.nodeValue = (firstText.nodeValue ?? '').slice(match[0].length);
     if ((firstText.nodeValue ?? '') === '') {

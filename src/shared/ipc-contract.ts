@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
@@ -273,6 +273,7 @@ export const IpcChannel = {
   MarkdownListNotes: 'markdown:list-notes',
   /** Markdown page → main: an image beside the note, as a data URL. */
   MarkdownReadImage: 'markdown:read-image',
+  MarkdownPickImage: 'markdown:pick-image',
   /** Markdown page → main: fetch a web picture the user clicked to load (a note never loads one by itself). */
   MarkdownReadRemoteImage: 'markdown:read-remote-image',
   /** Markdown page → main: run one of the note's fenced code blocks. */
@@ -1351,7 +1352,37 @@ export interface MarkdownFileData {
  * A formatting command for the editor: what the keyboard shortcuts, the right-click menu and the Tools sidebar's
  * formatting buttons ask for. `'table'` opens a box for the table's size, then puts the table at the caret.
  */
-export type MarkdownFormatAction = 'bold' | 'italic' | 'link' | 'latex' | 'code' | 'table';
+export const MARKDOWN_FORMAT_ACTIONS = [
+  'bold',
+  'italic',
+  'highlight',
+  'inlineCode',
+  'link',
+  'latex',
+  'code',
+  'table',
+  // Opens the page's heading-size picker; `heading0`–`heading6` set a size directly (0 is normal text).
+  'heading',
+  'heading0',
+  'heading1',
+  'heading2',
+  'heading3',
+  'heading4',
+  'heading5',
+  'heading6',
+  'bulletList',
+  'orderedList',
+  'taskList',
+  // Opens the page's callout-type picker.
+  'callout',
+  'divider',
+  'html',
+  // Asks main for a picture file, then puts it at the caret.
+  'image',
+] as const;
+
+/** One of `MARKDOWN_FORMAT_ACTIONS`. */
+export type MarkdownFormatAction = (typeof MARKDOWN_FORMAT_ACTIONS)[number];
 
 /** Which annotation tool the window has on for a Markdown tab. The tools are mutually exclusive in main. */
 export type MarkdownTool = 'none' | 'pen' | 'comment' | 'highlighter';
@@ -1442,6 +1473,8 @@ export interface PortalogiaMarkdownApi {
   listNotes(): Promise<readonly string[]>;
   /** An image beside the note as a `data:` URL, or `null` if it can't be read. */
   readImage(src: string): Promise<string | null>;
+  /** Asks the user for a picture to put in the note (a native dialog); the link to write for it, or `null`. */
+  pickImage(): Promise<string | null>;
   /**
    * A web (`https:`) picture as a `data:` URL, or `null` if it can't be
    * fetched. Only for a picture the user clicked to load: a note opened from

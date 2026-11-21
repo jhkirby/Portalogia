@@ -1,11 +1,14 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-21
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import 'katex/dist/katex.min.css';
+// ProseMirror's own rules the formatted editor needs (white-space, the gap cursor); its look is formatted-editor.css.
+import 'prosemirror-view/style/prosemirror.css';
+import 'prosemirror-gapcursor/style/gapcursor.css';
 import { MarkdownViewer } from './components/MarkdownViewer';
 import { watchAccentColor } from './lib/accentStorage';
 import { trackPageFocus } from './lib/pageFocus';

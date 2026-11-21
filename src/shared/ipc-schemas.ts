@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import { z } from 'zod';
 import { HISTORY_UNIT_LIMITS } from './constants';
@@ -11,6 +11,7 @@ import {
   MAX_SECRET_SOURCE_CHARS,
   MAX_SECRET_VALUE_CHARS,
 } from './secrets';
+import { MARKDOWN_FORMAT_ACTIONS } from './ipc-contract';
 import { isWorkspaceIconId } from './workspaceIcons';
 
 // Every ipcMain.handle validates its payload against one of these before
@@ -478,7 +479,7 @@ export const markdownExportRequestSchema = z.object({
 /** A formatting button pressed in the Tools sidebar for a Markdown tab: one of `MarkdownFormatAction`. */
 export const markdownApplyFormatRequestSchema = z.object({
   id: z.string().min(1),
-  action: z.enum(['bold', 'italic', 'link', 'latex', 'code', 'table']),
+  action: z.enum(MARKDOWN_FORMAT_ACTIONS),
 });
 
 export const markdownNavigateHistoryRequestSchema = z.object({
