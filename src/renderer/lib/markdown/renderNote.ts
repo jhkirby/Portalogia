@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-11-21
 
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/core';
@@ -123,4 +123,24 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
  */
 export function renderNote(source: string): string {
   return DOMPurify.sanitize(engine.render(source), PURIFY_CONFIG);
+}
+
+/**
+ * A note's raw HTML (a block the formatted editor draws), made safe the same
+ * way `renderNote` makes the reader's: the same forbidden tags and the same
+ * hold on web pictures.
+ * @param html The HTML as written in the note.
+ */
+export function sanitizeNoteHtml(html: string): string {
+  return DOMPurify.sanitize(html, PURIFY_CONFIG);
+}
+
+/**
+ * Colours a code block's text as the reader does (highlight.js, for the
+ * languages it knows), as escaped HTML.
+ * @param code The block's text.
+ * @param language The word after its fence.
+ */
+export function highlightNoteCode(code: string, language: string): string {
+  return highlightCode(code, language);
 }

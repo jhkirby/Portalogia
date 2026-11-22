@@ -7,7 +7,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Terminal } from './components/Terminal';
 import { watchAccentColor } from './lib/accentStorage';
-import { trackPageFocus } from './lib/pageFocus';
+import { trackPageFocus, trackPageHover } from './lib/pageFocus';
 import { followSystemTheme } from './lib/themeFade';
 
 // `colors.css`'s `::selection` rule (this page loads it too) reads
@@ -23,6 +23,7 @@ watchAccentColor();
 followSystemTheme();
 // The frame around the content lights up in the accent while this page has the keyboard.
 trackPageFocus();
+trackPageHover();
 
 // This page is loaded once per terminal tab, each with its own `?id=` (see
 // `TabManager.createTerminalTab`) — there's no chrome here to pass it down

@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import type { RGB } from '@shared/color';
 import type { FindOptions } from '@shared/find';
@@ -16,14 +16,12 @@ import type { BookmarkState, BrowserState, MarkdownDisplay, PointerMode } from '
 export const IpcChannel = {
   TabsCreate: 'tabs:create',
   TabsClose: 'tabs:close',
+  TabsDuplicate: 'tabs:duplicate',
   TabsActivate: 'tabs:activate',
   TabsToggleSelect: 'tabs:toggle-select',
   TabsSelectRange: 'tabs:select-range',
   TabsMove: 'tabs:move',
   TabsMoveToWorkspace: 'tabs:move-to-workspace',
-  TabsTearOff: 'tabs:tear-off',
-  TabsTearOffEnd: 'tabs:tear-off-end',
-  TabsDropRegions: 'tabs:drop-regions',
   TabsNavigate: 'tabs:navigate',
   TabsGoBack: 'tabs:go-back',
   TabsGoForward: 'tabs:go-forward',
@@ -273,6 +271,7 @@ export const IpcChannel = {
   MarkdownListNotes: 'markdown:list-notes',
   /** Markdown page → main: an image beside the note, as a data URL. */
   MarkdownReadImage: 'markdown:read-image',
+  MarkdownPickImage: 'markdown:pick-image',
   /** Markdown page → main: fetch a web picture the user clicked to load (a note never loads one by itself). */
   MarkdownReadRemoteImage: 'markdown:read-remote-image',
   /** Markdown page → main: run one of the note's fenced code blocks. */
@@ -363,6 +362,7 @@ export const IpcChannel = {
   UiFocusAddressBar: 'ui:focus-address-bar',
   /** Main → chrome: the pointer came onto (`true`) or left the tab row, its empty drag space included. */
   UiTitlebarPointer: 'ui:titlebar-pointer',
+  UiContentPointer: 'ui:content-pointer',
   /** Main → chrome: where the pointer is on the tab row (window CSS pixels), pushed as it moves there, for its glow. */
   UiTitlebarPointerPosition: 'ui:titlebar-pointer-position',
   UiFocusZoom: 'ui:focus-zoom',
@@ -414,14 +414,6 @@ export type IpcResult<T> =
   | { readonly ok: false; readonly code: string; readonly message: string };
 
 /** Result of a PDF export: the path it was saved to, or `null` if the user canceled the save dialog. */
-/** A rectangle in window-client coordinates. */
-export interface DropRegionRect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
 export interface ExportPdfResult {
   readonly savedPath: string | null;
 }
@@ -671,6 +663,8 @@ export interface AdBlockState {
 export interface PortalogiaApi {
   createTab(url?: string): Promise<IpcResult<BrowserState>>;
   closeTab(id: string): Promise<IpcResult<BrowserState>>;
+  /** Opens a copy of a tab right after it: the same page, file or kind of tool (Ctrl+Shift+D). */
+  duplicateTab(id: string): Promise<IpcResult<BrowserState>>;
   activateTab(id: string): Promise<IpcResult<BrowserState>>;
   /** Ctrl+click: adds the tab to (or removes it from) the multi-selection, along with the active tab, without switching to it. */
   toggleTabSelection(id: string): Promise<IpcResult<BrowserState>>;
@@ -680,32 +674,6 @@ export interface PortalogiaApi {
   moveTab(id: string, beforeId: string | null): Promise<IpcResult<BrowserState>>;
   /** Moves a tab into a different workspace — dragging it onto one of `WorkspaceBar`'s pills. A no-op if it's already there. */
   moveTabToWorkspace(id: string, workspaceId: string): Promise<IpcResult<BrowserState>>;
-  /**
-   * Reports a tab drag that ended outside the tab bar's own drop targets —
-   * `screenX`/`screenY` are the drag's OS screen coordinates at release
-   * (`DragEvent.screenX`/`screenY`), not viewport-relative. Main decides
-   * whether that point actually landed outside this window's own bounds
-   * (a drop inside the window that simply missed every `TabBar`/
-   * `WorkspaceBar` target — e.g. over the page's own native view — isn't a
-   * tear-off) before spinning up a new window for it. Fire-and-forget: the
-   * eventual result is just this window's own `onStateChanged` push once
-   * the tab is gone, same as any other tab removal.
-   */
-  tearOffTab(id: string, screenX: number, screenY: number, live?: boolean): void;
-  /**
-   * Ends a `live` tear-off (the drag was released). `accepted` is whether
-   * the release landed on a drop target (another tab strip or a workspace
-   * pill) — main then discards the now-empty torn-off window if the tab
-   * really did move out of it; otherwise the window stays where it is.
-   */
-  tearOffTabEnd(id: string, accepted: boolean): void;
-  /**
-   * Reports where this window's tab drop targets are (workspace pills and
-   * the "+ New workspace" button), in window-client coordinates — sent when
-   * a tab drag starts, so main can tell when a torn-off window is hovering
-   * over one of them.
-   */
-  reportDropRegions(rects: readonly DropRegionRect[]): void;
   navigate(id: string, url: string): Promise<IpcResult<BrowserState>>;
   goBack(id: string): Promise<IpcResult<BrowserState>>;
   goForward(id: string): Promise<IpcResult<BrowserState>>;
@@ -1064,6 +1032,8 @@ export interface PortalogiaApi {
   onFocusAddressBar(listener: (clear: boolean) => void): () => void;
   /** Pushed as the pointer comes onto or leaves the tab row (main watches it: the row's empty space is the OS drag region). */
   onTitlebarPointer(listener: (inside: boolean) => void): () => void;
+  /** Pushed as the pointer comes onto or leaves a shown tab's page (main watches it: a page is a native view): the tab's id, or `null`. */
+  onContentPointer(listener: (tabId: string | null) => void): () => void;
   /** Pushed as the pointer moves on the tab row, empty space included: its place in the window's CSS pixels. */
   onTitlebarPointerPosition(listener: (point: { readonly x: number; readonly y: number }) => void): () => void;
 
@@ -1351,7 +1321,37 @@ export interface MarkdownFileData {
  * A formatting command for the editor: what the keyboard shortcuts, the right-click menu and the Tools sidebar's
  * formatting buttons ask for. `'table'` opens a box for the table's size, then puts the table at the caret.
  */
-export type MarkdownFormatAction = 'bold' | 'italic' | 'link' | 'latex' | 'code' | 'table';
+export const MARKDOWN_FORMAT_ACTIONS = [
+  'bold',
+  'italic',
+  'highlight',
+  'inlineCode',
+  'link',
+  'latex',
+  'code',
+  'table',
+  // Opens the page's heading-size picker; `heading0`–`heading6` set a size directly (0 is normal text).
+  'heading',
+  'heading0',
+  'heading1',
+  'heading2',
+  'heading3',
+  'heading4',
+  'heading5',
+  'heading6',
+  'bulletList',
+  'orderedList',
+  'taskList',
+  // Opens the page's callout-type picker.
+  'callout',
+  'divider',
+  'html',
+  // Asks main for a picture file, then puts it at the caret.
+  'image',
+] as const;
+
+/** One of `MARKDOWN_FORMAT_ACTIONS`. */
+export type MarkdownFormatAction = (typeof MARKDOWN_FORMAT_ACTIONS)[number];
 
 /** Which annotation tool the window has on for a Markdown tab. The tools are mutually exclusive in main. */
 export type MarkdownTool = 'none' | 'pen' | 'comment' | 'highlighter';
@@ -1442,6 +1442,8 @@ export interface PortalogiaMarkdownApi {
   listNotes(): Promise<readonly string[]>;
   /** An image beside the note as a `data:` URL, or `null` if it can't be read. */
   readImage(src: string): Promise<string | null>;
+  /** Asks the user for a picture to put in the note (a native dialog); the link to write for it, or `null`. */
+  pickImage(): Promise<string | null>;
   /**
    * A web (`https:`) picture as a `data:` URL, or `null` if it can't be
    * fetched. Only for a picture the user clicked to load: a note opened from

@@ -7,6 +7,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HistoryViewer } from './components/HistoryViewer';
 import { watchAccentColor } from './lib/accentStorage';
+import { trackPageHover } from './lib/pageFocus';
 import { followSystemTheme } from './lib/themeFade';
 
 // A separate renderer from the chrome's, so it doesn't inherit `<html data-theme>` (what colors.css's tokens key off):
@@ -19,6 +20,9 @@ const container = document.getElementById('root');
 if (!container) {
   throw new Error('Root element #root is missing from history.html');
 }
+
+// The pointer over the table: its frame glows softly (history-viewer.css).
+trackPageHover();
 
 createRoot(container).render(
   <StrictMode>

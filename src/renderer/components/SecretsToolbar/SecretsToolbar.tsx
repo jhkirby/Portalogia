@@ -82,7 +82,8 @@ export function SecretsToolbar({ tab }: SecretsToolbarProps) {
       {/* A new, empty row at the top of the table, every field typed in by hand; switches to editing to show it. */}
       <button
         type="button"
-        className="secrets-toolbar__add hover-grow chrome-tooltip"
+        className="secrets-toolbar__add hover-glow icon-hop chrome-tooltip"
+        data-hop="turn"
         onClick={() => window.portalogia.addSecretRow(tab.id)}
         aria-label="Add a secret"
         data-tooltip="Add a secret by hand"

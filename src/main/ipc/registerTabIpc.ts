@@ -131,6 +131,9 @@ export function registerTabIpc(
   handle(IpcChannel.TabsClose, tabIdRequestSchema, (request, event) =>
     resolveTabManager(event).closeTab(request.id),
   );
+  handle(IpcChannel.TabsDuplicate, tabIdRequestSchema, (request, event) =>
+    resolveTabManager(event).duplicateTab(request.id),
+  );
   handle(IpcChannel.TabsActivate, tabIdRequestSchema, (request, event) =>
     resolveTabManager(event).activateTab(request.id),
   );

@@ -139,7 +139,8 @@ export function ColorPicker() {
     <button
       ref={buttonRef}
       type="button"
-      className="page-actions__button hover-grow chrome-tooltip"
+      className="page-actions__button hover-glow icon-hop chrome-tooltip"
+      data-hop="drip"
       onClick={() => setIsOpen((open) => !open)}
       aria-pressed={isOpen}
       aria-label="Accent color"

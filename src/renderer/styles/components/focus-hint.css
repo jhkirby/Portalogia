@@ -1,7 +1,7 @@
 /* Project: Portalogia
    Owner: Joshua H. Kirby
    Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-   Last Modified: 2026-11-03 */
+   Last Modified: 2026-11-21 */
 
 /* ── FOCUS HINT ───────────────────────────────────────────────────────── */
 /* The last item in every stat bar (`FocusHint`): how to move the keyboard
@@ -9,7 +9,7 @@
    whatever the bar's other items take. When they take more than the bar has
    (a narrow window), it stays stuck to the right edge over the items it
    covers, in the bar's own background, rather than being cut off with them.
-   In the accent, so it reads as a hint rather than one more count. */
+   In the bar's own colour, set apart as a hint by its italics. */
 
 .focus-hint {
   position: sticky;
@@ -21,6 +21,7 @@
   /* The bar's background, so the items it covers don't show through. */
   background: inherit;
 
-  color: var(--color-accent-text);
+  color: inherit;
+  font-style: italic;
   white-space: nowrap;
 }

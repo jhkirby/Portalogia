@@ -10,7 +10,7 @@ import type { BookmarkState, LoadBytes } from '@shared/tab-state';
 import { looksLikeUrl } from '@shared/url';
 import { useAnimatedPlaceholder } from '../../hooks/useAnimatedPlaceholder';
 import { useFadingProgress, useFadingValue } from '../../hooks/useFadingProgress';
-import { formatByteFraction } from '../../lib/formatBytes';
+import { formatByteCount } from '../../lib/formatBytes';
 import { useHistorySuggestions } from '../../hooks/useHistorySuggestions';
 import { pageLabel } from '../../lib/pageLabel';
 import { rankSuggestions } from '../../lib/suggestionRanking';
@@ -278,7 +278,8 @@ export function AddressBar({
       )}
       <button
         type="button"
-        className="address-bar__bookmark hover-grow chrome-tooltip"
+        className="address-bar__bookmark hover-glow icon-hop chrome-tooltip"
+        data-hop="twinkle"
         onClick={onToggleBookmark}
         disabled={!canBookmark}
         aria-pressed={isBookmarked}
@@ -337,7 +338,8 @@ export function AddressBar({
           className={`address-bar__bytes${shownProgress.leaving ? ' address-bar__progress--leaving' : ''}`}
           aria-label="Bytes loaded"
         >
-          {formatByteFraction(shownBytes.value.loaded, shownBytes.value.total)}
+          {/* What has arrived so far, counting up as it loads. */}
+          {formatByteCount(shownBytes.value.loaded)}
         </span>
       )}
       {/* …and the same as a number at the bar's right end, held at 100% for a second once the page has loaded. */}

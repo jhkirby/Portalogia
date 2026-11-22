@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-06
+// Last Modified: 2026-11-21
 
 import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import type { MarkdownFormatAction } from '@shared/ipc-contract';
@@ -9,12 +9,22 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from '../../lib/markdown/editorForm
 import { formatShortcut } from '../../lib/shortcuts';
 
 /** The right-click menu's entries, in order: what each does and the keys that do the same from the keyboard. */
-const MENU_ITEMS: readonly { readonly action: MarkdownFormatAction; readonly label: string; readonly keys: string }[] = [
+const MENU_ITEMS: readonly { readonly action: MarkdownFormatAction; readonly label: string; readonly keys: string | null }[] = [
   { action: 'bold', label: 'Bold', keys: 'B' },
   { action: 'italic', label: 'Italic', keys: 'I' },
-  { action: 'link', label: 'Make a link…', keys: 'Shift+U' },
-  { action: 'latex', label: 'Wrap in LaTeX block', keys: 'Shift+L' },
-  { action: 'code', label: 'Wrap in code block', keys: 'Shift+K' },
+  { action: 'inlineCode', label: 'Inline code', keys: null },
+  { action: 'link', label: 'Make a link', keys: 'Shift+U' },
+  { action: 'heading', label: 'Heading', keys: 'Alt+1' },
+  { action: 'bulletList', label: 'Bulleted list', keys: 'Shift+8' },
+  { action: 'orderedList', label: 'Numbered list', keys: 'Shift+7' },
+  { action: 'taskList', label: 'Checklist', keys: 'Shift+9' },
+  { action: 'callout', label: 'Callout', keys: 'Alt+C' },
+  { action: 'divider', label: 'Divider', keys: 'Alt+D' },
+  { action: 'latex', label: 'LaTeX block', keys: 'Shift+L' },
+  { action: 'code', label: 'Code block', keys: 'Shift+K' },
+  { action: 'table', label: 'Table', keys: null },
+  { action: 'image', label: 'Picture', keys: 'Alt+I' },
+  { action: 'html', label: 'Raw HTML', keys: 'Alt+H' },
 ];
 
 interface EditorContextMenuProps {
@@ -83,7 +93,7 @@ export function EditorContextMenu({ x, y, onPick, onClose }: EditorContextMenuPr
           type="button"
           role="menuitem"
           className="md-menu__item"
-          data-tooltip={`${item.label.replace('…', '')} (${formatShortcut(item.keys)})`}
+          data-tooltip={item.keys === null ? item.label : `${item.label} (${formatShortcut(item.keys)})`}
           // A press must not take focus from the editor, or its selection would be lost before the menu acts on it.
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onPick(item.action)}

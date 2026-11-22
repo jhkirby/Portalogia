@@ -34,15 +34,12 @@ function invoke<T>(channel: string, payload?: unknown): Promise<IpcResult<T>> {
 const api: PortalogiaApi = {
   createTab: (url) => invoke(IpcChannel.TabsCreate, { url }),
   closeTab: (id) => invoke(IpcChannel.TabsClose, { id }),
+  duplicateTab: (id) => invoke(IpcChannel.TabsDuplicate, { id }),
   activateTab: (id) => invoke(IpcChannel.TabsActivate, { id }),
   toggleTabSelection: (id) => invoke(IpcChannel.TabsToggleSelect, { id }),
   selectTabRange: (id) => invoke(IpcChannel.TabsSelectRange, { id }),
   moveTab: (id, beforeId) => invoke(IpcChannel.TabsMove, { id, beforeId }),
   moveTabToWorkspace: (id, workspaceId) => invoke(IpcChannel.TabsMoveToWorkspace, { id, workspaceId }),
-  tearOffTab: (id, screenX, screenY, live) =>
-    ipcRenderer.send(IpcChannel.TabsTearOff, { id, screenX, screenY, live }),
-  reportDropRegions: (rects) => ipcRenderer.send(IpcChannel.TabsDropRegions, { rects }),
-  tearOffTabEnd: (id, accepted) => ipcRenderer.send(IpcChannel.TabsTearOffEnd, { id, accepted }),
   navigate: (id, url) => invoke(IpcChannel.TabsNavigate, { id, url }),
   goBack: (id) => invoke(IpcChannel.TabsGoBack, { id }),
   goForward: (id) => invoke(IpcChannel.TabsGoForward, { id }),
@@ -215,6 +212,11 @@ const api: PortalogiaApi = {
     const handler = (_event: Electron.IpcRendererEvent, payload?: { clear?: boolean }): void => listener(payload?.clear === true);
     ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
+  },
+  onContentPointer: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, tabId: unknown): void => listener(typeof tabId === 'string' ? tabId : null);
+    ipcRenderer.on(IpcChannel.UiContentPointer, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiContentPointer, handler);
   },
   onTitlebarPointer: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, inside: unknown): void => listener(inside === true);

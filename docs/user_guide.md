@@ -276,29 +276,68 @@ such as Obsidian.
    choose one you already have.
 
 **Viewing and editing.** A note has two modes: **View** shows it nicely
-formatted, and **Edit** lets you type. Switch with the toggle in the
-toolbar, or press **Ctrl+Shift+G**. Your changes are saved automatically.
+formatted, and **Edit** lets you change it. Switch with the toggle in the
+toolbar, or press **Ctrl+Shift+G**. A second toggle switches between
+**Formatted** (the note as it looks) and **Raw** (the Markdown text itself).
+Your changes are saved automatically.
 
-**Formatting while you type:**
+**Editing a formatted note** works like a word processor. Headings, lists,
+tables and the rest look the way they will when you view the note. What you
+type always stays text: typing `**`, `#` or `[[` does not turn into
+formatting. Use the formatting buttons in the Tools sidebar, their shortcuts,
+or the right-click menu instead. (In **Raw**, you type the Markdown
+yourself.)
 
-| You type | You get |
-| --- | --- |
-| `**bold**` | **bold** |
-| `*italic*` | *italic* |
-| `==highlight==` | highlighted text |
-| `# Heading` | a heading |
-| `- item` | a bulleted list |
-| `- [ ] task` | a checkbox you can tick in View mode |
-| `[[Other note]]` | a link to another note |
-| `$x^2$` | a math formula |
+| Tool | Shortcut | What it adds |
+| --- | --- | --- |
+| **Heading** | **Ctrl+Alt+1** to **Ctrl+Alt+6** (**Ctrl+Alt+0** for normal text) | A heading. The button shows a list of sizes. |
+| **Bold** / **Italic** | **Ctrl+B** / **Ctrl+I** | Bold or italic text |
+| **Link** | **Ctrl+Shift+U** | A link to a web address or to another note |
+| **Bullets** | **Ctrl+Shift+8** | A bulleted list |
+| **Numbered** | **Ctrl+Shift+7** | A numbered list |
+| **Checklist** | **Ctrl+Shift+9** | A list of checkboxes |
+| **Callout** | **Ctrl+Alt+C** | A coloured box (Note, Tip, Warning…). Pick a type from the list. |
+| **Divider** | **Ctrl+Alt+D** | A horizontal line |
+| **Code block** | **Ctrl+Shift+K** | A box for program code |
+| **LaTeX block** | **Ctrl+Shift+L** | A math formula |
+| **Table** | — | A table. Choose how many rows and columns. |
+| **Picture** | **Ctrl+Alt+I** | A picture from a file on your computer |
+| **Raw HTML** | **Ctrl+Alt+H** | A block of HTML |
 
-**Linking notes together.** Type `[[` and the name of another note to link to
-it. Portalogia suggests note names as you type. Clicking a link opens that
+In a list, **Enter** starts the next item, **Enter** on an empty item ends
+the list, and **Tab** / **Shift+Tab** move an item in or out. **Shift+Enter**
+starts a new line without starting a new paragraph.
+
+**Changing what you added.** Put the cursor in (or click on) a part of the
+note to see its controls:
+
+- **Heading:** a bar above it sets its size, from normal text to H6.
+- **Link:** a pencil appears beside it. Click it to change the text, the
+  web address or note it goes to, or the heading in that note. **Unlink**
+  keeps the text; **✕** removes the link and its text. **Ctrl+click** a link
+  to follow it.
+- **Table:** a bar adds, moves or deletes rows and columns, sets a
+  column's alignment, or removes the table (**✕**). The header row always
+  stays at the top. Drag across cells to select
+  several at once.
+- **Callout:** a bar changes its type, its title and whether it folds. **✕**
+  removes the box but keeps its text.
+- **Code block:** type its language at the top; **Copy** copies the code and
+  **✕** removes the block.
+- **Formula or raw HTML:** click it to open a box with its source (LaTeX or
+  HTML). The note updates as you type. Press **Escape** when you're done.
+- **Picture:** click it to select it, then drag the dots on its sides to
+  resize it. Its bar can swap in another picture, describe it for screen
+  readers, put it back to its own size, or remove it (**✕**).
+
+**Linking notes together.** Use **Link** and type the name of another note
+(in Raw, type `[[` and its name). Portalogia suggests note names as you type. Clicking a link opens that
 note, and the **◀ ▶** buttons step back and forward through the notes you've
 followed. The side panel shows the note's outline and every other note that
 links to it.
 
-**Pictures.** Pictures saved alongside your notes show up automatically.
+**Pictures.** Pictures saved alongside your notes show up automatically, and
+so do pictures you add with the **Picture** button, wherever they are.
 Pictures from the internet appear as a placeholder until you click them.
 This stops a note from telling a website that you opened it.
 

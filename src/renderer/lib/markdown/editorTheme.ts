@@ -1,11 +1,9 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-22
+// Last Modified: 2026-11-21
 
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { EditorView } from '@codemirror/view';
-import { tags } from '@lezer/highlight';
 
 /**
  * The editor's look, drawn from the page's own colour tokens so it follows
@@ -88,27 +86,3 @@ export const editorTheme = EditorView.theme({
   '.cm-find-match--current': { backgroundColor: 'rgba(var(--color-accent-rgb), 0.75)' },
 });
 
-/** Syntax colours for the Markdown source: headings and emphasis in the text colour, markup dimmed, code and links in the accent. */
-export const editorHighlight = syntaxHighlighting(
-  HighlightStyle.define([
-    { tag: tags.heading, color: 'var(--color-tab-text-active)', fontWeight: '700' },
-    { tag: tags.strong, fontWeight: '700' },
-    { tag: tags.emphasis, fontStyle: 'italic' },
-    { tag: tags.strikethrough, textDecoration: 'line-through' },
-    { tag: tags.link, color: 'var(--color-accent-text)' },
-    { tag: tags.url, color: 'var(--color-accent-text)' },
-    // Code's colour, unless what it's in says otherwise: a code block's lines set `--md-monospace-color` to the text
-    // colour (`livePreview`), so only inline code is drawn in the code colour there.
-    { tag: tags.monospace, color: 'var(--md-monospace-color, var(--md-code-color))' },
-    { tag: tags.quote, color: 'var(--color-tab-text)', fontStyle: 'italic' },
-    { tag: tags.processingInstruction, color: 'var(--color-address-placeholder)' },
-    { tag: tags.contentSeparator, color: 'var(--color-address-placeholder)' },
-    { tag: tags.meta, color: 'var(--color-address-placeholder)' },
-    { tag: tags.comment, color: 'var(--color-address-placeholder)' },
-    { tag: tags.keyword, color: 'var(--md-syntax-keyword)' },
-    { tag: [tags.string, tags.regexp], color: 'var(--md-syntax-string)' },
-    { tag: [tags.number, tags.bool, tags.null], color: 'var(--md-syntax-number)' },
-    { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: 'var(--md-syntax-function)' },
-    { tag: [tags.typeName, tags.className], color: 'var(--md-syntax-type)' },
-  ]),
-);

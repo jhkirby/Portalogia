@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-10-29
+// Last Modified: 2026-11-21
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { EditorState } from '@codemirror/state';
@@ -24,7 +24,16 @@ import {
   type NoteHeading,
   type NoteLink,
 } from '@shared/markdown/structure';
-import { applyLink, insertTable, toggleWrap, wrapInBlock } from '../../lib/markdown/editorFormat';
+import {
+  applyLink,
+  insertBlockText,
+  insertInlineText,
+  insertTable,
+  setHeadingLines,
+  toggleListLines,
+  toggleWrap,
+  wrapInBlock,
+} from '../../lib/markdown/editorFormat';
 import { collectRenderedText, offsetOfPoint, rangeForOffsets, reanchorHighlight } from '../../lib/markdown/textOffsets';
 import { commentCursor, highlighterCursor, penCursor } from '../../lib/toolCursors';
 import {
@@ -33,6 +42,7 @@ import {
   type NotePoint,
   type NoteStroke,
 } from './MarkdownAnnotationLayer';
+import { FormattedEditor, type FormattedEditorHandle } from './FormattedEditor';
 import { MarkdownEditor } from './MarkdownEditor';
 import { EditorContextMenu, LinkPopup, TablePopup } from './MarkdownEditorMenus';
 import { MarkdownReader } from './MarkdownReader';
@@ -92,8 +102,9 @@ interface Size {
  *
  * The two switches pick what shows. View + Formatted is the reader: the note
  * drawn in full (images, maths, runnable code), and the only place marks can
- * be made. Every other pairing is the editor: raw text (read-only in View),
- * or in Edit + Formatted the note formatted while being edited in place.
+ * be made. Edit + Formatted is the formatted editor (`FormattedEditor`): the
+ * note edited as a document, its formatting from the toolbar. Either Raw is
+ * the Markdown itself in CodeMirror (`MarkdownEditor`), read-only in View.
  *
  * The note's text lives here while it's being worked on: edits are saved to
  * main a moment after typing stops (and at once when leaving the editor, or
@@ -119,7 +130,10 @@ export function MarkdownViewer() {
   const [editorSelection, setEditorSelection] = useState<{ readonly from: number; readonly to: number } | null>(null);
   /** The text selected in the reader (which has no offsets into the source), or `null`. */
   const [readerSelection, setReaderSelection] = useState<string | null>(null);
+  /** Where the caret last was in either editor, kept across a Raw ↔ Formatted switch so the other one starts there. */
+  const lastCaretRef = useRef<number | null>(null);
   const handleEditorSelection = useCallback((head: number, from: number, to: number): void => {
+    lastCaretRef.current = head;
     setCaret(head);
     setEditorSelection(from === to ? null : { from, to });
   }, []);
@@ -148,6 +162,9 @@ export function MarkdownViewer() {
   const readerHostRef = useRef<HTMLDivElement>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const savedEditorStateRef = useRef<EditorState | null>(null);
+  /** The formatted editor (Edit + Formatted), while it's showing. */
+  const formattedRef = useRef<FormattedEditorHandle | null>(null);
+  const formattedHostRef = useRef<HTMLDivElement>(null);
   const generationRef = useRef(0);
   const sourceRef = useRef('');
   const pendingSaveRef = useRef<string | null>(null);
@@ -158,6 +175,34 @@ export function MarkdownViewer() {
   // Printing always draws the reader, whichever view is showing.
   const showReader = hasNote && ((mode === 'view' && display === 'formatted') || printing);
   const showEditor = hasNote && !showReader;
+  const showFormatted = showEditor && mode === 'edit' && display === 'formatted';
+  const showFormattedRef = useRef(showFormatted);
+  showFormattedRef.current = showFormatted;
+  const handleFormattedReady = useCallback((handle: FormattedEditorHandle | null): void => {
+    formattedRef.current = handle;
+    if (handle === null) {
+      setCaret(null);
+      setEditorSelection(null);
+    }
+    setRenderVersion((version) => version + 1);
+  }, []);
+  // What the find bar searches in the drawn views: the reader's note, or the formatted editor's (both `.md-reader`).
+  const findHostRef = useMemo(
+    () => ({
+      get current(): HTMLElement | null {
+        return showFormattedRef.current ? formattedHostRef.current : readerHostRef.current;
+      },
+    }),
+    [],
+  );
+  const findScrollRef = useMemo(
+    () => ({
+      get current(): HTMLElement | null {
+        return showFormattedRef.current ? (formattedRef.current?.scroller ?? null) : scrollRef.current;
+      },
+    }),
+    [],
+  );
 
   // The tool cursors are drawn in light or dark ink to match the theme.
   useEffect(() => {
@@ -273,6 +318,7 @@ export function MarkdownViewer() {
       if (isNewNote) {
         startLoadBlur();
         savedEditorStateRef.current = null;
+        lastCaretRef.current = null;
         scrollRatioRef.current = 0;
         undoRef.current = [];
         redoRef.current = [];
@@ -290,6 +336,9 @@ export function MarkdownViewer() {
       if (view && view.state.doc.toString() !== file.content) {
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: file.content } });
         pendingSaveRef.current = null;
+      }
+      if (formattedRef.current && !isNewNote) {
+        formattedRef.current.replaceSource(file.content);
       }
     },
     [flushSave, startLoadBlur],
@@ -326,7 +375,7 @@ export function MarkdownViewer() {
 
   /** Notes how far down the note is scrolled, and writes any edit, before a switch changes what's showing. */
   const beforeSwitch = useCallback((): void => {
-    const scroller = editorViewRef.current?.scrollDOM ?? scrollRef.current;
+    const scroller = editorViewRef.current?.scrollDOM ?? formattedRef.current?.scroller ?? scrollRef.current;
     if (scroller && scroller.scrollHeight > 0) {
       scrollRatioRef.current = scroller.scrollTop / scroller.scrollHeight;
     }
@@ -381,7 +430,8 @@ export function MarkdownViewer() {
   // The toolbar's width slider: how wide the formatted note is drawn (a printout keeps the usual column).
   const noteWidthStyle = useNoteWidth(bodyRef, hasNote && !printing);
   const pannerScroller = useCallback(
-    (): HTMLElement | null => (showReader ? scrollRef.current : (editorViewRef.current?.scrollDOM ?? null)),
+    (): HTMLElement | null =>
+      showReader ? scrollRef.current : (editorViewRef.current?.scrollDOM ?? formattedRef.current?.scroller ?? null),
     [showReader],
   );
   const panEnabled = hasNote && pointerMode === 'pan' && tool.tool === 'none';
@@ -449,19 +499,46 @@ export function MarkdownViewer() {
 
   /** Runs a formatting command on the editor — from a shortcut (via main) or the right-click menu. */
   const runFormat = useCallback((action: MarkdownFormatAction, at?: { x: number; y: number }): void => {
-    const view = editorViewRef.current;
-    if (!view) {
+    setMenu(null);
+    // The formatted editor has its own version of every tool.
+    if (formattedRef.current) {
+      formattedRef.current.runFormat(action, at);
       return;
     }
-    setMenu(null);
+    const view = editorViewRef.current;
+    if (!view || view.state.readOnly) {
+      return;
+    }
+    // On the raw text, each tool writes its Markdown.
     if (action === 'bold') {
       toggleWrap(view, '**');
     } else if (action === 'italic') {
       toggleWrap(view, '*');
+    } else if (action === 'highlight') {
+      toggleWrap(view, '==');
+    } else if (action === 'inlineCode') {
+      toggleWrap(view, '`');
     } else if (action === 'latex') {
       wrapInBlock(view, '$$');
     } else if (action === 'code') {
       wrapInBlock(view, '```');
+    } else if (action === 'heading' || /^heading\d$/.test(action)) {
+      setHeadingLines(view, action === 'heading' ? 1 : Number(action.slice('heading'.length)));
+    } else if (action === 'bulletList' || action === 'orderedList' || action === 'taskList') {
+      toggleListLines(view, action === 'bulletList' ? 'bullet' : action === 'orderedList' ? 'ordered' : 'task');
+    } else if (action === 'callout') {
+      insertBlockText(view, '> [!note]\n> ');
+    } else if (action === 'divider') {
+      insertBlockText(view, '---');
+    } else if (action === 'html') {
+      insertBlockText(view, '<div>\n\n</div>', '<div>\n'.length);
+    } else if (action === 'image') {
+      void window.portalogiaMarkdown.pickImage().then((src) => {
+        const current = editorViewRef.current;
+        if (src !== null && current) {
+          insertInlineText(current, `![](${/[\s()<>]/.test(src) ? `<${src}>` : src})`);
+        }
+      });
     } else if (action === 'table') {
       // The size box opens under the caret, and remembers where the table goes.
       const { head } = view.state.selection.main;
@@ -743,6 +820,10 @@ export function MarkdownViewer() {
   /** Puts the editor's caret at an offset and scrolls it into view; the editor takes the keyboard when it can be edited. */
   const jumpTo = useCallback(
     (offset: number, y: 'center' | 'start' = 'center'): void => {
+      if (formattedRef.current) {
+        formattedRef.current.jumpTo(offset, y);
+        return;
+      }
       const view = editorViewRef.current;
       if (!view) {
         return;
@@ -756,25 +837,26 @@ export function MarkdownViewer() {
     [mode],
   );
 
+  // Lines and columns are counted in the note's Markdown, whichever editor is showing.
   const goToLine = useCallback(
     (line: number): void => {
-      const view = editorViewRef.current;
-      if (view) {
-        jumpTo(view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines))).from);
-      }
+      const starts = structure.lineStarts;
+      jumpTo(starts[Math.max(1, Math.min(line, starts.length)) - 1] ?? 0);
     },
-    [jumpTo],
+    [jumpTo, structure],
   );
 
   const goToColumn = useCallback(
     (column: number): void => {
-      const view = editorViewRef.current;
-      if (view) {
-        const line = view.state.doc.lineAt(view.state.selection.main.head);
-        jumpTo(line.from + Math.max(0, Math.min(column - 1, line.length)));
+      if (caretLine === null) {
+        return;
       }
+      const starts = structure.lineStarts;
+      const from = starts[caretLine - 1] ?? 0;
+      const lineEnd = (starts[caretLine] ?? source.length + 1) - 1;
+      jumpTo(from + Math.max(0, Math.min(column - 1, lineEnd - from)));
     },
-    [jumpTo],
+    [jumpTo, structure, caretLine, source.length],
   );
 
   const goToWord = useCallback(
@@ -791,10 +873,8 @@ export function MarkdownViewer() {
   const goToHeading = useCallback(
     (heading: NoteHeading, index: number): void => {
       if (!showReader) {
-        const view = editorViewRef.current;
-        if (view) {
-          jumpTo(view.state.doc.line(Math.min(heading.line, view.state.doc.lines)).from, 'start');
-        }
+        const starts = structure.lineStarts;
+        jumpTo(starts[Math.max(1, Math.min(heading.line, starts.length)) - 1] ?? 0, 'start');
         return;
       }
       // The same words can head more than one section: take the one with as many namesakes before it.
@@ -826,11 +906,12 @@ export function MarkdownViewer() {
   );
 
   useMarkdownFind({
-    mode: showReader ? 'view' : 'edit',
+    // The formatted editor is drawn like the reader, and is searched the same way.
+    mode: showReader || showFormatted ? 'view' : 'edit',
     hasNote,
-    readerHostRef,
+    readerHostRef: findHostRef,
     editorViewRef,
-    scrollRef,
+    scrollRef: findScrollRef,
     contentVersion: renderVersion,
   });
 
@@ -886,11 +967,28 @@ export function MarkdownViewer() {
         <>
           {/* The note and its panel side by side, over the status bar. */}
           <div ref={bodyRef} className={`md-viewer__body load-blur${loadBlurred ? ' load-blur--on' : ''}${closing ? ' content-fading' : ''}`}>
-            {showEditor && (
+            {showFormatted && (
+              <div className="md-viewer__editor md-viewer__editor--formatted">
+                <FormattedEditor
+                  key={noteKey}
+                  initialSource={source}
+                  initialCaret={lastCaretRef.current}
+                  initialScroll={scrollRatioRef.current}
+                  onChange={handleEdit}
+                  onSelection={handleEditorSelection}
+                  onReady={handleFormattedReady}
+                  onContextMenu={(x, y) => setMenu({ x, y })}
+                  listNotes={listNotes}
+                  hostRef={formattedHostRef}
+                />
+              </div>
+            )}
+            {showEditor && !showFormatted && (
               <div className="md-viewer__editor">
                 <MarkdownEditor
                   key={noteKey}
                   initialSource={source}
+                  initialCaret={lastCaretRef.current}
                   savedState={savedEditorStateRef.current}
                   onChange={handleEdit}
                   onView={handleEditorView}
@@ -903,7 +1001,6 @@ export function MarkdownViewer() {
                   }}
                   initialScroll={scrollRatioRef.current}
                   readOnly={mode === 'view'}
-                  livePreview={display === 'formatted'}
                   onSelection={handleEditorSelection}
                 />
               </div>

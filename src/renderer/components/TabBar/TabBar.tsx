@@ -1,9 +1,18 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
-import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { BookmarkState, TabState } from '@shared/tab-state';
 import { pageLabel } from '../../lib/pageLabel';
 import { MAX_TABS_PER_WORKSPACE } from '@shared/constants';
@@ -30,26 +39,20 @@ const TITLE_SELECTOR = '.tab-bar__title';
 /** The titles whose fit decides that size: tabs at rest, not still opening or closing (an animation squeezes them). */
 const RESTING_TITLE_SELECTOR = '.tab-bar__tab:not(.tab-bar__tab--entering):not(.tab-bar__tab--exiting) .tab-bar__title';
 
-// A native HTML5 drag shows the browser's own snapshot of the dragged
-// element following the cursor by default; over this chrome's mix of HTML
-// and layered native `WebContentsView`s that snapshot renders in the wrong
-// place entirely (see the tab drag-and-drop work this came from). Handing
-// `setDragImage` a fully transparent 1x1 pixel suppresses that snapshot,
-// leaving only the dragged tab's own in-place `--dragging` highlight.
-const TRANSPARENT_DRAG_IMAGE = new Image();
-TRANSPARENT_DRAG_IMAGE.src =
-  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7';
-
 /** The animation (in `tab-bar.css`) that ends a tab's opening, and the one that ends its closing. */
 const TAB_TRANSITION_LAST_ANIMATIONS = new Set(['tab-bar-tab-rise', 'tab-bar-tab-close']);
 
 /** Stands in for every handler of a closing tab, which takes no input while it shrinks away. */
 const noop = (): void => undefined;
 
-/** How far below the tab strip the cursor must travel before the tab tears off into its own window. */
-const TEAR_OFF_MARGIN_PX = 16;
-/** How long the cursor must stay out of the tab strip before it tears off — see `onDragMove`. */
-const TEAR_OFF_DWELL_MS = 200;
+/** How far a press must move before it's a drag rather than a click. */
+const DRAG_THRESHOLD_PX = 4;
+
+/** How long a released tab takes to glide from the pointer into its slot. */
+const SETTLE_MS = 160;
+
+/** The longest a dropped order is held waiting for main's reordered tabs (see `heldOrder`). */
+const HELD_ORDER_MS = 1500;
 
 interface TabBarProps {
   /** Tabs to render, left to right, in the order they were opened. */
@@ -70,25 +73,14 @@ interface TabBarProps {
   readonly onActivate: (id: string) => void;
   /** Called when the user closes a tab. */
   readonly onClose: (id: string) => void;
-  /** Called when a drag-and-drop reorder finishes: `beforeId` is the tab it should land before, or `null` for the end of the row. */
+  /**
+   * Called when a drag finishes reordering: `beforeId` is the tab it should land before, or `null` for the end of the
+   * row. A drag only ever reorders — the tab stays in the row, so it can't be torn off into a window or dropped on a
+   * workspace.
+   */
   readonly onReorder: (id: string, beforeId: string | null) => void;
   /** The tab grabbed for keyboard reordering (Ctrl+Space held, then Left/Right to nudge it — see `TabManager.grabTabForReorder`), or `null` when nothing is grabbed. Shares the mouse-drag's `--dragging` highlight. */
   readonly grabbedTabId: string | null;
-  /**
-   * Called when a tab drag ends without landing on any drop target this
-   * chrome itself recognizes (an in-bar reorder, or a `WorkspaceBar` pill)
-   * — `screenX`/`screenY` are the drag's OS screen coordinates at release,
-   * for main to decide whether the release point actually left this
-   * window (see `tearOffTab`), which alone means "open this tab in a new
-   * window."
-   */
-  readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
-  /** Called once, mid-drag, the moment the cursor leaves this window — main opens the new window right then and keeps it under the cursor, like Chrome. */
-  readonly onDragOutOfWindow: (id: string, screenX: number, screenY: number) => void;
-  /** Called when a drag that already tore off (`onDragOutOfWindow`) is released, so main stops moving the new window. */
-  readonly onTearOffEnd: (id: string, accepted: boolean) => void;
-  /** Called when a tab drag starts, with the window's other drop targets (workspace pills, "+ New workspace") — see `PortalogiaApi.reportDropRegions`. */
-  readonly onReportDropRegions: (rects: readonly { x: number; y: number; width: number; height: number }[]) => void;
   /**
    * The workspace's split pair, left then right (`BrowserState.splitPair`): side by side in the row, drawn as one joint
    * tab with no line between its two — shown or put away. `null` with none.
@@ -119,28 +111,27 @@ export function TabBar({
   onClose,
   onReorder,
   grabbedTabId,
-  onDragEndOutside,
-  onDragOutOfWindow,
-  onTearOffEnd,
-  onReportDropRegions,
   pairTabIds,
   splitTabIds,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  // Set once the drag has already torn off into its own window, so the
-  // release doesn't tear it off a second time (`onDragEndOutside`).
-  const tornOffRef = useRef(false);
-  // When the cursor last left the tab strip's tear-off zone, or null while it's inside.
-  const outsideSinceRef = useRef<number | null>(null);
-  // Last known copy of the dragged tab: once it tears off, it leaves
-  // `tabs`, and unmounting its element would silently kill the in-flight
-  // native drag (no `dragend`). It's kept rendered, invisibly, until release.
-  const draggedTabRef = useRef<TabState | null>(null);
-  const draggedTab = draggedId !== null ? tabs.find((tab) => tab.id === draggedId) : undefined;
-  if (draggedTab) {
-    draggedTabRef.current = draggedTab;
-  }
-  const ghostTab = draggedId !== null && !draggedTab ? draggedTabRef.current : null;
+  /**
+   * The order a drag was dropped in, drawn until main's reordered tabs arrive (`handleDrop`). Dropped as soon as the
+   * row's order changes — the new order is then the real one — or after `HELD_ORDER_MS` if it never does (a drop that
+   * changed nothing, or a reorder main refused).
+   */
+  const [heldOrder, setHeldOrder] = useState<readonly string[] | null>(null);
+  const tabOrderKey = tabs.map((tab) => tab.id).join('\n');
+  useEffect(() => {
+    setHeldOrder(null);
+  }, [tabOrderKey]);
+  useEffect(() => {
+    if (heldOrder === null) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setHeldOrder(null), HELD_ORDER_MS);
+    return () => window.clearTimeout(timer);
+  }, [heldOrder]);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
   // Every title shrinks together as the tabs narrow, rather than ending in "…", down to a size still easy to read: the
@@ -155,9 +146,6 @@ export function TabBar({
   );
 
   const endDrag = (): void => {
-    tornOffRef.current = false;
-    outsideSinceRef.current = null;
-    draggedTabRef.current = null;
     setDraggedId(null);
     setDropTarget(null);
   };
@@ -180,47 +168,6 @@ export function TabBar({
       return { id: right, position: 'after' };
     }
     return target;
-  };
-
-  // Reads the dragged tab's id from `dataTransfer`, not the local
-  // `draggedId` state — `draggedId` is only ever set by this *same*
-  // window's own `Tab.onDragStart` (see below), so it stays `null` for a
-  // drag dragged in from another window's tab bar, which never fires that
-  // handler here. `dataTransfer` carries the id regardless of which
-  // window's DOM started the drag, since it's the OS-level drag session's
-  // own payload, not any one renderer's local state — same reasoning
-  // `WorkspaceBar`'s own drop handlers already use.
-  const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
-    const draggedTabId = event.dataTransfer.getData('text/plain');
-    const target = keepPairWhole(dropTarget);
-    if (draggedTabId && target) {
-      const targetIndex = tabs.findIndex((tab) => tab.id === target.id);
-      const insertIndex = target.position === 'before' ? targetIndex : targetIndex + 1;
-      onReorder(draggedTabId, tabs[insertIndex]?.id ?? null);
-    }
-    endDrag();
-  };
-
-  // Fallback for the drag crossing off the last tab entirely — onto the
-  // "+" button, or any gap `.tab-bar`'s own flex row leaves past the
-  // tabs — where no `Tab` is underneath to report a precise before/after
-  // position. `drop`/`dragover` both bubble, so this still fires (and
-  // still needs its own `preventDefault`) even when the event originated
-  // on a `Tab` beneath it; the `closest` check below only takes over when
-  // it didn't, defaulting to "append at the end" rather than leaving
-  // whatever `dropTarget` a previous, no-longer-relevant hover left set.
-  const handleContainerDragOver = (event: DragEvent<HTMLDivElement>): void => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    if (draggedId !== null) {
-      previewLocalDrag(event.clientX);
-      return;
-    }
-    const overTab = (event.target as HTMLElement).closest('.tab-bar__tab');
-    const lastTab = tabs[tabs.length - 1];
-    if (!overTab && lastTab) {
-      setDropTarget({ id: lastTab.id, position: 'after' });
-    }
   };
 
   // A tab from this strip: the target is read from where the tabs are laid out, not from which tab's half the pointer
@@ -252,11 +199,6 @@ export function TabBar({
     }
   };
 
-  const handleContainerDrop = (event: DragEvent<HTMLDivElement>): void => {
-    event.preventDefault();
-    handleDrop(event);
-  };
-
   // While a tab from this strip is dragged, the strip previews where a release
   // would leave it: the dragged tab(s) sit in the target slot and the others
   // make room. Done with CSS `order`, not by reordering the elements, because
@@ -272,8 +214,11 @@ export function TabBar({
           ? selectedTabIds.filter((id) => tabs.some((tab) => tab.id === id))
           : [draggedId];
   const pairTarget = keepPairWhole(dropTarget);
+  const tabIds = tabs.map((tab) => tab.id);
+  // A just-dropped order, held until the tabs' own order catches up; ignored once the row holds other tabs.
+  const held = heldOrder !== null && heldOrder.length === tabIds.length && tabIds.every((id) => heldOrder.includes(id));
   const displayIds = previewTabOrder(
-    tabs.map((tab) => tab.id),
+    held ? heldOrder : tabIds,
     draggedGroup,
     pairTarget?.id ?? null,
     pairTarget?.position ?? 'before',
@@ -282,12 +227,168 @@ export function TabBar({
     const index = displayIds.indexOf(id);
     return index === -1 ? displayIds.length : index;
   };
-  // A tab dragged in from another window has no element here to move, so the
-  // slot it would take is held open with a blank placeholder instead.
-  const foreignInsertAt =
-    draggedId === null && pairTarget !== null
-      ? tabs.findIndex((tab) => tab.id === pairTarget.id) + (pairTarget.position === 'after' ? 1 : 0)
-      : null;
+
+  // ── The drag: a press on a tab that moves sideways picks it up; it follows the pointer, kept inside the row, and the
+  // others make room. Released, it's put where it's shown. It never leaves the row. ──
+
+  /** The press that may become a drag: which tab, where it started, and where on the tab it was grabbed. */
+  const pressRef = useRef<{
+    readonly id: string;
+    readonly pointerId: number;
+    readonly startX: number;
+    readonly grabX: number;
+    readonly element: HTMLElement;
+    dragging: boolean;
+    lastX: number;
+  } | null>(null);
+  /** Set by a drag's release, so the click that follows it doesn't also switch to the tab. */
+  const suppressClickRef = useRef(false);
+  const draggedIdRef = useRef(draggedId);
+  draggedIdRef.current = draggedId;
+
+  /**
+   * Draws the grabbed tab under the pointer: shifted from its laid-out slot by however far the pointer has moved, but
+   * kept within the row of tabs (from the first tab's left edge to the last one's right).
+   */
+  const placeGrabbed = (): void => {
+    const press = pressRef.current;
+    const bar = tabBarRef.current;
+    if (!press?.dragging || !bar) {
+      return;
+    }
+    const { element } = press;
+    const slots = Array.from(bar.querySelectorAll<HTMLElement>('.tab-bar__tab[data-tab-id]'));
+    if (slots.length === 0) {
+      return;
+    }
+    const parentLeft = (element.offsetParent ?? bar).getBoundingClientRect().left;
+    const rowLeft = parentLeft + Math.min(...slots.map((slot) => slot.offsetLeft));
+    const rowRight = parentLeft + Math.max(...slots.map((slot) => slot.offsetLeft + slot.offsetWidth));
+    const slotLeft = parentLeft + element.offsetLeft;
+    const wanted = Math.max(rowLeft, Math.min(press.lastX - press.grabX, rowRight - element.offsetWidth));
+    element.style.transform = `translateX(${wanted - slotLeft}px)`;
+  };
+
+  /** Lets go of the grabbed tab: it glides from where it was drawn into its slot. */
+  const settleGrabbed = (element: HTMLElement): void => {
+    element.style.transition = `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.8, 0.3, 1)`;
+    element.style.transform = '';
+    window.setTimeout(() => {
+      element.style.transition = '';
+      delete element.dataset['grabbed'];
+    }, SETTLE_MS);
+  };
+
+  const startPress = (id: string, event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || pressRef.current) {
+      return;
+    }
+    // The close button is a button, not a handle.
+    if ((event.target as HTMLElement).closest('.tab-bar__close')) {
+      return;
+    }
+    const element = event.currentTarget;
+    pressRef.current = {
+      id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      grabX: event.clientX - element.getBoundingClientRect().left,
+      element,
+      dragging: false,
+      lastX: event.clientX,
+    };
+  };
+
+  // The move and the release are followed on the window, so a drag that wanders off the row keeps going (the tab
+  // itself stays in it).
+  const handlersRef = useRef({ move: (_event: PointerEvent): void => undefined, up: (_event: PointerEvent): void => undefined, cancel: (): void => undefined });
+  handlersRef.current = {
+    move: (event) => {
+      const press = pressRef.current;
+      if (!press || event.pointerId !== press.pointerId) {
+        return;
+      }
+      press.lastX = event.clientX;
+      if (!press.dragging) {
+        if (Math.abs(event.clientX - press.startX) < DRAG_THRESHOLD_PX) {
+          return;
+        }
+        press.dragging = true;
+        press.element.dataset['grabbed'] = '';
+        press.element.style.transition = '';
+        try {
+          press.element.setPointerCapture(press.pointerId);
+        } catch {
+          // The pointer already went up; the release below ends the drag.
+        }
+        setDraggedId(press.id);
+      }
+      const bar = tabBarRef.current?.getBoundingClientRect();
+      if (bar) {
+        previewLocalDrag(Math.max(bar.left, Math.min(event.clientX, bar.right - 1)));
+      }
+      placeGrabbed();
+    },
+    up: (event) => {
+      const press = pressRef.current;
+      if (!press || event.pointerId !== press.pointerId) {
+        return;
+      }
+      pressRef.current = null;
+      if (!press.dragging) {
+        return;
+      }
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+      const target = keepPairWhole(dropTarget);
+      if (target && draggedIdRef.current !== null) {
+        // The row stays as the drag left it until main's new order arrives, rather than springing back to the old
+        // order for the moment in between and then sliding forward again.
+        setHeldOrder(displayIds);
+        const targetIndex = tabs.findIndex((tab) => tab.id === target.id);
+        const insertIndex = target.position === 'before' ? targetIndex : targetIndex + 1;
+        onReorder(draggedIdRef.current, tabs[insertIndex]?.id ?? null);
+      }
+      settleGrabbed(press.element);
+      endDrag();
+    },
+    cancel: () => {
+      const press = pressRef.current;
+      pressRef.current = null;
+      if (press?.dragging) {
+        settleGrabbed(press.element);
+        endDrag();
+      }
+    },
+  };
+  useEffect(() => {
+    const move = (event: PointerEvent): void => handlersRef.current.move(event);
+    const up = (event: PointerEvent): void => handlersRef.current.up(event);
+    const cancel = (): void => handlersRef.current.cancel();
+    const escape = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape' && pressRef.current?.dragging) {
+        event.preventDefault();
+        event.stopPropagation();
+        cancel();
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('blur', cancel);
+    window.addEventListener('keydown', escape, true);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('blur', cancel);
+      window.removeEventListener('keydown', escape, true);
+    };
+  }, []);
+  // The others moving round it re-lay the row, which moves the grabbed tab's slot: it's redrawn under the pointer.
+  useLayoutEffect(placeGrabbed);
   // Every 20 s a shimmer runs along the tabs' icons and names, ten seconds out of step with the workspaces', so one of
   // the two runs every ten seconds.
   const shimmer = useShimmerTick(SHIMMER_PERIOD_MS / 2);
@@ -296,7 +397,7 @@ export function TabBar({
     workspaceId,
     displayIds,
     tabBarRef,
-    draggedId === null ? [] : [draggedId],
+    [],
   );
   const notePress = useActiveTabSlide(
     tabBarRef,
@@ -318,20 +419,25 @@ export function TabBar({
       data-shimmer={shimmer ?? undefined}
       role="tablist"
       aria-label="Open tabs"
-      onDragOver={handleContainerDragOver}
-      onDrop={handleContainerDrop}
+      // A click that ends a drag doesn't also switch tabs.
+      onClickCapture={(event) => {
+        if (suppressClickRef.current) {
+          event.preventDefault();
+          event.stopPropagation();
+          suppressClickRef.current = false;
+        }
+      }}
       onPointerDown={(event) =>
         notePress((event.target as HTMLElement).closest<HTMLElement>('.tab-bar__tab[data-tab-id]')?.dataset['tabId'] ?? null)
       }
     >
-      {(ghostTab ? [...tabs, ghostTab] : tabs).map((tab) => (
+      {tabs.map((tab) => (
         <Tab
           pairSide={pairSideOf(tab.id)}
           key={tab.id}
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
-          isGhost={tab === ghostTab}
-          order={slotOrder(foreignInsertAt !== null && orderOf(tab.id) >= foreignInsertAt ? orderOf(tab.id) + 1 : orderOf(tab.id))}
+          order={slotOrder(orderOf(tab.id))}
           isEntering={enteringIds.has(tab.id)}
           isExiting={false}
           onTransitionEnd={() => endEnter(tab.id)}
@@ -346,74 +452,7 @@ export function TabBar({
             // Dragging one selected tab drags them all, as one of the split pair drags both: they all show as grabbed.
             draggedGroup.includes(tab.id)
           }
-          onDragStart={() => {
-            setDraggedId(tab.id);
-            onReportDropRegions(
-              Array.from(document.querySelectorAll('.workspace-bar__pill, .workspace-bar__new')).map((element) => {
-                const { x, y, width, height } = element.getBoundingClientRect();
-                return { x, y, width, height };
-              }),
-            );
-          }}
-          onDragOver={(position) => {
-            // A tab from this strip is placed by `previewLocalDrag`; this half-of-the-tab reading is for one dragged
-            // in from another window. Over one of the dragged tabs' own slots, the preview is already right.
-            if (draggedId !== null || draggedGroup.includes(tab.id)) {
-              return;
-            }
-            setDropTarget({ id: tab.id, position });
-          }}
-          onDragEnd={(accepted) => {
-            if (tornOffRef.current) {
-              onTearOffEnd(tab.id, accepted);
-            }
-            endDrag();
-          }}
-          onDragEndOutside={(id, x, y) => {
-            // A drag that already tore off has its window; nothing more to open.
-            if (!tornOffRef.current) {
-              onDragEndOutside(id, x, y);
-            }
-          }}
-          onDragMove={(screenX, screenY, clientX, clientY) => {
-            // Some platforms report (0,0) for the final `drag` event.
-            if (tornOffRef.current || (screenX === 0 && screenY === 0)) {
-              return;
-            }
-            // Torn off when the cursor leaves the tab strip and stays out
-            // (a small margin plus a short dwell keep a sloppy reorder, or a
-            // drag *through* the toolbar on the way to a workspace pill,
-            // from opening a window that would only flash and close). The
-            // workspace pills (and "+ New workspace") never count: they're
-            // real drop targets. Everything else does — including the
-            // sidebar's empty space and the toolbar band above it — so a tab
-            // sitting over the sidebar's column can still be pulled straight
-            // down and out.
-            const barRect = tabBarRef.current?.getBoundingClientRect();
-            const sidebarRect = document.querySelector('.sidebar')?.getBoundingClientRect();
-            const overSidebar =
-              document.elementFromPoint(clientX, clientY)?.closest('.workspace-bar__pill, .workspace-bar__new') != null;
-            const leftWindow = clientX < 0 || clientX > window.innerWidth || clientY < 0;
-            const belowStrip =
-              barRect !== undefined &&
-              clientY > barRect.bottom + TEAR_OFF_MARGIN_PX &&
-              !overSidebar;
-            if (!leftWindow && !belowStrip) {
-              outsideSinceRef.current = null;
-              return;
-            }
-            const now = Date.now();
-            outsideSinceRef.current ??= now;
-            // The dwell only matters over the sidebar's own column, where a
-            // drag may be passing through the toolbar on its way to a workspace
-            // pill; anywhere else there's nothing to drop on, so tear off now.
-            const inSidebarColumn = sidebarRect !== undefined && clientX < sidebarRect.right;
-            if (leftWindow || !inSidebarColumn || now - outsideSinceRef.current >= TEAR_OFF_DWELL_MS) {
-              tornOffRef.current = true;
-              outsideSinceRef.current = null;
-              onDragOutOfWindow(tab.id, screenX, screenY);
-            }
-          }}
+          onPointerDown={(event) => startPress(tab.id, event)}
         />
       ))}
       {exiting.map(({ tab, slot }) => (
@@ -422,7 +461,6 @@ export function TabBar({
           key={`exiting-${tab.id}`}
           tab={tab}
           label={tab.kind === 'browser' ? pageLabel(tab.url, bookmarks) : null}
-          isGhost={false}
           order={slotOrder(slot) - 1}
           isActive={false}
           isSelected={false}
@@ -431,19 +469,12 @@ export function TabBar({
           onActivate={noop}
           onClose={noop}
           isDragging={false}
-          onDragStart={noop}
-          onDragOver={noop}
-          onDragEnd={noop}
-          onDragEndOutside={noop}
-          onDragMove={noop}
+          onPointerDown={noop}
           isEntering={false}
           isExiting
           onTransitionEnd={() => endExit(tab.id)}
         />
       ))}
-      {foreignInsertAt !== null && (
-        <div className="tab-bar__placeholder" style={{ order: slotOrder(foreignInsertAt) }} aria-hidden="true" />
-      )}
       {/* At the per-workspace limit the "+" goes away entirely (main enforces it too) and returns once a tab closes. It
           opens the menu of what a new tab can be (`NewTabMenu`). */}
       {tabs.length < MAX_TABS_PER_WORKSPACE && <NewTabMenu style={{ order: slotOrder(displayIds.length + 2) }} />}
@@ -464,21 +495,12 @@ interface TabProps {
   readonly onSelectRange: (id: string) => void;
   readonly onActivate: (id: string) => void;
   readonly onClose: (id: string) => void;
-  /** Whether this is the tab currently being dragged (mouse) or grabbed (Ctrl+Space) — either way, drives its in-place `--dragging` highlight. */
+  /** Whether this is the tab being dragged (mouse) or grabbed (Ctrl+Space) — either way, drives its `--dragging` highlight. */
   readonly isDragging: boolean;
-  readonly onDragStart: () => void;
-  /** Reports which half of this tab is being hovered; `TabBar` previews the dragged tab landing on that side. */
-  readonly onDragOver: (position: DropPosition) => void;
   /** Where this tab sits in the strip's current (possibly previewed) order, as a CSS `order`. */
   readonly order: number;
-  /** `accepted`: the drag ended on a drop target (any `dropEffect` but `'none'`). */
-  readonly onDragEnd: (accepted: boolean) => void;
-  /** See `TabBarProps.onDragEndOutside` — forwarded straight through, this tab already has its own `id` in scope. */
-  readonly onDragEndOutside: (id: string, screenX: number, screenY: number) => void;
-  /** Fires continuously during this tab's drag with the cursor's screen and client coordinates. */
-  readonly onDragMove: (screenX: number, screenY: number, clientX: number, clientY: number) => void;
-  /** True for the invisible stand-in kept mounted after the tab tore off — see `TabBar`'s `ghostTab`. */
-  readonly isGhost: boolean;
+  /** A press on the tab, which becomes a drag if it moves sideways (`TabBar`'s `startPress`). */
+  readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   /** Just opened: grows into the row. */
   readonly isEntering: boolean;
   /** Already closed: drawn only while it shrinks out of the row, and takes no input. */
@@ -499,12 +521,7 @@ function Tab({
   onActivate,
   onClose,
   isDragging,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  onDragEndOutside,
-  onDragMove,
-  isGhost,
+  onPointerDown,
   order,
   isEntering,
   isExiting,
@@ -526,54 +543,13 @@ function Tab({
     onClose(tab.id);
   };
 
-  // A native HTML5 drag needs `dataTransfer` populated even though this
-  // reorder is entirely local — some platforms refuse to start a drag (or
-  // show a "no drop" cursor throughout) if nothing was ever set on it.
-  const handleDragStart = (event: DragEvent<HTMLDivElement>): void => {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', tab.id);
-    event.dataTransfer.setDragImage(TRANSPARENT_DRAG_IMAGE, 0, 0);
-    onDragStart();
-  };
-
-  // Fires continuously while hovering — `preventDefault` is what tells the
-  // browser this element accepts the drop at all; without it, the drop
-  // event (handled up at `.tab-bar` itself, since `drop` bubbles same as
-  // this) would never fire. Which half of the tab the pointer is over
-  // decides "insert before" vs. "insert after" this tab.
-  const handleDragOver = (event: DragEvent<HTMLDivElement>): void => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    const rect = event.currentTarget.getBoundingClientRect();
-    const isLeftHalf = event.clientX - rect.left < rect.width / 2;
-    onDragOver(isLeftHalf ? 'before' : 'after');
-  };
-
-  // `dropEffect` reflects whatever the drop target's own `dragover`
-  // handler last set before the drop (or `'none'` if the release never
-  // landed on a target that called `preventDefault` at all — including a
-  // release outside this OS window entirely, which never dispatches a
-  // `drop` event here in the first place). Both this tab bar's own
-  // in-place reorder and `WorkspaceBar`'s pills set `'move'` when they
-  // accept a drop, so `'none'` uniquely means "didn't land on either" —
-  // main gets the final say on whether that point was actually outside
-  // the window (see `tearOffTab`'s own doc comment).
-  const handleDragEnd = (event: DragEvent<HTMLDivElement>): void => {
-    const accepted = event.dataTransfer.dropEffect !== 'none';
-    if (!accepted) {
-      onDragEndOutside(tab.id, event.screenX, event.screenY);
-    }
-    onDragEnd(accepted);
-  };
-
   return (
     <div
       role={isExiting ? 'presentation' : 'tab'}
       tabIndex={isExiting ? -1 : 0}
       aria-selected={isExiting ? undefined : isActive || isSelected}
       aria-hidden={isExiting || undefined}
-      draggable={!isExiting}
-      data-tab-id={isExiting || isGhost ? undefined : tab.id}
+      data-tab-id={isExiting ? undefined : tab.id}
       className={`tab-bar__tab${isActive ? ' tab-bar__tab--active' : ''}${isSelected ? ' tab-bar__tab--selected' : ''}${isDragging ? ' tab-bar__tab--dragging' : ''}${isEntering ? ' tab-bar__tab--entering' : ''}${isExiting ? ' tab-bar__tab--exiting' : ''}${pairSide ? ` tab-bar__tab--pair-${pairSide}` : ''}`}
       onAnimationEnd={(event) => {
         // Only the last of the tab's own opening or closing animations, not a ripple's (which bubbles up from inside
@@ -595,15 +571,8 @@ function Tab({
         }
       }}
       onKeyDown={handleKeyDown}
-      style={
-        (isGhost
-          ? { position: 'absolute', opacity: 0, pointerEvents: 'none', order }
-          : { order, '--shimmer-index': order }) as CSSProperties
-      }
-      onDragStart={handleDragStart}
-      onDrag={(event) => onDragMove(event.screenX, event.screenY, event.clientX, event.clientY)}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
+      style={{ order, '--shimmer-index': order } as CSSProperties}
+      onPointerDown={onPointerDown}
     >
       {/* Below the tab's content: the active background sliding past on a keyboard switch (`useActiveTabSlide`
           draws into it), and the click ripples. */}

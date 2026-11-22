@@ -14,14 +14,17 @@
   display: contents;
 }
 
-/* Fade and blur in: the still starts as the page looked (sharp, unscaled) and
-   softens into the backdrop, while the tint fades up over it. Closing runs it
-   back, sharpening into the page, so the live page that then returns lines up. */
+/* Fade and blur in: the still starts as the page looked (sharp) and softens
+   into the backdrop where it stands — no zoom — while the tint fades up over
+   it. Closing runs it back, sharpening into the page, so the live page that
+   then returns lines up. */
 .popup-transition .bookmark-popup__preview {
   animation: popup-preview-in 220ms ease-out both;
 }
 
-.popup-transition .bookmark-popup__scrim {
+.popup-transition .bookmark-popup__scrim,
+.popup-transition .bookmark-popup__backdrop::after,
+.popup-transition .tab-search__backdrop::after {
   animation: popup-scrim-in 220ms ease-out both;
 }
 
@@ -34,7 +37,9 @@
   animation: popup-preview-out 200ms ease-in both;
 }
 
-.popup-transition[data-closing] .bookmark-popup__scrim {
+.popup-transition[data-closing] .bookmark-popup__scrim,
+.popup-transition[data-closing] .bookmark-popup__backdrop::after,
+.popup-transition[data-closing] .tab-search__backdrop::after {
   animation: popup-scrim-out 200ms ease-in both;
 }
 
@@ -52,22 +57,18 @@
 @keyframes popup-preview-in {
   from {
     filter: blur(0);
-    transform: scale(1);
   }
   to {
     filter: blur(20px);
-    transform: scale(1.1);
   }
 }
 
 @keyframes popup-preview-out {
   from {
     filter: blur(20px);
-    transform: scale(1.1);
   }
   to {
     filter: blur(0);
-    transform: scale(1);
   }
 }
 

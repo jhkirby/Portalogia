@@ -1,18 +1,18 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { HistoryClearRange, MarkdownFormatAction, PageStats } from '@shared/ipc-contract';
-import { HOME_URL, ZOOM_PERCENT_STEP } from '@shared/constants';
+import { HOME_URL, MAX_TABS_PER_WORKSPACE, ZOOM_PERCENT_STEP } from '@shared/constants';
 import type { TabState } from '@shared/tab-state';
 import { AddressBar } from './components/AddressBar';
 import { BookmarkPopup } from './components/BookmarkPopup';
 import { ClearHistoryPopup } from './components/ClearHistoryPopup';
 import { ConfirmWordPopup } from './components/ConfirmWordPopup';
 import { Mist } from './components/Mist';
-import { ToolsBar, type ToolsBarAction } from './components/ToolsBar';
+import { ToolsBar, type ToolsBarAction, type ToolsBarSection } from './components/ToolsBar';
 import {
   BoldIcon,
   CodeBlockIcon,
@@ -29,6 +29,14 @@ import {
   NoteEditIcon,
   RawIcon,
   TableIcon,
+  HeadingIcon,
+  BulletListIcon,
+  NumberedListIcon,
+  ChecklistIcon,
+  CalloutIcon,
+  DividerIcon,
+  ImageIcon,
+  HtmlIcon,
   TrashIcon,
 } from './components/icons';
 import { formatShortcut } from './lib/shortcuts';
@@ -51,13 +59,14 @@ import { WorkspaceBar } from './components/WorkspaceBar';
 import { ItemsStatusBar, WebStatusBar } from './components/WebStatusBar';
 import { PAGE_UNFOCUS_KEYS, TERMINAL_UNFOCUS_KEYS } from './components/FocusHint';
 import { WorkspaceImagesPopup } from './components/WorkspaceImagesPopup';
+import { MoveTabPopup, type MoveTabDestination } from './components/MoveTabPopup';
 import { hostOfUrl, useAdBlock } from './hooks/useAdBlock';
 import { useTabs } from './hooks/useTabs';
 import { useTheme } from './hooks/useTheme';
 import { usePointerGlow } from './hooks/usePointerGlow';
 
 /** The popups that cover the page, each closed with an animation (see `PopupTransition`). */
-type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote' | 'revert';
+type PopupName = 'bookmark' | 'tabSearch' | 'images' | 'workspaceEdit' | 'clearHistory' | 'deleteNote' | 'revert' | 'moveTab';
 
 /** The longest a popup's closing motion may take before it closes anyway (it can't end while the window is hidden). */
 const POPUP_EXIT_FALLBACK_MS = 500;
@@ -119,6 +128,7 @@ export function App() {
     canRevert,
     grabbedTabId,
     closeTab,
+    duplicateTab,
     activateTab,
     selectedTabIds,
     selectedWorkspaceIds,
@@ -128,10 +138,6 @@ export function App() {
     selectWorkspaceRange,
     moveTab,
     moveTabToWorkspace,
-    tearOffTab,
-    tearOffTabEnd,
-    reportDropRegions,
-    createWorkspaceWithTab,
     navigate,
     goBack,
     goForward,
@@ -206,6 +212,26 @@ export function App() {
    */
   const [pointerOnTitlebar, setPointerOnTitlebar] = useState(false);
   useEffect(() => window.portalogia.onTitlebarPointer(setPointerOnTitlebar), []);
+  /** The shown tab whose page the pointer is over (main watches it), for the hover glow on a web page's frame. */
+  const [hoveredContentTabId, setHoveredContentTabId] = useState<string | null>(null);
+  useEffect(() => window.portalogia.onContentPointer(setHoveredContentTabId), []);
+
+  // While a tab is grabbed for keyboard reordering (Ctrl+Space, then the arrows), the gesture's keys come here and are
+  // swallowed: main lets them through rather than preventing them, since a key-down it prevents makes Chromium drop the
+  // keyUps after it, and the release of Ctrl+Space would never be seen (`TabManager.handleReorderGestureInput`).
+  useEffect(() => {
+    if (grabbedTabId === null) {
+      return undefined;
+    }
+    const swallow = (event: KeyboardEvent): void => {
+      if (event.key === ' ' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', swallow, true);
+    return () => window.removeEventListener('keydown', swallow, true);
+  }, [grabbedTabId]);
   const titlebarRef = useRef<HTMLDivElement>(null);
   usePointerGlow(titlebarRef, true);
   /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
@@ -250,26 +276,13 @@ export function App() {
     window.setTimeout(() => finishPopupClose(name), POPUP_EXIT_FALLBACK_MS);
   };
   /** The workspace images popup while open: the still of the tab standing in behind it. */
+  /** The move-tab popup while open: the tab being moved, and the still of it standing in behind the popup. */
+  const [movePopup, setMovePopup] = useState<{ readonly tabId: string; readonly previewImage: string | null } | null>(null);
   const [imagesPopup, setImagesPopup] = useState<{ readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   /** The workspace editor while open: which workspace, and the still of the tab standing in behind it. */
   const [workspaceEdit, setWorkspaceEdit] = useState<{ readonly workspaceId: string; readonly tabId: string | null; readonly previewImage: string | null } | null>(null);
   const { theme, toggleTheme } = useTheme();
   const adBlock = useAdBlock();
-
-  // Tells main a dragged tab was dropped on this window, as a backup to the
-  // dragged tab's own `dragend` (which can go missing if the tab's element
-  // is moved while the drag is in flight) — main uses either to finish a
-  // live tear-off. A drop that isn't a tab drag carries no tab id and is ignored.
-  useEffect(() => {
-    const handleDrop = (event: DragEvent): void => {
-      const tabId = event.dataTransfer?.getData('text/plain');
-      if (tabId) {
-        tearOffTabEnd(tabId, true);
-      }
-    };
-    document.addEventListener('drop', handleDrop, true);
-    return () => document.removeEventListener('drop', handleDrop, true);
-  }, [tearOffTabEnd]);
 
   // Belt-and-suspenders for the chrome-focused case, same reasoning as
   // Ctrl+Shift+F's menu accelerator: reliable when chrome itself has OS
@@ -743,7 +756,7 @@ export function App() {
   // A note's own sections in the Tools sidebar, between the tools and its file actions: first its View/Edit and
   // Formatted/Raw buttons, each named and drawn for the state the note is in and flipping it on a click; then its
   // formatting buttons, which work while it's being edited.
-  const noteSections = ((): readonly (readonly ToolsBarAction[])[] => {
+  const noteSections = ((): readonly ToolsBarSection[] => {
     if (activeTab?.kind !== 'markdown') {
       return [];
     }
@@ -781,14 +794,25 @@ export function App() {
       onClick: () => formatMarkdown(id, action),
     });
     const formatting: ToolsBarAction[] = [
+      format('heading', 'Heading', <HeadingIcon />, `Heading size: pick one (${formatShortcut('Alt+1')} to ${formatShortcut('Alt+6')}; ${formatShortcut('Alt+0')} for text)`),
       format('bold', 'Bold', <BoldIcon />, `Bold (${formatShortcut('B')})`),
       format('italic', 'Italic', <ItalicIcon />, `Italic (${formatShortcut('I')})`),
       format('link', 'Link', <LinkIcon />, `Make a link (${formatShortcut('Shift+U')})`),
-      format('latex', 'LaTeX block', <LatexIcon />, `Wrap in a LaTeX block (${formatShortcut('Shift+L')})`),
-      format('code', 'Code block', <CodeBlockIcon />, `Wrap in a code block (${formatShortcut('Shift+K')})`),
+      format('bulletList', 'Bullets', <BulletListIcon />, `Bulleted list (${formatShortcut('Shift+8')})`),
+      format('orderedList', 'Numbered', <NumberedListIcon />, `Numbered list (${formatShortcut('Shift+7')})`),
+      format('taskList', 'Checklist', <ChecklistIcon />, `Checklist (${formatShortcut('Shift+9')})`),
+      format('callout', 'Callout', <CalloutIcon />, `Callout: pick a type (${formatShortcut('Alt+C')})`),
+      format('divider', 'Divider', <DividerIcon />, `Horizontal divider (${formatShortcut('Alt+D')})`),
+      format('code', 'Code block', <CodeBlockIcon />, `Code block (${formatShortcut('Shift+K')})`),
+      format('latex', 'LaTeX block', <LatexIcon />, `LaTeX block (${formatShortcut('Shift+L')})`),
       format('table', 'Table', <TableIcon />, 'Insert a table at the caret'),
+      format('image', 'Picture', <ImageIcon />, `Insert a picture from a file (${formatShortcut('Alt+I')})`),
+      format('html', 'Raw HTML', <HtmlIcon />, `Raw HTML block (${formatShortcut('Alt+H')})`),
     ];
-    return [modes, formatting];
+    return [
+      { title: 'Mode', actions: modes },
+      { title: 'Format', actions: formatting },
+    ];
   })();
 
   // A note's or PDF's Delete: confirmed the same way as Clear History (typing "delete"), over its tab, before its
@@ -933,6 +957,47 @@ export function App() {
 
   useEffect(() => window.portalogia.onOpenWorkspaceImages(openWorkspaceImages));
 
+  // Where the active tab can go: every other workspace with room for one more tab, in the sidebar's order.
+  const moveDestinations: readonly MoveTabDestination[] = (() => {
+    const own = activeTab?.workspaceId;
+    return workspaces
+      .filter((workspace) => workspace.id !== own)
+      .map((workspace) => ({ workspace, tabCount: tabs.filter((tab) => tab.workspaceId === workspace.id).length }))
+      .filter(({ tabCount }) => tabCount < MAX_TABS_PER_WORKSPACE);
+  })();
+
+  // Opens like the workspace images: the active tab's view comes off the window and a blurred still of it stands in.
+  const openMoveTab = (): void => {
+    if (movePopup) {
+      closeMoveTab(null);
+      return;
+    }
+    const tabId = activeTabId;
+    if (!tabId) {
+      return;
+    }
+    setMovePopup({ tabId, previewImage: null });
+    void beginTabPreview(tabId).then((previewImage) => {
+      setMovePopup((current) => (current ? { tabId, previewImage } : current));
+    });
+  };
+
+  // A move takes the tab out of this workspace, so the still is only put back if the tab is still the active one
+  // (main checks).
+  const closeMoveTab = (workspaceId: string | null): void => {
+    if (!movePopup) {
+      return;
+    }
+    const { tabId } = movePopup;
+    closePopupAnimated('moveTab', () => {
+      if (workspaceId) {
+        moveTabToWorkspace(tabId, workspaceId);
+      }
+      endTabPreview(tabId);
+      setMovePopup(null);
+    });
+  };
+
   // Like the bookmark popup, the editor covers whichever kind of tab is showing, so that tab's native view comes off
   // the window first and a still of its last frame stands in behind the popup.
   const openWorkspaceEditor = (workspaceId: string): void => {
@@ -1013,10 +1078,6 @@ export function App() {
               onClose={closeTab}
               onReorder={moveTab}
               grabbedTabId={grabbedTabId}
-              onDragEndOutside={tearOffTab}
-              onDragOutOfWindow={(id, x, y) => tearOffTab(id, x, y, true)}
-              onTearOffEnd={tearOffTabEnd}
-              onReportDropRegions={reportDropRegions}
               pairTabIds={splitPair ? [splitPair.primaryTabId, splitPair.secondaryTabId] : null}
               splitTabIds={splitView ? [splitView.primaryTabId, splitView.secondaryTabId] : []}
             />
@@ -1050,6 +1111,15 @@ export function App() {
               splitActive={splitView !== null}
               canSplit={tabSelectionOrder.length === 2}
               onToggleSplit={toggleSplitScreen}
+              // Main refuses a tab past the workspace's limit, as the tab row's "+" button does (`MAX_TABS_PER_WORKSPACE`).
+              canDuplicate={activeTabId !== null && workspaceTabs.length < MAX_TABS_PER_WORKSPACE}
+              canMoveTab={activeTabId !== null && moveDestinations.length > 0}
+              onMoveTab={openMoveTab}
+              onDuplicateTab={() => {
+                if (activeTabId) {
+                  duplicateTab(activeTabId);
+                }
+              }}
               onSwapSplit={swapSplitSides}
               onOpenTabSearch={openTabSearch}
               findOpen={findOpen}
@@ -1088,8 +1158,6 @@ export function App() {
           onMove={moveWorkspace}
           onEdit={openWorkspaceEditor}
           onRemove={removeWorkspace}
-          onDropTab={moveTabToWorkspace}
-          onDropTabToNewWorkspace={createWorkspaceWithTab}
           onSaveImage={saveWorkspaceImage}
           onRemoveImage={removeWorkspaceImage}
           onOpenImages={openWorkspaceImages}
@@ -1103,10 +1171,17 @@ export function App() {
             too), and this element's bounds already match that natively —
             same area the hidden `WebContentsView` it's standing in for
             would otherwise occupy. */}
-        <div className="tab-content">
+        <div
+          className="tab-content"
+          // Where the page sits, for the popups' blurred still (bookmark-popup.css): in the chrome's frame (a web
+          // page), in its own (any other tab), or both sides of a split across the area.
+          data-frame={splitView ? 'split' : activeTab?.kind === 'browser' ? 'web' : 'page'}
+          data-focus-mode={focusMode || undefined}
+        >
           {/* The border of the frame a web page sits in (main places the page's view just inside it); a note, PDF,
-              terminal or History page draws its own frame, and Focus Mode shows none. */}
-          {!focusMode &&
+              terminal or History page draws its own frame. Focus Mode keeps it, down to the window's bottom (there's
+              no stat bar), so the background still shows around the page — except in split screen. */}
+          {!(focusMode && splitView) &&
             (splitView ? (
               // Split screen: a frame for each side showing a web page (a note, PDF or terminal draws its own), lit on
               // whichever side has the keyboard.
@@ -1117,7 +1192,7 @@ export function App() {
                 tabs.find((tab) => tab.id === tabId)?.kind === 'browser' ? (
                   <div
                     key={side}
-                    className={`tab-content__frame tab-content__frame--split-${side}${focusedTabId === tabId ? ' tab-content__frame--focused' : ''}${frameMotion === 'entering' ? ' tab-content__frame--entering' : ''}`}
+                    className={`tab-content__frame tab-content__frame--split-${side}${hoveredContentTabId === tabId ? ' tab-content__frame--hovered' : ''}${focusedTabId === tabId ? ' tab-content__frame--focused' : ''}${frameMotion === 'entering' ? ' tab-content__frame--entering' : ''}`}
                     aria-hidden="true"
                     onAnimationEnd={() => setFrameMotion(null)}
                   />
@@ -1126,7 +1201,7 @@ export function App() {
             ) : (
               activeTab?.kind === 'browser' && (
                 <div
-                  className={`tab-content__frame${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
+                  className={`tab-content__frame${focusMode ? ' tab-content__frame--focus-mode' : ''}${hoveredContentTabId === activeTab.id ? ' tab-content__frame--hovered' : ''}${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
                   aria-hidden="true"
                   onAnimationEnd={() => setFrameMotion(null)}
                 />
@@ -1177,6 +1252,18 @@ export function App() {
                 previewImage={workspaceEdit.previewImage}
                 onSave={handleSaveWorkspace}
                 onClose={closeWorkspaceEditor}
+              />
+            </PopupTransition>
+          )}
+          {movePopup && (
+            <PopupTransition closing={closingPopups.has('moveTab')} onExited={() => finishPopupClose('moveTab')}>
+              <MoveTabPopup
+                destinations={moveDestinations}
+                maxTabs={MAX_TABS_PER_WORKSPACE}
+                tabTitle={tabs.find((tab) => tab.id === movePopup.tabId)?.title || 'New Tab'}
+                previewImage={movePopup.previewImage}
+                onMove={(workspaceId) => closeMoveTab(workspaceId)}
+                onClose={() => closeMoveTab(null)}
               />
             </PopupTransition>
           )}
@@ -1248,6 +1335,7 @@ export function App() {
         <ToolsBar
           visible={toolsSidebarVisible}
           focusMode={focusMode}
+          absent={isTablePage}
           onToggleVisible={toggleToolsSidebar}
           canAnnotate={browserTab !== null || activeTab?.kind === 'pdf' || activeTab?.kind === 'markdown'}
           // Something to point at: a web page other than home, a PDF or note with its file open, or a terminal (its
@@ -1305,6 +1393,7 @@ export function App() {
           exportMarkdown={activeTab?.kind === 'markdown'}
           fileActions={fileActions}
           actionSections={noteSections}
+          fileActionsTitle={activeTab?.kind === 'browser' ? 'Page' : 'File'}
           onRevertPage={openRevert}
         />
       </div>

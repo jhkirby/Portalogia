@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -25,7 +25,6 @@ import {
   CHROME_HEIGHT_PX,
   MAX_TABS_PER_WORKSPACE,
   MAX_WORKSPACES,
-  TAB_STRIP_HEIGHT_PX,
   DEFAULT_TAB_URL,
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
@@ -100,6 +99,7 @@ import { EMPTY_MARKDOWN_ANNOTATIONS, markdownAnnotationStore } from './MarkdownA
 import { FileLoadProgress } from './FileLoadProgress';
 import { onAnnotationsChanged } from './annotationChanges';
 import { MarkdownDocuments } from './MarkdownDocuments';
+import { PickedImageStore } from './PickedImageStore';
 import {
   MARKDOWN_EXTENSION_PATTERN,
   findBacklinks,
@@ -107,6 +107,8 @@ import {
   isMarkdownPath,
   listNoteNames,
   fetchRemoteImageDataUrl,
+  imageLinkFor,
+  PICKABLE_IMAGE_EXTENSIONS,
   readImageDataUrl,
   resolveLinkTarget,
   resolveWikiLinks,
@@ -124,7 +126,7 @@ import type { HistoryController } from './HistoryController';
 import type { AdBlocker } from '../adblock/AdBlocker';
 import { editableKindOf, hasEditableFocus } from './editableFocus';
 import { isTextEditingChord, type TextBoxContext } from './textEditingChords';
-import { isToolShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
+import { isToolShortcut, markdownFormatShortcut, pointerModeShortcut, tabJumpIndex } from './toolShortcuts';
 import { FindOverlay } from './FindOverlay';
 import { DEFAULT_FIND_OPTIONS, type FindOptions } from '@shared/find';
 import { ColorPickerOverlay } from './ColorPickerOverlay';
@@ -232,6 +234,19 @@ const pdfBacklinkPaths = new Map<string, readonly string[]>();
 
 /** The notes open in Markdown tabs, by tab id. Module-level for the same reason as `pdfFilePaths`: a tab can move between windows' managers. */
 const markdownDocuments = new MarkdownDocuments();
+
+/** How long Ctrl must be held on its own before it swaps the pointer (`handleQuickPointerKey`): longer than a shortcut takes. */
+const QUICK_SWITCH_DELAY_MS = 150;
+
+/** A marking tool that a held Ctrl can set aside and bring back. */
+type QuickSwitchTool = 'laser' | 'pen' | 'highlighter' | 'comment' | 'text' | 'crop';
+
+/** The pictures the user picked in a note's image dialog (see `PickedImageStore`), made on first use — `app` must be ready. */
+let pickedImageStore: PickedImageStore | null = null;
+function pickedImages(): PickedImageStore {
+  pickedImageStore ??= new PickedImageStore(join(app.getPath('userData'), 'picked-images.json'));
+  return pickedImageStore;
+}
 
 /** How long the address bar's progress line stays at 100% after a page finishes loading, so it can be read. */
 const LOAD_PROGRESS_HOLD_MS = 1000;
@@ -406,7 +421,16 @@ export class TabManager {
   private selectedTabIds = new Set<string>();
   /** Workspaces multi-selected (Ctrl/Shift+click), active one included. Read through `currentWorkspaceSelection`. */
   private selectedWorkspaceIds = new Set<string>();
-  private dropRegions: readonly { x: number; y: number; width: number; height: number }[] = [];
+  /**
+   * A held Ctrl's swap (`handleQuickPointerKey`): the tab it was made on, and what to put back when Ctrl is let go —
+   * the pointer mode it swapped from, or the marking tool it set aside.
+   */
+  private quickSwitch: {
+    readonly tabId: string;
+    readonly restore: { readonly kind: 'mode'; readonly mode: PointerMode } | { readonly kind: 'tool'; readonly tool: QuickSwitchTool };
+  } | null = null;
+  /** Counting down to a held Ctrl's swap — cleared if another key makes it a shortcut first. */
+  private quickSwitchTimer: ReturnType<typeof setTimeout> | null = null;
   private highlighterActive = false;
   private commentToolActive = false;
   private textToolActive = false;
@@ -424,6 +448,10 @@ export class TabManager {
   private spaceHoldTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Set once per grab, never reset by repeats; see `GRAB_MAX_DURATION_MS`. */
   private grabMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the grabbed tab has been moved yet — from then on Space's repeats no longer keep the grab (see `handleReorderGestureInput`). */
+  private grabNudged = false;
+  /** The tab whose page had the keyboard when a grab started there (it moves to the chrome until the grab ends). */
+  private grabKeyboardTabId: string | null = null;
   /** Bumped on every `toggleSidebar`/`setFocusMode` call so an in-flight bounds animation can tell it's been superseded and stop early. */
   private boundsAnimationToken = 0;
   /** Set for the duration of an in-flight bounds animation (see `animateBoundsInset`) — lets `updateBounds` defer to the animation's own frames instead of fighting them with a one-off instant jump, e.g. from the native 'resize' event `setFullScreen` fires when Focus Mode toggles. */
@@ -637,8 +665,39 @@ export class TabManager {
     // terminal. Not a menu accelerator for the same reason the reorder
     // gesture isn't — it needs to check the active tab's kind, which a
     // static accelerator can't express.
+    // Which shown page the pointer is over, for the chrome's hover glow on a web page's frame: a page is a native view,
+    // so the chrome never sees the pointer over it. Checked a few times a second; only changes are sent.
+    let hoveredContentTabId: string | null = null;
+    const contentPointerTimer = setInterval(() => {
+      if (this.window.isDestroyed() || this.window.webContents.isDestroyed()) {
+        return;
+      }
+      let next: string | null = null;
+      if (this.window.isVisible() && !this.window.isMinimized()) {
+        const cursor = screen.getCursorScreenPoint();
+        const content = this.window.getContentBounds();
+        const x = cursor.x - content.x;
+        const y = cursor.y - content.y;
+        for (const tabId of [this.activeTabId, this.splitOtherTabId()]) {
+          const bounds = tabId ? this.views.get(tabId)?.getBounds() : undefined;
+          if (tabId && bounds && x >= bounds.x && x < bounds.x + bounds.width && y >= bounds.y && y < bounds.y + bounds.height) {
+            next = tabId;
+            break;
+          }
+        }
+      }
+      if (next !== hoveredContentTabId) {
+        hoveredContentTabId = next;
+        this.window.webContents.send(IpcChannel.UiContentPointer, next);
+      }
+    }, 100);
+    this.window.once('closed', () => clearInterval(contentPointerTimer));
+    // Ctrl let go in another app never reaches this one: leaving the window ends a held Ctrl's swap.
+    this.window.on('blur', () => this.endQuickSwitch());
     this.window.webContents.on('before-input-event', (event, input) => {
-      if (this.handleReorderGestureInput(event, input) || this.handleWindowShortcut(event, input)) {
+      // Ctrl held alone swaps the pointer for quick access; it takes no key, so everything below still sees them.
+      this.handleQuickPointerKey(input);
+      if (this.handleReorderGestureInput(event, input, true) || this.handleWindowShortcut(event, input)) {
         return;
       }
       // A text box in the chrome (the address bar, a name field) keeps every key it edits with; Escape leaves it.
@@ -1575,6 +1634,35 @@ export class TabManager {
   }
 
   /**
+   * The note editor's block shortcuts, Google Docs style: Ctrl+Alt+0–6 (normal text, headings 1–6), Ctrl+Shift+7/8/9
+   * (numbered, bulleted, checklist), and Ctrl+Alt+C/D/H/I (callout, divider, raw HTML, picture). Matched by physical
+   * key, since Ctrl+Alt is AltGr on many layouts and Shift turns the digits into symbols. Only taken while a note is
+   * being edited and has the caret (`formatMarkdown`); otherwise the key goes on as usual.
+   * @param event The input event, so a handled key can `preventDefault`.
+   * @param input Electron's parsed key info.
+   * @param id The tab the key was pressed in.
+   * @returns Whether the key was taken.
+   */
+  private handleMarkdownFormatShortcut(event: Electron.Event, input: Electron.Input, id: string): boolean {
+    if (input.type !== 'keyDown' || !(input.control || input.meta) || this.states.get(id)?.kind !== 'markdown') {
+      return false;
+    }
+    const action = markdownFormatShortcut(input);
+    if (action === null) {
+      return false;
+    }
+    if (input.isAutoRepeat) {
+      event.preventDefault();
+      return true;
+    }
+    if (!this.formatMarkdown(id, action)) {
+      return false;
+    }
+    event.preventDefault();
+    return true;
+  }
+
+  /**
    * Runs a formatting command from the Tools sidebar on a Markdown tab's editor. Unlike `formatMarkdown` (a shortcut
    * pressed in the page), the click left the keyboard in the chrome, so the page is given it first; the editor kept
    * its selection, which the command then acts on.
@@ -1688,7 +1776,33 @@ export class TabManager {
   /** An image beside the tab's note as a data URL — see `readImageDataUrl`. */
   public async readMarkdownImage(id: string, src: string): Promise<string | null> {
     const path = markdownDocuments.pathOf(id);
-    return path ? readImageDataUrl(path, src) : null;
+    return path ? readImageDataUrl(path, src, (candidate) => pickedImages().has(candidate)) : null;
+  }
+
+  /**
+   * The formatted editor's Image button: the user picks a picture from disk, which is remembered as one this note
+   * may show (`PickedImageStore`), and the page is given the link to write for it.
+   * @param id The Markdown tab.
+   * @returns The link (relative to the note where possible), or `null` if nothing was picked.
+   */
+  public async pickMarkdownImage(id: string): Promise<string | null> {
+    const notePath = markdownDocuments.pathOf(id);
+    if (this.states.get(id)?.kind !== 'markdown' || !notePath) {
+      return null;
+    }
+    const window = (this.registry.mountOwners.get(id) ?? this).window;
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: 'Insert a picture',
+      defaultPath: dirname(notePath),
+      properties: ['openFile'],
+      filters: [{ name: 'Pictures', extensions: [...PICKABLE_IMAGE_EXTENSIONS] }],
+    });
+    const [imagePath] = filePaths;
+    if (canceled || !imagePath || !PICKABLE_IMAGE_EXTENSIONS.includes(extname(imagePath).slice(1).toLowerCase())) {
+      return null;
+    }
+    pickedImages().add(imagePath);
+    return imageLinkFor(notePath, imagePath);
   }
 
   /** A web picture the user clicked to load in the tab's note, as a data URL — see `fetchRemoteImageDataUrl`. */
@@ -2765,6 +2879,114 @@ export class TabManager {
     }
   }
 
+  /**
+   * Ctrl held on its own, for quick access: Pan and Select trade places while it's down, or — with a marking tool on
+   * (laser pointer, pen, highlighter, comments, text box, crop) — the tool steps aside for the pointer mode under it.
+   * Letting go puts things back as they were. Only after Ctrl has been held alone for `QUICK_SWITCH_DELAY_MS`, so a
+   * shortcut (Ctrl+C, Ctrl+click…) never flickers the pointer; another key meanwhile is a chord, and calls it off.
+   * Fed every key, from the chrome and from every tab's page (`before-input-event`); takes none of them.
+   * @param input Electron's parsed key info.
+   */
+  public handleQuickPointerKey(input: Electron.Input): void {
+    const isCtrl = input.key === 'Control';
+    if (input.type === 'keyDown' && isCtrl && !input.alt && !input.shift && !input.meta) {
+      if (!input.isAutoRepeat && this.quickSwitchTimer === null && this.quickSwitch === null) {
+        this.quickSwitchTimer = setTimeout(() => {
+          this.quickSwitchTimer = null;
+          this.engageQuickSwitch();
+        }, QUICK_SWITCH_DELAY_MS);
+      }
+      return;
+    }
+    // Any other key while Ctrl is down makes it a shortcut, and letting go of Ctrl ends the hold: either way, back.
+    if ((input.type === 'keyDown' && !isCtrl) || (input.type === 'keyUp' && isCtrl)) {
+      this.endQuickSwitch();
+    }
+  }
+
+  /** Swaps the pointer for as long as Ctrl stays down — see `handleQuickPointerKey`. */
+  private engageQuickSwitch(): void {
+    const tabId = this.activeTabId;
+    const state = tabId ? this.states.get(tabId) : undefined;
+    if (!tabId || (state?.kind !== 'pdf' && state?.kind !== 'markdown' && state?.kind !== 'browser')) {
+      return;
+    }
+    if ((state.kind === 'pdf' || state.kind === 'markdown') && state.fileName === null) {
+      return;
+    }
+    const tool = this.activePointerTool();
+    if (tool !== null) {
+      // The tool steps aside; the pointer mode it was covering shows again.
+      this.quickSwitch = { tabId, restore: { kind: 'tool', tool } };
+      this.turnOffPointerTools();
+      this.emitState();
+      return;
+    }
+    this.quickSwitch = { tabId, restore: { kind: 'mode', mode: state.pointerMode } };
+    this.setPointerMode(tabId, state.pointerMode === 'pan' ? 'select' : 'pan');
+  }
+
+  /** Puts the pointer back as it was before Ctrl was held, if a hold had swapped it. */
+  private endQuickSwitch(): void {
+    if (this.quickSwitchTimer !== null) {
+      clearTimeout(this.quickSwitchTimer);
+      this.quickSwitchTimer = null;
+    }
+    const held = this.quickSwitch;
+    this.quickSwitch = null;
+    // Only on the tab it was swapped on: a tab switched to meanwhile keeps its own pointer.
+    if (!held || held.tabId !== this.activeTabId) {
+      return;
+    }
+    if (held.restore.kind === 'mode') {
+      this.setPointerMode(held.tabId, held.restore.mode);
+      return;
+    }
+    switch (held.restore.tool) {
+      case 'laser':
+        this.setLaserPointer(true);
+        break;
+      case 'pen':
+        this.setPen(true);
+        break;
+      case 'highlighter':
+        this.setHighlighter(true);
+        break;
+      case 'comment':
+        this.setCommentTool(true);
+        break;
+      case 'text':
+        this.setTextTool(true);
+        break;
+      case 'crop':
+        this.setCrop(true);
+        break;
+    }
+  }
+
+  /** The marking tool that has the pointer, if one does. */
+  private activePointerTool(): QuickSwitchTool | null {
+    if (this.laserPointerActive) {
+      return 'laser';
+    }
+    if (this.penActive) {
+      return 'pen';
+    }
+    if (this.highlighterActive) {
+      return 'highlighter';
+    }
+    if (this.commentToolActive) {
+      return 'comment';
+    }
+    if (this.textToolActive) {
+      return 'text';
+    }
+    if (this.cropActive) {
+      return 'crop';
+    }
+    return null;
+  }
+
   /** Turns off every tool that takes the pointer over: the laser pointer, pen, highlighter, comments, text boxes and crop. */
   private turnOffPointerTools(): void {
     if (this.laserPointerActive) {
@@ -3767,7 +3989,11 @@ export class TabManager {
     } else if (leaving) {
       releaseView(leaving.view, this.window);
     }
-    // Sized again now it's the active tab: whether the bottom is kept for the web stat bar depends on its kind.
+    // Sized again now it's the active tab: whether the bottom is kept for the web stat bar, and the right edge for the
+    // Tools sidebar (which a History, Bookmarks or Secrets page doesn't have), depends on its kind.
+    if (!this.isAnimatingBounds) {
+      this.rightInsetNow = this.targetRightInset();
+    }
     view?.setBounds(this.computeMainBounds(this.targetLeftInset(), this.targetTopInset()));
     this.pushPageStats();
     // Showing a different tab (a plain click, a shortcut, a fallback after a
@@ -4221,28 +4447,6 @@ export class TabManager {
   }
 
   /**
-   * Whether a screen point is over this window's tab strip or workspace
-   * sidebar — the two places a dragged-out tab can be dropped back in. Used
-   * by the torn-off window (`main/index.ts`'s `followCursor`) to get out of
-   * the way, so the OS drag reaches this window's own drop handlers.
-   */
-  public isOverTabDropRegion(screenX: number, screenY: number): boolean {
-    if (this.window.isDestroyed() || !this.window.isVisible() || this.window.isMinimized()) {
-      return false;
-    }
-    const content = this.window.getContentBounds();
-    const x = screenX - content.x;
-    const y = screenY - content.y;
-    if (x < 0 || y < 0 || x >= content.width || y >= content.height) {
-      return false;
-    }
-    return (
-      y < TAB_STRIP_HEIGHT_PX ||
-      this.dropRegions.some((r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
-    );
-  }
-
-  /**
    * Takes a tab's view off this window without activating anything in its
    * place (unlike `releaseTab`, which falls back to a neighbor or a fresh
    * home tab). For a window that's about to be closed while its tab lives
@@ -4264,22 +4468,6 @@ export class TabManager {
   /** Marks this window as one being dragged around whole (see `suppressWorkspaceFallback`). */
   public setSuppressWorkspaceFallback(suppress: boolean): void {
     this.suppressWorkspaceFallback = suppress;
-  }
-
-  /** Whether `tabId` is the only tab this window lists in its workspace — dragging it out then moves the whole window instead of spawning another. */
-  public isOnlyTabInItsWorkspace(tabId: string): boolean {
-    const workspaceId = this.states.get(tabId)?.workspaceId;
-    if (workspaceId === undefined) {
-      return false;
-    }
-    const dragged = this.registry.selectionContainingTab(tabId) ?? [tabId];
-    const listed = this.listedTabIds(workspaceId);
-    return listed.length === dragged.length && listed.every((listedId) => dragged.includes(listedId));
-  }
-
-  /** Records where this window's tab drop targets are (client coordinates) — see `isOverTabDropRegion`. */
-  public setDropRegions(rects: readonly { x: number; y: number; width: number; height: number }[]): void {
-    this.dropRegions = rects;
   }
 
   /** @returns The workspace a tab currently belongs to, or `undefined` if it no longer exists. */
@@ -6857,11 +7045,17 @@ export class TabManager {
       return;
     }
     this.grabbedTabId = id;
+    this.grabNudged = false;
+    this.armGrabMaxDuration();
+    this.emitState();
+  }
+
+  /** (Re)starts the last-resort limit on a keyboard grab (`GRAB_MAX_DURATION_MS`), counted from the latest move. */
+  private armGrabMaxDuration(): void {
     if (this.grabMaxDurationTimeout !== null) {
       clearTimeout(this.grabMaxDurationTimeout);
     }
     this.grabMaxDurationTimeout = setTimeout(() => this.releaseGrabbedTab(), GRAB_MAX_DURATION_MS);
-    this.emitState();
   }
 
   /** Ends keyboard reorder mode, if it's active — dropping the grabbed tab wherever `nudgeTab` last left it. */
@@ -6871,10 +7065,19 @@ export class TabManager {
       clearTimeout(this.grabMaxDurationTimeout);
       this.grabMaxDurationTimeout = null;
     }
+    const returnTo = this.grabKeyboardTabId;
+    this.grabKeyboardTabId = null;
     if (this.grabbedTabId === null) {
       return;
     }
     this.grabbedTabId = null;
+    // A grab started from a page moved the keyboard to the chrome: it goes back to that page, if it's still in view.
+    if (returnTo !== null && returnTo === this.activeTabId) {
+      const view = this.views.get(returnTo);
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.focus();
+      }
+    }
     this.emitState();
   }
 
@@ -7149,7 +7352,32 @@ export class TabManager {
    * @returns Whether this event belonged to the gesture and was fully
    *   handled — callers should stop processing it themselves when `true`.
    */
-  private handleReorderGestureInput(event: Electron.Event, input: Electron.Input): boolean {
+  /**
+   * A key of the keyboard-reorder gesture: from a page it's kept from the page and the keyboard moves to the chrome;
+   * from the chrome it's let through for the chrome to swallow (see `handleReorderGestureInput`).
+   * @param event The input event.
+   * @param fromChrome Whether the key came from the chrome's own page.
+   */
+  private takeGestureKey(event: Electron.Event, fromChrome: boolean): void {
+    if (!fromChrome) {
+      event.preventDefault();
+      this.moveKeyboardToChromeForGrab();
+    }
+  }
+
+  /** Gives the chrome the keyboard for the rest of a keyboard grab, remembering the tab to hand it back to. */
+  private moveKeyboardToChromeForGrab(): void {
+    if (this.window.isDestroyed() || this.window.webContents.isDestroyed()) {
+      return;
+    }
+    this.grabKeyboardTabId ??= this.activeTabId;
+    this.window.webContents.focus();
+  }
+
+  /**
+   * @param fromChrome Whether the key came from the chrome's own page (`true`) or from a tab's.
+   */
+  private handleReorderGestureInput(event: Electron.Event, input: Electron.Input, fromChrome: boolean): boolean {
     const key = input.key.toLowerCase();
 
     if (input.type === 'keyUp') {
@@ -7164,42 +7392,44 @@ export class TabManager {
       return false;
     }
 
-    // While a tab is grabbed, every key involved in the gesture is fully
-    // consumed here — Left/Right nudges it (auto-repeat deliberately
-    // allowed, unlike every other shortcut in this app, so holding an
-    // arrow keeps nudging). Space's own repeats (not just the very first
-    // press) re-arm the grace-period timer that stands in for its
-    // unreliable `keyUp` — see `armSpaceHoldTimeout`. Control's repeats
-    // are left alone entirely (not even `preventDefault`-ed): unlike
-    // Space, its keydown is never prevented in the first place, so its
-    // own keyUp stays a trustworthy release signal.
+    // While a tab is grabbed, every key of the gesture is handled here — Left/Right nudge it (auto-repeat allowed, so
+    // a held arrow keeps nudging), and Space's repeats re-arm the grace timer that stands in for its keyUp until the
+    // first nudge.
+    //
+    // None of them is `preventDefault`-ed while the chrome has the keyboard: a key-down main prevents makes Chromium
+    // drop every key event after it until the next key-down — the keyUps of Ctrl and Space included — so the release
+    // would never be seen and the tab would stay drawn as grabbed. The chrome swallows them itself instead (`App`, while
+    // `grabbedTabId` is set). A key from a page is prevented (the page mustn't scroll), and the keyboard moves to the
+    // chrome, so the rest of the gesture — and its release — arrives there.
     if (this.grabbedTabId !== null) {
+      // A key that arrives without Ctrl down means Ctrl has been let go, whether or not its keyUp ever arrived: the
+      // grab ends there, and the key goes on as an ordinary key (an arrow then moves nothing).
+      if (!input.control && key !== 'control') {
+        this.releaseGrabbedTab();
+        return false;
+      }
       if (key === 'arrowleft' || key === 'arrowright') {
-        event.preventDefault();
+        this.takeGestureKey(event, fromChrome);
         this.nudgeTab(this.grabbedTabId, key === 'arrowright' ? 1 : -1);
-        // The OS only auto-repeats whichever key was pressed most
-        // recently, so a Left/Right press while Space is held stops
-        // Space's own repeats from arriving at all — without this, only
-        // `armSpaceHoldTimeout`'s Space-repeat branch below would ever
-        // re-arm the grace timer, which would then fire (and drop the
-        // grab) mid-nudge even though both keys are still physically
-        // held. Nudging is itself proof the gesture is still active, so
-        // it re-arms the same timer Space's own repeats do.
-        this.armSpaceHoldTimeout();
+        // The OS only auto-repeats whichever key was pressed most recently, so once an arrow has been pressed Space's
+        // repeats stop for good: from the first nudge the grab lasts until Ctrl or Space is let go, with the last-resort
+        // limit counted from the latest move.
+        this.grabNudged = true;
+        this.disarmSpaceHoldTimeout();
+        this.armGrabMaxDuration();
         return true;
       }
       if (key === ' ') {
-        event.preventDefault();
-        // A brand-new (non-repeat) Ctrl+Space while something's already
-        // grabbed resets the grab onto whatever tab is active *now*,
-        // instead of just extending the existing hold. This is also the
-        // escape hatch if a grab ever gets stuck (its release signal
-        // missed for whatever reason): pressing Ctrl+Space again always
-        // breaks out of it rather than silently doing nothing forever.
+        this.takeGestureKey(event, fromChrome);
+        // A brand-new (non-repeat) Ctrl+Space while something's already grabbed resets the grab onto whatever tab is
+        // active now — also the way out if a grab ever gets stuck.
         if (input.control && !input.isAutoRepeat && this.activeTabId) {
           this.grabTabForReorder(this.activeTabId);
         }
-        this.armSpaceHoldTimeout();
+        // Before the first nudge, Space's repeats are what keep the grab; after it, the keys' release ends it.
+        if (!this.grabNudged) {
+          this.armSpaceHoldTimeout();
+        }
       }
       return true;
     }
@@ -7208,7 +7438,13 @@ export class TabManager {
     // `grabTabForReorder` and the grabbed-mode branch just above.
     if (input.control && key === ' ' && !input.isAutoRepeat) {
       if (this.activeTabId) {
+        // Prevented even from the chrome: the chrome only learns of the grab from the state this sends, too late to
+        // swallow this first Space (it would press a focused button). The keyUps it drops are covered by the next
+        // key-down (a Space repeat or an arrow), which isn't prevented, and by the grace timer for a quick tap.
         event.preventDefault();
+        if (!fromChrome) {
+          this.moveKeyboardToChromeForGrab();
+        }
         this.grabTabForReorder(this.activeTabId);
         this.armSpaceHoldTimeout();
       }
@@ -7571,10 +7807,19 @@ export class TabManager {
    * (`SIDEBAR_COLLAPSED_WIDTH_PX`) hidden, and 0 in Focus Mode — the left sidebar's `targetLeftInset`, mirrored.
    */
   private targetRightInset(): number {
-    if (this.focusMode) {
+    if (this.focusMode || this.activeHasNoTools()) {
       return 0;
     }
     return this.toolsSidebarVisible ? TOOLS_SIDEBAR_WIDTH_PX : SIDEBAR_COLLAPSED_WIDTH_PX;
+  }
+
+  /**
+   * Whether the active tab is a History, Bookmarks or Secrets page: a table with nothing to point at, mark or export,
+   * so it has no Tools sidebar (`App.tsx` doesn't draw one) and its page takes the right edge too.
+   */
+  private activeHasNoTools(): boolean {
+    const kind = this.activeTabId ? this.states.get(this.activeTabId)?.kind : undefined;
+    return kind === 'history' || kind === 'bookmarks' || kind === 'secrets';
   }
 
   /**
@@ -7599,12 +7844,14 @@ export class TabManager {
   }
 
   /**
-   * Whether the active tab's view sits inside the content frame (`CONTENT_FRAME_*`): a web page, outside Focus Mode
-   * and a page's own fullscreen. A note, PDF, terminal or History page fills its view and draws its own frame.
+   * Whether the active tab's view sits inside the content frame (`CONTENT_FRAME_*`): a web page, outside a page's own
+   * fullscreen. Focus Mode keeps the frame — the background still flows around the page, as it does around a note's
+   * or PDF's own frame — except in split screen, where the two sides just share the area. A note, PDF, terminal or
+   * History page fills its view and draws its own frame.
    */
   private framesActiveView(): boolean {
     const active = this.activeTabId ? this.states.get(this.activeTabId) : undefined;
-    return active?.kind === 'browser' && !this.focusMode && this.htmlFullScreenTabId === null;
+    return active?.kind === 'browser' && this.htmlFullScreenTabId === null && !(this.focusMode && this.splitView);
   }
 
   /** @returns The bounds a single full-width tab view should occupy for a given sidebar/chrome inset. */
@@ -8076,11 +8323,16 @@ export class TabManager {
 
     wc.on('before-input-event', (event, input) => {
       const owner = owningManager();
+      // Ctrl held alone swaps the pointer for quick access (see `handleQuickPointerKey`); it takes no key.
+      owner.handleQuickPointerKey(input);
 
       // Window shortcuts (Ctrl+Alt+M, Ctrl+Alt+Enter), ahead of everything else: a terminal returns early
       // on any Alt chord below, and a page could swallow them, so the Window menu's accelerators alone
       // never fired while a tab had the keyboard.
       if (owner.handleWindowShortcut(event, input)) {
+        return;
+      }
+      if (owner.handleMarkdownFormatShortcut(event, input, id)) {
         return;
       }
 
@@ -8163,7 +8415,7 @@ export class TabManager {
         return;
       }
 
-      if (owner.handleReorderGestureInput(event, input)) {
+      if (owner.handleReorderGestureInput(event, input, false)) {
         return;
       }
       if (input.type !== 'keyDown') {

@@ -7,7 +7,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PdfViewer } from './components/PdfViewer';
 import { watchAccentColor } from './lib/accentStorage';
-import { trackPageFocus } from './lib/pageFocus';
+import { trackPageFocus, trackPageHover } from './lib/pageFocus';
 import { followSystemTheme } from './lib/themeFade';
 
 // A separate renderer from the chrome's, so it doesn't inherit `<html data-theme>` (what colors.css's tokens key off):
@@ -17,6 +17,7 @@ followSystemTheme();
 watchAccentColor();
 // The frame around the content lights up in the accent while this page has the keyboard.
 trackPageFocus();
+trackPageHover();
 
 // Loaded once per PDF tab with its own `?id=` (see `TabManager.createPdfTab`).
 const id = new URLSearchParams(location.search).get('id');

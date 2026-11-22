@@ -112,6 +112,9 @@
 
   --color-panel-bg: #ffffff;
   --color-panel-border: #d7d9db;
+  /* A page's frame with the pointer over it (and not the keyboard, whose accent wins): a grey edge and glow. */
+  --color-frame-hover-border: #9aa0a6;
+  --color-frame-hover-glow: rgba(95, 99, 104, 0.45);
   /* An empty note or PDF tab, inside its frame: the same as a browser tab's blank home page (`homePage.ts`). */
   --color-blank-page-bg: #ffffff;
   --color-overlay-backdrop: rgba(32, 33, 36, 0.35);
@@ -170,6 +173,9 @@
 
   --color-panel-bg: #2d2e31;
   --color-panel-border: #5f6368;
+  /* A page's frame with the pointer over it (and not the keyboard, whose accent wins): a light edge and glow. */
+  --color-frame-hover-border: #bdc1c6;
+  --color-frame-hover-glow: rgba(232, 234, 237, 0.35);
   --color-blank-page-bg: #202124;
   --color-overlay-backdrop: rgba(0, 0, 0, 0.55);
   /* Neutral gray rather than an accent tint, deliberately — unlike the

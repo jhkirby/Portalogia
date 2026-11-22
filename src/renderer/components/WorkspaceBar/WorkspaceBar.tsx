@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
 // Last Modified: 2026-10-29
 
-import { useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
+import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { MAX_WORKSPACES } from '@shared/constants';
 import type { WorkspaceState } from '@shared/tab-state';
 import { useClickRipples } from '../../hooks/useClickRipples';
@@ -46,10 +46,6 @@ interface WorkspaceBarProps {
   /** Opens the workspace editor (name, icon color, icon) for one workspace: its pencil button. */
   readonly onEdit: (id: string) => void;
   readonly onRemove: (id: string) => void;
-  /** Called when a tab dragged from `TabBar` is dropped onto a workspace pill — moves it into that workspace. Tab id first, same argument order as every other tab action (`moveTab`, `activateTab`, ...). */
-  readonly onDropTab: (tabId: string, workspaceId: string) => void;
-  /** Called when a tab dragged from `TabBar` is dropped onto the "+ New workspace" button — creates a new workspace with that tab as its first (and only) one. */
-  readonly onDropTabToNewWorkspace: (tabId: string) => void;
   /** Saves a workspace (its tabs in order) as a workspace image: the star its icon turns into while hovered. */
   readonly onSaveImage: (id: string) => void;
   /** Deletes a saved image: a click on a filled star. */
@@ -81,8 +77,6 @@ export function WorkspaceBar({
   onMove,
   onEdit,
   onRemove,
-  onDropTab,
-  onDropTabToNewWorkspace,
   onSaveImage,
   onRemoveImage,
   onOpenImages,
@@ -90,10 +84,6 @@ export function WorkspaceBar({
 }: WorkspaceBarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-  /** Which pill a dragged tab is currently hovering over, if any — drives its drop-target highlight. */
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
-  /** Whether a dragged tab is currently hovering the "+ New workspace" button — drives its own drop-target highlight, same idea as `dropTargetId` for the pills above it. */
-  const [isNewWorkspaceDropTarget, setNewWorkspaceDropTarget] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   usePointerGlow(sidebarRef);
@@ -151,7 +141,8 @@ export function WorkspaceBar({
           {!focusMode && (
             <button
               type="button"
-              className="sidebar__toggle hover-glow chrome-tooltip"
+              className="sidebar__toggle hover-glow icon-hop chrome-tooltip"
+              data-hop="slide-x"
               onClick={(event) => {
                 onToggleSidebar();
                 // Let go of focus: a focused button can keep itself looking "active" after the click.
@@ -187,40 +178,8 @@ export function WorkspaceBar({
           {workspaces.map((workspace) => {
             const isActive = workspace.id === activeWorkspaceId;
             const isEditing = editingId === workspace.id;
-            const isDropTarget = dropTargetId === workspace.id;
             const isDragged = reorder.draggedId === workspace.id;
             const order = reorder.displayIds.indexOf(workspace.id);
-
-            // Accepts a tab dragged from `TabBar` (its own `handleDragStart`
-            // puts the dragged tab's id on `dataTransfer` as `text/plain`) —
-            // `preventDefault` in `dragover` is what marks this a valid drop
-            // target at all, same reasoning as `TabBar`'s own in-bar reorder
-            // targets, and is also what makes this drop's `dropEffect`
-            // (`'move'`) show up on the dragged tab's own `dragend`, which is
-            // how it knows *not* to treat this as a tear-off-to-new-window.
-            const handleDragOver = (event: DragEvent<HTMLDivElement>): void => {
-              // A workspace being reordered is placed by the list (above), not dropped into this one.
-              if (reorder.isWorkspaceDrag(event)) {
-                return;
-              }
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'move';
-              setDropTargetId(workspace.id);
-            };
-            const handleDragLeave = (): void => {
-              setDropTargetId((current) => (current === workspace.id ? null : current));
-            };
-            const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
-              if (reorder.isWorkspaceDrag(event)) {
-                return;
-              }
-              event.preventDefault();
-              const tabId = event.dataTransfer.getData('text/plain');
-              if (tabId) {
-                onDropTab(tabId, workspace.id);
-              }
-              setDropTargetId(null);
-            };
 
             return (
               <div
@@ -229,7 +188,7 @@ export function WorkspaceBar({
                 tabIndex={0}
                 aria-selected={isActive || selectedWorkspaceIds.includes(workspace.id)}
                 data-workspace-id={workspace.id}
-                className={`workspace-bar__pill hover-glow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDropTarget ? ' workspace-bar__pill--drop-target' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}${enteringIds.has(workspace.id) ? ' workspace-bar__pill--entering' : ''}`}
+                className={`workspace-bar__pill hover-glow${isActive ? ' workspace-bar__pill--active' : ''}${selectedWorkspaceIds.includes(workspace.id) ? ' workspace-bar__pill--selected' : ''}${isDragged ? ' workspace-bar__pill--dragging' : ''}${enteringIds.has(workspace.id) ? ' workspace-bar__pill--entering' : ''}`}
                 onAnimationEnd={(event) => {
                   // Bubbled up from the ripples and the selected colour too; only the slide-in ends the opening.
                   if (event.animationName === 'workspace-pill-slide-in') {
@@ -258,9 +217,6 @@ export function WorkspaceBar({
                 }}
                 // Not while collapsed: there's no room for the name box, and focusing it scrolled the whole list sideways.
                 onDoubleClick={sidebarVisible ? () => startEditing(workspace) : undefined}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
               >
                 {/* Below the pill's content: the selected colour, which grows in like the hover when this workspace
                     becomes the selected one, and the click ripples. */}
@@ -381,26 +337,13 @@ export function WorkspaceBar({
         {workspaces.length < MAX_WORKSPACES && (
           <button
             type="button"
-            className={`workspace-bar__new hover-glow chrome-tooltip${isNewWorkspaceDropTarget ? ' workspace-bar__new--drop-target' : ''}`}
+            className="workspace-bar__new hover-glow icon-hop chrome-tooltip"
+            data-hop="turn"
             aria-label="New workspace"
             onClick={() => {
               onCreate();
             }}
             data-tooltip={`New workspace (${formatShortcut('Shift+N')})`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'move';
-              setNewWorkspaceDropTarget(true);
-            }}
-            onDragLeave={() => setNewWorkspaceDropTarget(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              const tabId = event.dataTransfer.getData('text/plain');
-              if (tabId) {
-                onDropTabToNewWorkspace(tabId);
-              }
-              setNewWorkspaceDropTarget(false);
-            }}
           >
             <span className="workspace-bar__new-icon" aria-hidden="true">
               +
@@ -410,7 +353,8 @@ export function WorkspaceBar({
         )}
         <button
           type="button"
-          className="workspace-bar__images hover-glow chrome-tooltip"
+          className="workspace-bar__images hover-glow icon-hop chrome-tooltip"
+          data-hop="stack"
           aria-label="Workspace images"
           onClick={() => {
             onOpenImages();

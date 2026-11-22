@@ -1,7 +1,7 @@
 // Project: Portalogia
 // Owner: Joshua H. Kirby
 // Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-// Last Modified: 2026-11-12
+// Last Modified: 2026-11-21
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import type { AdBlocker } from '../adblock/AdBlocker';
@@ -239,6 +239,53 @@ export function buildMenu(
         { role: 'delete' },
         { role: 'selectAll' },
       ],
+    },
+    {
+      // A note's formatting, while it's being edited (a no-op otherwise). Display only: the keys reach the note through
+      // `TabManager` (`toggleBookmark`'s Ctrl+B, `handleMarkdownFormatShortcut`…), so they stay free everywhere else.
+      label: 'Format',
+      submenu: (
+        [
+          ['Bold', 'CmdOrCtrl+B', 'bold'],
+          ['Italic', 'CmdOrCtrl+I', 'italic'],
+          ['Highlight', null, 'highlight'],
+          ['Inline Code', null, 'inlineCode'],
+          ['Make a Link…', 'CmdOrCtrl+Shift+U', 'link'],
+          null,
+          ['Normal Text', 'CmdOrCtrl+Alt+0', 'heading0'],
+          ['Heading 1', 'CmdOrCtrl+Alt+1', 'heading1'],
+          ['Heading 2', 'CmdOrCtrl+Alt+2', 'heading2'],
+          ['Heading 3', 'CmdOrCtrl+Alt+3', 'heading3'],
+          ['Heading 4', 'CmdOrCtrl+Alt+4', 'heading4'],
+          ['Heading 5', 'CmdOrCtrl+Alt+5', 'heading5'],
+          ['Heading 6', 'CmdOrCtrl+Alt+6', 'heading6'],
+          null,
+          ['Numbered List', 'CmdOrCtrl+Shift+7', 'orderedList'],
+          ['Bulleted List', 'CmdOrCtrl+Shift+8', 'bulletList'],
+          ['Checklist', 'CmdOrCtrl+Shift+9', 'taskList'],
+          null,
+          ['Callout…', 'CmdOrCtrl+Alt+C', 'callout'],
+          ['Divider', 'CmdOrCtrl+Alt+D', 'divider'],
+          ['Code Block', 'CmdOrCtrl+Shift+K', 'code'],
+          ['LaTeX Block', 'CmdOrCtrl+Shift+L', 'latex'],
+          ['Table…', null, 'table'],
+          ['Picture…', 'CmdOrCtrl+Alt+I', 'image'],
+          ['Raw HTML', 'CmdOrCtrl+Alt+H', 'html'],
+        ] as const
+      ).map((entry): MenuItemConstructorOptions =>
+        entry === null
+          ? { type: 'separator' }
+          : {
+              label: entry[0],
+              ...(entry[1] === null ? {} : { accelerator: entry[1], registerAccelerator: false }),
+              click: () => {
+                const id = getActiveTabId();
+                if (id) {
+                  getTabManager()?.applyMarkdownFormat(id, entry[2]);
+                }
+              },
+            },
+      ),
     },
     {
       label: 'View',

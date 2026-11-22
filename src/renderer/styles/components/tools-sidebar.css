@@ -179,20 +179,50 @@
     padding var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* Between Pan and Select, which only move the pointer, and the tools after them, which mark the page. */
-.tools-sidebar__divider {
+/* A section's heading (`SectionHeading`): small capitals naming the tools under it, set in the middle of the rule
+   that divides the sections — every section, the first included. */
+.tools-sidebar__heading {
+  display: flex;
   flex-shrink: 0;
-  height: 1px;
-  margin: var(--size-spacing-xs) var(--size-spacing-sm);
+  align-items: center;
+  gap: var(--size-spacing-sm);
+  margin: var(--size-spacing-sm) var(--size-spacing-sm) var(--size-spacing-xs);
 
-  background: var(--color-chrome-border);
+  color: var(--color-address-placeholder);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 12px;
+  text-transform: uppercase;
+  white-space: nowrap;
 
-  transition: margin var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1);
+  transition:
+    margin var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    color var(--size-sidebar-label-fade-in) ease-out var(--size-sidebar-label-fade-in-delay);
 }
 
-.tools-sidebar--hidden .tools-sidebar__divider {
+/* The rule, either side of the words. */
+.tools-sidebar__heading::before,
+.tools-sidebar__heading::after {
+  content: '';
+  flex: 1;
+  min-width: 0;
+  height: 1px;
+
+  background: var(--color-chrome-border);
+}
+
+/* The rail keeps the rules; the words go with the rows' names, and the two halves meet. */
+.tools-sidebar--hidden .tools-sidebar__heading {
+  gap: 0;
   margin-left: 2px;
   margin-right: 2px;
+
+  color: transparent;
+  font-size: 0;
+  transition:
+    margin var(--size-sidebar-toggle-duration) cubic-bezier(0.33, 1, 0.68, 1),
+    color var(--size-sidebar-label-fade-out) ease-in;
 }
 
 /* A tool that's on: the selected workspace's fill (workspace-bar.css), with its icon in the accent. */

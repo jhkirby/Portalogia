@@ -29,6 +29,11 @@ interface ToolsBarProps {
   readonly visible: boolean;
   /** Focus Mode: the sidebar slides away entirely, and its toggle goes with it. */
   readonly focusMode: boolean;
+  /**
+   * The active tab has no tools at all — a History, Bookmarks or Secrets page — so the sidebar is gone, as in Focus
+   * Mode, and its page takes the right edge (main's `targetRightInset`).
+   */
+  readonly absent: boolean;
   readonly onToggleVisible: () => void;
 
   /** True on the blank home page, or a PDF or note with no file open: the marking tools — and Revert — have nothing to act on. */
@@ -82,12 +87,49 @@ interface ToolsBarProps {
    * the tools — Export's menu, where shown, right after them. Empty for any other tab.
    */
   readonly fileActions: readonly ToolsBarAction[];
+  /** The heading over the file's actions (and Export): "File" for a note or PDF, "Page" for a web page. */
+  readonly fileActionsTitle: string;
   /**
-   * Sections of their own between the tools and the file's actions, each set off by a rule: a note's View/Edit and
-   * Formatted/Raw buttons, then its formatting buttons. Empty sections are skipped.
+   * Sections of their own between the tools and the file's actions, each set off by a rule and headed by its title: a
+   * note's View/Edit and Formatted/Raw buttons, then its formatting buttons. Empty sections are skipped.
    */
-  readonly actionSections: readonly (readonly ToolsBarAction[])[];
+  readonly actionSections: readonly ToolsBarSection[];
 }
+
+/** A titled group of actions in the Tools sidebar. */
+export interface ToolsBarSection {
+  readonly title: string;
+  readonly actions: readonly ToolsBarAction[];
+}
+
+/**
+ * Each row's hover motion (`icon-hop.css`), by its id: what its icon does — the hand waves, the pen writes, the trash
+ * can shakes. A row not listed (a formatting button) takes the default hop.
+ */
+const HOP_BY_ID: Readonly<Record<string, string>> = {
+  pan: 'wave',
+  select: 'blink',
+  'laser-pointer': 'pulse',
+  pen: 'write',
+  highlighter: 'swipe',
+  comment: 'pop',
+  'text-box': 'type',
+  crop: 'snip',
+  revert: 'rewind',
+  'page-open': 'open',
+  'page-home': 'bounce',
+  'file-new': 'pop',
+  'file-open': 'open',
+  'file-close': 'shake',
+  'file-delete': 'shake',
+  'file-export': 'rise',
+  export: 'rise',
+  'note-mode': 'flip',
+  'note-display': 'flip',
+};
+
+/** The pointer modes, headed "Pointer"; every other tool is headed "Annotate". */
+const POINTER_TOOL_IDS = new Set(['pan', 'select']);
 
 /** One of a file's actions in the Tools sidebar: a row like a tool's, never "on". */
 export interface ToolsBarAction {
@@ -132,15 +174,19 @@ interface Tool {
  * it (`TabManager.targetRightInset`).
  */
 export function ToolsBar(props: ToolsBarProps) {
-  const { visible, focusMode, onToggleVisible } = props;
+  const { visible, focusMode, absent, onToggleVisible } = props;
+  // Gone entirely, rail and all: in Focus Mode, or for a tab with no tools.
+  const gone = focusMode || absent;
   const sidebarRef = useRef<HTMLElement>(null);
   usePointerGlow(sidebarRef);
   const ripples = useClickRipples();
   const tools = toolsFor(props);
   const { fileActions } = props;
-  // Every section after the tools, in order, each set off from what's above it by a rule: the note's own sections,
-  // then the file's actions (Export's menu follows those, in the same section).
-  const sections = [...props.actionSections, fileActions].filter((section) => section.length > 0);
+  // Every section after the tools, in order, each set off from what's above it by a rule and headed by its title: the
+  // note's own sections, then the file's actions (Export's menu follows those, in the same section).
+  const sections = [...props.actionSections, { title: props.fileActionsTitle, actions: fileActions }].filter(
+    (section) => section.actions.length > 0,
+  );
   const hasExportSection = fileActions.length === 0 && props.showExport;
   // Export opens its menu (its own overlay, beside the sidebar) rather than turning on.
   const exportMenu = useExportMenu({
@@ -174,7 +220,8 @@ export function ToolsBar(props: ToolsBarProps) {
   return (
     <aside
       ref={sidebarRef}
-      className={`tools-sidebar pointer-glow-host${visible ? '' : ' tools-sidebar--hidden'}${focusMode ? ' tools-sidebar--focus-mode' : ''}`}
+      className={`tools-sidebar pointer-glow-host${visible ? '' : ' tools-sidebar--hidden'}${gone ? ' tools-sidebar--focus-mode' : ''}`}
+      aria-hidden={absent || undefined}
       aria-label="Tools"
     >
       {/* Mist drifting up and down the sidebar, then the accent glowing around the pointer, under everything in it. */}
@@ -184,10 +231,11 @@ export function ToolsBar(props: ToolsBarProps) {
         {/* Mirrored from the workspace sidebar's: the show/hide button on the outer side, toward the page, then the title. */}
         <div className="sidebar__header tools-sidebar__header">
           {/* Omitted in Focus Mode, like the workspace sidebar's: nothing there should be reachable then. */}
-          {!focusMode && (
+          {!gone && (
             <button
               type="button"
-              className="sidebar__toggle hover-glow chrome-tooltip"
+              className="sidebar__toggle hover-glow icon-hop chrome-tooltip"
+              data-hop="slide-x"
               onClick={(event) => {
                 onToggleVisible();
                 event.currentTarget.blur();
@@ -204,9 +252,15 @@ export function ToolsBar(props: ToolsBarProps) {
         <div className="tools-sidebar__list">
           {tools.map((tool, index) => (
             <Fragment key={tool.id}>
+              {/* Each kind of tool under its heading: the pointer modes, then the tools that mark the page. */}
+              {index === 0 && <SectionHeading title={POINTER_TOOL_IDS.has(tool.id) ? 'Pointer' : 'Annotate'} />}
+              {index > 0 && POINTER_TOOL_IDS.has(tools[index - 1]!.id) && !POINTER_TOOL_IDS.has(tool.id) && (
+                <SectionHeading title="Annotate" />
+              )}
               <button
                 type="button"
-                className={`tools-sidebar__tool hover-glow chrome-tooltip${tool.pressed ? ' tools-sidebar__tool--on' : ''}`}
+                className={`tools-sidebar__tool hover-glow icon-hop chrome-tooltip${tool.pressed ? ' tools-sidebar__tool--on' : ''}`}
+                data-hop={HOP_BY_ID[tool.id]}
                 onClick={(event) => {
                   ripples.add(tool.id, event);
                   tool.onClick();
@@ -223,22 +277,19 @@ export function ToolsBar(props: ToolsBarProps) {
                   {tool.icon}
                 </span>
               </button>
-              {/* Pan and Select only move the pointer; the tools after them mark the page. A rule keeps the two apart. */}
-              {tool.id === 'select' && index < tools.length - 1 && (
-                <span className="tools-sidebar__divider" role="separator" aria-hidden="true" />
-              )}
             </Fragment>
           ))}
           {/* A note's modes and formatting, then the file's own actions and Export: sections of their own, as they act on
               the note or the file rather than mark it. */}
-          {sections.map((section, sectionIndex) => (
-            <Fragment key={section[0]!.id}>
-              {(tools.length > 0 || sectionIndex > 0) && <span className="tools-sidebar__divider" role="separator" aria-hidden="true" />}
-              {section.map((action) => (
+          {sections.map((section) => (
+            <Fragment key={section.actions[0]!.id}>
+              <SectionHeading title={section.title} />
+              {section.actions.map((action) => (
                 <button
                   key={action.id}
                   type="button"
-                  className="tools-sidebar__tool hover-glow chrome-tooltip"
+                  className="tools-sidebar__tool hover-glow icon-hop chrome-tooltip"
+                  data-hop={HOP_BY_ID[action.id]}
                   onClick={(event) => {
                     ripples.add(action.id, event);
                     action.onClick();
@@ -257,15 +308,14 @@ export function ToolsBar(props: ToolsBarProps) {
             </Fragment>
           ))}
           {/* Export with no file actions above it (a web page's): a section of its own. */}
-          {hasExportSection && (tools.length > 0 || sections.length > 0) && (
-            <span className="tools-sidebar__divider" role="separator" aria-hidden="true" />
-          )}
+          {hasExportSection && <SectionHeading title={props.fileActionsTitle} />}
           {props.showExport && (
             <>
               <button
                 ref={exportMenu.anchorRef}
                 type="button"
-                className={`tools-sidebar__tool hover-glow chrome-tooltip${exportMenu.isOpen ? ' tools-sidebar__tool--on' : ''}`}
+                className={`tools-sidebar__tool hover-glow icon-hop chrome-tooltip${exportMenu.isOpen ? ' tools-sidebar__tool--on' : ''}`}
+                data-hop={HOP_BY_ID['export']}
                 onClick={(event) => {
                   ripples.add('export', event);
                   exportMenu.toggle();
@@ -287,6 +337,19 @@ export function ToolsBar(props: ToolsBarProps) {
         </div>
       </div>
     </aside>
+  );
+}
+
+/**
+ * A section's heading in the Tools sidebar, in capitals, in the middle of the rule that sets the section off
+ * (`.tools-sidebar__heading`). Its words fade away, like the rows' names, as the sidebar narrows to its rail; the rule stays.
+ * @param props.title The section's name, written as a word ("Annotate"); the stylesheet puts it in capitals.
+ */
+function SectionHeading({ title }: { readonly title: string }) {
+  return (
+    <span className="tools-sidebar__heading" role="presentation">
+      {title}
+    </span>
   );
 }
 

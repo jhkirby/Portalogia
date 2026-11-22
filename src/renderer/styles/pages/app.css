@@ -147,6 +147,11 @@ body {
     box-shadow 160ms ease-out;
 }
 
+/* Focus Mode: no stat bar below, so the frame comes down to the window's bottom margin, as a note's does. */
+.tab-content__frame--focus-mode {
+  bottom: var(--size-content-frame-y);
+}
+
 /* Split screen: a frame for each side showing a web page, the gap between them the same as between a single frame
    and the sidebar (`--size-content-frame-x`). Main lays the two views out to match (`TabManager.computeSplitPanes`). */
 .tab-content__frame--split-left,
@@ -218,6 +223,13 @@ body {
 }
 
 /* The page has the keyboard (`BrowserState.contentFocused`): the frame lights up in the accent. */
+/* The pointer is over the page (main reports it): the frame glows softly — light in the dark theme, grey in the light.
+   The keyboard's accent, below, wins. */
+.tab-content__frame--hovered {
+  border-color: var(--color-frame-hover-border);
+  box-shadow: 0 0 12px 1px var(--color-frame-hover-glow);
+}
+
 .tab-content__frame--focused {
   border-color: var(--color-accent-text);
   /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */

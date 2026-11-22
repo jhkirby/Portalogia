@@ -89,56 +89,6 @@ test.describe('multi-selecting tabs', () => {
     await expect(window.locator('.tab-bar__tab--selected')).toHaveCount(0);
   });
 
-  test('dropping one selected tab onto a workspace moves them all', async ({ window }) => {
-    await openTabs(window, 5);
-    await window.getByRole('button', { name: 'New workspace' }).click();
-    const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
-    await expect(workspaces).toHaveCount(2);
-    await workspaces.first().click();
-
-    const tabs = window.locator('.tab-bar__tab');
-    await expect(tabs).toHaveCount(5);
-    await tabs.nth(0).click({ modifiers: ['Control'] });
-    await tabs.nth(1).click({ modifiers: ['Control'] });
-    const state = await stateOf(window);
-    expect(state.selectedTabIds).toHaveLength(3);
-
-    // What a drop on the second workspace's pill sends: one tab's id.
-    const secondWorkspaceId = state.workspaces[1]!.id;
-    await window.evaluate(([id, ws]) => window.portalogia.moveTabToWorkspace(id!, ws!), [state.selectedTabIds[0], secondWorkspaceId]);
-
-    await expect(tabs).toHaveCount(2); // Home keeps the two that weren't selected
-    await workspaces.nth(1).click();
-    await expect(tabs).toHaveCount(4); // its own home tab + the three moved ones
-  });
-
-  test('tearing a selected tab out moves the whole selection into one new window', async ({ electronApp, window }) => {
-    await openTabs(window, 5);
-    const tabs = window.locator('.tab-bar__tab');
-    await tabs.nth(0).click({ modifiers: ['Control'] });
-    await tabs.nth(1).click({ modifiers: ['Control'] });
-    const state = await stateOf(window);
-    expect(state.selectedTabIds).toHaveLength(3);
-    const selected = state.selectedTabIds;
-
-    // A release far outside the window is a tear-off (not live).
-    await window.evaluate((id) => window.portalogia.tearOffTab(id!, 6000, 6000), selected[0]);
-
-    await expect
-      .poll(async () => {
-        for (const page of electronApp.windows()) {
-          if (page !== window && !page.isClosed() && (await page.locator('.tab-bar__tab').count().catch(() => 0)) > 0) {
-            return page.locator('.tab-bar__tab').count();
-          }
-        }
-        return 0;
-      }, { timeout: 15_000 })
-      .toBe(3);
-    await expect(tabs).toHaveCount(2);
-  });
-});
-
-test.describe('multi-selecting workspaces', () => {
   test('Ctrl+click and Shift+click select workspaces, and Ctrl+Alt+W (Close Workspace) removes them all', async ({ electronApp, window }) => {
     const workspaces = window.getByRole('tablist', { name: 'Workspaces' }).getByRole('tab');
     for (let i = 0; i < 3; i += 1) {

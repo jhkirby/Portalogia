@@ -11,8 +11,8 @@
   gap: 2px;
 }
 
-/* The pill behind the percent field — it grows in on hover (`hover-grow`), like `.page-actions__button` beside it, so
-   it stays quiet until interacted with, and stays while the field is being typed in. Its
+/* The pill behind the percent field — its number glows on hover, like the `.page-actions__button`s beside it, so it
+   stays quiet until interacted with, and fills while the field is being typed in. Its
    own flex centers the input+suffix pair as one group, which is what
    keeps the number visually centered in the bubble even though the input
    itself is right-aligned against the tightly-following "%" (see
@@ -29,15 +29,15 @@
   border-radius: var(--size-radius-pill);
 }
 
-/* Typing in it: the fill stays up, as if hovered, while the field has the caret. */
-.zoom-control__bubble:focus-within::before {
-  opacity: 1;
-  transform: scale(1);
+/* Typing in it: a quiet fill marks the field that has the caret. */
+.zoom-control__bubble:focus-within {
+  background: var(--color-button-hover-bg);
 }
 
-/* Nothing to zoom: no fill, as a disabled button beside it shows none. */
-.zoom-control__bubble:has(.zoom-control__input:disabled) {
-  --hover-grow-bg: transparent;
+/* Hovered: the number glows, as the buttons beside it do (`.hover-glow` lights text, not a field's own). */
+.zoom-control__bubble:hover .zoom-control__input:not(:disabled) {
+  color: var(--color-tab-text-active);
+  text-shadow: var(--hover-glow-text-shadow);
 }
 
 .zoom-control__bubble:focus-within {
