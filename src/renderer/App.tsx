@@ -212,6 +212,26 @@ export function App() {
    */
   const [pointerOnTitlebar, setPointerOnTitlebar] = useState(false);
   useEffect(() => window.portalogia.onTitlebarPointer(setPointerOnTitlebar), []);
+  /** The shown tab whose page the pointer is over (main watches it), for the hover glow on a web page's frame. */
+  const [hoveredContentTabId, setHoveredContentTabId] = useState<string | null>(null);
+  useEffect(() => window.portalogia.onContentPointer(setHoveredContentTabId), []);
+
+  // While a tab is grabbed for keyboard reordering (Ctrl+Space, then the arrows), the gesture's keys come here and are
+  // swallowed: main lets them through rather than preventing them, since a key-down it prevents makes Chromium drop the
+  // keyUps after it, and the release of Ctrl+Space would never be seen (`TabManager.handleReorderGestureInput`).
+  useEffect(() => {
+    if (grabbedTabId === null) {
+      return undefined;
+    }
+    const swallow = (event: KeyboardEvent): void => {
+      if (event.key === ' ' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', swallow, true);
+    return () => window.removeEventListener('keydown', swallow, true);
+  }, [grabbedTabId]);
   const titlebarRef = useRef<HTMLDivElement>(null);
   usePointerGlow(titlebarRef, true);
   /** The latest stats main sent for the active web page, with the tab they're for (`WebStatusBar`). */
@@ -1172,7 +1192,7 @@ export function App() {
                 tabs.find((tab) => tab.id === tabId)?.kind === 'browser' ? (
                   <div
                     key={side}
-                    className={`tab-content__frame tab-content__frame--split-${side}${focusedTabId === tabId ? ' tab-content__frame--focused' : ''}${frameMotion === 'entering' ? ' tab-content__frame--entering' : ''}`}
+                    className={`tab-content__frame tab-content__frame--split-${side}${hoveredContentTabId === tabId ? ' tab-content__frame--hovered' : ''}${focusedTabId === tabId ? ' tab-content__frame--focused' : ''}${frameMotion === 'entering' ? ' tab-content__frame--entering' : ''}`}
                     aria-hidden="true"
                     onAnimationEnd={() => setFrameMotion(null)}
                   />
@@ -1181,7 +1201,7 @@ export function App() {
             ) : (
               activeTab?.kind === 'browser' && (
                 <div
-                  className={`tab-content__frame${focusMode ? ' tab-content__frame--focus-mode' : ''}${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
+                  className={`tab-content__frame${focusMode ? ' tab-content__frame--focus-mode' : ''}${hoveredContentTabId === activeTab.id ? ' tab-content__frame--hovered' : ''}${contentFocused ? ' tab-content__frame--focused' : ''}${frameMotion === 'joining-left' ? ' tab-content__frame--joining' : ''}${frameMotion === 'joining-right' ? ' tab-content__frame--joining-right' : ''}`}
                   aria-hidden="true"
                   onAnimationEnd={() => setFrameMotion(null)}
                 />

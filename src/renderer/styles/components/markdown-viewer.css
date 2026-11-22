@@ -56,6 +56,12 @@ body {
     box-shadow 160ms ease-out;
 }
 
+/* The pointer is over the note (`trackPageHover`): the frame glows softly — light in the dark theme, grey in the light. */
+.page-hovered:not(.page-focused) .md-viewer > :is(.md-viewer__body, .md-viewer__empty) {
+  border-color: var(--color-frame-hover-border);
+  box-shadow: 0 0 12px 1px var(--color-frame-hover-glow);
+}
+
 .page-focused .md-viewer > :is(.md-viewer__body, .md-viewer__empty) {
   border-color: var(--color-accent-text);
   /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */

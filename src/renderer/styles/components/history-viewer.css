@@ -50,6 +50,17 @@ body {
   background: var(--color-panel-bg);
   border: 1px solid var(--color-panel-border);
   border-radius: var(--size-content-frame-radius);
+
+  transition:
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
+/* The pointer is over the page (`trackPageHover`): the table's frame glows softly — light in the dark theme, grey in
+   the light — as every page's frame does. */
+.page-hovered .history__table-wrap {
+  border-color: var(--color-frame-hover-border);
+  box-shadow: 0 0 12px 1px var(--color-frame-hover-glow);
 }
 
 /* The vertical scroll bar runs from the bottom of the column headers down, not through them: the headers stay put

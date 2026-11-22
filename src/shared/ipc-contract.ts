@@ -362,6 +362,7 @@ export const IpcChannel = {
   UiFocusAddressBar: 'ui:focus-address-bar',
   /** Main → chrome: the pointer came onto (`true`) or left the tab row, its empty drag space included. */
   UiTitlebarPointer: 'ui:titlebar-pointer',
+  UiContentPointer: 'ui:content-pointer',
   /** Main → chrome: where the pointer is on the tab row (window CSS pixels), pushed as it moves there, for its glow. */
   UiTitlebarPointerPosition: 'ui:titlebar-pointer-position',
   UiFocusZoom: 'ui:focus-zoom',
@@ -1031,6 +1032,8 @@ export interface PortalogiaApi {
   onFocusAddressBar(listener: (clear: boolean) => void): () => void;
   /** Pushed as the pointer comes onto or leaves the tab row (main watches it: the row's empty space is the OS drag region). */
   onTitlebarPointer(listener: (inside: boolean) => void): () => void;
+  /** Pushed as the pointer comes onto or leaves a shown tab's page (main watches it: a page is a native view): the tab's id, or `null`. */
+  onContentPointer(listener: (tabId: string | null) => void): () => void;
   /** Pushed as the pointer moves on the tab row, empty space included: its place in the window's CSS pixels. */
   onTitlebarPointerPosition(listener: (point: { readonly x: number; readonly y: number }) => void): () => void;
 

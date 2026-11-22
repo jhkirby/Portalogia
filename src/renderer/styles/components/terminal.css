@@ -78,6 +78,13 @@ body {
 
 /* The cursor is in the terminal (`trackPageFocus`): the frame lights up in the accent, as a web page's does.
    Shift+Escape gives the keyboard back to the chrome; Escape there hands it back. */
+/* The pointer is over the terminal (`trackPageHover`): the frame glows softly — light in the dark theme, grey in the
+   light. */
+.page-hovered:not(.page-focused) .terminal__surface {
+  border-color: var(--color-frame-hover-border);
+  box-shadow: 0 0 12px 1px var(--color-frame-hover-glow);
+}
+
 .page-focused .terminal__surface {
   border-color: var(--color-accent-text);
   /* A second pixel of accent just outside the frame, then a soft glow of it spreading out from the edges. */

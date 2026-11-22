@@ -213,6 +213,11 @@ const api: PortalogiaApi = {
     ipcRenderer.on(IpcChannel.UiFocusAddressBar, handler);
     return () => ipcRenderer.removeListener(IpcChannel.UiFocusAddressBar, handler);
   },
+  onContentPointer: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, tabId: unknown): void => listener(typeof tabId === 'string' ? tabId : null);
+    ipcRenderer.on(IpcChannel.UiContentPointer, handler);
+    return () => ipcRenderer.removeListener(IpcChannel.UiContentPointer, handler);
+  },
   onTitlebarPointer: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, inside: unknown): void => listener(inside === true);
     ipcRenderer.on(IpcChannel.UiTitlebarPointer, handler);

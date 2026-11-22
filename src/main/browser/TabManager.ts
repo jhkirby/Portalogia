@@ -448,6 +448,10 @@ export class TabManager {
   private spaceHoldTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Set once per grab, never reset by repeats; see `GRAB_MAX_DURATION_MS`. */
   private grabMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the grabbed tab has been moved yet — from then on Space's repeats no longer keep the grab (see `handleReorderGestureInput`). */
+  private grabNudged = false;
+  /** The tab whose page had the keyboard when a grab started there (it moves to the chrome until the grab ends). */
+  private grabKeyboardTabId: string | null = null;
   /** Bumped on every `toggleSidebar`/`setFocusMode` call so an in-flight bounds animation can tell it's been superseded and stop early. */
   private boundsAnimationToken = 0;
   /** Set for the duration of an in-flight bounds animation (see `animateBoundsInset`) — lets `updateBounds` defer to the animation's own frames instead of fighting them with a one-off instant jump, e.g. from the native 'resize' event `setFullScreen` fires when Focus Mode toggles. */
@@ -661,12 +665,39 @@ export class TabManager {
     // terminal. Not a menu accelerator for the same reason the reorder
     // gesture isn't — it needs to check the active tab's kind, which a
     // static accelerator can't express.
+    // Which shown page the pointer is over, for the chrome's hover glow on a web page's frame: a page is a native view,
+    // so the chrome never sees the pointer over it. Checked a few times a second; only changes are sent.
+    let hoveredContentTabId: string | null = null;
+    const contentPointerTimer = setInterval(() => {
+      if (this.window.isDestroyed() || this.window.webContents.isDestroyed()) {
+        return;
+      }
+      let next: string | null = null;
+      if (this.window.isVisible() && !this.window.isMinimized()) {
+        const cursor = screen.getCursorScreenPoint();
+        const content = this.window.getContentBounds();
+        const x = cursor.x - content.x;
+        const y = cursor.y - content.y;
+        for (const tabId of [this.activeTabId, this.splitOtherTabId()]) {
+          const bounds = tabId ? this.views.get(tabId)?.getBounds() : undefined;
+          if (tabId && bounds && x >= bounds.x && x < bounds.x + bounds.width && y >= bounds.y && y < bounds.y + bounds.height) {
+            next = tabId;
+            break;
+          }
+        }
+      }
+      if (next !== hoveredContentTabId) {
+        hoveredContentTabId = next;
+        this.window.webContents.send(IpcChannel.UiContentPointer, next);
+      }
+    }, 100);
+    this.window.once('closed', () => clearInterval(contentPointerTimer));
     // Ctrl let go in another app never reaches this one: leaving the window ends a held Ctrl's swap.
     this.window.on('blur', () => this.endQuickSwitch());
     this.window.webContents.on('before-input-event', (event, input) => {
       // Ctrl held alone swaps the pointer for quick access; it takes no key, so everything below still sees them.
       this.handleQuickPointerKey(input);
-      if (this.handleReorderGestureInput(event, input) || this.handleWindowShortcut(event, input)) {
+      if (this.handleReorderGestureInput(event, input, true) || this.handleWindowShortcut(event, input)) {
         return;
       }
       // A text box in the chrome (the address bar, a name field) keeps every key it edits with; Escape leaves it.
@@ -7014,11 +7045,17 @@ export class TabManager {
       return;
     }
     this.grabbedTabId = id;
+    this.grabNudged = false;
+    this.armGrabMaxDuration();
+    this.emitState();
+  }
+
+  /** (Re)starts the last-resort limit on a keyboard grab (`GRAB_MAX_DURATION_MS`), counted from the latest move. */
+  private armGrabMaxDuration(): void {
     if (this.grabMaxDurationTimeout !== null) {
       clearTimeout(this.grabMaxDurationTimeout);
     }
     this.grabMaxDurationTimeout = setTimeout(() => this.releaseGrabbedTab(), GRAB_MAX_DURATION_MS);
-    this.emitState();
   }
 
   /** Ends keyboard reorder mode, if it's active — dropping the grabbed tab wherever `nudgeTab` last left it. */
@@ -7028,10 +7065,19 @@ export class TabManager {
       clearTimeout(this.grabMaxDurationTimeout);
       this.grabMaxDurationTimeout = null;
     }
+    const returnTo = this.grabKeyboardTabId;
+    this.grabKeyboardTabId = null;
     if (this.grabbedTabId === null) {
       return;
     }
     this.grabbedTabId = null;
+    // A grab started from a page moved the keyboard to the chrome: it goes back to that page, if it's still in view.
+    if (returnTo !== null && returnTo === this.activeTabId) {
+      const view = this.views.get(returnTo);
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.focus();
+      }
+    }
     this.emitState();
   }
 
@@ -7306,7 +7352,32 @@ export class TabManager {
    * @returns Whether this event belonged to the gesture and was fully
    *   handled — callers should stop processing it themselves when `true`.
    */
-  private handleReorderGestureInput(event: Electron.Event, input: Electron.Input): boolean {
+  /**
+   * A key of the keyboard-reorder gesture: from a page it's kept from the page and the keyboard moves to the chrome;
+   * from the chrome it's let through for the chrome to swallow (see `handleReorderGestureInput`).
+   * @param event The input event.
+   * @param fromChrome Whether the key came from the chrome's own page.
+   */
+  private takeGestureKey(event: Electron.Event, fromChrome: boolean): void {
+    if (!fromChrome) {
+      event.preventDefault();
+      this.moveKeyboardToChromeForGrab();
+    }
+  }
+
+  /** Gives the chrome the keyboard for the rest of a keyboard grab, remembering the tab to hand it back to. */
+  private moveKeyboardToChromeForGrab(): void {
+    if (this.window.isDestroyed() || this.window.webContents.isDestroyed()) {
+      return;
+    }
+    this.grabKeyboardTabId ??= this.activeTabId;
+    this.window.webContents.focus();
+  }
+
+  /**
+   * @param fromChrome Whether the key came from the chrome's own page (`true`) or from a tab's.
+   */
+  private handleReorderGestureInput(event: Electron.Event, input: Electron.Input, fromChrome: boolean): boolean {
     const key = input.key.toLowerCase();
 
     if (input.type === 'keyUp') {
@@ -7321,42 +7392,44 @@ export class TabManager {
       return false;
     }
 
-    // While a tab is grabbed, every key involved in the gesture is fully
-    // consumed here — Left/Right nudges it (auto-repeat deliberately
-    // allowed, unlike every other shortcut in this app, so holding an
-    // arrow keeps nudging). Space's own repeats (not just the very first
-    // press) re-arm the grace-period timer that stands in for its
-    // unreliable `keyUp` — see `armSpaceHoldTimeout`. Control's repeats
-    // are left alone entirely (not even `preventDefault`-ed): unlike
-    // Space, its keydown is never prevented in the first place, so its
-    // own keyUp stays a trustworthy release signal.
+    // While a tab is grabbed, every key of the gesture is handled here — Left/Right nudge it (auto-repeat allowed, so
+    // a held arrow keeps nudging), and Space's repeats re-arm the grace timer that stands in for its keyUp until the
+    // first nudge.
+    //
+    // None of them is `preventDefault`-ed while the chrome has the keyboard: a key-down main prevents makes Chromium
+    // drop every key event after it until the next key-down — the keyUps of Ctrl and Space included — so the release
+    // would never be seen and the tab would stay drawn as grabbed. The chrome swallows them itself instead (`App`, while
+    // `grabbedTabId` is set). A key from a page is prevented (the page mustn't scroll), and the keyboard moves to the
+    // chrome, so the rest of the gesture — and its release — arrives there.
     if (this.grabbedTabId !== null) {
+      // A key that arrives without Ctrl down means Ctrl has been let go, whether or not its keyUp ever arrived: the
+      // grab ends there, and the key goes on as an ordinary key (an arrow then moves nothing).
+      if (!input.control && key !== 'control') {
+        this.releaseGrabbedTab();
+        return false;
+      }
       if (key === 'arrowleft' || key === 'arrowright') {
-        event.preventDefault();
+        this.takeGestureKey(event, fromChrome);
         this.nudgeTab(this.grabbedTabId, key === 'arrowright' ? 1 : -1);
-        // The OS only auto-repeats whichever key was pressed most
-        // recently, so a Left/Right press while Space is held stops
-        // Space's own repeats from arriving at all — without this, only
-        // `armSpaceHoldTimeout`'s Space-repeat branch below would ever
-        // re-arm the grace timer, which would then fire (and drop the
-        // grab) mid-nudge even though both keys are still physically
-        // held. Nudging is itself proof the gesture is still active, so
-        // it re-arms the same timer Space's own repeats do.
-        this.armSpaceHoldTimeout();
+        // The OS only auto-repeats whichever key was pressed most recently, so once an arrow has been pressed Space's
+        // repeats stop for good: from the first nudge the grab lasts until Ctrl or Space is let go, with the last-resort
+        // limit counted from the latest move.
+        this.grabNudged = true;
+        this.disarmSpaceHoldTimeout();
+        this.armGrabMaxDuration();
         return true;
       }
       if (key === ' ') {
-        event.preventDefault();
-        // A brand-new (non-repeat) Ctrl+Space while something's already
-        // grabbed resets the grab onto whatever tab is active *now*,
-        // instead of just extending the existing hold. This is also the
-        // escape hatch if a grab ever gets stuck (its release signal
-        // missed for whatever reason): pressing Ctrl+Space again always
-        // breaks out of it rather than silently doing nothing forever.
+        this.takeGestureKey(event, fromChrome);
+        // A brand-new (non-repeat) Ctrl+Space while something's already grabbed resets the grab onto whatever tab is
+        // active now — also the way out if a grab ever gets stuck.
         if (input.control && !input.isAutoRepeat && this.activeTabId) {
           this.grabTabForReorder(this.activeTabId);
         }
-        this.armSpaceHoldTimeout();
+        // Before the first nudge, Space's repeats are what keep the grab; after it, the keys' release ends it.
+        if (!this.grabNudged) {
+          this.armSpaceHoldTimeout();
+        }
       }
       return true;
     }
@@ -7365,7 +7438,13 @@ export class TabManager {
     // `grabTabForReorder` and the grabbed-mode branch just above.
     if (input.control && key === ' ' && !input.isAutoRepeat) {
       if (this.activeTabId) {
+        // Prevented even from the chrome: the chrome only learns of the grab from the state this sends, too late to
+        // swallow this first Space (it would press a focused button). The keyUps it drops are covered by the next
+        // key-down (a Space repeat or an arrow), which isn't prevented, and by the grace timer for a quick tap.
         event.preventDefault();
+        if (!fromChrome) {
+          this.moveKeyboardToChromeForGrab();
+        }
         this.grabTabForReorder(this.activeTabId);
         this.armSpaceHoldTimeout();
       }
@@ -8336,7 +8415,7 @@ export class TabManager {
         return;
       }
 
-      if (owner.handleReorderGestureInput(event, input)) {
+      if (owner.handleReorderGestureInput(event, input, false)) {
         return;
       }
       if (input.type !== 'keyDown') {
